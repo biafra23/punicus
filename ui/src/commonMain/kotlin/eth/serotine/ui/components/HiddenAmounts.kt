@@ -47,7 +47,7 @@ fun maskAmount(text: String): String {
 fun maskAmount(text: String?): String? = text?.let { maskAmount(it) }
 
 /** What a screen says when the eye's choice could not be saved: nothing changed. */
-const val AMOUNTS_NOT_SAVED = "Couldn't save whether amounts are hidden. Nothing was changed.
+const val AMOUNTS_NOT_SAVED = "Couldn't save whether amounts are hidden. Nothing was changed."
 
 /** What separates an amount from what qualifies it. */
 private const val QUALIFIER = " · "
