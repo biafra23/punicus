@@ -24,6 +24,7 @@ import eth.serotine.ui.components.GUARD_REMOVED_WARNING
 import eth.serotine.ui.components.GUARD_SET_WARNING
 import eth.serotine.ui.components.MODULE_DISABLED_WARNING
 import eth.serotine.ui.components.displaySymbol
+import eth.serotine.ui.components.exactAmount
 import eth.serotine.ui.components.grouped
 import eth.serotine.ui.components.shortAddress
 
@@ -277,7 +278,7 @@ internal class ActivityRows(
 
     /** [units] at [decimals] in [symbol]: "0.25 ETH", or "•••• ETH" while amounts are hidden. */
     fun figure(units: UInt256, decimals: Int, symbol: String): String =
-        "${if (hideAmounts) AMOUNT_MASK else units.formatUnits(decimals)} $symbol"
+        if (hideAmounts) "$AMOUNT_MASK $symbol" else exactAmount(units, decimals, symbol)
 
     /**
      * A CoW order signed here as a row: what it sells and buys, and where it stands as the chain

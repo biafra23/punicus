@@ -35,14 +35,15 @@ import eth.serotine.domain.usecase.RefreshNetworkData
 import eth.serotine.domain.usecase.SafeReading
 import eth.serotine.domain.usecase.SafeTxQueueReading
 import eth.serotine.domain.usecase.SafeTxRefusal
-import eth.serotine.domain.usecase.SetAmountsHidden
 import eth.serotine.domain.usecase.SetNetworkEnabled
 import eth.serotine.domain.usecase.SetTokenHidden
+import eth.serotine.domain.usecase.ToggleAmountsHidden
 import eth.serotine.domain.usecase.UpgradeWarning
 import eth.serotine.domain.usecase.Valuation
 import eth.serotine.ui.accounts.UnreachableNetwork
 import eth.serotine.ui.activity.AccountActivity
 import eth.serotine.ui.activity.ActivityUiState
+import eth.serotine.ui.components.AMOUNTS_NOT_SAVED
 import eth.serotine.ui.components.Control
 import eth.serotine.ui.components.DecodingToken
 import eth.serotine.ui.components.Eip55
@@ -129,7 +130,7 @@ class AccountDetailViewModel(
     /** Whether amounts are hidden (docs/wallet-ux.md, *Hiding amounts*): every amount masked, the eye closed. */
     observeAmountsHidden: ObserveAmountsHidden,
     /** Hides amounts or shows them again: what a tap on the eye asks. */
-    private val setAmountsHidden: SetAmountsHidden,
+    private val toggleAmountsHidden: ToggleAmountsHidden,
     /** How a row dates a balance last verified (unix seconds). */
     private val formatTime: (Long) -> String = ::formatDateTime,
     /** Now, in unix seconds: what simple mode's ages are dated against. */
@@ -146,7 +147,12 @@ class AccountDetailViewModel(
      * choice is read: nothing is drawn until then, so a hidden amount never shows for a moment.
      */
     private val amountsHidden = observeAmountsHidden()
-        .shareIn(viewModelScope, SharingStarted.WhileSubscribed(stopTimeoutMillis = 5_000), replay = 1)
+        // Its last value forgotten once it stops: back after that, the choice is read again, never replayed.
+        .shareIn(
+            viewModelScope,
+            SharingStarted.WhileSubscribed(stopTimeoutMillis = 5_000, replayExpirationMillis = 0),
+            replay = 1,
+        )
 
     /** Proves the account's network's balances and prices again now: what pulling the screen down asks. */
     fun refresh() {
@@ -335,10 +341,9 @@ class AccountDetailViewModel(
             initialValue = AccountDetailUiState.Loading,
         )
 
-    /** Hides amounts, or shows them again: the eye beside Back. */
+    /** Hides amounts, or shows them again: the eye beside Back. A choice that could not be saved says so. */
     fun toggleAmounts() {
-        val ready = uiState.value as? AccountDetailUiState.Ready ?: return
-        viewModelScope.launch { setAmountsHidden(!ready.amountsHidden) }
+        viewModelScope.launch { if (!toggleAmountsHidden()) view.update { it.copy(message = AMOUNTS_NOT_SAVED) } }
     }
 
     /** Turns the account's network on again: the way to Send and Swap on one that is off (N19). */

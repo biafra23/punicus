@@ -23,6 +23,14 @@ class HiddenAmountsTest {
     fun aTinyAmountDoesNotSayItIsTiny() {
         assertEquals("$AMOUNT_MASK ETH", maskAmount("< 0.0001 ETH"))
         assertEquals("$$AMOUNT_MASK", maskAmount("< $0.01"))
+        // At a pool's average, "≈ " comes first.
+        assertEquals("≈ €$AMOUNT_MASK · Uniswap 30-min average", maskAmount("≈ < €0.01 · Uniswap 30-min average"))
+    }
+
+    @Test
+    fun digitsInTheUnitAreTheUnits() {
+        assertEquals("$AMOUNT_MASK 1INCH", maskAmount("12.5 1INCH"))
+        assertEquals("$AMOUNT_MASK USDT0", maskAmount("100 USDT0"))
     }
 
     @Test
@@ -39,11 +47,5 @@ class HiddenAmountsTest {
         listOf("Checking…", "No price", "no real value", "Syncing…", "Not verified", "No EUR rate", "Not checked")
             .forEach { assertEquals(it, maskAmount(it)) }
         assertNull(maskAmount(null as String?))
-    }
-
-    @Test
-    fun shownAmountsAreUntouched() {
-        assertEquals("< 0.0001 ETH", maskAmount("< 0.0001 ETH", hidden = false))
-        assertEquals("€12,025.55", maskAmount("€12,025.55", hidden = false))
     }
 }

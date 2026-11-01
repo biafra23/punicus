@@ -129,7 +129,6 @@ import eth.serotine.domain.usecase.SendCowCancellation
 import eth.serotine.domain.usecase.SendSwap
 import eth.serotine.domain.usecase.SendTokenApproval
 import eth.serotine.domain.usecase.SendTransfer
-import eth.serotine.domain.usecase.SetAmountsHidden
 import eth.serotine.domain.usecase.SetDebugLogLevel
 import eth.serotine.domain.usecase.SetDebugScreen
 import eth.serotine.domain.usecase.SetDisplayCurrency
@@ -138,6 +137,7 @@ import eth.serotine.domain.usecase.SetNetworkEnabled
 import eth.serotine.domain.usecase.SetTokenHidden
 import eth.serotine.domain.usecase.SignSafeTx
 import eth.serotine.domain.usecase.SyncPastStaleAnchor
+import eth.serotine.domain.usecase.ToggleAmountsHidden
 import eth.serotine.domain.usecase.WalletChanges
 import eth.serotine.domain.usecase.WarmFeeHistory
 import eth.serotine.domain.usecase.WatchAddress
@@ -317,7 +317,7 @@ class AppGraph(
             RefreshNetworkData(networkFreshness),
             ObserveNetworkLive(networkFreshness),
             ObserveAmountsHidden(amountsHidden),
-            SetAmountsHidden(amountsHidden),
+            ToggleAmountsHidden(amountsHidden),
         )
 
     /** The light clients' status strips of the screens that depend on them: one for the app, in the host's scope. */
@@ -343,7 +343,7 @@ class AppGraph(
             ObserveLightClient(lightClient),
             DropWaitingSwap(waitingSwaps),
             ObserveAmountsHidden(amountsHidden),
-            SetAmountsHidden(amountsHidden),
+            ToggleAmountsHidden(amountsHidden),
         )
 
     /**
@@ -586,7 +586,7 @@ class AppGraph(
         knownTokens(),
         ObserveSentToAddresses(transactionHistory),
         ObserveAmountsHidden(amountsHidden),
-        SetAmountsHidden(amountsHidden),
+        ToggleAmountsHidden(amountsHidden),
     )
 
     /** Create Safe (docs/wallet-ux.md, screens 13 to 15). */

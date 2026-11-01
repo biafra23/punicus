@@ -23,12 +23,13 @@ import eth.serotine.domain.usecase.ObserveUpgradeWarnings
 import eth.serotine.domain.usecase.Portfolio
 import eth.serotine.domain.usecase.RefreshNetworkData
 import eth.serotine.domain.usecase.SafeReading
-import eth.serotine.domain.usecase.SetAmountsHidden
 import eth.serotine.domain.usecase.SetNetworkEnabled
 import eth.serotine.domain.usecase.SyncPastStaleAnchor
+import eth.serotine.domain.usecase.ToggleAmountsHidden
 import eth.serotine.domain.usecase.Total
 import eth.serotine.domain.usecase.UpgradeWarning
 import eth.serotine.domain.usecase.UpgradeWarnings
+import eth.serotine.ui.components.AMOUNTS_NOT_SAVED
 import eth.serotine.ui.components.Eip55
 import eth.serotine.ui.components.LightClientHealth
 import eth.serotine.ui.components.LightClientItem
@@ -86,7 +87,7 @@ class AccountsViewModel(
     /** Whether amounts are hidden (docs/wallet-ux.md, *Hiding amounts*): every amount masked, the eye closed. */
     observeAmountsHidden: ObserveAmountsHidden,
     /** Hides amounts or shows them again: what a tap on the eye asks. */
-    private val setAmountsHidden: SetAmountsHidden,
+    private val toggleAmountsHidden: ToggleAmountsHidden,
     /** Now, in unix seconds: what the sections date their head blocks against. */
     private val clock: () -> Long = ::epochSecondsNow,
     /** How the banner dates an upgrade, and a row a balance last verified (unix seconds). */
@@ -187,10 +188,9 @@ class AccountsViewModel(
             initialValue = AccountsUiState.Loading(),
         )
 
-    /** Hides amounts, or shows them again: the eye at the top left. */
+    /** Hides amounts, or shows them again: the eye at the top left. A choice that could not be saved says so. */
     fun toggleAmounts() {
-        val ready = uiState.value as? AccountsUiState.Ready ?: return
-        viewModelScope.launch { setAmountsHidden(!ready.amountsHidden) }
+        viewModelScope.launch { if (!toggleAmountsHidden()) message.value = AMOUNTS_NOT_SAVED }
     }
 
     /** What [uiState] is made of, gathered before it is re-dated. */

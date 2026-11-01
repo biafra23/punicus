@@ -45,9 +45,9 @@ import eth.serotine.domain.usecase.ObserveTokenHoldings
 import eth.serotine.domain.usecase.ObserveUpgradeWarnings
 import eth.serotine.domain.usecase.ObserveUsdPrice
 import eth.serotine.domain.usecase.RefreshNetworkData
-import eth.serotine.domain.usecase.SetAmountsHidden
 import eth.serotine.domain.usecase.SetNetworkEnabled
 import eth.serotine.domain.usecase.SyncPastStaleAnchor
+import eth.serotine.domain.usecase.ToggleAmountsHidden
 import eth.serotine.domain.usecase.UpgradeWarning
 import eth.serotine.ui.FakeFeeds
 import eth.serotine.ui.FakeFreshness
@@ -155,7 +155,7 @@ class AccountsViewModelTest {
             RefreshNetworkData(freshness),
             ObserveNetworkLive(freshness),
             ObserveAmountsHidden(hiddenSetting),
-            SetAmountsHidden(hiddenSetting),
+            ToggleAmountsHidden(hiddenSetting),
             clock = { now },
             formatTime = { "<$it>" },
         )

@@ -30,7 +30,6 @@ import eth.serotine.ui.components.grouped
 import eth.serotine.ui.platform.formatDateTime
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.combine
-import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
 
 /**
@@ -65,7 +64,7 @@ class AccountActivity(
      * The Activity of the [account], as it changes, with every amount masked while [hideAmounts] says
      * so (docs/wallet-ux.md, *Hiding amounts*); nothing is read until it is collected.
      */
-    fun of(account: AccountId, hideAmounts: Flow<Boolean> = flowOf(false)): Flow<ActivityUiState> =
+    fun of(account: AccountId, hideAmounts: Flow<Boolean>): Flow<ActivityUiState> =
         Listing(account, hideAmounts).state
 
     /** One account's Activity: the [account] its rows and sources are of, and whether its amounts are hidden. */

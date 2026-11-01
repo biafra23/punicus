@@ -28,23 +28,26 @@ const val HIDE_AMOUNTS_TAG = "hide-amounts"
 
 /**
  * [text], an amount as a screen shows it ("0.5 ETH", "€12,025.55", "≈ €3.10 · Uniswap 30-min
- * average", "< 0.0001 ETH"), with its figure masked when [hidden]: the number and its sign become
- * [AMOUNT_MASK], and a leading "< " goes; the unit, a "≈ " and words stay. Only the part before the
- * first " · " is an amount: what follows qualifies it ("price 2 h old") and is left as it is. A text
- * with no figure in that part ("Checking…", "No price", "no real value") is returned unchanged.
+ * average", "< 0.0001 ETH"), with its figure masked: the number and its sign become [AMOUNT_MASK],
+ * and a "< " goes; the unit, a "≈ " and words stay. An amount has one figure, its first: digits after
+ * it belong to the unit ("1INCH"). Only the part before the first " · " is an amount: what follows
+ * qualifies it ("price 2 h old") and is left as it is. A text with no figure in that part
+ * ("Checking…", "No price", "no real value") is returned unchanged.
  */
-fun maskAmount(text: String, hidden: Boolean = true): String {
-    if (!hidden) return text
+fun maskAmount(text: String): String {
     val cut = text.indexOf(QUALIFIER).let { if (it < 0) text.length else it }
     val amount = text.substring(0, cut)
     if (!FIGURE.containsMatchIn(amount)) return text
-    // "< 0.0001 ETH", "< $0.01": that it is tiny is how much, too.
-    return FIGURE.replace(amount.removePrefix(LESS_THAN), AMOUNT_MASK) + text.substring(cut)
+    // "< 0.0001 ETH", "≈ < €0.01": that it is tiny is how much, too.
+    return FIGURE.replaceFirst(amount.replace(LESS_THAN, ""), AMOUNT_MASK) + text.substring(cut)
 }
 
 /** [maskAmount] of a text that may be absent. Its own JVM name: on the JVM the two would clash. */
 @JvmName("maskAmountOrNull")
-fun maskAmount(text: String?, hidden: Boolean = true): String? = text?.let { maskAmount(it, hidden) }
+fun maskAmount(text: String?): String? = text?.let { maskAmount(it) }
+
+/** What a screen says when the eye's choice could not be saved: nothing changed. */
+const val AMOUNTS_NOT_SAVED = "Couldn't save whether amounts are hidden. Nothing was changed.
 
 /** What separates an amount from what qualifies it. */
 private const val QUALIFIER = " · "

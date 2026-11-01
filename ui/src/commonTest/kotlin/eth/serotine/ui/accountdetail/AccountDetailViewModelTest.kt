@@ -59,9 +59,9 @@ import eth.serotine.domain.usecase.ObserveTokenTransfers
 import eth.serotine.domain.usecase.ObserveUsdPrice
 import eth.serotine.domain.usecase.ObserveWaitingSwaps
 import eth.serotine.domain.usecase.RefreshNetworkData
-import eth.serotine.domain.usecase.SetAmountsHidden
 import eth.serotine.domain.usecase.SetNetworkEnabled
 import eth.serotine.domain.usecase.SetTokenHidden
+import eth.serotine.domain.usecase.ToggleAmountsHidden
 import eth.serotine.ui.FakeAccounts
 import eth.serotine.ui.FakeBalances
 import eth.serotine.ui.FakeFeeds
@@ -186,7 +186,7 @@ class AccountDetailViewModelTest {
         ObserveLightClient(lightClient),
         DropWaitingSwap(waitingSwaps),
         ObserveAmountsHidden(amountsHidden),
-        SetAmountsHidden(amountsHidden),
+        ToggleAmountsHidden(amountsHidden),
         formatTime = { "<$it>" },
         clock = { NOW },
     )
@@ -968,7 +968,7 @@ class AccountDetailViewModelTest {
             ObserveLightClient(lightClient),
             DropWaitingSwap(waitingSwaps),
             ObserveAmountsHidden(amountsHidden),
-            SetAmountsHidden(amountsHidden),
+            ToggleAmountsHidden(amountsHidden),
         )
         backgroundScope.launch { viewModel.uiState.collect {} }
         runCurrent()

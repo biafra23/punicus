@@ -24,7 +24,7 @@ import eth.serotine.domain.usecase.ObserveSafeHistory
 import eth.serotine.domain.usecase.ObserveSentToAddresses
 import eth.serotine.domain.usecase.ObserveTokenTransfers
 import eth.serotine.domain.usecase.SafeChainEvent
-import eth.serotine.domain.usecase.SetAmountsHidden
+import eth.serotine.domain.usecase.ToggleAmountsHidden
 import eth.serotine.domain.usecase.TokenTransferEvent
 import eth.serotine.ui.activity.ActivityKey
 import eth.serotine.ui.activity.ActivityRow
@@ -69,7 +69,7 @@ class ActivityDetailViewModel(
     /** Whether amounts are hidden (docs/wallet-ux.md, *Hiding amounts*): the eye in the top bar shows it. */
     observeAmountsHidden: ObserveAmountsHidden,
     /** Hides amounts or shows them again: what a tap on the eye asks. */
-    private val setAmountsHidden: SetAmountsHidden,
+    private val toggleAmountsHidden: ToggleAmountsHidden,
     private val formatTime: (Long) -> String = ::formatDateTime,
 ) : ViewModel() {
     /** The account this screen is about: its address, on its network. */
@@ -109,10 +109,12 @@ class ActivityDetailViewModel(
         }
     }
 
-    /** Hides amounts, or shows them again: the eye in the top bar. */
+    /**
+     * Hides amounts, or shows them again: the eye in the top bar. This screen has no message to say a
+     * choice that could not be saved: the eye simply stays as it was.
+     */
     fun toggleAmounts() {
-        val shown = uiState.value as? ActivityDetailUiState.Shown ?: return
-        viewModelScope.launch { setAmountsHidden(!shown.amountsHidden) }
+        viewModelScope.launch { toggleAmountsHidden() }
     }
 
     /** [this] with the eye's state, where it is drawn. */

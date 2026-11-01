@@ -31,7 +31,7 @@ import eth.serotine.domain.usecase.ObserveKnownTokens
 import eth.serotine.domain.usecase.ObserveSafeHistory
 import eth.serotine.domain.usecase.ObserveSentToAddresses
 import eth.serotine.domain.usecase.ObserveTokenTransfers
-import eth.serotine.domain.usecase.SetAmountsHidden
+import eth.serotine.domain.usecase.ToggleAmountsHidden
 import eth.serotine.ui.FakeAccounts
 import eth.serotine.ui.FakeLogIndex
 import eth.serotine.ui.FakeMetadata
@@ -115,7 +115,7 @@ class ActivityDetailViewModelTest {
             ObserveKnownTokens(ListCatalog(usdc), userTokens, FakeMetadata()),
             ObserveSentToAddresses(history),
             ObserveAmountsHidden(amountsHidden),
-            SetAmountsHidden(amountsHidden),
+            ToggleAmountsHidden(amountsHidden),
         ) { "at $it" }
         backgroundScope.launch { viewModel.uiState.collect {} }
         runCurrent()
