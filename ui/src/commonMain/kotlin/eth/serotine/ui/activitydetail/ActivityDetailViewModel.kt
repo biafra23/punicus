@@ -18,11 +18,13 @@ import eth.serotine.domain.usecase.IndexedHistory
 import eth.serotine.domain.usecase.KnownToken
 import eth.serotine.domain.usecase.ObserveAccountHistory
 import eth.serotine.domain.usecase.ObserveAccounts
+import eth.serotine.domain.usecase.ObserveAmountsHidden
 import eth.serotine.domain.usecase.ObserveKnownTokens
 import eth.serotine.domain.usecase.ObserveSafeHistory
 import eth.serotine.domain.usecase.ObserveSentToAddresses
 import eth.serotine.domain.usecase.ObserveTokenTransfers
 import eth.serotine.domain.usecase.SafeChainEvent
+import eth.serotine.domain.usecase.SetAmountsHidden
 import eth.serotine.domain.usecase.TokenTransferEvent
 import eth.serotine.ui.activity.ActivityKey
 import eth.serotine.ui.activity.ActivityRow
@@ -40,6 +42,7 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.launch
 
 /**
  * The ViewModel of the detail of one row of the Activity of the account at [address]
@@ -63,6 +66,10 @@ class ActivityDetailViewModel(
     observeTokenTransfers: ObserveTokenTransfers,
     observeKnownTokens: ObserveKnownTokens,
     observeSentTo: ObserveSentToAddresses,
+    /** Whether amounts are hidden (docs/wallet-ux.md, *Hiding amounts*): the eye in the top bar shows it. */
+    observeAmountsHidden: ObserveAmountsHidden,
+    /** Hides amounts or shows them again: what a tap on the eye asks. */
+    private val setAmountsHidden: SetAmountsHidden,
     private val formatTime: (Long) -> String = ::formatDateTime,
 ) : ViewModel() {
     /** The account this screen is about: its address, on its network. */
@@ -72,7 +79,8 @@ class ActivityDetailViewModel(
     private val network: Network = account.network
 
 
-    private val rows = ActivityRows(address, network, formatTime)
+    /** What a row of this account says, with its amounts masked while they are [hidden]. */
+    private fun rowsFor(hidden: Boolean) = ActivityRows(address, network, formatTime, hidden)
 
     private val sources = ActivitySources(
         account,
@@ -84,11 +92,32 @@ class ActivityDetailViewModel(
     )
 
     /** Only what the row is read from is followed: the history for a sent one, the log index for an event. */
-    private val shown: Flow<ActivityDetailUiState> = if (key.logIndex == null) {
-        combine(observeAccountHistory(account), sources.parties, ::renderSent)
-    } else {
-        combine(sources.parties, sources.safeHistory, sources.transfers, sources.tokens, ::renderLogged)
+    private val shown: Flow<ActivityDetailUiState> = observeAmountsHidden().let { hiddenFlow ->
+        if (key.logIndex == null) {
+            combine(observeAccountHistory(account), sources.parties, hiddenFlow) { history, parties, hidden ->
+                renderSent(history, parties, rowsFor(hidden)).withHidden(hidden)
+            }
+        } else {
+            combine(
+                sources.parties,
+                sources.safeHistory,
+                sources.transfers,
+                combine(sources.tokens, hiddenFlow, ::Pair),
+            ) { parties, safe, transfers, (tokens, hidden) ->
+                renderLogged(parties, safe, transfers, tokens, rowsFor(hidden)).withHidden(hidden)
+            }
+        }
     }
+
+    /** Hides amounts, or shows them again: the eye in the top bar. */
+    fun toggleAmounts() {
+        val shown = uiState.value as? ActivityDetailUiState.Shown ?: return
+        viewModelScope.launch { setAmountsHidden(!shown.amountsHidden) }
+    }
+
+    /** [this] with the eye's state, where it is drawn. */
+    private fun ActivityDetailUiState.withHidden(hidden: Boolean): ActivityDetailUiState =
+        if (this is ActivityDetailUiState.Shown) copy(amountsHidden = hidden) else this
 
     val uiState: StateFlow<ActivityDetailUiState> = shown.stateIn(
         viewModelScope,
@@ -96,7 +125,7 @@ class ActivityDetailViewModel(
         ActivityDetailUiState.Loading(sources.shortTitle),
     )
 
-    private fun renderSent(history: HistoryList, parties: Parties): ActivityDetailUiState {
+    private fun renderSent(history: HistoryList, parties: Parties, rows: ActivityRows): ActivityDetailUiState {
         val names = parties.names
         val title = sources.titleOf(names)
         val entries = when (history) {
@@ -105,7 +134,7 @@ class ActivityDetailViewModel(
         }
         val entry = entries.firstOrNull { it.transfer.hash == key.hash }
             ?: return ActivityDetailUiState.Unavailable(title, NOT_SENT_HERE)
-        return shownOf(title, rows.row(entry, names), sentFields(entry, names), opensStatus = entry.transfer.hash)
+        return shownOf(title, rows.row(entry, names), sentFields(entry, names, rows), opensStatus = entry.transfer.hash)
     }
 
     private fun renderLogged(
@@ -113,19 +142,20 @@ class ActivityDetailViewModel(
         safe: IndexedHistory<SafeChainEvent>?,
         transfers: IndexedHistory<TokenTransferEvent>?,
         tokens: Map<Address, KnownToken>?,
+        rows: ActivityRows,
     ): ActivityDetailUiState {
         val names = parties.names
         val title = sources.titleOf(names)
         if (parties.list !is AccountList.Loaded) return ActivityDetailUiState.Unavailable(title, ACCOUNTS_UNREADABLE)
         // Only an account of the wallet has its logs followed.
         if (transfers == null) return ActivityDetailUiState.Unavailable(title, NOT_IN_WALLET)
-        safe.found()?.let { return shownOf(title, rows.eventRow(it, parties), safeFields(it, names)) }
+        safe.found()?.let { return shownOf(title, rows.eventRow(it, parties), safeFields(it, names, rows)) }
         val transfer = transfers.found() ?: return missing(title, listOfNotNull(safe, transfers))
         // A transfer of nothing is not listed, and not detailed either: it plants a look-alike address.
         if (transfer.transfer.movesNothing()) return ActivityDetailUiState.Unavailable(title, MOVED_NOTHING)
         // Until the tokens are known, what moved cannot be said.
         if (tokens == null) return ActivityDetailUiState.Loading(title)
-        return transferShown(title, transfer, parties, tokens)
+        return transferShown(title, transfer, parties, tokens, rows)
     }
 
     /** The event [key] names in this history, when it is read with it. */
@@ -167,7 +197,7 @@ class ActivityDetailViewModel(
     )
 
     /** Each party a sent transaction concerns, then what it moved, then where it is on chain. */
-    private fun sentFields(entry: HistoryEntry, names: Map<Address, String>): List<DetailField> {
+    private fun sentFields(entry: HistoryEntry, names: Map<Address, String>, rows: ActivityRows): List<DetailField> {
         val transfer = entry.transfer
         val fields = mutableListOf(addressOf("From", transfer.account, names))
         when (val action = transfer.action) {
@@ -223,7 +253,7 @@ class ActivityDetailViewModel(
     }
 
     /** What a Safe's event concerns, the Safe, then where it is on chain. */
-    private fun safeFields(event: SafeChainEvent, names: Map<Address, String>): List<DetailField> {
+    private fun safeFields(event: SafeChainEvent, names: Map<Address, String>, rows: ActivityRows): List<DetailField> {
         val fields = mutableListOf<DetailField>()
         when (val what = event.event) {
             is SafeEvent.SetUp -> {
@@ -275,6 +305,7 @@ class ActivityDetailViewModel(
         event: TokenTransferEvent,
         parties: Parties,
         tokens: Map<Address, KnownToken>,
+        rows: ActivityRows,
     ): ActivityDetailUiState {
         val names = parties.names
         val transfer = event.transfer
@@ -294,7 +325,7 @@ class ActivityDetailViewModel(
         }
         val moved = when (transfer) {
             is TokenTransfer.Fungible ->
-                DetailField("Amount", "${transfer.amount.formatUnits(known.token.decimals)} $symbol")
+                DetailField("Amount", rows.figure(transfer.amount, known.token.decimals, symbol))
             is TokenTransfer.Nft -> DetailField("Token id", transfer.tokenId.toDecimal())
         }
         val sides = listOf(addressOf("From", transfer.from, names), addressOf("To", transfer.to, names))

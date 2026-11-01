@@ -26,19 +26,23 @@ import eth.serotine.domain.repository.SentOutcome
 import eth.serotine.domain.repository.SentTransfer
 import eth.serotine.domain.usecase.ObserveAccountHistory
 import eth.serotine.domain.usecase.ObserveAccounts
+import eth.serotine.domain.usecase.ObserveAmountsHidden
 import eth.serotine.domain.usecase.ObserveKnownTokens
 import eth.serotine.domain.usecase.ObserveSafeHistory
 import eth.serotine.domain.usecase.ObserveSentToAddresses
 import eth.serotine.domain.usecase.ObserveTokenTransfers
+import eth.serotine.domain.usecase.SetAmountsHidden
 import eth.serotine.ui.FakeAccounts
 import eth.serotine.ui.FakeLogIndex
 import eth.serotine.ui.FakeMetadata
 import eth.serotine.ui.ListCatalog
+import eth.serotine.ui.MemoryAmountsHidden
 import eth.serotine.ui.MemoryHistoryStarts
 import eth.serotine.ui.MemoryTransactionHistory
 import eth.serotine.ui.MemoryUserTokens
 import eth.serotine.ui.activity.ActivityKey
 import eth.serotine.ui.activity.ActivityState
+import eth.serotine.ui.components.AMOUNT_MASK
 import eth.serotine.ui.components.Eip55
 import eth.serotine.ui.topicOf
 import kotlin.test.AfterTest
@@ -84,6 +88,8 @@ class ActivityDetailViewModelTest {
     private val index = FakeLogIndex()
     private val userTokens = MemoryUserTokens()
 
+    private val amountsHidden = MemoryAmountsHidden()
+
     private val sent = SentTransfer(
         network = Network.SEPOLIA,
         account = alice.address,
@@ -108,6 +114,8 @@ class ActivityDetailViewModelTest {
             ObserveTokenTransfers(index, starts),
             ObserveKnownTokens(ListCatalog(usdc), userTokens, FakeMetadata()),
             ObserveSentToAddresses(history),
+            ObserveAmountsHidden(amountsHidden),
+            SetAmountsHidden(amountsHidden),
         ) { "at $it" }
         backgroundScope.launch { viewModel.uiState.collect {} }
         runCurrent()
@@ -230,6 +238,28 @@ class ActivityDetailViewModelTest {
 
         assertNull(shown.addToken)
         assertTrue("ERC-721" in shown.note.orEmpty())
+    }
+
+    @Test
+    fun hiddenAmountsMaskTheHeadlineAndWhatMovedAndTheEyeTogglesThem() = runTest {
+        amountsHidden.hidden.value = true
+        history.entries.value = listOf(HistoryEntry(sent, SentOutcome.Finalized(9_412_118, succeeded = true)))
+        val viewModel = viewModel(ActivityKey(sent.hash))
+
+        val hidden = assertIs<ActivityDetailUiState.Shown>(viewModel.uiState.value)
+        assertTrue(hidden.amountsHidden)
+        assertEquals("Sent $AMOUNT_MASK USDC", hidden.headline)
+        assertEquals(DetailField("Amount", "$AMOUNT_MASK USDC"), hidden.fields.single { it.label == "Amount" })
+        // Who and where stay: only the amount is hidden.
+        assertEquals(DetailField("To", Eip55.format(bob), DetailKind.ADDRESS), hidden.fields.single { it.label == "To" })
+
+        viewModel.toggleAmounts()
+        runCurrent()
+        assertFalse(amountsHidden.hidden.value)
+        val shown = assertIs<ActivityDetailUiState.Shown>(viewModel.uiState.value)
+        assertFalse(shown.amountsHidden)
+        assertEquals("Sent 40.5 USDC", shown.headline)
+        assertEquals(DetailField("Amount", "40.5 USDC"), shown.fields.single { it.label == "Amount" })
     }
 
     @Test

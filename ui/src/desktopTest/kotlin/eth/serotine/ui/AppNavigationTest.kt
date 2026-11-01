@@ -393,6 +393,7 @@ class AppNavigationTest {
         debugLog = debugLog,
         debugScreen = debugScreen,
         interfaceMode = interfaceMode,
+        amountsHidden = MemoryAmountsHidden(),
         networkFreshness = FakeFreshness(),
         screenCaptureDebugSwitch = null,
         networkDemand = NetworkDemand(),

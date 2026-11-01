@@ -50,6 +50,7 @@ import eth.serotine.ui.MemoryHistoryStarts
 import eth.serotine.ui.MemoryTransactionHistory
 import eth.serotine.ui.MemoryUserTokens
 import eth.serotine.ui.MemoryWaitingSwaps
+import eth.serotine.ui.components.AMOUNT_MASK
 import eth.serotine.ui.components.GUARD_REMOVED_WARNING
 import eth.serotine.ui.components.GUARD_SET_WARNING
 import eth.serotine.ui.components.MODULE_DISABLED_WARNING
@@ -58,8 +59,11 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertIs
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.plus
 import kotlinx.coroutines.test.TestScope
@@ -121,7 +125,10 @@ class AccountActivityTest {
     )
 
     /** The Activity of the account at [address], kept current as the tests change what it is read from. */
-    private fun TestScope.activity(address: Address = alice.address): StateFlow<ActivityUiState> =
+    private fun TestScope.activity(
+        address: Address = alice.address,
+        hidden: Flow<Boolean> = flowOf(false),
+    ): StateFlow<ActivityUiState> =
         AccountActivity(
             ObserveAccountHistory(history),
             ObserveAccounts(accounts),
@@ -132,7 +139,7 @@ class AccountActivityTest {
             ObserveAccountCowOrders(cowOrders),
             ObserveWaitingSwaps(waitingSwaps),
         ) { "at $it" }
-            .of(AccountId(Network.SEPOLIA, address))
+            .of(AccountId(Network.SEPOLIA, address), hidden)
             // Unconfined, so that what a test changes is listed before it reads the value.
             .stateIn(
                 backgroundScope + UnconfinedTestDispatcher(testScheduler),
@@ -236,6 +243,42 @@ class AccountActivityTest {
             ),
             shown.rows,
         )
+    }
+
+    @Test
+    fun hiddenAmountsAreMaskedInEveryRowAndCardAndFollowTheEye() = runTest {
+        history.entries.value = listOf(
+            HistoryEntry(token, SentOutcome.Included(9_401_220, succeeded = false)),
+            HistoryEntry(native, SentOutcome.Finalized(9_412_118, succeeded = true)),
+        )
+        val router = Address.of("0x" + "50".repeat(20))
+        waitingSwaps.swaps.value = listOf(
+            WaitingSwap(
+                account = alice.id,
+                sell = usdc.address,
+                buy = null,
+                amount = UInt256.of(40_000_000),
+                tolerance = SlippageTolerance.DEFAULT,
+                venue = SwapVenue.UNISWAP,
+                approval = sent(10, SentAction.TokenApproval(usdc, router, UInt256.of(40_000_000)), 600).hash,
+                step = 2,
+                steps = 2,
+            ),
+        )
+        val hidden = MutableStateFlow(true)
+        val activity = activity(hidden = hidden)
+
+        val masked = assertIs<ActivityUiState.Shown>(activity.value)
+        assertEquals(listOf("Sent $AMOUNT_MASK ETH", "Sent $AMOUNT_MASK USDC"), masked.rows.map { it.title })
+        assertEquals("Swap $AMOUNT_MASK USDC → ETH", masked.waiting.single().title)
+        // Only the amounts: who, when and how each ended stay.
+        assertEquals("To Treasury · 0xfB69…d359", masked.rows.first().detail)
+        assertEquals("Finalized in block 9,412,118", masked.rows.first().status)
+
+        hidden.value = false
+        val shown = assertIs<ActivityUiState.Shown>(activity.value)
+        assertEquals(listOf("Sent 0.25 ETH", "Sent 40.5 USDC"), shown.rows.map { it.title })
+        assertEquals("Swap 40 USDC → ETH", shown.waiting.single().title)
     }
 
     @Test

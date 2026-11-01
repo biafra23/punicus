@@ -15,6 +15,7 @@ import eth.serotine.domain.repository.AccountList
 import eth.serotine.domain.repository.AccountRepository
 import eth.serotine.domain.repository.AddressKind
 import eth.serotine.domain.repository.AddressKinds
+import eth.serotine.domain.repository.AmountsHiddenSetting
 import eth.serotine.domain.repository.BalanceReading
 import eth.serotine.domain.repository.KindReading
 import eth.serotine.domain.repository.KnownUpgrade
@@ -29,6 +30,7 @@ import eth.serotine.domain.repository.SafeState
 import eth.serotine.domain.repository.StaleAnchorConsent
 import eth.serotine.domain.usecase.ObserveAccountValue
 import eth.serotine.domain.usecase.ObserveAccounts
+import eth.serotine.domain.usecase.ObserveAmountsHidden
 import eth.serotine.domain.usecase.ObserveDisplayCurrencies
 import eth.serotine.domain.usecase.ObserveEnabledNetworks
 import eth.serotine.domain.usecase.ObserveEnsNames
@@ -43,6 +45,7 @@ import eth.serotine.domain.usecase.ObserveTokenHoldings
 import eth.serotine.domain.usecase.ObserveUpgradeWarnings
 import eth.serotine.domain.usecase.ObserveUsdPrice
 import eth.serotine.domain.usecase.RefreshNetworkData
+import eth.serotine.domain.usecase.SetAmountsHidden
 import eth.serotine.domain.usecase.SetNetworkEnabled
 import eth.serotine.domain.usecase.SyncPastStaleAnchor
 import eth.serotine.domain.usecase.UpgradeWarning
@@ -52,9 +55,11 @@ import eth.serotine.ui.FakeMetadata
 import eth.serotine.ui.FakeNames
 import eth.serotine.ui.FakeTokenBalances
 import eth.serotine.ui.FakeTokenCatalog
+import eth.serotine.ui.MemoryAmountsHidden
 import eth.serotine.ui.MemoryCurrencySetting
 import eth.serotine.ui.MemoryNetworkSettings
 import eth.serotine.ui.MemoryUserTokens
+import eth.serotine.ui.components.AMOUNT_MASK
 import eth.serotine.ui.components.Control
 import eth.serotine.ui.components.Eip55
 import eth.serotine.ui.components.LightClientHealth
@@ -66,6 +71,7 @@ import eth.serotine.ui.update.UpgradeBannerItem
 import kotlin.test.AfterTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertIs
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
@@ -78,6 +84,7 @@ import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.emptyFlow
+import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.onStart
 import kotlinx.coroutines.launch
@@ -125,7 +132,7 @@ class AccountsViewModelTest {
         totalNote: String? = "Testnet prices · still checking",
     ) = NetworkSection(Network.SEPOLIA.chainId, "Sepolia", testnet = true, on = true, status, accounts, total, totalNote)
 
-    private fun viewModel(): AccountsViewModel {
+    private fun viewModel(hiddenSetting: AmountsHiddenSetting = amountsHidden): AccountsViewModel {
         val currencies = ObserveDisplayCurrencies(feeds, currency, repository)
         val value = ObserveAccountValue(
             ObserveNativeBalance(balances),
@@ -147,12 +154,16 @@ class AccountsViewModelTest {
             SyncPastStaleAnchor(lightClient, consent),
             RefreshNetworkData(freshness),
             ObserveNetworkLive(freshness),
+            ObserveAmountsHidden(hiddenSetting),
+            SetAmountsHidden(hiddenSetting),
             clock = { now },
             formatTime = { "<$it>" },
         )
     }
 
     private val freshness = FakeFreshness()
+
+    private val amountsHidden = MemoryAmountsHidden()
 
     private val treasury =
         Account(
@@ -261,6 +272,61 @@ class AccountsViewModelTest {
             listOf("¥781,250 · testnet prices", "¥156,250 · testnet prices"),
             ready.accounts.map { it.value },
         )
+    }
+
+    @Test
+    fun hiddenAmountsMaskEveryAmountUntilTheEyeOpensAgain() = runTest {
+        Dispatchers.setMain(UnconfinedTestDispatcher(testScheduler))
+        repository.accounts = listOf(treasury, daily)
+        currency.choose(DisplayCurrency.JPY)
+        amountsHidden.hidden.value = true
+        val viewModel = viewModel()
+        backgroundScope.launch { viewModel.uiState.collect {} }
+        balances.of(treasury.address).value = BalanceReading.Verified(Wei.of("2500000000000000000"), 9)
+        balances.of(daily.address).value = BalanceReading.Unavailable(ReadUnavailable.UNPROVEN)
+        feeds.answer("ETH", 2_000.0)
+        feeds.answer("JPY", 0.0064)
+        runCurrent()
+
+        val hidden = viewModel.uiState.value as AccountsUiState.Ready
+        assertTrue(hidden.amountsHidden)
+        assertEquals("¥$AMOUNT_MASK", hidden.total)
+        hidden.sections.forEach { assertFalse(it.total.orEmpty().any(Char::isDigit), "${it.name}: ${it.total}") }
+        // An amount is masked beside its unit; what is not one ("Not verified") says what it says.
+        assertEquals(listOf("$AMOUNT_MASK ETH", "Not verified"), hidden.accounts.map { it.balance })
+        assertEquals("¥$AMOUNT_MASK · testnet prices", hidden.accounts.first().value)
+        // On a testnet an account has no real value: nothing to mask.
+        assertEquals("no real value", hidden.accounts.first().accountTotal)
+
+        // The eye opens: saved, and the amounts are back.
+        viewModel.toggleAmounts()
+        runCurrent()
+        assertFalse(amountsHidden.hidden.value)
+        val shown = viewModel.uiState.value as AccountsUiState.Ready
+        assertFalse(shown.amountsHidden)
+        assertEquals("¥781,250", shown.total)
+        assertEquals("2.5 ETH", shown.accounts.first().balance)
+
+        viewModel.toggleAmounts()
+        runCurrent()
+        assertTrue(amountsHidden.hidden.value)
+    }
+
+    @Test
+    fun nothingIsDrawnBeforeTheChoiceIsRead() = runTest {
+        Dispatchers.setMain(UnconfinedTestDispatcher(testScheduler))
+        repository.accounts = listOf(treasury)
+        val unread = object : AmountsHiddenSetting {
+            override fun observe(): Flow<Boolean> = flow { awaitCancellation() }
+            override suspend fun set(hidden: Boolean) = true
+        }
+        val viewModel = viewModel(unread)
+        backgroundScope.launch { viewModel.uiState.collect {} }
+        balances.of(treasury.address).value = BalanceReading.Verified(Wei.of("2500000000000000000"), 9)
+        runCurrent()
+
+        // A balance hidden before must never show for a moment: the list waits for the choice.
+        assertTrue(viewModel.uiState.value is AccountsUiState.Loading)
     }
 
     @Test

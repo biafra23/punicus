@@ -243,6 +243,15 @@ private fun SimpleAccountsListUnavailablePreview() = SimpleAccountsPreview(
     ),
 )
 
+/** Amounts hidden: the eye at the top left closed, every figure masked beside its unit. */
+@Preview
+@Composable
+private fun SimpleAccountsHiddenPreview() = SimpleAccountsPreview(everyday.withAmountsHidden(true))
+
+@Preview
+@Composable
+private fun SimpleAccountsHiddenDarkPreview() = SimpleAccountsPreview(everyday.withAmountsHidden(true), darkTheme = true)
+
 /** The list not read yet. */
 @Preview
 @Composable
@@ -261,4 +270,6 @@ internal val simpleAccountsScreenPreviews: List<@Composable () -> Unit> = listOf
     { SimpleAccountsLoadingPreview() },
     { SimpleAccountsSetAsidePreview() },
     { SimpleAccountsListUnavailablePreview() },
+    { SimpleAccountsHiddenPreview() },
+    { SimpleAccountsHiddenDarkPreview() },
 )

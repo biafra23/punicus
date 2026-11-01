@@ -42,6 +42,7 @@ import eth.serotine.domain.usecase.ObserveAccountCowOrders
 import eth.serotine.domain.usecase.ObserveAccountHistory
 import eth.serotine.domain.usecase.ObserveAccountValue
 import eth.serotine.domain.usecase.ObserveAccounts
+import eth.serotine.domain.usecase.ObserveAmountsHidden
 import eth.serotine.domain.usecase.ObserveDisplayCurrencies
 import eth.serotine.domain.usecase.ObserveEnabledNetworks
 import eth.serotine.domain.usecase.ObserveEnsNames
@@ -58,6 +59,7 @@ import eth.serotine.domain.usecase.ObserveTokenTransfers
 import eth.serotine.domain.usecase.ObserveUsdPrice
 import eth.serotine.domain.usecase.ObserveWaitingSwaps
 import eth.serotine.domain.usecase.RefreshNetworkData
+import eth.serotine.domain.usecase.SetAmountsHidden
 import eth.serotine.domain.usecase.SetNetworkEnabled
 import eth.serotine.domain.usecase.SetTokenHidden
 import eth.serotine.ui.FakeAccounts
@@ -71,6 +73,7 @@ import eth.serotine.ui.FakeRecovery
 import eth.serotine.ui.FakeTokenBalances
 import eth.serotine.ui.FakeTokenCatalog
 import eth.serotine.ui.FakeUpgradeReports
+import eth.serotine.ui.MemoryAmountsHidden
 import eth.serotine.ui.MemoryCowOrders
 import eth.serotine.ui.MemoryCurrencySetting
 import eth.serotine.ui.MemoryHistoryStarts
@@ -81,6 +84,7 @@ import eth.serotine.ui.MemoryUserTokens
 import eth.serotine.ui.MemoryWaitingSwaps
 import eth.serotine.ui.activity.AccountActivity
 import eth.serotine.ui.activity.ActivityUiState
+import eth.serotine.ui.components.AMOUNT_MASK
 import eth.serotine.ui.components.Control
 import eth.serotine.ui.components.Eip55
 import eth.serotine.ui.components.NetworkLabel
@@ -133,6 +137,8 @@ class AccountDetailViewModelTest {
     private val uni = Token(Address.of("0x1f9840a85d5af5bf1d1762f925bdaddc4201f984"), "UNI", "Uniswap", 18, "uni")
     private val catalog = FakeTokenCatalog(usdc, link, uni)
     private val userTokens = MemoryUserTokens()
+
+    private val amountsHidden = MemoryAmountsHidden()
     private val metadata = FakeMetadata()
     private val tokenBalances = FakeTokenBalances()
     private val feeds = FakeFeeds()
@@ -179,6 +185,8 @@ class AccountDetailViewModelTest {
         ObserveNetworkLive(freshness),
         ObserveLightClient(lightClient),
         DropWaitingSwap(waitingSwaps),
+        ObserveAmountsHidden(amountsHidden),
+        SetAmountsHidden(amountsHidden),
         formatTime = { "<$it>" },
         clock = { NOW },
     )
@@ -380,6 +388,42 @@ class AccountDetailViewModelTest {
         runCurrent()
         val byName = viewModel.uiState.value as AccountDetailUiState.Ready
         assertEquals(listOf("ETH", "UNI", "USDC"), byName.assets.map { it.symbol })
+    }
+
+    @Test
+    fun hiddenAmountsMaskTheTotalAndEachAssetUntilTheEyeOpensAgain() = runTest {
+        Dispatchers.setMain(UnconfinedTestDispatcher(testScheduler))
+        amountsHidden.hidden.value = true
+        val viewModel = viewModel()
+        backgroundScope.launch { viewModel.uiState.collect {} }
+        balances.of(daily.address).value = BalanceReading.Verified(Wei.of("1500000000000000000"), 9)
+        tokenBalances.of(daily.address, usdc.address).value =
+            TokenBalanceReading.Verified(TokenUnits.of("2500000000"), 9)
+        tokenBalances.of(daily.address, link.address).value = TokenBalanceReading.Verified(TokenUnits.of("0"), 9)
+        tokenBalances.of(daily.address, uni.address).value =
+            TokenBalanceReading.Verified(TokenUnits.of("2000000000000000000"), 9)
+        feeds.answer("ETH", 2_000.0)
+        feeds.answer("USDC", 1.0)
+        runCurrent()
+
+        val hidden = viewModel.uiState.value as AccountDetailUiState.Ready
+        assertTrue(hidden.amountsHidden)
+        assertEquals("$$AMOUNT_MASK", hidden.total)
+        // Still in value order, which says nothing a viewer could not already see in the list.
+        assertEquals(listOf("ETH", "USDC", "UNI"), hidden.assets.map { it.symbol })
+        assertEquals(listOf("$AMOUNT_MASK ETH", "$AMOUNT_MASK USDC", "$AMOUNT_MASK UNI"), hidden.assets.map { it.amount })
+        assertEquals(
+            listOf("$$AMOUNT_MASK · testnet prices", "$$AMOUNT_MASK · testnet prices", "No price"),
+            hidden.assets.map { it.value },
+        )
+
+        viewModel.toggleAmounts()
+        runCurrent()
+        assertFalse(amountsHidden.hidden.value)
+        val shown = viewModel.uiState.value as AccountDetailUiState.Ready
+        assertFalse(shown.amountsHidden)
+        assertEquals("$5,500.00", shown.total)
+        assertEquals("1.5 ETH", shown.assets.first().amount)
     }
 
     @Test
@@ -923,6 +967,8 @@ class AccountDetailViewModelTest {
             ObserveNetworkLive(freshness),
             ObserveLightClient(lightClient),
             DropWaitingSwap(waitingSwaps),
+            ObserveAmountsHidden(amountsHidden),
+            SetAmountsHidden(amountsHidden),
         )
         backgroundScope.launch { viewModel.uiState.collect {} }
         runCurrent()

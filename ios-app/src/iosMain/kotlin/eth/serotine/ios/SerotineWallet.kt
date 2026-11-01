@@ -17,6 +17,7 @@ import eth.serotine.data.safe.JsonSigningRequestCodec
 import eth.serotine.data.safe.PinnedSafeReleases
 import eth.serotine.data.settings.FileDebugScreen
 import eth.serotine.data.settings.FileDisplayCurrency
+import eth.serotine.data.settings.FileAmountsHidden
 import eth.serotine.data.settings.FileInterfaceMode
 import eth.serotine.data.settings.FileSwapVenue
 import eth.serotine.data.swaps.FileWaitingSwaps
@@ -118,6 +119,7 @@ class SerotineWallet {
 
     /** The view the user chose, simple mode or Detailed view (docs/simple-ui.md), beside the other settings. */
     private val interfaceMode = FileInterfaceMode("$dataDir/ui-mode.json")
+    private val amountsHidden = FileAmountsHidden("$dataDir/amounts-hidden.json")
 
     // One engine, one light client per network that is on and needed: FollowNetworks starts with
     // the wallet and runs for the life of the process (docs/networks.md, *The engine host*). The
@@ -237,6 +239,7 @@ class SerotineWallet {
             debugLog = debugLog,
             debugScreen = debugScreen,
             interfaceMode = interfaceMode,
+            amountsHidden = amountsHidden,
             // iOS blocks no capture, so there is nothing for a debug switch to lift.
             screenCaptureDebugSwitch = null,
             networkDemand = networkDemand,

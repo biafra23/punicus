@@ -68,6 +68,9 @@ sealed interface AccountsUiState {
      * from before; [refreshing], while a pull-to-refresh is being answered; and [simpleTotalNote],
      * [totalNote] with the accounts it leaves out of those networks ("1 Ethereum account not
      * counted"), null where it is [totalNote] itself.
+     *
+     * [amountsHidden] while the user hides amounts with the eye at the top left (docs/wallet-ux.md,
+     * *Hiding amounts*): every amount here already reads "••••" beside its unit.
      */
     data class Ready(
         val sections: List<NetworkSection>,
@@ -81,6 +84,7 @@ sealed interface AccountsUiState {
         val unreachable: List<UnreachableNetwork> = emptyList(),
         val refreshing: Boolean = false,
         val simpleTotalNote: String? = null,
+        val amountsHidden: Boolean = false,
     ) : AccountsUiState {
         init {
             require(accounts.distinctBy { it.chainId to it.address }.size == accounts.size) {

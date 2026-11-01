@@ -362,6 +362,15 @@ private fun AccountDetailAssetsPreview() = AccountDetailPreview(daily)
 @Composable
 private fun AccountDetailAssetsDarkPreview() = AccountDetailPreview(daily, darkTheme = true)
 
+/** Amounts hidden: the eye beside Back closed, the total and each asset's amount and value masked. */
+@Preview
+@Composable
+private fun AccountDetailAssetsHiddenPreview() = AccountDetailPreview(daily.withAmountsHidden(true))
+
+@Preview
+@Composable
+private fun AccountDetailAssetsHiddenDarkPreview() = AccountDetailPreview(daily.withAmountsHidden(true), darkTheme = true)
+
 @Preview
 @Composable
 private fun AccountDetailCheckingPreview() = AccountDetailPreview(
@@ -708,4 +717,6 @@ internal val accountDetailScreenPreviews: List<@Composable () -> Unit> = listOf(
     { AccountDetailEthereumPreview() },
     { AccountDetailNetworkOffPreview() },
     { AccountDetailSafeOwnersNetworkOffPreview() },
+    { AccountDetailAssetsHiddenPreview() },
+    { AccountDetailAssetsHiddenDarkPreview() },
 )

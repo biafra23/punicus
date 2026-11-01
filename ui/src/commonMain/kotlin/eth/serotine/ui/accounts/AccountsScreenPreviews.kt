@@ -138,6 +138,11 @@ private fun AccountsAccountsPreview() = AccountsPreview(withAccounts)
 @Composable
 private fun AccountsAccountsDarkPreview() = AccountsPreview(withAccounts, darkTheme = true)
 
+/** Amounts hidden: the eye at the top left closed, the total, each network's and each row's masked. */
+@Preview
+@Composable
+private fun AccountsHiddenPreview() = AccountsPreview(withAccounts.withAmountsHidden(true))
+
 /** The screen on a narrow phone (#68): a control badge too wide for its row shows as its icon. */
 @Preview
 @Composable
@@ -620,4 +625,5 @@ internal val accountsScreenPreviews: List<@Composable () -> Unit> = listOf(
     { AccountsStaleAnchorPreview() },
     { AccountsStaleAnchorDarkPreview() },
     { AccountsStaleAnchorDialogPreview() },
+    { AccountsHiddenPreview() },
 )

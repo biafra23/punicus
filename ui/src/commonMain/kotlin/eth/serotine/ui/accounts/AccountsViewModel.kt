@@ -12,6 +12,7 @@ import eth.serotine.domain.repository.LightClientStatus
 import eth.serotine.domain.repository.TokenBalanceReading
 import eth.serotine.domain.usecase.AccountValue
 import eth.serotine.domain.usecase.EnsNameCheck
+import eth.serotine.domain.usecase.ObserveAmountsHidden
 import eth.serotine.domain.usecase.ObserveEnabledNetworks
 import eth.serotine.domain.usecase.ObserveEnsNames
 import eth.serotine.domain.usecase.ObserveLightClient
@@ -22,6 +23,7 @@ import eth.serotine.domain.usecase.ObserveUpgradeWarnings
 import eth.serotine.domain.usecase.Portfolio
 import eth.serotine.domain.usecase.RefreshNetworkData
 import eth.serotine.domain.usecase.SafeReading
+import eth.serotine.domain.usecase.SetAmountsHidden
 import eth.serotine.domain.usecase.SetNetworkEnabled
 import eth.serotine.domain.usecase.SyncPastStaleAnchor
 import eth.serotine.domain.usecase.Total
@@ -34,6 +36,7 @@ import eth.serotine.ui.components.StaleAnchorWarning
 import eth.serotine.ui.components.agoText
 import eth.serotine.ui.components.asItems
 import eth.serotine.ui.components.epochSecondsNow
+import eth.serotine.ui.components.maskAmount
 import eth.serotine.ui.components.notTurnedOn
 import eth.serotine.ui.components.redatedWhile
 import eth.serotine.ui.components.spokenList
@@ -80,6 +83,10 @@ class AccountsViewModel(
     private val refreshNetworkData: RefreshNetworkData,
     /** Whether each network updates live, which simple mode's freshness line says. */
     observeNetworkLive: ObserveNetworkLive,
+    /** Whether amounts are hidden (docs/wallet-ux.md, *Hiding amounts*): every amount masked, the eye closed. */
+    observeAmountsHidden: ObserveAmountsHidden,
+    /** Hides amounts or shows them again: what a tap on the eye asks. */
+    private val setAmountsHidden: SetAmountsHidden,
     /** Now, in unix seconds: what the sections date their head blocks against. */
     private val clock: () -> Long = ::epochSecondsNow,
     /** How the banner dates an upgrade, and a row a balance last verified (unix seconds). */
@@ -168,6 +175,9 @@ class AccountsViewModel(
                 }
             }
         }
+        // Masked last, on the finished state; nothing is drawn before the choice is read, so a hidden
+        // amount never shows for a moment at the start.
+        .combine(observeAmountsHidden()) { state, hidden -> state.withAmountsHidden(hidden) }
         .stateIn(
             scope = viewModelScope,
             // Keeps collecting across a configuration change (the screen re-subscribes within
@@ -176,6 +186,12 @@ class AccountsViewModel(
             started = SharingStarted.WhileSubscribed(stopTimeoutMillis = 5_000, replayExpirationMillis = 0),
             initialValue = AccountsUiState.Loading(),
         )
+
+    /** Hides amounts, or shows them again: the eye at the top left. */
+    fun toggleAmounts() {
+        val ready = uiState.value as? AccountsUiState.Ready ?: return
+        viewModelScope.launch { setAmountsHidden(!ready.amountsHidden) }
+    }
 
     /** What [uiState] is made of, gathered before it is re-dated. */
     private data class Inputs(
@@ -478,3 +494,29 @@ private fun AccountValue.provenAts(): List<Long> =
     listOfNotNull((native as? BalanceReading.Verified)?.provenAt) +
         tokens.mapNotNull { (it.holding.reading as? TokenBalanceReading.Verified)?.provenAt }
 
+/**
+ * [this] as the screen draws it while amounts are [hidden] or not (docs/wallet-ux.md, *Hiding
+ * amounts*): the eye's state, and every amount it shows masked ([maskAmount]): the total, each
+ * network's, and each account's balance, value and total. What is not an amount ("Checking…", "No
+ * price", a note) stays as it is.
+ */
+internal fun AccountsUiState.withAmountsHidden(hidden: Boolean): AccountsUiState {
+    val ready = this as? AccountsUiState.Ready ?: return this
+    if (!hidden) return ready.copy(amountsHidden = false)
+    return ready.copy(
+        amountsHidden = true,
+        total = maskAmount(ready.total),
+        sections = ready.sections.map { section ->
+            section.copy(
+                total = maskAmount(section.total),
+                accounts = section.accounts.map { account ->
+                    account.copy(
+                        balance = maskAmount(account.balance),
+                        value = maskAmount(account.value),
+                        accountTotal = maskAmount(account.accountTotal),
+                    )
+                },
+            )
+        },
+    )
+}
