@@ -7,9 +7,10 @@ Whether anything here becomes work is the owner's call.
 
 ## What was reviewed and how
 
-- Scope: every Kotlin source of the repository. 826 files, 132k lines: 78k in
-  the main source sets of `domain`, `data`, `ui`, `android-app`, `desktop-app`
-  and `ios-app`, 50k of tests, and the eight Gradle scripts.
+- Scope: every Kotlin source of the repository. 818 `.kt` files and the eight
+  `.kts` scripts, 132k lines: 80.5k in the main source sets of `domain`, `data`,
+  `ui`, `android-app`, `desktop-app` and `ios-app`, 50.5k of tests, and 1.1k of
+  Gradle scripts.
 - Method: five reading passes, one per area (domain, data, the `ui` ViewModels
   and UiStates, the `ui` composables, the tests), plus the hosts and the build
   scripts, and a set of repository-wide counts (grep heuristics and a
@@ -34,7 +35,7 @@ The code is idiomatic, modern Kotlin, and unusually disciplined at the line
 level. Results are sealed interfaces, not exceptions: no port throws, no
 `kotlin.Result` appears in a signature, and `when` over those results is the
 dominant control flow. Nullability and mutability are exemplary: seven `!!` in
-78k lines of main code, no `lateinit`, no `MutableList` in a declared type, no
+80k lines of main code, no `lateinit`, no `MutableList` in a declared type, no
 wildcard import. Coroutine hygiene is careful: structured concurrency only,
 `CancellationException` rethrown before every broad catch that could see one,
 `NonCancellable` only around steps that must complete, `Mutex` and
@@ -75,7 +76,7 @@ All counts are over the main source sets unless the row says tests.
 
 | Measure | Count |
 |---|---|
-| Kotlin files / lines (main + tests) | 826 / 132k (78k + 50k) |
+| Files / lines | 818 `.kt` + 8 `.kts` / 132k (80.5k main + 50.5k tests + 1.1k Gradle) |
 | Main files over 800 lines / over 1,000 lines | 14 / 5 |
 | Block-bodied functions / over 60 lines / of those, composables | 1,325 / 70 / 50 |
 | Public top-level declarations / without KDoc | 795 / 0 |
@@ -432,7 +433,7 @@ stated; redacted `toString` on `Mnemonic` and `WalletPassword`; limb-based
   `SafeTxOnChain.kt:380-383`, one 124-column line
   (`SafeSettingsChanges.kt:50`).
 
-## Data (`data/src/*Main`, 112 files, 15.1k lines)
+## Data (`data/src/*Main`, 111 files, 15.1k lines)
 
 Modern, mostly idiomatic adapters: sealed results (`CallOutcome`,
 `EngineReading<out T>` with `data object Syncing : EngineReading<Nothing>`),
@@ -821,9 +822,12 @@ is X-11, C-10 (`Pair`) is X-04.
   `coworder/CowOrderScreen.kt:338, 343`, `safepropose/SafeProposeScreen.kt:327`,
   `safeswap/SafeSwapScreen.kt:310`, each with the comment "Empty in simple
   mode". The leaf is declared non-null (`components/TransferItems.kt:96`).
-  `send/SendScreen.kt:369` forgets the convention and draws an empty `Note`.
+  Send does not take part: its simple view draws a separate
+  `SimpleReviewContent` (`send/SendScreen.kt:262-267, 400`) and blanks nothing,
+  so its `Note(change.verifiedAt)` at `:369` always has text.
 - Idiomatic form: `verifiedAt: String?` and `feeDetail: String?` with `?.let {
-  Note(it) }`, as the same files do for every other optional line. A `String`
+  Note(it) }`, as the same files do for every other optional line, or Send's
+  shape, a simple composable of its own over the unchanged state. A `String`
   whose emptiness means "do not draw" is not a display-ready leaf, which is
   the project's own UiState rule.
 
