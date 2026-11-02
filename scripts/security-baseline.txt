@@ -12,7 +12,7 @@ WF-SHA-PIN	.github/workflows/android-apk.yml:actions/download-artifact@v4	# .git
 WF-SHA-PIN	.github/workflows/ci.yml:actions/checkout@v4	# .github/workflows/ci.yml:23: `actions/checkout@v4` is pinned by a movable tag, not a commit SHA
 WF-SHA-PIN	.github/workflows/ci.yml:actions/setup-java@v4	# .github/workflows/ci.yml:30: `actions/setup-java@v4` is pinned by a movable tag, not a commit SHA
 WF-SHA-PIN	.github/workflows/ci.yml:gradle/actions/setup-gradle@v4	# .github/workflows/ci.yml:39: `gradle/actions/setup-gradle@v4` is pinned by a movable tag, not a commit SHA
-WF-SHA-PIN	.github/workflows/ci.yml:actions/upload-artifact@v4	# .github/workflows/ci.yml:106: `actions/upload-artifact@v4` is pinned by a movable tag, not a commit SHA
+WF-SHA-PIN	.github/workflows/ci.yml:actions/upload-artifact@v4	# .github/workflows/ci.yml:119: `actions/upload-artifact@v4` is pinned by a movable tag, not a commit SHA
 WF-SHA-PIN	.github/workflows/claude-review.yml:actions/checkout@v4	# .github/workflows/claude-review.yml:151: `actions/checkout@v4` is pinned by a movable tag, not a commit SHA
 WF-SHA-PIN	.github/workflows/claude-review.yml:anthropics/claude-code-action@v1	# .github/workflows/claude-review.yml:237: `anthropics/claude-code-action@v1` is pinned by a movable tag, not a commit SHA
 WF-SHA-PIN	.github/workflows/claude-review.yml:actions/checkout@v4	# .github/workflows/claude-review.yml:389: `actions/checkout@v4` is pinned by a movable tag, not a commit SHA
@@ -43,8 +43,8 @@ WF-SHA-PIN	.github/workflows/ios.yml:actions/upload-artifact@v4	# .github/workfl
 WF-SHA-PIN	.github/workflows/release-version-guard.yml:actions/checkout@v4	# .github/workflows/release-version-guard.yml:62: `actions/checkout@v4` is pinned by a movable tag, not a commit SHA
 WF-SHA-PIN	.github/workflows/release-version-guard.yml:actions/setup-java@v4	# .github/workflows/release-version-guard.yml:65: `actions/setup-java@v4` is pinned by a movable tag, not a commit SHA
 WF-SHA-PIN	.github/workflows/release-version-guard.yml:gradle/actions/setup-gradle@v4	# .github/workflows/release-version-guard.yml:71: `gradle/actions/setup-gradle@v4` is pinned by a movable tag, not a commit SHA
-UI-NO-PUBLISHED-PHRASE	ui/src/commonTest/kotlin/eth/serotine/ui/createaccount/CreateAccountViewModelTest.kt:46	# ui/src/commonTest/kotlin/eth/serotine/ui/createaccount/CreateAccountViewModelTest.kt:46: a string of 12 BIP-39 words
-UI-NO-PUBLISHED-PHRASE	ui/src/desktopTest/kotlin/eth/serotine/ui/createaccount/CreateAccountScreenTest.kt:29	# ui/src/desktopTest/kotlin/eth/serotine/ui/createaccount/CreateAccountScreenTest.kt:29: a string of 12 BIP-39 words
+UI-NO-PUBLISHED-PHRASE	ui/src/commonTest/kotlin/eth/serotine/ui/createaccount/CreateAccountViewModelTest.kt:test test test	# ui/src/commonTest/kotlin/eth/serotine/ui/createaccount/CreateAccountViewModelTest.kt:46: a string of 12 BIP-39 words
+UI-NO-PUBLISHED-PHRASE	ui/src/desktopTest/kotlin/eth/serotine/ui/createaccount/CreateAccountScreenTest.kt:test test test	# ui/src/desktopTest/kotlin/eth/serotine/ui/createaccount/CreateAccountScreenTest.kt:29: a string of 12 BIP-39 words
 GRADLE-ENGINE-IMMUTABLE	https://raw.githubusercontent.com/biafra23/myotis/maven-repo	# settings.gradle.kts: the engine repository `https://raw.githubusercontent.com/biafra23/myotis/maven-repo` names a branch, not a commit
 GRADLE-VERIFICATION	metadata	# gradle/verification-metadata.xml is missing: artifacts are not checksummed
 GRADLE-WRAPPER	sha256	# gradle/wrapper/gradle-wrapper.properties: no distributionSha256Sum

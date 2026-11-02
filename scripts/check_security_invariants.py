@@ -60,9 +60,12 @@ class Checker:
             if not base.exists():
                 continue
             for path in sorted(base.rglob("*.kt")):
-                if "/build/" in path.as_posix():
+                relative = path.relative_to(self.repo)
+                if "build" in relative.parts:
                     continue
-                is_test = is_test_source(path)
+                # Classified on the path inside the repository: a checkout under a directory named
+                # `test` must not turn every file into a test source and empty the main-only checks.
+                is_test = is_test_source(relative)
                 if main_only and is_test:
                     continue
                 if tests_only and not is_test:
@@ -74,9 +77,14 @@ class Checker:
         return path.relative_to(self.repo).as_posix()
 
 
-def is_test_source(path: Path) -> bool:
-    parts = path.as_posix().split("/")
-    return any(part.endswith("Test") or part == "test" for part in parts if part != path.name)
+def is_test_source(relative: Path) -> bool:
+    """Whether [relative], a path inside the repository, is in a test source set."""
+    return any(part.endswith("Test") or part == "test" for part in relative.parts[:-1])
+
+
+def yaml_code(text: str) -> str:
+    """[text] without its full-line comments: what the runner reads, not what a header quotes."""
+    return "\n".join(line for line in text.splitlines() if not line.lstrip().startswith("#"))
 
 
 def strip_comments(text: str) -> str:
@@ -141,7 +149,9 @@ DANGEROUS_TRIGGERS = re.compile(r"^\s*(pull_request_target|workflow_run|issue_co
 
 
 def check_workflows(c: Checker) -> None:
-    workflows = sorted((c.repo / ".github" / "workflows").glob("*.yml"))
+    directory = c.repo / ".github" / "workflows"
+    # .yml and .yaml alike: GitHub runs both, so both are checked.
+    workflows = sorted(p for p in directory.iterdir() if p.suffix in (".yml", ".yaml")) if directory.is_dir() else []
     for wf in workflows:
         text = wf.read_text(encoding="utf-8")
         name = c.rel(wf)
@@ -170,23 +180,32 @@ def check_workflows(c: Checker) -> None:
             m = DANGEROUS_TRIGGERS.match(line)
             if m:
                 c.fail("WF-DANGEROUS-TRIGGER", f"{name}:{m.group(1)}", f"{name}:{n}: trigger `{m.group(1)}`")
-        # WF-RUN-INJECTION: no event-controlled expression inside a `run:` script.
+        # WF-RUN-INJECTION: no event-controlled expression inside a `run:` script. Keyed by the
+        # expression, not the line, so an edit above it does not make it a new violation.
+        def injection(line_number: int, line: str) -> None:
+            m = INJECTABLE.search(line)
+            if m:
+                expression = re.search(r"\$\{\{[^}]*\}\}", line[m.start() :])
+                key = expression.group(0) if expression else m.group(0)
+                c.fail("WF-RUN-INJECTION", f"{name}:{key}", f"{name}:{line_number}: `{key}` inside `run:`")
+
         i = 0
         while i < len(lines):
             line = lines[i]
             block = RUN_BLOCK.match(line)
             inline = RUN_INLINE.match(line)
-            if block and block.group(2) is not None:
+            # A block scalar (`run: |`, `run: >`) and a plain scalar that starts on the next line
+            # (`run:` alone) both continue on the more-indented lines that follow.
+            if block:
                 indent = len(block.group(1))
                 j = i + 1
                 while j < len(lines) and (not lines[j].strip() or len(lines[j]) - len(lines[j].lstrip()) > indent):
-                    if INJECTABLE.search(lines[j]):
-                        c.fail("WF-RUN-INJECTION", f"{name}:{j + 1}", f"{name}:{j + 1}: expression inside `run:`")
+                    injection(j + 1, lines[j])
                     j += 1
                 i = j
                 continue
-            if inline and not inline.group(2).startswith(("|", ">")) and INJECTABLE.search(inline.group(2)):
-                c.fail("WF-RUN-INJECTION", f"{name}:{i + 1}", f"{name}:{i + 1}: expression inside `run:`")
+            if inline and not inline.group(2).startswith(("|", ">")):
+                injection(i + 1, inline.group(2))
             i += 1
     c.ran("WF-SHA-PIN")
     c.ran("WF-DANGEROUS-TRIGGER")
@@ -195,7 +214,7 @@ def check_workflows(c: Checker) -> None:
     # WF-REVIEWER: the CI reviewer skips forks and can neither write the tree nor merge.
     review = ".github/workflows/claude-review.yml"
     if c.exists(review):
-        text = c.read(review)
+        text = yaml_code(c.read(review))  # the live expression, not a header quoting the rule
         if "head.repo.full_name == github.repository" not in text:
             c.fail("WF-REVIEWER", "fork-exclusion", f"{review}: the fork exclusion is gone")
         if re.search(r"^\s*contents:\s*write", text, re.M):
@@ -209,7 +228,7 @@ def check_workflows(c: Checker) -> None:
     # WF-SIGNING: the APK signing job keeps its guards.
     apk = ".github/workflows/android-apk.yml"
     if c.exists(apk):
-        text = c.read(apk)
+        text = yaml_code(c.read(apk))  # a guard quoted in a comment is no guard
         for needle, key in (
             ("persist-credentials: false", "persist-credentials"),
             ("environment: android-release", "environment"),
@@ -268,9 +287,18 @@ def check_android(c: Checker) -> None:
     build = "android-app/build.gradle.kts"
     if c.exists(build):
         gradle = strip_comments(c.read(build))
-        release = re.search(r"\brelease\s*\{(.*?)\n\s*\}", gradle, re.DOTALL)
-        if release and "signingConfig" in release.group(1):
-            c.fail("AND-RELEASE-SIGNING", "signingConfig", f"{build}: the release build type sets a signingConfig")
+        # The balanced `release { … }` blocks inside `buildTypes { … }`, whatever is declared around
+        # them: a `signingConfigs { release { … } }` above, a nested block inside the build type.
+        releases = [
+            block
+            for types in brace_blocks(gradle, r"\bbuildTypes\s*\{")
+            for block in brace_blocks(types, r"(?:\brelease|getByName\(\"release\"\))\s*\{")
+        ]
+        if not releases:
+            c.fail("AND-RELEASE-SIGNING", "release-block", f"{build}: no release build type found under buildTypes")
+        for block in releases:
+            if re.search(r"\bsigningConfig\b", block):
+                c.fail("AND-RELEASE-SIGNING", "signingConfig", f"{build}: the release build type sets a signingConfig")
         if 'module = "ui-tooling"' not in gradle:
             c.fail("AND-RELEASE-SIGNING", "ui-tooling", f"{build}: Compose ui-tooling is no longer excluded")
     c.ran("AND-RELEASE-SIGNING")
@@ -356,7 +384,7 @@ def check_architecture(c: Checker) -> None:
     # KEY-ENVELOPE-BOUNDS: the Argon2id floor and ceiling (docs/keys-and-signing.md, rule 2).
     envelope = "data/src/commonMain/kotlin/eth/serotine/data/keys/Envelope.kt"
     if c.exists(envelope):
-        text = c.read(envelope)
+        text = strip_comments(c.read(envelope))  # the old line kept in a comment is no floor
         for needle in (
             "const val MIN_MEMORY_BYTES = 64L * 1024 * 1024",
             "const val MIN_OPS = 2L",
@@ -413,7 +441,7 @@ def check_architecture(c: Checker) -> None:
     for rel in CAPTURE_PROTECTED:
         if not c.exists(rel):
             c.fail("UI-CAPTURE", rel, f"{rel} is missing (moved? add it to CAPTURE_PROTECTED)")
-        elif "protectFromScreenCapture()" not in c.read(rel):
+        elif "protectFromScreenCapture()" not in strip_comments(c.read(rel)):
             c.fail("UI-CAPTURE", rel, f"{rel} no longer calls protectFromScreenCapture()")
     c.ran("UI-CAPTURE")
 
@@ -421,7 +449,8 @@ def check_architecture(c: Checker) -> None:
     for path in c.kotlin_files("ui/src", main_only=True):
         for n, line in enumerate(path.read_text(encoding="utf-8").splitlines(), 1):
             if "rememberSaveable" in line and re.search(r"password|phrase|mnemonic|words|seed", line, re.I):
-                c.fail("UI-NO-SAVED-SECRET", f"{c.rel(path)}:{n}", f"{c.rel(path)}:{n}: a secret in rememberSaveable")
+                # Keyed by the line's text, not its number, so an edit above it is not a new violation.
+                c.fail("UI-NO-SAVED-SECRET", f"{c.rel(path)}:{line.strip()[:80]}", f"{c.rel(path)}:{n}: a secret in rememberSaveable")
     c.ran("UI-NO-SAVED-SECRET")
 
     # LOG-NO-PRINT: :ui and :domain never print (a UiState or a use case could carry a secret).
@@ -471,7 +500,10 @@ def check_ui_phrases(c: Checker) -> None:
                 for literal in re.findall(r'"([^"\\]*)"', line):
                     tokens = literal.lower().split()
                     if len(tokens) >= 12 and all(t in words for t in tokens):
-                        c.fail("UI-NO-PUBLISHED-PHRASE", f"{c.rel(path)}:{n}", f"{c.rel(path)}:{n}: a string of {len(tokens)} BIP-39 words")
+                        # Keyed by the file and the phrase's first words, not the line number: an
+                        # edit above the phrase is not a new violation; the phrase moving file is.
+                        key = f"{c.rel(path)}:{' '.join(tokens[:3])}"
+                        c.fail("UI-NO-PUBLISHED-PHRASE", key, f"{c.rel(path)}:{n}: a string of {len(tokens)} BIP-39 words")
     c.ran("UI-NO-PUBLISHED-PHRASE")
 
 

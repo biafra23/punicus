@@ -11,11 +11,19 @@ import kotlinx.coroutines.test.runTest
 
 /**
  * Acceptance test of finding N4 of the security audit of 2026-11-01 (.claude/rules/trust.md,
- * *Network-upgrade warnings are peer reports*): the update screen needs an activation peers
- * CONFIRMED, "not merely an announced time passing". A live report still in phase SCHEDULED whose
- * announced time has passed on the clock is the latter, so while the light client is only starting
- * it earns the banner, never the screen that replaces every other. Ignored while the finding is
- * open; remove the @Ignore with the fix.
+ * *Network-upgrade warnings are peer reports*): the update screen needs BOTH an activation peers
+ * CONFIRMED, "not merely an announced time passing", AND a light client that is not verifying. A
+ * live report still in phase SCHEDULED whose announced time has passed on the clock is the former
+ * leg unmet, whatever the light client's own state: the rule lists a stale head under the
+ * light-client leg of the AND, not as a confirmation by peers. So the banner, never the screen
+ * that replaces every other, for every status that is not verifying.
+ *
+ * The fix this test waits for keys confirmation on the report's phase. [ObserveUpgradeWarningTest]'s
+ * `theWarningChangesWhenTheActivationTimePassesWithNothingElseChanging` pins the other reading for
+ * the same shape (a live SCHEDULED report, its time passed, `WaitingForHead` → `UpdateRequired`),
+ * so the fix changes that test too, and [ObserveUpgradeWarning]'s KDoc says which reading the rule
+ * means. Which one is the owner's decision; this test encodes the rule's text. Ignored while the
+ * finding is open; remove the @Ignore with the fix.
  */
 @OptIn(ExperimentalCoroutinesApi::class)
 class ObserveUpgradeWarningConfirmationTest {
@@ -35,6 +43,8 @@ class ObserveUpgradeWarningConfirmationTest {
             LightClientStatus.Starting,
             LightClientStatus.Bootstrapping(lookingForServers = true),
             LightClientStatus.CatchingUp(1, 4),
+            LightClientStatus.WaitingForHead(headAgeSeconds = 120),
+            LightClientStatus.StaleAnchor(anchorAgePeriods = 20, boundPeriods = 13),
         )
         for (status in notVerifying) {
             lightClient.status.value = status

@@ -125,8 +125,8 @@ configurations.matching { it.name.endsWith("RuntimeClasspath") }.configureEach {
 
 
 class AndroidChecks(unittest.TestCase):
-    def android_tree(self) -> Tree:
-        tree = Tree(self)
+    def android_tree(self, owner: unittest.TestCase | None = None) -> Tree:
+        tree = Tree(owner or self)
         tree.write("android-app/src/main/AndroidManifest.xml", MANIFEST)
         tree.write("android-app/src/main/res/xml/data_extraction_rules.xml", RULES)
         tree.write("android-app/build.gradle.kts", BUILD)
@@ -170,8 +170,8 @@ internal object Envelope {
 
 
 class ArchitectureChecks(unittest.TestCase):
-    def minimal_tree(self) -> Tree:
-        tree = Tree(self)
+    def minimal_tree(self, owner: unittest.TestCase | None = None) -> Tree:
+        tree = Tree(owner or self)
         tree.write("data/src/commonMain/kotlin/eth/serotine/data/keys/Envelope.kt", ENVELOPE)
         tree.write("data/src/androidMain/kotlin/eth/serotine/data/keys/AndroidBiometricKey.kt",
                    "setUserAuthenticationRequired(true)\nsetInvalidatedByBiometricEnrollment(true)\n"
@@ -235,8 +235,8 @@ class ArchitectureChecks(unittest.TestCase):
 
 
 class PhraseAndBuildChecks(unittest.TestCase):
-    def wordlist_tree(self) -> Tree:
-        tree = Tree(self)
+    def wordlist_tree(self, owner: unittest.TestCase | None = None) -> Tree:
+        tree = Tree(owner or self)
         words = " ".join(f"w{i}" for i in range(2048 - len(WORDS))) + " " + " ".join(WORDS)
         tree.write("data/src/commonMain/kotlin/eth/serotine/data/keys/Bip39EnglishWordlist.kt",
                    'internal val BIP39_ENGLISH: List<String> = """\n' + words + '\n""".trim().split(" ")\n')
@@ -271,6 +271,72 @@ class PhraseAndBuildChecks(unittest.TestCase):
         self.assertEqual(set(), tree.ids(CHECKER.check_build))
         tree.write("settings.gradle.kts", settings.replace("REF", SHA).replace('includeGroup("eth.myotis")', ""))
         self.assertIn("GRADLE-REPOSITORIES", tree.ids(CHECKER.check_build))
+
+
+class ReviewFindingsOfPr217(unittest.TestCase):
+    """Each fixes a gap the review of PR #217 found; a check that regresses to it fails here."""
+
+    def test_a_needle_left_in_a_comment_does_not_satisfy_a_kotlin_check(self) -> None:
+        tree = ArchitectureChecks.minimal_tree(ArchitectureChecks("test_the_minimal_tree_passes"), self)
+        tree.write(CHECKER.CAPTURE_PROTECTED[0], "// protectFromScreenCapture()\nfun Screen() {}\n")
+        tree.write(
+            "data/src/commonMain/kotlin/eth/serotine/data/keys/Envelope.kt",
+            ENVELOPE.replace("const val MIN_MEMORY_BYTES = 64L", "// const val MIN_MEMORY_BYTES = 64L * 1024 * 1024\n    const val MIN_MEMORY_BYTES = 16L"),
+        )
+        ids = tree.ids(CHECKER.check_architecture)
+        self.assertIn("UI-CAPTURE", ids)
+        self.assertIn("KEY-ENVELOPE-BOUNDS", ids)
+
+    def test_a_guard_quoted_in_a_yaml_comment_does_not_satisfy_a_workflow_check(self) -> None:
+        tree = Tree(self)
+        tree.write(".github/workflows/android-apk.yml", "# persist-credentials: false\n# environment: android-release\n# scripts/sign_release_apk.sh\non: push\n")
+        tree.write(".github/workflows/claude-review.yml", "# if: head.repo.full_name == github.repository\non: pull_request\n")
+        ids = {(check, key) for check, key, _ in tree.violations(CHECKER.check_workflows)}
+        self.assertIn(("WF-SIGNING", "persist-credentials"), ids)
+        self.assertIn(("WF-REVIEWER", "fork-exclusion"), ids)
+
+    def test_a_checkout_under_a_directory_named_test_still_scans_main_sources(self) -> None:
+        outer = Tree(self)
+        repo = outer.root / "test" / "serotine"
+        repo.mkdir(parents=True)
+        (repo / "ui/src/commonMain/kotlin/eth/serotine/ui").mkdir(parents=True)
+        (repo / "ui/src/commonMain/kotlin/eth/serotine/ui/X.kt").write_text('fun x() { println("x") }\n', encoding="utf-8")
+        checker = CHECKER.Checker(repo, verbose=False)
+        CHECKER.check_architecture(checker)
+        self.assertIn("LOG-NO-PRINT", {check for check, _, _ in checker.violations})
+
+    def test_a_yaml_workflow_is_scanned_like_a_yml_one(self) -> None:
+        tree = Tree(self)
+        tree.write(".github/workflows/x.yaml", workflow("actions/checkout@v4"))
+        self.assertIn("WF-SHA-PIN", tree.ids(CHECKER.check_workflows))
+
+    def test_a_run_scalar_that_starts_on_the_next_line_is_scanned(self) -> None:
+        tree = Tree(self)
+        tree.write(
+            ".github/workflows/x.yml",
+            f"on: pull_request\njobs:\n  b:\n    steps:\n      - uses: actions/checkout@{SHA}\n"
+            '      - run:\n          echo "${{ github.head_ref }}"\n',
+        )
+        ids = {(check, key) for check, key, _ in tree.violations(CHECKER.check_workflows)}
+        self.assertIn(("WF-RUN-INJECTION", ".github/workflows/x.yml:${{ github.head_ref }}"), ids)
+
+    def test_a_signing_config_hidden_by_the_layout_is_still_found(self) -> None:
+        tree = AndroidChecks.android_tree(AndroidChecks("test_the_sound_host_passes"), self)
+        above = "android {\n    signingConfigs {\n        release {\n            storeFile = file(\"x\")\n        }\n    }\n" + BUILD[len("android {\n"):]
+        tree.write("android-app/build.gradle.kts", above.replace("isMinifyEnabled = false", "postprocessing {\n                isObfuscateEnabled = false\n            }\n            signingConfig = signingConfigs.getByName(\"release\")"))
+        self.assertIn("AND-RELEASE-SIGNING", tree.ids(CHECKER.check_android))
+        tree.write("android-app/build.gradle.kts", above)
+        self.assertNotIn("AND-RELEASE-SIGNING", tree.ids(CHECKER.check_android), "a signingConfigs block alone is no violation")
+
+    def test_a_phrase_key_survives_an_edit_above_it(self) -> None:
+        tree = PhraseAndBuildChecks.wordlist_tree(PhraseAndBuildChecks("test_twelve_wordlist_words_in_a_ui_string_are_a_violation"), self)
+        phrase = " ".join(WORDS[:12])
+        tree.write("ui/src/commonMain/kotlin/eth/serotine/ui/x/Previews.kt", f'val phrase = "{phrase}"\n')
+        before = {key for _, key, _ in tree.violations(CHECKER.check_ui_phrases)}
+        tree.write("ui/src/commonMain/kotlin/eth/serotine/ui/x/Previews.kt", f'import x\nimport y\nval phrase = "{phrase}"\n')
+        after = {key for _, key, _ in tree.violations(CHECKER.check_ui_phrases)}
+        self.assertEqual(before, after)
+        self.assertEqual({"ui/src/commonMain/kotlin/eth/serotine/ui/x/Previews.kt:" + " ".join(WORDS[:3])}, before)
 
 
 class RepositoryChecks(unittest.TestCase):
