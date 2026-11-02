@@ -48,6 +48,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import eth.serotine.domain.model.AccountKind
 import eth.serotine.domain.model.InterfaceMode
 import eth.serotine.ui.components.AccountAvatar
+import eth.serotine.ui.components.HideAmountsButton
 import eth.serotine.ui.components.LightClientHealthDot
 import eth.serotine.ui.components.MenuAction
 import eth.serotine.ui.components.NameWithControlBadge
@@ -115,6 +116,7 @@ fun AccountsRoute(
             onTurnOnNetwork = viewModel::turnOnNetwork,
             onSyncPastStaleAnchor = viewModel::syncPastStaleAnchor,
             onMessageShown = viewModel::messageShown,
+            onToggleAmounts = viewModel::toggleAmounts,
         )
         InterfaceMode.DETAILED -> AccountsScreen(
             state = state,
@@ -127,6 +129,7 @@ fun AccountsRoute(
             onTurnOnNetwork = viewModel::turnOnNetwork,
             onSyncPastStaleAnchor = viewModel::syncPastStaleAnchor,
             onMessageShown = viewModel::messageShown,
+            onToggleAmounts = viewModel::toggleAmounts,
         )
     }
 }
@@ -143,7 +146,9 @@ fun AccountsRoute(
  * and its total; on a network that is off, Send's reason offers to turn it on ([onTurnOnNetwork],
  * N18). A network whose light client refuses a stale checkpoint warns in its section, and its
  * "Catch up anyway…" asks first, then [onSyncPastStaleAnchor] (owner's request, 2026-10-24).
- * [fabExpandedAtStart] opens the button's fan from the start (a preview).
+ * [fabExpandedAtStart] opens the button's fan from the start (a preview). Once the list is read, the
+ * eye at the top left hides or shows every amount ([onToggleAmounts]; docs/wallet-ux.md, *Hiding
+ * amounts*).
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -159,6 +164,7 @@ fun AccountsScreen(
     onTurnOnNetwork: (chainId: Long) -> Unit = {},
     onSyncPastStaleAnchor: (chainId: Long) -> Unit = {},
     onMessageShown: () -> Unit = {},
+    onToggleAmounts: () -> Unit = {},
 ) {
     val snackbar = remember { SnackbarHostState() }
     // Said once: a network that could not be turned on.
@@ -197,7 +203,15 @@ fun AccountsScreen(
             }
         },
         // No network in the top bar: each section names its own (docs/networks.md, N1).
-        topBar = { TopAppBar(title = { Text("Accounts") }) },
+        topBar = {
+            TopAppBar(
+                // Top left, while there are amounts to hide.
+                navigationIcon = {
+                    (state as? AccountsUiState.Ready)?.let { HideAmountsButton(it.amountsHidden, onToggleAmounts) }
+                },
+                title = { Text("Accounts") },
+            )
+        },
     ) { padding ->
         Column(Modifier.padding(padding).fillMaxSize()) {
             state.upgrades.forEach { UpgradeBanner(it) }

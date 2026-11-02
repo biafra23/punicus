@@ -83,6 +83,7 @@ import eth.serotine.ui.components.GHOST_ROWS_UNKNOWN
 import eth.serotine.ui.components.GhostCircle
 import eth.serotine.ui.components.GhostLine
 import eth.serotine.ui.components.GhostRows
+import eth.serotine.ui.components.HideAmountsButton
 import eth.serotine.ui.components.LightClientItem
 import eth.serotine.ui.components.MenuAction
 import eth.serotine.ui.components.NetworkMark
@@ -199,6 +200,7 @@ fun AccountDetailRoute(
             onContinueSwap = onContinueSwap,
             onDismissWaiting = viewModel::dismissWaiting,
             onDerive = onDerive,
+            onToggleAmounts = viewModel::toggleAmounts,
         )
         // The strip is collected only where it is drawn: shared while subscribed, it stays idle otherwise.
         InterfaceMode.DETAILED -> AccountDetailScreen(
@@ -225,6 +227,7 @@ fun AccountDetailRoute(
             onContinueSwap = onContinueSwap,
             onDismissWaiting = viewModel::dismissWaiting,
             onDerive = onDerive,
+            onToggleAmounts = viewModel::toggleAmounts,
         )
     }
 }
@@ -245,7 +248,8 @@ fun AccountDetailRoute(
  * account's menu adds it on another network through [onAddOnNetwork] (N5), and the next account of
  * its recovery phrase through [onDerive], greyed out while its key is not on this device.
  * How the light client's state is shown is its [chrome]: Detailed view's strip under the top bar,
- * or simple mode's ([SimpleAccountDetailScreen]) pull-to-refresh.
+ * or simple mode's ([SimpleAccountDetailScreen]) pull-to-refresh. Once the account is read, the eye
+ * beside Back hides or shows every amount ([onToggleAmounts]; docs/wallet-ux.md, *Hiding amounts*).
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -273,6 +277,7 @@ fun AccountDetailScreen(
     onContinueSwap: (sell: String) -> Unit = {},
     onDismissWaiting: (sell: String) -> Unit = {},
     onDerive: () -> Unit = {},
+    onToggleAmounts: () -> Unit = {},
 ) {
     val snackbar = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
@@ -333,8 +338,12 @@ fun AccountDetailScreen(
         topBar = {
             TopAppBar(
                 navigationIcon = {
-                    IconButton(onClick = onBack) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
+                    Row {
+                        IconButton(onClick = onBack) {
+                            Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
+                        }
+                        // Top left, beside Back, while there are amounts to hide.
+                        (state as? AccountDetailUiState.Ready)?.let { HideAmountsButton(it.amountsHidden, onToggleAmounts) }
                     }
                 },
                 title = { Text((state as? AccountDetailUiState.Ready)?.label ?: "") },

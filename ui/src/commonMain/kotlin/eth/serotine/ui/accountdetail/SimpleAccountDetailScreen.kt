@@ -38,6 +38,7 @@ fun SimpleAccountDetailScreen(
     onContinueSwap: (sell: String) -> Unit = {},
     onDismissWaiting: (sell: String) -> Unit = {},
     onDerive: () -> Unit = {},
+    onToggleAmounts: () -> Unit = {},
 ) {
     val ready = state as? AccountDetailUiState.Ready
     AccountDetailScreen(
@@ -64,6 +65,7 @@ fun SimpleAccountDetailScreen(
         onContinueSwap = onContinueSwap,
         onDismissWaiting = onDismissWaiting,
         onDerive = onDerive,
+        onToggleAmounts = onToggleAmounts,
     )
 }
 

@@ -2,6 +2,7 @@ package eth.serotine.ui.activitydetail
 
 import androidx.compose.runtime.Composable
 import eth.serotine.ui.activity.ActivityState
+import eth.serotine.ui.components.AMOUNT_MASK
 import eth.serotine.ui.components.verifiedStripSample
 import eth.serotine.ui.theme.SerotineTheme
 import org.jetbrains.compose.ui.tooling.preview.Preview
@@ -124,6 +125,21 @@ private fun ActivityDetailSentPreview() = ActivityDetailPreview(sent)
 @Composable
 private fun ActivityDetailSentDarkPreview() = ActivityDetailPreview(sent, darkTheme = true)
 
+/** Amounts hidden: the eye beside Back closed, what it moved masked in its headline and its Amount. */
+private val sentHidden = sent.copy(
+    headline = "Sent $AMOUNT_MASK USDC",
+    fields = sent.fields.map { if (it.label == "Amount") it.copy(value = "$AMOUNT_MASK USDC") else it },
+    amountsHidden = true,
+)
+
+@Preview
+@Composable
+private fun ActivityDetailHiddenPreview() = ActivityDetailPreview(sentHidden)
+
+@Preview
+@Composable
+private fun ActivityDetailHiddenDarkPreview() = ActivityDetailPreview(sentHidden, darkTheme = true)
+
 @Preview
 @Composable
 private fun ActivityDetailUnconfirmedPreview() = ActivityDetailPreview(waiting)
@@ -163,4 +179,6 @@ internal val activityDetailScreenPreviews: List<@Composable () -> Unit> = listOf
     { ActivityDetailLoadingPreview() },
     { ActivityDetailUnavailablePreview() },
     { ActivityDetailUnfamiliarSenderPreview() },
+    { ActivityDetailHiddenPreview() },
+    { ActivityDetailHiddenDarkPreview() },
 )

@@ -1,8 +1,10 @@
 package eth.serotine.ui.accounts
 
+import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertTextEquals
 import androidx.compose.ui.test.junit4.createComposeRule
+import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
@@ -11,10 +13,14 @@ import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performTouchInput
 import eth.serotine.domain.model.AccountKind
 import eth.serotine.domain.model.Network
+import eth.serotine.ui.components.AMOUNT_MASK
 import eth.serotine.ui.components.Control
+import eth.serotine.ui.components.HIDE_AMOUNTS
+import eth.serotine.ui.components.HIDE_AMOUNTS_TAG
 import eth.serotine.ui.components.LightClientHealth.VERIFIED
 import eth.serotine.ui.components.LightClientItem
 import eth.serotine.ui.components.NetworkLabel
+import eth.serotine.ui.components.SHOW_AMOUNTS
 import eth.serotine.ui.theme.SerotineTheme
 import org.junit.Rule
 import org.junit.Test
@@ -44,6 +50,8 @@ class SimpleAccountsScreenTest {
     )
     private val strip = LightClientItem("Verified at block 23,614,077 · 8 s ago", null, false, VERIFIED)
 
+    private var toggles = 0
+
     private fun show(state: AccountsUiState) = rule.setContent {
         SerotineTheme {
             SimpleAccountsScreen(
@@ -54,6 +62,7 @@ class SimpleAccountsScreenTest {
                 onCreateSafe = {},
                 onAccountAction = { actions += it },
                 onRefresh = { refreshes++ },
+                onToggleAmounts = { toggles++ },
             )
         }
     }
@@ -63,6 +72,34 @@ class SimpleAccountsScreenTest {
         total = "€12,025.55",
         freshness = "Updated 2 min ago · pull down to refresh",
     )
+
+    @Test
+    fun theEyeAtTheTopLeftSaysWhatItDoesAndAsksToToggle() {
+        show(ready(main))
+        rule.onNodeWithContentDescription(HIDE_AMOUNTS).assertIsDisplayed().performClick()
+        assertEquals(1, toggles)
+    }
+
+    @Test
+    fun hiddenAmountsAreDrawnAsTheyComeAndTheEyeIsClosed() {
+        val hidden = ready(main).withAmountsHidden(true) as AccountsUiState.Ready
+        show(hidden)
+
+        rule.onNodeWithContentDescription(SHOW_AMOUNTS).assertIsDisplayed()
+        // The total and the account's total: two figures, both masked.
+        rule.onAllNodesWithText("€$AMOUNT_MASK").assertCountEquals(2)
+        rule.onNodeWithText("$AMOUNT_MASK ETH").assertIsDisplayed()
+        rule.onNodeWithText("€12,025.55").assertDoesNotExist()
+        rule.onNodeWithText("3.2041 ETH").assertDoesNotExist()
+        // The name and the network stay.
+        rule.onNodeWithText("Main").assertIsDisplayed()
+    }
+
+    @Test
+    fun noEyeWhileThereIsNothingToHide() {
+        show(AccountsUiState.Loading())
+        rule.onNodeWithTag(HIDE_AMOUNTS_TAG).assertDoesNotExist()
+    }
 
     @Test
     fun aRowsMenuAddsAnAccountFromTheSamePhrase() {

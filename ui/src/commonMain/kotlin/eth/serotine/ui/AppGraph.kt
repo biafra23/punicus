@@ -7,6 +7,7 @@ import eth.serotine.domain.model.Digest
 import eth.serotine.domain.model.Network
 import eth.serotine.domain.repository.AccountRepository
 import eth.serotine.domain.repository.AddressKinds
+import eth.serotine.domain.repository.AmountsHiddenSetting
 import eth.serotine.domain.repository.Broadcaster
 import eth.serotine.domain.repository.CowApi
 import eth.serotine.domain.repository.CowChain
@@ -74,6 +75,7 @@ import eth.serotine.domain.usecase.ObserveAccountHistory
 import eth.serotine.domain.usecase.ObserveAccountValue
 import eth.serotine.domain.usecase.ObserveAccounts
 import eth.serotine.domain.usecase.ObserveAddressKind
+import eth.serotine.domain.usecase.ObserveAmountsHidden
 import eth.serotine.domain.usecase.ObserveCowOrder
 import eth.serotine.domain.usecase.ObserveCowOrderLife
 import eth.serotine.domain.usecase.ObserveDebugLog
@@ -135,6 +137,7 @@ import eth.serotine.domain.usecase.SetNetworkEnabled
 import eth.serotine.domain.usecase.SetTokenHidden
 import eth.serotine.domain.usecase.SignSafeTx
 import eth.serotine.domain.usecase.SyncPastStaleAnchor
+import eth.serotine.domain.usecase.ToggleAmountsHidden
 import eth.serotine.domain.usecase.WalletChanges
 import eth.serotine.domain.usecase.WarmFeeHistory
 import eth.serotine.domain.usecase.WatchAddress
@@ -277,6 +280,8 @@ class AppGraph(
     private val debugScreen: DebugScreenSetting,
     /** The view the user chose in Settings, simple mode or Detailed view (docs/simple-ui.md). */
     private val interfaceMode: InterfaceModeSetting,
+    /** Whether the user hides amounts with the eye of the screens that show them (docs/wallet-ux.md). */
+    private val amountsHidden: AmountsHiddenSetting,
     /** How fresh each network's values are kept: live, or proven on demand in simple mode (docs/simple-ui.md). */
     private val networkFreshness: NetworkFreshness,
     /**
@@ -295,6 +300,9 @@ class AppGraph(
     /** The one [WalletChanges] of the app: imports and removals never interleave. */
     private val walletChanges = WalletChanges()
 
+    /** The one toggle of the eye for every screen: its taps take turns app-wide, not only within a screen. */
+    private val toggleAmountsHidden = ToggleAmountsHidden(amountsHidden)
+
     /** Every network's upgrade warning, and whether the update screen replaces the app (docs/networks.md). */
     private fun observeUpgradeWarnings() =
         ObserveUpgradeWarnings(networkUpgrades, knownUpgrades, lightClient, networkSettings, accounts)
@@ -311,6 +319,8 @@ class AppGraph(
             SyncPastStaleAnchor(lightClient, staleAnchorConsent),
             RefreshNetworkData(networkFreshness),
             ObserveNetworkLive(networkFreshness),
+            ObserveAmountsHidden(amountsHidden),
+            toggleAmountsHidden,
         )
 
     /** The light clients' status strips of the screens that depend on them: one for the app, in the host's scope. */
@@ -335,6 +345,8 @@ class AppGraph(
             ObserveNetworkLive(networkFreshness),
             ObserveLightClient(lightClient),
             DropWaitingSwap(waitingSwaps),
+            ObserveAmountsHidden(amountsHidden),
+            toggleAmountsHidden,
         )
 
     /**
@@ -576,6 +588,8 @@ class AppGraph(
         ObserveTokenTransfers(logIndex, historyStarts),
         knownTokens(),
         ObserveSentToAddresses(transactionHistory),
+        ObserveAmountsHidden(amountsHidden),
+        toggleAmountsHidden,
     )
 
     /** Create Safe (docs/wallet-ux.md, screens 13 to 15). */

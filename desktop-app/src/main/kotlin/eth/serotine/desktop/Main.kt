@@ -25,6 +25,7 @@ import eth.serotine.data.safe.JsonSigningRequestCodec
 import eth.serotine.data.safe.PinnedSafeReleases
 import eth.serotine.data.settings.FileDebugScreen
 import eth.serotine.data.settings.FileDisplayCurrency
+import eth.serotine.data.settings.FileAmountsHidden
 import eth.serotine.data.settings.FileInterfaceMode
 import eth.serotine.data.settings.FileSwapVenue
 import eth.serotine.data.swaps.FileWaitingSwaps
@@ -151,6 +152,7 @@ private fun openWallet(dataDir: File) {
     val debugScreen = FileDebugScreen(dataDir.resolve("debug-screen.json").path)
     // The view the user chose, simple mode or Detailed view (docs/simple-ui.md); the Debug tab is the latter's.
     val interfaceMode = FileInterfaceMode(dataDir.resolve("ui-mode.json").path)
+    val amountsHidden = FileAmountsHidden(dataDir.resolve("amounts-hidden.json").path)
     // One engine, one light client per network that is on and needed (FollowNetworks, below).
     val node = MyotisHost.start(
         dataDir.resolve("myotis"),
@@ -354,6 +356,7 @@ private fun openWallet(dataDir: File) {
                 debugLog = apiLog,
                 debugScreen = debugScreen,
                 interfaceMode = interfaceMode,
+                amountsHidden = amountsHidden,
                 // The desktop keeps no window out of screen capture, so there is nothing to lift.
                 screenCaptureDebugSwitch = null,
                 networkDemand = networkDemand,

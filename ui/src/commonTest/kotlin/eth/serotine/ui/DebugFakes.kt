@@ -3,6 +3,7 @@ package eth.serotine.ui
 import eth.serotine.domain.model.InterfaceMode
 import eth.serotine.domain.model.LogLevel
 import eth.serotine.domain.model.LogRecord
+import eth.serotine.domain.repository.AmountsHiddenSetting
 import eth.serotine.domain.repository.DebugLog
 import eth.serotine.domain.repository.DebugScreenSetting
 import eth.serotine.domain.repository.InterfaceModeSetting
@@ -33,6 +34,20 @@ internal class MemoryInterfaceMode(mode: InterfaceMode = InterfaceMode.SIMPLE) :
     override suspend fun set(mode: InterfaceMode): Boolean {
         if (failSaves) return false
         this.mode.value = mode
+        return true
+    }
+}
+
+/** An [AmountsHiddenSetting] in memory: [hidden] as a test sets it, and as the app saves it unless [failSaves]. */
+internal class MemoryAmountsHidden(hidden: Boolean = false) : AmountsHiddenSetting {
+    val hidden = MutableStateFlow(hidden)
+    var failSaves = false
+
+    override fun observe(): Flow<Boolean> = this.hidden
+
+    override suspend fun set(hidden: Boolean): Boolean {
+        if (failSaves) return false
+        this.hidden.value = hidden
         return true
     }
 }

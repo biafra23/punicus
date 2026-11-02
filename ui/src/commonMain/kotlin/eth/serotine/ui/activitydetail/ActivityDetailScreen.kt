@@ -40,6 +40,7 @@ import eth.serotine.ui.activity.statusColor
 import eth.serotine.ui.components.AccountAvatar
 import eth.serotine.ui.components.Blockie
 import eth.serotine.ui.components.HiddenDetails
+import eth.serotine.ui.components.HideAmountsButton
 import eth.serotine.ui.components.LightClientItem
 import eth.serotine.ui.components.SerotineIcons
 import eth.serotine.ui.components.UnderLightClientStripIfAny
@@ -79,6 +80,7 @@ fun ActivityDetailRoute(
             onStatus,
             onAddToken,
             modifier,
+            onToggleAmounts = viewModel::toggleAmounts,
             syncLine = lightClient.collectAsStateWithLifecycle().value,
         )
         // The strip in Detailed view; in simple mode the same item, drawn as the sync line while it says something.
@@ -90,6 +92,7 @@ fun ActivityDetailRoute(
             onStatus = onStatus,
             onAddToken = onAddToken,
             modifier = modifier,
+            onToggleAmounts = viewModel::toggleAmounts,
         )
     }
 }
@@ -100,7 +103,8 @@ fun ActivityDetailRoute(
  * concerns in full, each with Copy ([onCopy]); Status ([onStatus]) for a transaction sent from
  * here, and Add token ([onAddToken]) for an ERC-20 contract the wallet does not list.
  * [lightClient] is the strip above it, Detailed view's; simple mode ([SimpleActivityDetailScreen])
- * has none, and keeps the block behind *Details* ([details]).
+ * has none, and keeps the block behind *Details* ([details]). Once it is shown, the eye beside Back
+ * hides or shows its amounts ([onToggleAmounts]; docs/wallet-ux.md, *Hiding amounts*).
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -112,6 +116,7 @@ fun ActivityDetailScreen(
     onStatus: (String) -> Unit,
     onAddToken: (String) -> Unit,
     modifier: Modifier = Modifier,
+    onToggleAmounts: () -> Unit = {},
     details: List<DetailField> = emptyList(),
     syncLine: LightClientItem? = null,
 ) {
@@ -120,8 +125,12 @@ fun ActivityDetailScreen(
         topBar = {
             TopAppBar(
                 navigationIcon = {
-                    IconButton(onClick = onBack) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
+                    Row {
+                        IconButton(onClick = onBack) {
+                            Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
+                        }
+                        // Top left, beside Back, while there are amounts to hide.
+                        (state as? ActivityDetailUiState.Shown)?.let { HideAmountsButton(it.amountsHidden, onToggleAmounts) }
                     }
                 },
                 title = {

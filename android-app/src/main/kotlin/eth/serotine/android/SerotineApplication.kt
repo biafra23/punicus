@@ -38,6 +38,7 @@ import eth.serotine.data.safe.JsonSigningRequestCodec
 import eth.serotine.data.safe.PinnedSafeReleases
 import eth.serotine.data.settings.FileDebugScreen
 import eth.serotine.data.settings.FileDisplayCurrency
+import eth.serotine.data.settings.FileAmountsHidden
 import eth.serotine.data.settings.FileInterfaceMode
 import eth.serotine.data.settings.FileSwapVenue
 import eth.serotine.data.swaps.FileWaitingSwaps
@@ -178,6 +179,7 @@ class SerotineApplication : Application() {
 
     /** The view the user chose, simple mode or Detailed view (docs/simple-ui.md), beside the other settings. */
     private val interfaceMode by lazy { FileInterfaceMode(filesDir.resolve("ui-mode.json").path) }
+    private val amountsHidden by lazy { FileAmountsHidden(filesDir.resolve("amounts-hidden.json").path) }
 
     /** eth.serotine.debug is debuggable, the release app is not: what the debug app's extras hang on. */
     private val debuggable by lazy { applicationInfo.flags and ApplicationInfo.FLAG_DEBUGGABLE != 0 }
@@ -398,6 +400,7 @@ class SerotineApplication : Application() {
             debugLog = debugLog,
             debugScreen = debugScreen,
             interfaceMode = interfaceMode,
+            amountsHidden = amountsHidden,
             // The debug app only: Settings may lift FLAG_SECURE for a screen recording, until the
             // process ends. The release app has no switch (docs/keys-and-signing.md, rule 8).
             screenCaptureDebugSwitch = if (debuggable) ScreenCaptureDebugSwitch() else null,

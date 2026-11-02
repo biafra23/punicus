@@ -26,7 +26,6 @@ import eth.serotine.domain.usecase.ObserveTokenTransfers
 import eth.serotine.domain.usecase.ObserveWaitingSwaps
 import eth.serotine.domain.usecase.SafeChainEvent
 import eth.serotine.domain.usecase.TokenTransferEvent
-import eth.serotine.ui.components.exactAmount
 import eth.serotine.ui.components.grouped
 import eth.serotine.ui.platform.formatDateTime
 import kotlinx.coroutines.flow.Flow
@@ -61,15 +60,17 @@ class AccountActivity(
     private val formatTime: (Long) -> String = ::formatDateTime,
 ) {
 
-    /** The Activity of the [account], as it changes; nothing is read until it is collected. */
-    fun of(account: AccountId): Flow<ActivityUiState> = Listing(account).state
+    /**
+     * The Activity of the [account], as it changes, with every amount masked while [hideAmounts] says
+     * so (docs/wallet-ux.md, *Hiding amounts*); nothing is read until it is collected.
+     */
+    fun of(account: AccountId, hideAmounts: Flow<Boolean>): Flow<ActivityUiState> =
+        Listing(account, hideAmounts).state
 
-    /** One account's Activity: the [account] its rows and sources are of. */
-    private inner class Listing(private val account: AccountId) {
+    /** One account's Activity: the [account] its rows and sources are of, and whether its amounts are hidden. */
+    private inner class Listing(private val account: AccountId, private val hideAmounts: Flow<Boolean>) {
 
         private val address: Address = account.address
-
-        private val rows = ActivityRows(address, account.network, formatTime)
 
         private val sources = ActivitySources(
             account,
@@ -85,7 +86,8 @@ class AccountActivity(
                 observeAccountHistory(account),
                 observeCowOrders(account),
                 observeWaitingSwaps(account),
-            ) { history, orders, waiting -> SentHere(history, orders, waiting) },
+                hideAmounts,
+            ) { history, orders, waiting, hidden -> SentHere(history, orders, waiting, hidden) },
             sources.parties,
             sources.safeHistory,
             sources.transfers,
@@ -102,11 +104,13 @@ class AccountActivity(
         ): ActivityUiState {
             val names = parties.names
             val (history, orders) = sentHere
+            // Built per change, for the amounts it says to follow the eye.
+            val rows = ActivityRows(address, account.network, formatTime, sentHere.hidden)
             val entries = when (history) {
                 HistoryList.Unreadable -> return ActivityUiState.Unavailable(UNREADABLE)
                 is HistoryList.Loaded -> history.entries
             }
-            val waiting = sentHere.waiting.map { waitingStep(it, entries, tokens) }
+            val waiting = sentHere.waiting.map { waitingStep(it, entries, tokens, rows) }
             // The CoW orders signed here among them, by when each was signed: a live one waits for
             // its end as a transaction waits for its block, a filled or cancelled one goes by the
             // block of its fill or its cancellation, and one never filled by where it was signed
@@ -185,12 +189,17 @@ class AccountActivity(
          * [swap] as its card: what it swaps, once the tokens are known, and where it stands, from its
          * approval's outcome in [entries]. Step 1 is said done only on a verified receipt that it succeeded.
          */
-        private fun waitingStep(swap: WaitingSwap, entries: List<HistoryEntry>, tokens: Map<Address, KnownToken>?) =
+        private fun waitingStep(
+            swap: WaitingSwap,
+            entries: List<HistoryEntry>,
+            tokens: Map<Address, KnownToken>?,
+            rows: ActivityRows,
+        ) =
             WaitingStep(
                 title = tokens?.get(swap.sell)?.token?.let { sold ->
                     // Only no token bought is the network's currency: one no longer listed is not named.
                     val bought = if (swap.buy == null) account.network.nativeSymbol else tokens[swap.buy]?.token?.symbol
-                    bought?.let { "Swap ${exactAmount(swap.amount, sold.decimals, sold.symbol)} → $it" }
+                    bought?.let { "Swap ${rows.figure(swap.amount, sold.decimals, sold.symbol)} → $it" }
                 } ?: "A swap",
                 message = waitingText(swap, entries.firstOrNull { it.transfer.hash.equals(swap.approval, true) }),
                 sell = swap.sell.hex,
@@ -214,11 +223,15 @@ class AccountActivity(
         }
     }
 
-    /** What this device sent for the account: its [history], its CoW [orders], and its swaps [waiting] for a step. */
+    /**
+     * What this device sent for the account: its [history], its CoW [orders], and its swaps [waiting]
+     * for a step; and whether amounts are [hidden].
+     */
     private data class SentHere(
         val history: HistoryList,
         val orders: List<CowOrderRecord>,
         val waiting: List<WaitingSwap>,
+        val hidden: Boolean,
     )
 
     /**

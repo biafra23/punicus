@@ -19,6 +19,7 @@ fun SimpleActivityDetailScreen(
     onStatus: (String) -> Unit,
     onAddToken: (String) -> Unit,
     modifier: Modifier = Modifier,
+    onToggleAmounts: () -> Unit = {},
     syncLine: LightClientItem? = null,
 ) {
     val shown = state as? ActivityDetailUiState.Shown
@@ -33,6 +34,7 @@ fun SimpleActivityDetailScreen(
         onStatus = onStatus,
         onAddToken = onAddToken,
         modifier = modifier,
+        onToggleAmounts = onToggleAmounts,
         details = shown?.fields.orEmpty().filter { it.kind == DetailKind.BLOCK },
         syncLine = syncLine,
     )

@@ -151,6 +151,23 @@ the text wins.
   desktop) opens an item's menu; every action in it is also reachable from a
   visible control (the detail screen's buttons), and the menu has an
   accessibility label (`onLongClickLabel`).
+- **Hiding amounts** (owner's request, 2026-11-01; mockups approved the
+  same day). An eye at the top left of every screen that shows how much an
+  account holds or moved — Accounts (1), an account (4) with its Assets and
+  Activity (25), and an Activity row's detail (26) — hides the amounts: on
+  Accounts it stands where Back would, elsewhere right after Back. Open
+  while amounts show, closed and tinted while they are hidden; a tap
+  toggles it, and the choice is kept across restarts
+  (`AmountsHiddenSetting`, `FileAmountsHidden`). Hidden, every figure reads
+  `••••` beside its unit (`•••• ETH`, `€••••`), a sign and a "< " in front
+  of a tiny one included; what is held, names, addresses, networks, times
+  and statuses stay, and so does everything that is not an amount
+  ("Checking…", "No price"). Copy still copies what it copied. Send, Swap,
+  a CoW order, a Safe transaction and a transfer's status always show their
+  amounts: they are acted on, and a signature is never asked for blind. A
+  Safe's Queue rows are those transactions' and show theirs too. Both views
+  hide alike. The ViewModels mask, so the screens draw display-ready
+  strings as everywhere else (`components/HiddenAmounts.kt`).
 
 ## Navigation
 

@@ -39,6 +39,7 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import eth.serotine.ui.components.AccountAvatar
+import eth.serotine.ui.components.HideAmountsButton
 import eth.serotine.ui.components.NameWithControlBadge
 import eth.serotine.ui.components.StaleAnchorBanner
 import eth.serotine.ui.components.StaleAnchorDialog
@@ -66,7 +67,8 @@ const val ACCOUNTS_UNREACHABLE_TAG = "accounts-unreachable-"
  * balances from before gets a banner, and those rows are dimmed with their age. Pulling the list
  * down, or the Refresh button, asks [onRefresh]. Everything else is as [AccountsScreen] has it: the
  * + button, a row's tap and long-press menu, the greyed-out actions and their reasons, the upgrade
- * banners and a stale checkpoint's warning with its "Catch up anyway…".
+ * banners and a stale checkpoint's warning with its "Catch up anyway…", and the eye at the top left
+ * that hides or shows every amount ([onToggleAmounts]).
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -83,6 +85,7 @@ fun SimpleAccountsScreen(
     onTurnOnNetwork: (chainId: Long) -> Unit = {},
     onSyncPastStaleAnchor: (chainId: Long) -> Unit = {},
     onMessageShown: () -> Unit = {},
+    onToggleAmounts: () -> Unit = {},
 ) {
     val snackbar = remember { SnackbarHostState() }
     val message = (state as? AccountsUiState.Ready)?.message
@@ -122,6 +125,8 @@ fun SimpleAccountsScreen(
         },
         topBar = {
             TopAppBar(
+                // Top left, while there are amounts to hide.
+                navigationIcon = { ready?.let { HideAmountsButton(it.amountsHidden, onToggleAmounts) } },
                 title = { Text("Accounts") },
                 actions = {
                     // Pulling down is not the only way: a mouse, a screen reader, a keyboard get a button.

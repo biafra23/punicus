@@ -94,6 +94,15 @@ private fun SimpleAccountAssetsPreview() = SimpleAccountDetailPreview(main)
 @Composable
 private fun SimpleAccountAssetsDarkPreview() = SimpleAccountDetailPreview(main, darkTheme = true)
 
+/** Amounts hidden: the eye beside Back closed, the total and each asset's amount and value masked. */
+@Preview
+@Composable
+private fun SimpleAccountHiddenPreview() = SimpleAccountDetailPreview(main.withAmountsHidden(true))
+
+@Preview
+@Composable
+private fun SimpleAccountHiddenDarkPreview() = SimpleAccountDetailPreview(main.withAmountsHidden(true), darkTheme = true)
+
 /** Ethereum's amounts from before: each says how old it is, out of the total. */
 private val fromBefore = main.copy(
     total = "Checking…",
@@ -261,4 +270,6 @@ internal val simpleAccountDetailScreenPreviews: List<@Composable () -> Unit> = l
     { SimpleAccountWaitingSwapPreview() },
     { SimpleAccountSafePreview() },
     { SimpleAccountNetworkOffPreview() },
+    { SimpleAccountHiddenPreview() },
+    { SimpleAccountHiddenDarkPreview() },
 )

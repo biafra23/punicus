@@ -2,6 +2,7 @@ package eth.serotine.ui.activitydetail
 
 import androidx.compose.runtime.Composable
 import eth.serotine.ui.activity.ActivityState
+import eth.serotine.ui.components.AMOUNT_MASK
 import eth.serotine.ui.theme.SerotineTheme
 import org.jetbrains.compose.ui.tooling.preview.Preview
 
@@ -50,8 +51,25 @@ private fun SimpleActivityDetailSentPreview() = SimpleActivityDetailPreview(sent
 @Composable
 private fun SimpleActivityDetailSentDarkPreview() = SimpleActivityDetailPreview(sent, darkTheme = true)
 
+/** Amounts hidden: the eye beside Back closed, what it moved masked in its headline and its Amount. */
+private val sentHidden = sent.copy(
+    headline = "Sent $AMOUNT_MASK USDC",
+    fields = sent.fields.map { if (it.label == "Amount") it.copy(value = "$AMOUNT_MASK USDC") else it },
+    amountsHidden = true,
+)
+
+@Preview
+@Composable
+private fun SimpleActivityDetailHiddenPreview() = SimpleActivityDetailPreview(sentHidden)
+
+@Preview
+@Composable
+private fun SimpleActivityDetailHiddenDarkPreview() = SimpleActivityDetailPreview(sentHidden, darkTheme = true)
+
 /** Every preview above, which SimpleActivityDetailScreenPreviewsTest renders: a new preview goes in here too. */
 internal val simpleActivityDetailScreenPreviews: List<@Composable () -> Unit> = listOf(
     { SimpleActivityDetailSentPreview() },
     { SimpleActivityDetailSentDarkPreview() },
+    { SimpleActivityDetailHiddenPreview() },
+    { SimpleActivityDetailHiddenDarkPreview() },
 )

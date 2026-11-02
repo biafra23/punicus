@@ -43,7 +43,9 @@ sealed interface AccountDetailUiState {
      * while nothing is proven yet) and whether a refresh is being answered ([refreshing]), and
      * [cantCheck], a banner while its network cannot be checked and the screen shows amounts from
      * before, or its light client has no fresh head; "is still syncing" while it catches up
-     * (docs/simple-ui.md, H4 and *The sync line*).
+     * (docs/simple-ui.md, H4 and *The sync line*). [amountsHidden] while the user hides amounts with
+     * the eye beside Back (docs/wallet-ux.md, *Hiding amounts*): the total, the assets and the
+     * Activity already read "••••" beside their units.
      */
     data class Ready(
         val label: String,
@@ -72,6 +74,7 @@ sealed interface AccountDetailUiState {
         val freshness: String? = null,
         val refreshing: Boolean = false,
         val cantCheck: UnreachableNetwork? = null,
+        val amountsHidden: Boolean = false,
     ) : AccountDetailUiState {
 
         /** The tabs this account has: Assets | Activity, and a Safe's Owners | Queue after them. */
