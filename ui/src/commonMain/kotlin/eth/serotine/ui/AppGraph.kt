@@ -300,6 +300,9 @@ class AppGraph(
     /** The one [WalletChanges] of the app: imports and removals never interleave. */
     private val walletChanges = WalletChanges()
 
+    /** The one toggle of the eye for every screen: its taps take turns app-wide, not only within a screen. */
+    private val toggleAmountsHidden = ToggleAmountsHidden(amountsHidden)
+
     /** Every network's upgrade warning, and whether the update screen replaces the app (docs/networks.md). */
     private fun observeUpgradeWarnings() =
         ObserveUpgradeWarnings(networkUpgrades, knownUpgrades, lightClient, networkSettings, accounts)
@@ -317,7 +320,7 @@ class AppGraph(
             RefreshNetworkData(networkFreshness),
             ObserveNetworkLive(networkFreshness),
             ObserveAmountsHidden(amountsHidden),
-            ToggleAmountsHidden(amountsHidden),
+            toggleAmountsHidden,
         )
 
     /** The light clients' status strips of the screens that depend on them: one for the app, in the host's scope. */
@@ -343,7 +346,7 @@ class AppGraph(
             ObserveLightClient(lightClient),
             DropWaitingSwap(waitingSwaps),
             ObserveAmountsHidden(amountsHidden),
-            ToggleAmountsHidden(amountsHidden),
+            toggleAmountsHidden,
         )
 
     /**
@@ -586,7 +589,7 @@ class AppGraph(
         knownTokens(),
         ObserveSentToAddresses(transactionHistory),
         ObserveAmountsHidden(amountsHidden),
-        ToggleAmountsHidden(amountsHidden),
+        toggleAmountsHidden,
     )
 
     /** Create Safe (docs/wallet-ux.md, screens 13 to 15). */
