@@ -158,7 +158,7 @@ already begun to differ.
   already come loose in one (`iosMain/.../MyotisHost.kt:472-476`).
 - H-01: the "rethrow `CancellationException`, report everything else" block
   inlined about 20 times in the Android and desktop hosts while the iOS host
-  has the helper (`SerotineWallet.kt:449-457`).
+  has the helper (`SerotineWallet.kt:380-388`).
 - A-07: `WORD_HEX_DIGITS` defined 5 times, `UNKNOWN_BLOCK` 4, `REFUSED` 3,
   `val JSON = Json` in 15 companions, `report()` 4 times, two hex codecs.
 - C-04: capture-warning text in 5 files, spinner-in-button 25 times in 16
@@ -184,7 +184,7 @@ already begun to differ.
   (`Pair<Int, Int>` step positions; the domain's `WaitingSwap` already names
   them `step`/`steps`), `activity/ActivityRows.kt:100-104, 203, 322, 346`,
   `watch/WatchViewModel.kt:547, 570`, `components/TransferInputs.kt:243`;
-  `android-app/.../SerotineApplication.kt:278-287` (`rateReads` as a `Pair`
+  `android-app/.../SerotineApplication.kt:261-273` (`rateReads` as a `Pair`
   then destructured).
 - Idiomatic form: a small, often private, `data class` (`StepPosition(number,
   of)`, `Pin(address, codeHash)`, `Refusal(why, errorType)`, `FieldNote(text,
@@ -241,11 +241,12 @@ already begun to differ.
   jvmShared `MyotisHost.kt:249, 272, 498, 507, 839` (`System.err`), iosMain
   `MyotisHost.kt:783` (`NSLog` with its own `%` escaping),
   `desktopMain/.../MacBiometricKey.kt:54, 75, 108, 180`;
-  `android-app/.../SerotineApplication.kt:152, 168, 413, 614` (`System.err`
-  on Android; `Log.d` only for the engine's debug log at `:134`);
-  `ios-app/.../SerotineWallet.kt:263, 456, 471` (`println`, although the same
-  file says at `:195-198` that `println` reaches no one on a device);
-  `desktop-app/.../Main.kt:371, 383, 386`, `TrayUpgradeNotifier.kt:38, 49`.
+  `android-app/.../SerotineApplication.kt:152, 166, 416, 566, 711, 812, 842,
+  861, 882` (`System.err` on Android; `Log.d` only for the engine's debug log
+  at `:136`);
+  `ios-app/.../SerotineWallet.kt:253, 386, 409` (`println`, although the same
+  file says at `:126-127` that `println` reaches no one on a device);
+  `desktop-app/.../Main.kt:411, 425, 427`, `TrayUpgradeNotifier.kt:33, 49`.
 - Idiomatic form: the seam exists already. `MyotisHost` and
   `VerifiedAddressKinds` take `debugLog: ((String) -> Unit)?`, and
   `MemoryDebugLog` implements `LogSink`. Give the file adapters, the key store
@@ -300,8 +301,8 @@ already begun to differ.
   val *_SECONDS` beside `Duration` constants (`Calls.kt:327, 334`,
   `CowSwaps.kt:50, 56`, `SafeTxSigning.kt:309`); 30 constructors take `clock:
   () -> Long = ::epochSecondsNow` (`usecase/Clock.kt:8`); mixed units in one
-  companion (`SerotineApplication.kt:950-964`: `PAUSE_DELAY_MS = 30_000L`
-  beside `RATE_READ_TIMEOUT = 4.minutes`; desktop `Main.kt:302`;
+  companion (`SerotineApplication.kt:945-963`: `PAUSE_DELAY_MS = 30_000L`
+  beside `RATE_READ_TIMEOUT = 4.minutes`; desktop `Main.kt:389`;
   `UpgradeCheckJob.kt:76` with `TimeUnit`).
 - Chain timestamps are unix seconds and `kotlin.time.Instant`/`Clock` are
   still `@ExperimentalTime` in Kotlin 2.2.21 (`usecase/Clock.kt:7`), so a
@@ -402,7 +403,7 @@ stated; redacted `toString` on `Mnemonic` and `WalletPassword`; limb-based
 - `model/PriceId.kt:10-13` versus the private-constructor + `parse`/`of`
   shape of `Address`, `Wei`, `TokenUnits`, `Digest` and `CowOrderUid`. The
   hosts then validate with `runCatching { PriceId(it) }.getOrNull()`
-  (`RateWidgetPairs.kt:28`, `RateWidgetConfigureActivity.kt:67`).
+  (`RateWidgetPairs.kt:28`, `RateWidgetConfigureActivity.kt:65`).
 
 ### D-14 Tri-state `Boolean?` — Low
 
@@ -1146,33 +1147,33 @@ weaknesses are drift and duplication.
 
 Each host is one real composition root with manual constructor injection and
 no service locator. `suspendCancellableCoroutine` with `invokeOnCancellation {
-signal.cancel() }` bridges the biometric prompt (`PlatformBiometricPrompter.kt:33-78`);
+signal.cancel() }` bridges the biometric prompt (`PlatformBiometricPrompter.kt:32-84`);
 `Reference.reachabilityFence(instance)` keeps the instance lock alive with the
-reason stated (`Main.kt:118-123`); `Mutex` plus `NonCancellable` implement the
-last-waiter cancel of the widget's shared read (`SerotineApplication.kt:688-699`);
+reason stated (`Main.kt:94-97`); `Mutex` plus `NonCancellable` implement the
+last-waiter cancel of the widget's shared read (`SerotineApplication.kt:665-699`);
 `JobService` runs are small private classes with identity checks against stale
 callbacks. H-01 is part of X-03, H-04 of X-07, H-07 of X-10, H-09 of X-04.
 
 ### H-01 The failure-reporting block is inlined in two hosts and a helper in the third — Medium
 
-- `android-app/.../SerotineApplication.kt:146-156, 162-172, 604-616, 827-841,
-  853-874, 881-888, 898-909` and `desktop-app/.../Main.kt:181-191, 193-200,
-  206-215, 218-226, 229-242, 245-253, 258-275, 281-296` each repeat `try {
+- `android-app/.../SerotineApplication.kt:146-154, 160-168, 554-568, 704-712,
+  803-816, 826-846, 855-863, 870-883` and `desktop-app/.../Main.kt:186-197,
+  198-207, 211-221, 223-231, 233-248, 250-259, 264-282, 288-298` each repeat `try {
   Follow...()() } catch (e: CancellationException) { throw e } catch (e:
   Exception) { System.err.println("Serotine: ... stopped: ...") }`;
-  `ios-app/.../SerotineWallet.kt:449-457` defines `reportingFailure(what) { }`
+  `ios-app/.../SerotineWallet.kt:380-388` defines `reportingFailure(what) { }`
   and uses it for all of them.
 - Idiomatic form: the iOS helper, shared, beside the `Follow*` use cases.
 
 ### H-02 `SerotineApplication` is a composition root, an engine hold counter and the widget-refresh orchestration in one class — Medium
 
 - `android-app/.../SerotineApplication.kt` (968 lines): six `private var`
-  `Job`s, three counters and two `Runnable`s (`:430-450`); the shared-read
-  machinery `refreshRateInBackground`, `joinRead`, `SharedRead`,
-  `manualRefresh: AtomicReference` (`:624-732`); `refreshRateWidgetsNow`,
-  `giveUpManualRefresh` (`:741-791`); `Handler`/`Runnable` and coroutines
+  `Job`s, three counters and two `Runnable`s (`:430-451`); the shared-read
+  machinery `manualRefresh: AtomicReference`, `SharedRead`,
+  `refreshRateInBackground`, `joinRead` (`:584-712`); `refreshRateWidgetsNow`,
+  `giveUpManualRefresh` (`:722-762`); `Handler`/`Runnable` and coroutines
   mixed in one class; member order interleaves properties, lazies and
-  functions (`node` at `:130` uses `scope` declared at `:410`, correct only
+  functions (`node` at `:131` uses `scope` declared at `:414`, correct only
   because both are lazy).
 - Idiomatic form: an `EngineHolds` (counting and the delayed pause) and a
   `WidgetRateRefresher`, each with one reason to change; the Application keeps
@@ -1181,30 +1182,30 @@ callbacks. H-01 is part of X-03, H-04 of X-07, H-07 of X-10, H-09 of X-04.
 
 ### H-03 The desktop runs process-wide work in `LaunchedEffect(Unit)` blocks inside `application {}` — Medium
 
-- `desktop-app/.../Main.kt:176-297`: nine `LaunchedEffect`s run the
+- `desktop-app/.../Main.kt:185-299`: nine `LaunchedEffect`s run the
   followers, so Compose owns work no screen owns, and `openWallet` is 248
   lines. Android and iOS give that work a `CoroutineScope(SupervisorJob() +
   Dispatchers.Default + CoroutineExceptionHandler)`
-  (`SerotineApplication.kt:410-415`, `SerotineWallet.kt:260-265`).
+  (`SerotineApplication.kt:414-418`, `SerotineWallet.kt:251-255`).
 - Idiomatic form: the same scope in `main()`, cancelled after `application`
   returns.
 
-### H-05 `(context.applicationContext as SerotineApplication)` nine times — Low
+### H-05 `(context.applicationContext as SerotineApplication)` eleven times — Low
 
-- `widget/RateWidget.kt:33, 40, 46, 53, 58, 62, 126`,
-  `upgrade/UpgradeReminderReceiver.kt:25`, `upgrade/UpgradeCheckJob.kt:42, 65`.
+- `widget/RateWidget.kt:38, 45, 53, 59, 63, 67, 103`,
+  `upgrade/UpgradeReminderReceiver.kt:22`, `upgrade/UpgradeCheckJob.kt:41, 47, 68`.
   One `private val Context.serotine: SerotineApplication get() = ...`.
 
 ### H-06 Validation by exception at the boundary — Low
 
-- `widget/RateWidgetPairs.kt:28, 33, 106`, `widget/RateWidgetConfigureActivity.kt:67`:
+- `widget/RateWidgetPairs.kt:28, 33`, `widget/RateWidgetConfigureActivity.kt:65, 114`:
   `runCatching { PriceId(it) }.getOrNull()`, `runCatching { RatePair(...)
   }.getOrElse { }`. A `parse` factory on `PriceId` (D-12) and `RatePair`
   removes the catch.
 
 ### H-08 The one screen without a ViewModel — Low
 
-- `widget/RateWidgetConfigureActivity.kt:63-110` keeps its three-step state in
+- `widget/RateWidgetConfigureActivity.kt:58-104` keeps its three-step state in
   `rememberSaveable` and calls the Application directly. It lives in the host,
   so the `:ui` rule does not bind it; a small ViewModel would make it testable
   like every other screen.
@@ -1212,7 +1213,7 @@ callbacks. H-01 is part of X-03, H-04 of X-07, H-07 of X-10, H-09 of X-04.
 ## Gradle scripts (8 files, 1,073 lines)
 
 Well-written Kotlin DSL: configuration-cache discipline throughout (a
-`ValueSource` for the git-derived version, `ui/build.gradle.kts:36-93`; locals
+`ValueSource` for the git-derived version, `ui/build.gradle.kts:40-95`; locals
 captured in `doLast`; `jvmArgumentProviders`), every non-obvious line with its
 reason, content filters on every extra repository, the version catalog
 explaining each pin.
@@ -1221,8 +1222,8 @@ explaining each pin.
 
 - `jvmToolchain(21)`, the Android block (namespace, `compileSdk 35`, `minSdk
   29`, Java 17 `compileOptions`) and `jvmTarget.set(JvmTarget.JVM_17)` are
-  repeated in `data/build.gradle.kts:20-27, 158-168`, `ui/build.gradle.kts:117-123,
-  193-203`, `android-app/build.gradle.kts:40-43, 117-121`. For three or more
+  repeated in `data/build.gradle.kts:22-28, 149-158`, `ui/build.gradle.kts:128-134,
+  197-207`, `android-app/build.gradle.kts:45-48, 124-127`. For three or more
   modules the idiomatic shape is a `build-logic` included build with
   `serotine.kmp-library` and `serotine.android` convention plugins. Six modules
   is near the threshold; a judgement call.
@@ -1233,11 +1234,11 @@ explaining each pin.
   three files, `repositoriesMode.set(...)` at `settings.gradle.kts:27`,
   `languageVersion.set(...)` four times in `desktop-app` and `ios-app`);
   `tasks.matching { it.name == "desktopTest" }.configureEach { (this as
-  Test)... }` (`data/build.gradle.kts:173, 180`) where
+  Test)... }` (`data/build.gradle.kts:164-165, 172-173`) where
   `ui/build.gradle.kts:213` does it typed with `tasks.named<Test>(...)`;
   `tasks.configureEach { if (name == "prepareAppResources") dependsOn(...) }`
-  (`desktop-app/build.gradle.kts:118`); `org.jetbrains.kotlin.gradle.dsl.JvmTarget`
-  fully qualified at `data/build.gradle.kts:23` while the other scripts import it.
+  (`desktop-app/build.gradle.kts:142`); `org.jetbrains.kotlin.gradle.dsl.JvmTarget`
+  fully qualified at `data/build.gradle.kts:27` while the other scripts import it.
 
 ## What is done well
 
