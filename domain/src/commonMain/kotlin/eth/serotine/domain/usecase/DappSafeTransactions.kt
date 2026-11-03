@@ -141,7 +141,11 @@ class ProposeDappSafeTx(
         val pending = pendingOf(queuedList.await(), safeNonce, network)
         val nonce = nextNonce(pending, safeNonce)
         val signingRequest =
-            SigningRequest.of(network, safe.address, SafeTx.call(transaction.to, transaction.value, transaction.data, nonce))
+            SigningRequest.of(
+                network,
+                safe.address,
+                SafeTx.call(transaction.to, transaction.value, transaction.data, nonce),
+            )
         // Recorded once, it is that Safe transaction or none: never another one, at another nonce.
         if (recorded != null && signingRequest.hash != recorded) {
             return@cancellingReads DappSafeProposing.NoLongerQueued(recorded)
@@ -252,8 +256,9 @@ internal fun executionFor(safeTx: Digest, sent: List<SentTransfer>, past: List<H
         val request = (transfer.action as? SentAction.SafeExecution)?.request ?: return false
         return transfer.network == Network.SEPOLIA && request.network == Network.SEPOLIA && request.hash == safeTx
     }
-    val hashes = (sent.filter(::executes).map { it.hash } + past.filter { executes(it.transfer) }.map { it.transfer.hash })
-        .distinct()
+    val hashes =
+        (sent.filter(::executes).map { it.hash } + past.filter { executes(it.transfer) }.map { it.transfer.hash })
+            .distinct()
     return hashes.map { hash ->
         val recorded = sent.firstOrNull { it.hash == hash && executes(it) }
         val entry = past.firstOrNull { it.transfer.hash == hash && executes(it.transfer) }

@@ -18,7 +18,12 @@ internal object WcProtocol {
     const val SEPOLIA = "eip155:11155111"
 
     /** The methods a dApp may call (ruling 6). `eth_sign` is never among them. */
-    val METHODS: Set<String> = setOf("eth_sendTransaction", "personal_sign", "eth_signTypedData_v4", "wallet_switchEthereumChain")
+    val METHODS: Set<String> = setOf(
+        "eth_sendTransaction",
+        "personal_sign",
+        "eth_signTypedData_v4",
+        "wallet_switchEthereumChain",
+    )
 
     /** The events a session may carry. */
     val EVENTS: Set<String> = setOf("accountsChanged", "chainChanged")
@@ -46,6 +51,12 @@ internal object WcProtocol {
      * a dApp cannot grow the state file, which every message rewrites, without bound.
      */
     const val PENDING_REQUESTS_PER_SESSION = 20
+
+    /**
+     * Proposals a pairing may have waiting at once. One more is answered with [Error.LIMIT_EXCEEDED], as
+     * a request past [PENDING_REQUESTS_PER_SESSION] is: a pairing's key cannot grow the state file either.
+     */
+    const val PENDING_PROPOSALS_PER_PAIRING = 5
 
     /** A Sign method's relay tag for its request, its response, and how long the relay holds it. */
     class Method(val name: String, val requestTag: Int, val responseTag: Int, val ttlSeconds: Long)
@@ -86,7 +97,10 @@ internal object WcProtocol {
         REQUEST_EXPIRED(8000, "Request expired."),
         WC_METHOD_UNSUPPORTED(10001, "Unsupported wc_ method."),
 
-        /** EIP-1474: the session has [PENDING_REQUESTS_PER_SESSION] requests waiting already. */
+        /**
+         * EIP-1474: the session has [PENDING_REQUESTS_PER_SESSION] requests waiting already, or the pairing
+         * [PENDING_PROPOSALS_PER_PAIRING] proposals.
+         */
         LIMIT_EXCEEDED(-32005, "Too many requests waiting."),
 
         /** EIP-1193: the user declined. */
@@ -135,10 +149,13 @@ internal object WcProtocol {
             requiredChains.any { it != SEPOLIA } -> Error.UNSUPPORTED_CHAINS
             requiredMethods.any { it !in METHODS } -> Error.UNSUPPORTED_METHODS
             requiredEvents.any { it !in EVENTS } -> Error.UNSUPPORTED_EVENTS
-            SEPOLIA !in requiredChains && opt.none { it.key == "eip155" && SEPOLIA in it.chains } -> Error.UNSUPPORTED_CHAINS
+            SEPOLIA !in requiredChains && opt.none { it.key == "eip155" && SEPOLIA in it.chains } ->
+                Error.UNSUPPORTED_CHAINS
             else -> null
         }
-        val asked = req + opt.filter { it.key == "eip155" }
+        // An optional namespace is approved only where it names Sepolia: what it asks of other chains is not
+        // what a Sepolia session carries.
+        val asked = req + opt.filter { it.key == "eip155" && SEPOLIA in it.chains }
         return Ask(
             requiredChains = requiredChains,
             optionalChains = optionalChains,
@@ -148,7 +165,12 @@ internal object WcProtocol {
         )
     }
 
-    private class Namespace(val key: String, val chains: List<String>, val methods: List<String>, val events: List<String>)
+    private class Namespace(
+        val key: String,
+        val chains: List<String>,
+        val methods: List<String>,
+        val events: List<String>,
+    )
 
     /**
      * The namespaces of [value]: each key a namespace (`eip155`, its chains listed) or a chain

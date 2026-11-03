@@ -26,7 +26,10 @@ internal interface WcRelaySocket {
     suspend fun close()
 }
 
-/** Opens a [WcRelaySocket] to a URL: Ktor's WebSocket client in the app ([KtorRelayConnector]), a fake relay in tests. */
+/**
+ * Opens a [WcRelaySocket] to a URL: Ktor's WebSocket client in the app ([KtorRelayConnector]), a fake relay
+ * in tests.
+ */
 internal fun interface WcRelayConnector {
     /** A connection to [url], or throws when it cannot be had. */
     suspend fun connect(url: String): WcRelaySocket
@@ -84,7 +87,10 @@ internal class KtorRelayConnector(engine: HttpClientEngine) : WcRelayConnector {
     companion object {
         const val PING_INTERVAL_MILLIS = 30_000L
 
-        /** A frame larger than any envelope the client reads ([WcEnvelope.MAX_MESSAGE_CHARS]) with its JSON around it. */
+        /**
+         * A frame larger than any envelope the client reads ([WcEnvelope.MAX_MESSAGE_CHARS]) with its JSON
+         * around it.
+         */
         const val MAX_FRAME_BYTES = 1024L * 1024
     }
 }

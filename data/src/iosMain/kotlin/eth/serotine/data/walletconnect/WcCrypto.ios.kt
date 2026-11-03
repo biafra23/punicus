@@ -33,7 +33,9 @@ internal actual object WcCrypto {
         requireKey(privateKey, "an X25519 private key")
         checkReady()
         val q = ByteArray(WC_KEY_BYTES)
-        val result = q.withBytes { qPtr -> privateKey.withBytes { nPtr -> crypto_scalarmult_curve25519_base(qPtr, nPtr) } }
+        val result = q.withBytes { qPtr ->
+            privateKey.withBytes { nPtr -> crypto_scalarmult_curve25519_base(qPtr, nPtr) }
+        }
         check(result == 0) { "X25519 failed" }
         return q
     }
@@ -44,7 +46,9 @@ internal actual object WcCrypto {
         checkReady()
         val q = ByteArray(WC_KEY_BYTES)
         val result = q.withBytes { qPtr ->
-            privateKey.withBytes { nPtr -> publicKey.withBytes { pPtr -> crypto_scalarmult_curve25519(qPtr, nPtr, pPtr) } }
+            privateKey.withBytes { nPtr ->
+                publicKey.withBytes { pPtr -> crypto_scalarmult_curve25519(qPtr, nPtr, pPtr) }
+            }
         }
         // -1: the shared secret is all zeros (a low-order public key).
         return if (result == 0) q else null
@@ -74,7 +78,12 @@ internal actual object WcCrypto {
         return out
     }
 
-    actual fun chacha20Poly1305Open(key: ByteArray, nonce: ByteArray, ciphertext: ByteArray, aad: ByteArray): ByteArray? {
+    actual fun chacha20Poly1305Open(
+        key: ByteArray,
+        nonce: ByteArray,
+        ciphertext: ByteArray,
+        aad: ByteArray,
+    ): ByteArray? {
         requireAead(key, nonce)
         checkReady()
         if (ciphertext.size < WC_TAG_BYTES) return null
@@ -106,7 +115,9 @@ internal actual object WcCrypto {
         val sk = ByteArray(ED25519_SECRET_BYTES)
         try {
             val result = pk.withBytes { pkPtr ->
-                sk.withBytes { skPtr -> seed.withBytes { seedPtr -> crypto_sign_ed25519_seed_keypair(pkPtr, skPtr, seedPtr) } }
+                sk.withBytes { skPtr ->
+                    seed.withBytes { seedPtr -> crypto_sign_ed25519_seed_keypair(pkPtr, skPtr, seedPtr) }
+                }
             }
             check(result == 0) { "Ed25519 failed" }
             return pk
@@ -122,13 +133,17 @@ internal actual object WcCrypto {
         val sk = ByteArray(ED25519_SECRET_BYTES)
         try {
             val derived = pk.withBytes { pkPtr ->
-                sk.withBytes { skPtr -> seed.withBytes { seedPtr -> crypto_sign_ed25519_seed_keypair(pkPtr, skPtr, seedPtr) } }
+                sk.withBytes { skPtr ->
+                    seed.withBytes { seedPtr -> crypto_sign_ed25519_seed_keypair(pkPtr, skPtr, seedPtr) }
+                }
             }
             check(derived == 0) { "Ed25519 failed" }
             val signature = ByteArray(WC_SIGNATURE_BYTES)
             val result = signature.withBytes { sigPtr ->
                 message.withBytes { mPtr ->
-                    sk.withBytes { skPtr -> crypto_sign_ed25519_detached(sigPtr, null, mPtr, message.size.convert(), skPtr) }
+                    sk.withBytes { skPtr ->
+                        crypto_sign_ed25519_detached(sigPtr, null, mPtr, message.size.convert(), skPtr)
+                    }
                 }
             }
             check(result == 0) { "Ed25519 signing failed" }
@@ -143,7 +158,9 @@ internal actual object WcCrypto {
         checkReady()
         val result = signature.withBytes { sigPtr ->
             message.withBytes { mPtr ->
-                publicKey.withBytes { pkPtr -> crypto_sign_ed25519_verify_detached(sigPtr, mPtr, message.size.convert(), pkPtr) }
+                publicKey.withBytes { pkPtr ->
+                    crypto_sign_ed25519_verify_detached(sigPtr, mPtr, message.size.convert(), pkPtr)
+                }
             }
         }
         return result == 0

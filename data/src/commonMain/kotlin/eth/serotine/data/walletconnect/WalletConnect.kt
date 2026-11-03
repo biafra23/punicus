@@ -23,9 +23,8 @@ internal class WalletConnect(
     private val relayUrl: String = WcRelayAuth.DEFAULT_AUDIENCE,
 ) {
     init {
-        require(projectId.isNotEmpty() && projectId.all { it.isLetterOrDigit() && it.code < 128 }) {
-            "a Reown project ID is letters and digits"
-        }
+        // The one gate WalletConnectDapps decides "off" with: an ID it lets through is never refused here.
+        require(WalletConnectDapps.isProjectId(projectId)) { "a Reown project ID is ASCII letters and digits" }
     }
 
     private var handler: WcWallet? = null
@@ -71,7 +70,11 @@ internal class WalletConnect(
         val fresh = WcKeys.newSeed()
         val kept = store.change<String?>(null) { state ->
             val existing = state.relayAuthSeed
-            if (existing != null) existing to null else WcEncoding.hex(fresh).let { it to state.copy(relayAuthSeed = it) }
+            if (existing != null) {
+                existing to null
+            } else {
+                WcEncoding.hex(fresh).let { it to state.copy(relayAuthSeed = it) }
+            }
         }
         val seed = kept?.let { WcEncoding.hexOrNull(it, WC_KEY_BYTES) } ?: return fresh
         fresh.fill(0)

@@ -273,7 +273,10 @@ fun DappTransactionScreen(
                     modifier = Modifier.fillMaxWidth().unavailable(state.refuseUnavailable)
                         .testTag(DAPP_TRANSACTION_REFUSE_TAG),
                 ) {
-                    Text("Refuse", color = if (state.refuseUnavailable) Unavailable.contentColor() else Color.Unspecified)
+                    Text(
+                        "Refuse",
+                        color = if (state.refuseUnavailable) Unavailable.contentColor() else Color.Unspecified,
+                    )
                 }
             }
         }

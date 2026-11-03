@@ -140,8 +140,16 @@ internal class WcState(
         outbox: List<WcStoredOutgoing> = this.outbox,
     ) = WcState(relayAuthSeed, pairings, sessions, proposals, requests, seen, outbox)
 
-    /** Whether request [id] has been seen on [topic]. */
-    fun hasSeen(topic: String, id: Long): Boolean = seen[topic]?.contains(id) == true
+    /**
+     * Whether request [id] has been seen on [topic]: one of the ids remembered, or, once
+     * [WcProtocol.SEEN_IDS_PER_TOPIC] are, one below the smallest of them. A Sign id is the time in
+     * milliseconds times 1000 plus a random part, so a new request's is above every older one, and an
+     * id forgotten from the window is still never prompted again.
+     */
+    fun hasSeen(topic: String, id: Long): Boolean {
+        val ids = seen[topic] ?: return false
+        return id in ids || (ids.size >= WcProtocol.SEEN_IDS_PER_TOPIC && id < ids.min())
+    }
 
     /** With [id] recorded as seen on [topic], the oldest forgotten past [WcProtocol.SEEN_IDS_PER_TOPIC]. */
     fun seeing(topic: String, id: Long): WcState =

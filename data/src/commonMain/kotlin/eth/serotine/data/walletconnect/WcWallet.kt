@@ -120,7 +120,11 @@ internal class WcWallet(
     private val sending = Mutex()
 
     /** [publishes] added to the outbox, sent from there; the keys they are kept under go to [keys]. */
-    private fun WcState.queuing(publishes: List<Outgoing.Publish>, now: Long, keys: MutableList<Long>? = null): WcState {
+    private fun WcState.queuing(
+        publishes: List<Outgoing.Publish>,
+        now: Long,
+        keys: MutableList<Long>? = null,
+    ): WcState {
         if (publishes.isEmpty()) return this
         val entries = publishes.map {
             WcStoredOutgoing(Random.nextLong(), it.topic, it.message, it.ttlSeconds, it.tag, now + it.ttlSeconds)
@@ -194,7 +198,9 @@ internal class WcWallet(
             val gone = (state.pairings.map { it.topic } + state.sessions.map { it.topic }) -
                 (kept.pairings.map { it.topic } + kept.sessions.map { it.topic }).toSet()
             val open = kept.sessions.associateBy { it.topic }
-            val expired = state.requests.filterNot { request -> kept.requests.any { it.topic == request.topic && it.id == request.id } }
+            val expired = state.requests.filterNot { request ->
+                kept.requests.any { it.topic == request.topic && it.id == request.id }
+            }
             val errors = expired.mapNotNull { request ->
                 val session = open[request.topic] ?: return@mapNotNull null
                 expiredAnswer(session, request.id)
@@ -220,7 +226,10 @@ internal class WcWallet(
 
     /** What [pair] made of a URI. */
     sealed interface Pairing {
-        /** Paired on [topic]: the dApp's proposal arrives there. [subscribed] false when the relay could not be reached yet. */
+        /**
+         * Paired on [topic]: the dApp's proposal arrives there. [subscribed] false when the relay could not be
+         * reached yet.
+         */
         data class Paired(val topic: String, val subscribed: Boolean) : Pairing
 
         /** Not a pairing URI this build reads ([WcPairingUri.Parse]). */
@@ -269,7 +278,10 @@ internal class WcWallet(
 
     /** What [approve] did. */
     sealed interface Approval {
-        /** Settled on [topic]; [delivered] false when the relay has not taken both messages yet: they are sent again. */
+        /**
+         * Settled on [topic]; [delivered] false when the relay has not taken both messages yet: they are sent
+         * again.
+         */
         data class Approved(val topic: String, val delivered: Boolean) : Approval
 
         data object NoSuchProposal : Approval
@@ -363,7 +375,12 @@ internal class WcWallet(
                 )
                 symKey.fill(0)
                 settledTopic = topic
-                val activePairing = WcStoredPairing(pairing.topic, pairing.symKey, now + WcProtocol.ACTIVE_PAIRING_SECONDS, true)
+                val activePairing = WcStoredPairing(
+                    pairing.topic,
+                    pairing.symKey,
+                    now + WcProtocol.ACTIVE_PAIRING_SECONDS,
+                    true,
+                )
                 Approval.Approved(topic, delivered = false) to state.copy(
                     proposals = state.proposals - proposal,
                     sessions = state.sessions + session,
@@ -384,7 +401,11 @@ internal class WcWallet(
      * asked for more than a session here may have). True once saved: the answer is in the outbox then,
      * sent now when the relay takes it, else on the next connection.
      */
-    suspend fun reject(pairingTopic: String, proposalId: Long, why: WcProtocol.Error = WcProtocol.Error.USER_REJECTED): Boolean {
+    suspend fun reject(
+        pairingTopic: String,
+        proposalId: Long,
+        why: WcProtocol.Error = WcProtocol.Error.USER_REJECTED,
+    ): Boolean {
         val keys = mutableListOf<Long>()
         val saved = store.change(false) { state ->
             val proposal = state.proposals.find { it.pairingTopic == pairingTopic && it.id == proposalId }
@@ -399,7 +420,8 @@ internal class WcWallet(
                     WcProtocol.SESSION_PROPOSE_REJECT_TAG,
                 )
             }
-            true to state.copy(proposals = state.proposals - proposal).queuing(listOfNotNull(rejection), nowSeconds(), keys)
+            true to state.copy(proposals = state.proposals - proposal)
+                .queuing(listOfNotNull(rejection), nowSeconds(), keys)
         }
         // Nothing goes out for a change that was not saved: the proposal would still be shown.
         if (!saved) return false
@@ -495,11 +517,15 @@ internal class WcWallet(
             val key = checkNotNull(WcEncoding.hexOrNull(session.symKey, WC_KEY_BYTES))
             val extension = Outgoing.Publish(
                 topic,
-                WcEnvelope.sealType0(key, request(rpcId(), WcProtocol.SESSION_EXTEND.name, buildJsonObject { put("expiry", expiry) })),
+                WcEnvelope.sealType0(
+                    key,
+                    request(rpcId(), WcProtocol.SESSION_EXTEND.name, buildJsonObject { put("expiry", expiry) }),
+                ),
                 WcProtocol.SESSION_EXTEND.ttlSeconds,
                 WcProtocol.SESSION_EXTEND.requestTag,
             )
-            true to state.copy(sessions = state.sessions.map { if (it.topic == topic) it.copy(expirySeconds = expiry) else it })
+            true to state
+                .copy(sessions = state.sessions.map { if (it.topic == topic) it.copy(expirySeconds = expiry) else it })
                 .queuing(listOf(extension), nowSeconds(), keys)
         }
         if (!saved) return false
@@ -542,7 +568,8 @@ internal class WcWallet(
                     WcProtocol.SESSION_EVENT.requestTag,
                 )
             }
-            true to state.copy(sessions = state.sessions.map { if (it.topic == topic) it.copy(accounts = accounts) else it })
+            true to state
+                .copy(sessions = state.sessions.map { if (it.topic == topic) it.copy(accounts = accounts) else it })
                 .queuing(messages, nowSeconds(), keys)
         }
         if (!saved) return false
@@ -563,7 +590,9 @@ internal class WcWallet(
             val request = state.requests.find { it.topic == topic && it.id == requestId } ?: return@change false to null
             when (request.safeTx) {
                 hash -> true to null
-                null -> true to state.copy(requests = state.requests.map { if (it === request) it.withSafeTx(hash) else it })
+                null -> true to state.copy(
+                    requests = state.requests.map { if (it === request) it.withSafeTx(hash) else it },
+                )
                 else -> false to null
             }
         }
@@ -629,9 +658,17 @@ internal class WcWallet(
                 val proposal = proposal(id, pairing.topic, params as? JsonObject, now)
                     ?: return listOf(reply(invalidParams(id), WcProtocol.SESSION_PROPOSE)) to state
                 if (proposal.expirySeconds <= now) return emptyList<Outgoing>() to state
+                // Expired ones wait for the minute's sweep, and count for nothing, as for requests.
+                val waiting = state.proposals.count { it.pairingTopic == pairing.topic && it.expirySeconds > now }
+                if (waiting >= WcProtocol.PENDING_PROPOSALS_PER_PAIRING) {
+                    return listOf(
+                        reply(error(id, WcProtocol.Error.LIMIT_EXCEEDED), WcProtocol.SESSION_PROPOSE),
+                    ) to state
+                }
                 emptyList<Outgoing>() to state.copy(proposals = state.proposals + proposal)
             }
-            WcProtocol.PAIRING_PING.name -> listOf(reply(result(id, JsonPrimitive(true)), WcProtocol.PAIRING_PING)) to state
+            WcProtocol.PAIRING_PING.name ->
+                listOf(reply(result(id, JsonPrimitive(true)), WcProtocol.PAIRING_PING)) to state
             WcProtocol.PAIRING_DELETE.name -> listOf(
                 reply(result(id, JsonPrimitive(true)), WcProtocol.PAIRING_DELETE),
                 Outgoing.Unsubscribe(pairing.topic),
@@ -640,7 +677,10 @@ internal class WcWallet(
             "wc_sessionAuthenticate" -> emptyList<Outgoing>() to state
             // Answered under the method's own tag where it is one of Sign's, a pairing ping's otherwise.
             else -> listOf(
-                reply(error(id, WcProtocol.Error.WC_METHOD_UNSUPPORTED), WcProtocol.BY_NAME[method] ?: WcProtocol.PAIRING_PING),
+                reply(
+                    error(id, WcProtocol.Error.WC_METHOD_UNSUPPORTED),
+                    WcProtocol.BY_NAME[method] ?: WcProtocol.PAIRING_PING,
+                ),
             ) to state
         }
     }
@@ -687,7 +727,8 @@ internal class WcWallet(
                 if (waiting >= WcProtocol.PENDING_REQUESTS_PER_SESSION) {
                     return listOf(reply(error(id, WcProtocol.Error.LIMIT_EXCEEDED))) to state
                 }
-                val expiry = (stated ?: (now + WcProtocol.REQUEST_SECONDS)).coerceAtMost(now + WcProtocol.MAX_REQUEST_SECONDS)
+                val expiry = (stated ?: (now + WcProtocol.REQUEST_SECONDS))
+                    .coerceAtMost(now + WcProtocol.MAX_REQUEST_SECONDS)
                 val stored = WcStoredRequest(id, session.topic, chainId, name, params, expiry)
                 emptyList<Outgoing>() to state.copy(requests = state.requests + stored)
             }
@@ -697,8 +738,10 @@ internal class WcWallet(
                 Outgoing.Unsubscribe(session.topic),
             ) to state.forgetting(session.topic)
             // This wallet is the session's controller: only it updates and extends.
-            WcProtocol.SESSION_UPDATE.name -> listOf(reply(error(id, WcProtocol.Error.UNAUTHORIZED_UPDATE_REQUEST))) to state
-            WcProtocol.SESSION_EXTEND.name -> listOf(reply(error(id, WcProtocol.Error.UNAUTHORIZED_EXTEND_REQUEST))) to state
+            WcProtocol.SESSION_UPDATE.name ->
+                listOf(reply(error(id, WcProtocol.Error.UNAUTHORIZED_UPDATE_REQUEST))) to state
+            WcProtocol.SESSION_EXTEND.name ->
+                listOf(reply(error(id, WcProtocol.Error.UNAUTHORIZED_EXTEND_REQUEST))) to state
             WcProtocol.SESSION_EVENT.name -> listOf(reply(error(id, WcProtocol.Error.UNAUTHORIZED_EVENT))) to state
             else -> listOf(reply(error(id, WcProtocol.Error.WC_METHOD_UNSUPPORTED))) to state
         }
@@ -734,13 +777,15 @@ internal class WcWallet(
         }
         if (!onlyIrn) return null
         val proposer = params["proposer"] as? JsonObject ?: return null
-        val publicKey = proposer.string("publicKey")?.takeIf { WcEncoding.hexOrNull(it, WC_KEY_BYTES) != null } ?: return null
+        val publicKey = proposer.string("publicKey")?.takeIf { WcEncoding.hexOrNull(it, WC_KEY_BYTES) != null }
+            ?: return null
         val dapp = metadataOf(proposer["metadata"] as? JsonObject) ?: return null
         val required = (params["requiredNamespaces"] ?: JsonObject(emptyMap())) as? JsonObject ?: return null
         val optional = (params["optionalNamespaces"] ?: JsonObject(emptyMap())) as? JsonObject ?: return null
         if (WcProtocol.ask(required, optional) == null) return null
         val stated = params["expiryTimestamp"]?.let { (it as? JsonPrimitive)?.longOrNull ?: return null }
-        val expiry = (stated ?: (now + WcProtocol.SESSION_PROPOSE.ttlSeconds)).coerceAtMost(now + WcProtocol.ACTIVE_PAIRING_SECONDS)
+        val expiry = (stated ?: (now + WcProtocol.SESSION_PROPOSE.ttlSeconds))
+            .coerceAtMost(now + WcProtocol.ACTIVE_PAIRING_SECONDS)
         return WcStoredProposal(id, pairingTopic, publicKey.lowercase(), dapp, required, optional, expiry)
     }
 
@@ -804,14 +849,21 @@ internal class WcWallet(
         fun isAddress(text: String): Boolean =
             text.length == 42 && text.startsWith("0x") && WcEncoding.hexOrNull(text.substring(2), 20) != null
 
-        /** A dApp's stated metadata, or null when it is out of shape: shown as its claim, so only its shape is checked. */
+        /**
+         * A dApp's stated metadata, or null when it is out of shape: shown as its claim, so only its shape is
+         * checked.
+         */
         fun metadataOf(fields: JsonObject?): WcMetadata? {
             if (fields == null) return null
             val name = fields.string("name") ?: return null
             val url = fields.string("url") ?: return null
             val description = fields["description"]?.let { (it as? JsonPrimitive)?.contentOrNull ?: return null } ?: ""
-            val icons = (fields["icons"] as? JsonArray)?.map { (it as? JsonPrimitive)?.contentOrNull ?: return null }.orEmpty()
-            if (listOf(name, url, description).any { it.length > MAX_METADATA_CHARS } || icons.size > MAX_ICONS) return null
+            val icons = (fields["icons"] as? JsonArray)
+                ?.map { (it as? JsonPrimitive)?.contentOrNull ?: return null }
+                .orEmpty()
+            if (listOf(name, url, description).any { it.length > MAX_METADATA_CHARS } || icons.size > MAX_ICONS) {
+                return null
+            }
             return WcMetadata(name, description, url, icons.filter { it.length <= MAX_METADATA_CHARS })
         }
 
@@ -840,7 +892,8 @@ internal class WcWallet(
         /** JSON-RPC's own error for params out of shape. */
         fun invalidParams(id: Long): ByteArray = error(id, WcProtocol.Error.INVALID_PARAMS)
 
-        private fun JsonObject.string(key: String): String? = (this[key] as? JsonPrimitive)?.takeIf { it.isString }?.contentOrNull
+        private fun JsonObject.string(key: String): String? =
+            (this[key] as? JsonPrimitive)?.takeIf { it.isString }?.contentOrNull
     }
 }
 

@@ -761,7 +761,11 @@ internal suspend fun safeBalanceOf(
 }
 
 /** [safe]'s verified balance of the network's currency, as [safeBalanceOf] reads it. */
-internal suspend fun safeNativeBalanceOf(network: Network, nativeBalances: NativeBalances, safe: Address): SafeBalanceRead {
+internal suspend fun safeNativeBalanceOf(
+    network: Network,
+    nativeBalances: NativeBalances,
+    safe: Address,
+): SafeBalanceRead {
     val unproven = SafeBalanceRead.Refused(SafeTxRefusal.Unavailable(ReadUnavailable.UNPROVEN))
     return when (val reading = nativeBalances.observeBalance(network, safe).first()) {
         is BalanceReading.Verified ->

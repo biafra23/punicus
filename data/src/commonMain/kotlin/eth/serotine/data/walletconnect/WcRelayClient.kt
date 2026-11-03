@@ -40,8 +40,8 @@ internal data class WcRelayMessage(val topic: String, val message: String, val p
  *
  * - **Reconnects** with an exponential backoff ([backoff]) whenever the connection cannot be had or
  *   drops, starting again from its first step only after a connection that lasted
- *   [HEALTHY_CONNECTION_MILLIS], with a fresh URL each time ([connectionUrl]: a new auth token), and subscribes again to
- *   every topic it holds.
+ *   [HEALTHY_CONNECTION_MILLIS], with a fresh URL each time ([connectionUrl]: a new auth token), and
+ *   subscribes again to every topic it holds.
  * - **Every message is handed to [onMessage], then acknowledged** to the relay, so a message whose
  *   handling did not finish (the app killed in between) is delivered again. [onMessage] must not wait
  *   on this client: it runs on the connection's reader, which the answer would have to come through.
@@ -137,7 +137,10 @@ internal class WcRelayClient(
         return subscribeNow(topic)
     }
 
-    /** Stops following [topic]: no longer subscribed to on a reconnection, and unsubscribed now where the relay gave an id. */
+    /**
+     * Stops following [topic]: no longer subscribed to on a reconnection, and unsubscribed now where the
+     * relay gave an id.
+     */
     override suspend fun unsubscribe(topic: String) {
         val id = lock.withLock { if (topic in topics) topics.remove(topic) else return }
         if (id == null || socket.value == null) return
@@ -189,7 +192,10 @@ internal class WcRelayClient(
         for (topic in lock.withLock { topics.keys.toList() }) subscribeNow(topic)
     }
 
-    /** [method] with [params] on the open connection, waiting for one when there is none; null past [requestTimeout]. */
+    /**
+     * [method] with [params] on the open connection, waiting for one when there is none; null past
+     * [requestTimeout].
+     */
     private suspend fun call(method: String, params: JsonObject): Answer? =
         withTimeoutOrNull(requestTimeout) { callUntilAnswered(method, params) }
 

@@ -380,7 +380,8 @@ private fun AccountDetailAssetsHiddenPreview() = AccountDetailPreview(daily.with
 
 @Preview
 @Composable
-private fun AccountDetailAssetsHiddenDarkPreview() = AccountDetailPreview(daily.withAmountsHidden(true), darkTheme = true)
+private fun AccountDetailAssetsHiddenDarkPreview() =
+    AccountDetailPreview(daily.withAmountsHidden(true), darkTheme = true)
 
 @Preview
 @Composable
