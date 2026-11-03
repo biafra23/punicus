@@ -28,6 +28,14 @@
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
+            <!-- A WalletConnect link a dApp or a browser opens (docs/walletconnect.md, part 1.2a): it
+                 lands on Connect a dApp, filled in, and pairs only on the user's Connect. -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="wc" />
+            </intent-filter>
         </activity>
 
         <!-- The reminder alarm, and arming it again after a reboot or an update. Not exported:

@@ -161,6 +161,7 @@ import eth.serotine.ui.createsafe.CreateSafeViewModel
 import eth.serotine.ui.connections.ConnectionsViewModel
 import eth.serotine.ui.currency.CurrencyViewModel
 import eth.serotine.ui.dappproposal.DappProposalViewModel
+import eth.serotine.ui.pairdapp.IncomingDappLink
 import eth.serotine.ui.pairdapp.PairDappViewModel
 import eth.serotine.ui.debug.DebugTabViewModel
 import eth.serotine.ui.debug.DebugViewModel
@@ -690,7 +691,10 @@ class AppGraph(
     fun connectionsViewModel(): ConnectionsViewModel =
         ConnectionsViewModel(observeDappConnections(), DisconnectDapp(dappSessions), ExtendDappSession(dappSessions))
 
-    fun pairDappViewModel(): PairDappViewModel = PairDappViewModel(PairDapp(dappSessions))
+    /** The `wc:` link the platform opened the app with, which the host offers and Connect a dApp takes. */
+    val incomingDappLink: IncomingDappLink = IncomingDappLink()
+
+    fun pairDappViewModel(): PairDappViewModel = PairDappViewModel(PairDapp(dappSessions), incomingDappLink)
 
     /** The review of the proposal [proposalKey] names (`pairing/id`, as its route carries it). */
     fun dappProposalViewModel(proposalKey: String): DappProposalViewModel = DappProposalViewModel(

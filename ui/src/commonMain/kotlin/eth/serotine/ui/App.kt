@@ -134,6 +134,12 @@ private fun AppContent(graph: AppGraph, navController: NavHostController) {
         // The Debug screen's filter outlives its destination, which a tab switch pops: scoped to the host too.
         val debug = viewModel { graph.debugViewModel() }
         val tabs = Tab.entries.filter { it != Tab.DEBUG || debugShown == true }
+        // A `wc:` link the platform opened the app with opens Connect a dApp, which takes it from there.
+        LaunchedEffect(Unit) {
+            graph.incomingDappLink.pending.collect { link ->
+                if (link != null) navController.navigate(Destination.PAIR_DAPP) { launchSingleTop = true }
+            }
+        }
         val entry by navController.currentBackStackEntryAsState()
         val selected = entry?.destination?.hierarchy?.firstNotNullOfOrNull { destination ->
             Tab.entries.firstOrNull { it.graph == destination.route }

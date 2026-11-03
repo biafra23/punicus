@@ -7,6 +7,7 @@ import eth.serotine.domain.usecase.PairDapp
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
@@ -25,11 +26,26 @@ data class PairDappUiState(
     val missingLink: Boolean get() = text.isBlank()
 }
 
-/** Pair's ViewModel: pairs with the dApp of the pasted `wc:` link. */
-class PairDappViewModel(private val pairDapp: PairDapp) : ViewModel() {
+/**
+ * Pair's ViewModel: pairs with the dApp of the pasted `wc:` link, or of the one the platform opened
+ * the app with ([incoming]), which it fills in and pairs with only on Connect.
+ */
+class PairDappViewModel(private val pairDapp: PairDapp, incoming: IncomingDappLink? = null) : ViewModel() {
 
     private val state = MutableStateFlow(PairDappUiState())
     val uiState: StateFlow<PairDappUiState> = state.asStateFlow()
+
+    init {
+        if (incoming != null) {
+            // Every link that arrives while the screen is open too: the latest fills the field.
+            viewModelScope.launch {
+                incoming.pending.filterNotNull().collect {
+                    val link = incoming.take() ?: return@collect
+                    state.update { it.copy(text = link, message = null, paired = false) }
+                }
+            }
+        }
+    }
 
     fun edit(text: String) = state.update { it.copy(text = text, message = null) }
 

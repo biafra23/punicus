@@ -462,6 +462,18 @@ class AppNavigationTest {
     }
 
     @Test
+    fun aWalletConnectLinkTheAppWasOpenedWithLandsOnConnectADappFilledIn() {
+        showApp()
+        val link = "wc:" + "a".repeat(64) + "@2?relay-protocol=irn&symKey=" + "b".repeat(64)
+        graph.incomingDappLink.offer(link)
+        rule.waitForIdle()
+        rule.onNodeWithTag(eth.serotine.ui.pairdapp.PAIR_DAPP_FIELD_TAG).assertIsDisplayed()
+        rule.onNodeWithText(link).assertExists()
+        // Taken: nothing waits for the next screen to open.
+        kotlin.test.assertNull(graph.incomingDappLink.pending.value)
+    }
+
+    @Test
     fun theFloatingActionButtonAddsAnAccountFromItsSeedPhrase() {
         showApp()
         rule.onNodeWithText("No accounts yet").assertIsDisplayed()
