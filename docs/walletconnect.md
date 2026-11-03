@@ -82,8 +82,14 @@ everything on the chain side: the verified `call`, `estimateGasDetailed`,
 
 (Ruling 1.)
 
+- **Who runs it.** Today a centralised service: its gateway nodes are run by
+  Reown (formerly WalletConnect Inc.), the nodes behind them by a selected
+  group of operators. A permissionless network is on WalletConnect's
+  roadmap, not known to be live when this was written (November 2026).
+  Serotine does not call the relay decentralised.
 - It sees the device's IP address, the topics it subscribes to, and the
-  timing and size of its messages, and the project ID.
+  timing and size of its messages, and the project ID. The dApp's side
+  connects to the same relay, so it can link the two ends of a session.
 - The payloads are end-to-end encrypted: it cannot read or forge one.
 - It can withhold or delay a message. A request it holds back expires, and
   the dApp gets nothing; a response it holds back reaches the dApp late or

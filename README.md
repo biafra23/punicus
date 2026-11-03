@@ -80,6 +80,16 @@ in Activity, a Safe owned by a device's hardware P-256 key, recovery modules,
 dApp connections, and an iOS build for the App Store.
 docs/wallet-ux.md describes every screen, with what is built and what is not.
 
+**What leaves the device.** The wallet never takes chain data from a server:
+no RPC provider, no indexer. Two optional features use a third-party
+service. A swap the user sends to CoW Protocol goes to CoW's order API
+(docs/swaps.md). dApp connections, once built, go through WalletConnect's
+relay: today a centralised service, run by Reown and a selected group of
+operators. It carries end-to-end encrypted messages only. It sees the
+device's IP address and when it is connected, never what is signed, and it
+cannot sign anything (docs/walletconnect.md). The embedded Myotis engine
+itself uses neither.
+
 ## Build & run
 
 ```bash
