@@ -41,6 +41,19 @@ jobs:
       - name: Grant execute permission for gradlew
         run: chmod +x gradlew
 
+      # The security invariants of the source tree (scripts/check_security_invariants.py): the
+      # Myotis boundary, the mnemonic's one path, the key store's floors, the biometric keys'
+      # parameters, the Android backup and signing rules, the screens under capture protection,
+      # the workflows' pins and triggers, the build's repositories. Standard-library Python,
+      # seconds, before the build. A violation the baseline (scripts/security-baseline.txt) does
+      # not accept fails here; the baseline lists the open findings of the 2026-11-01 audit and
+      # shrinks as they are fixed. The script's own tests run first, so a broken check cannot
+      # pass silently.
+      - name: Check security invariants
+        run: |
+          python3 -m unittest discover -s scripts -p 'test_check_security_invariants.py'
+          python3 scripts/check_security_invariants.py
+
       # The Android launcher icon is GENERATED from assets/serotine_logo.svg and committed
       # (android-app/src/main/res: ic_launcher_foreground, ic_launcher_background,
       # mipmap-anydpi-v26/ic_launcher; android-app/src/debug/res: the debug app's recoloured
