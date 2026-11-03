@@ -26,6 +26,7 @@ import eth.serotine.domain.usecase.ProposeDappSafeTx
 import eth.serotine.domain.usecase.QuoteDappTransaction
 import eth.serotine.domain.usecase.RefuseDappRequest
 import eth.serotine.domain.usecase.SendDappTransaction
+import eth.serotine.domain.usecase.SignDappSafeTx
 import eth.serotine.domain.usecase.SignSafeTx
 import eth.serotine.ui.FakeAccounts
 import eth.serotine.ui.FakeBalances
@@ -111,7 +112,7 @@ class DappTransactionViewModelTest {
             SendDappTransaction(requests, accounts, networks, signer, broadcaster, sent, history, FakeReceipts(), clock = { now }),
             // A Safe's side, never reached from an account held here.
             ProposeDappSafeTx(requests, accounts, networks, catalog, safes.observeSafe, balances, inputs, safes.queue, clock = { now }),
-            SignSafeTx(signer, safes.observeSafe, safes.recovery, safes.queue, Network.SEPOLIA),
+            SignDappSafeTx(requests, SignSafeTx(signer, safes.observeSafe, safes.recovery, safes.queue, Network.SEPOLIA)),
             RefuseDappRequest(requests, accounts, networks, clock = { now }),
             DescribeKeyStore(FakeKeys()),
             clock = { now },

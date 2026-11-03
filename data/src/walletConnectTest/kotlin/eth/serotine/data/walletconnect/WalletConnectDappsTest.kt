@@ -4,6 +4,7 @@ package eth.serotine.data.walletconnect
 
 import eth.serotine.data.walletconnect.FakeDapp.Companion.namespace
 import eth.serotine.domain.model.Address
+import eth.serotine.domain.model.Digest
 import eth.serotine.domain.model.PersonalMessage
 import eth.serotine.domain.model.Signature
 import eth.serotine.domain.repository.DappAnswer
@@ -43,6 +44,7 @@ import kotlin.random.Random
 import kotlin.test.AfterTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertIs
 import kotlin.test.assertTrue
 import kotlin.time.Duration.Companion.seconds
@@ -189,6 +191,63 @@ class WalletConnectDappsTest {
         assertEquals(WcRequests.signatureHex(signature), answers.getValue("20").getValue("result").jsonPrimitive.content)
         assertEquals(4902, answers.getValue("21").getValue("error").jsonObject.getValue("code").jsonPrimitive.int)
         assertTrue(dapps.requests.observe().first().isEmpty())
+    }
+
+    @Test
+    fun aSafeTransactionRecordedForARequestIsKeptWithItOnceAndForAll() = runTest {
+        val dapps = dapps()
+        val dapp = FakeDapp(relay, backgroundScope) { now() }
+        dapp.subscribePairing()
+        dapps.pair(dapp.uri())
+        dapp.propose(
+            4,
+            JsonObject(emptyMap()),
+            buildJsonObject { put("eip155", namespace(listOf(WcProtocol.SEPOLIA), listOf("eth_sendTransaction"), emptyList())) },
+        )
+        settle()
+        val proposal = assertIs<DappConnections.On>(dapps.observe().first()).proposals.single()
+        assertIs<DappApproval.Approved>(dapps.approve(proposal.id, listOf(account)))
+        settle()
+        assertTrue(dapp.followSession(4))
+        dapp.sendOnSession(
+            FakeDapp.request(
+                30,
+                "wc_sessionRequest",
+                buildJsonObject {
+                    putJsonObject("request") {
+                        put("method", "eth_sendTransaction")
+                        put(
+                            "params",
+                            buildJsonArray {
+                                addJsonObject {
+                                    put("from", account.hex)
+                                    put("to", "0x00000000000000000000000000000000000000b2")
+                                    put("value", "0x1")
+                                }
+                            },
+                        )
+                    }
+                    put("chainId", WcProtocol.SEPOLIA)
+                },
+            ),
+        )
+        settle()
+        val request = dapps.requests.observe().first().single()
+        assertEquals(null, request.safeTx)
+        val safeTx = Digest.of("ab".repeat(32))
+        val told = dapp.received[checkNotNull(dapp.sessionTopic)].orEmpty().size
+        assertTrue(dapps.requests.recordSafeTx(request.id, safeTx))
+        assertTrue(dapps.requests.recordSafeTx(request.id, safeTx), "the same one again: kept")
+        assertFalse(dapps.requests.recordSafeTx(request.id, Digest.of("cd".repeat(32))), "never another")
+        assertEquals(safeTx, dapps.requests.observe().first().single().safeTx)
+        assertFalse(dapps.requests.recordSafeTx(DappRequestId(request.id.session, 31), safeTx), "no such request")
+        settle()
+        assertEquals(told, dapp.received[checkNotNull(dapp.sessionTopic)].orEmpty().size, "the dApp is told nothing")
+
+        // Answered with the execution's hash, it is gone, its record with it.
+        assertEquals(DappAnswer.DELIVERED, dapps.requests.answerTransaction(request.id, "0x" + "12".repeat(32)))
+        assertTrue(dapps.requests.observe().first().isEmpty())
+        assertFalse(dapps.requests.recordSafeTx(request.id, safeTx))
     }
 
     @Test

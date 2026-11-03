@@ -71,6 +71,8 @@ class DappTransactionsTest {
         override suspend fun answerSignature(request: DappRequestId, signature: Signature) = error("not used")
         override suspend fun answerNull(request: DappRequestId) = error("not used")
         override suspend fun refuse(request: DappRequestId, why: DappRequestError) = error("not used")
+        override suspend fun recordSafeTx(request: DappRequestId, safeTx: eth.serotine.domain.model.Digest) =
+            error("not used")
         override suspend fun answerTransaction(request: DappRequestId, hash: String): DappAnswer {
             hashes += request to hash
             waiting.value = waiting.value.filterNot { it.id == request }

@@ -96,6 +96,12 @@ enum class DappSignRefusal(val error: DappRequestError) {
     /** A transaction to the zero address: nobody holds its key, so what it sends is lost for good. */
     TX_TO_ZERO_ADDRESS(DappRequestError.INVALID_PARAMS),
 
+    /**
+     * A Safe's transaction with a gas limit: a Safe transaction's gas is its executing account's, so the
+     * dApp's limit could not be applied, and is refused rather than ignored (Myotis #314).
+     */
+    SAFE_GAS(DappRequestError.INVALID_PARAMS),
+
     /** Typed data with more values than D5 shows ([MAX_SHOWN_VALUES]): what would not be shown is not signed. */
     TYPED_TOO_LARGE(DappRequestError.LIMIT_EXCEEDED),
 }
@@ -213,8 +219,11 @@ fun reviewDappMessage(
         ?: when (content) {
         is DappSignContent.Message -> signInRefusal(content.signIn, signer, nowSeconds)
         is DappSignContent.Typed -> typedRefusal(content, signer)
-        is DappSignContent.Transaction ->
-            DappSignRefusal.TX_TO_ZERO_ADDRESS.takeIf { content.transaction.to == Address.ZERO }
+        is DappSignContent.Transaction -> when {
+            content.transaction.to == Address.ZERO -> DappSignRefusal.TX_TO_ZERO_ADDRESS
+            account?.kind == AccountKind.SAFE && content.transaction.gas != null -> DappSignRefusal.SAFE_GAS
+            else -> null
+        }
     }
     val warnings = buildSet {
         when (content) {
@@ -496,9 +505,9 @@ class AnswerDappRequestsAtOnce(
                 val recorded = sent.firstOrNull(::answers)
                 val entry = past.firstOrNull { answers(it.transfer) }
                 // An EOA's transaction signed for it, or, from a Safe, the execution of the Safe transaction
-                // that is its call: answered with the hash of the transaction sent, never the safeTxHash.
+                // recorded for it: answered with the hash of the transaction sent, never the safeTxHash.
                 val answer = (recorded ?: entry?.transfer)?.let { SignedAnswer(it, stateOf(recorded, entry)) }
-                    ?: executionFor(ask.transaction, sent, past)
+                    ?: request.safeTx?.let { executionFor(it, sent, past) }
                 answer?.takeIf { it.state == SignedState.SENT || it.state == SignedState.MINED }
                     ?.let { requests.answerTransaction(request.id, it.transfer.hash) }
             }

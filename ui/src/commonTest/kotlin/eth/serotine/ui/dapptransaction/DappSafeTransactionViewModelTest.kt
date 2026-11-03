@@ -20,6 +20,7 @@ import eth.serotine.domain.usecase.ProposeDappSafeTx
 import eth.serotine.domain.usecase.QuoteDappTransaction
 import eth.serotine.domain.usecase.RefuseDappRequest
 import eth.serotine.domain.usecase.SendDappTransaction
+import eth.serotine.domain.usecase.SignDappSafeTx
 import eth.serotine.domain.usecase.SignSafeTx
 import eth.serotine.ui.FakeDappRequests
 import eth.serotine.ui.FakeKeys
@@ -90,7 +91,7 @@ class DappSafeTransactionViewModelTest {
                 requests, world.accounts, networks, world.catalog, world.observeSafe, world.balances, world.inputs,
                 world.queue, clock = { now },
             ),
-            SignSafeTx(world.signer, world.observeSafe, world.recovery, world.queue, Network.SEPOLIA),
+            SignDappSafeTx(requests, SignSafeTx(world.signer, world.observeSafe, world.recovery, world.queue, Network.SEPOLIA)),
             RefuseDappRequest(requests, world.accounts, networks, clock = { now }),
             DescribeKeyStore(FakeKeys()),
             clock = { now },
@@ -198,5 +199,34 @@ class DappSafeTransactionViewModelTest {
         vm.refuse()
         runCurrent()
         assertEquals(listOf(request(1).id to DappRequestError.USER_REJECTED), requests.refusals)
+    }
+
+    @Test
+    fun aSafeTransactionNoLongerQueuedIsNeverReplacedAndCanOnlyBeRefused() = runTest {
+        requests.waiting.value = listOf(request(1))
+        val first = viewModel()
+        first.onPasswordChange("made-up test password")
+        first.send()
+        runCurrent()
+        assertNotNull(requests.waiting.value.single().safeTx, "tied to its Safe transaction before it was signed")
+        // Rejected here, and another transaction holds its nonce now.
+        world.queue.requests.value = listOf(world.request(world.ether(4), world.carol))
+        val again = viewModel()
+        assertEquals(DappTransactionViewModel.NO_LONGER_QUEUED, again.uiState.value.notQuoted)
+        assertTrue(again.uiState.value.sendUnavailable)
+        assertNull(again.uiState.value.queued)
+    }
+
+    @Test
+    fun aSafesGasLimitIsRefusedNeverIgnored() = runTest {
+        requests.waiting.value = listOf(
+            request(1, DappTransactionRequest(world.safe, world.recipient, UInt256.ONE, ByteArray(0), 21_000)),
+        )
+        val vm = viewModel()
+        assertTrue(vm.uiState.value.fromSafe)
+        assertNotNull(vm.uiState.value.refusal)
+        vm.refuse()
+        runCurrent()
+        assertEquals(listOf(request(1).id to DappRequestError.INVALID_PARAMS), requests.refusals)
     }
 }

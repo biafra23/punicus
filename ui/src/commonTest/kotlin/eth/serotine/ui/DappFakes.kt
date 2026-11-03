@@ -1,6 +1,7 @@
 package eth.serotine.ui
 
 import eth.serotine.domain.model.Address
+import eth.serotine.domain.model.Digest
 import eth.serotine.domain.model.Signature
 import eth.serotine.domain.repository.DappAnswer
 import eth.serotine.domain.repository.DappApproval
@@ -58,6 +59,7 @@ internal object OffDappRequests : DappRequests {
     override suspend fun answerNull(request: DappRequestId) = DappAnswer.OFF
     override suspend fun answerTransaction(request: DappRequestId, hash: String) = DappAnswer.OFF
     override suspend fun refuse(request: DappRequestId, why: DappRequestError) = DappAnswer.OFF
+    override suspend fun recordSafeTx(request: DappRequestId, safeTx: Digest) = false
 }
 
 /** [DappRequests] over [waiting], a test sets; an answer takes the request away and is recorded. */
@@ -82,4 +84,11 @@ internal class FakeDappRequests : DappRequests {
         answered(request).also { hashes += request to hash }
     override suspend fun refuse(request: DappRequestId, why: DappRequestError): DappAnswer =
         answered(request).also { refusals += request to why }
+    var recordSaves = true
+    override suspend fun recordSafeTx(request: DappRequestId, safeTx: Digest): Boolean {
+        val found = waiting.value.firstOrNull { it.id == request } ?: return false
+        if (!recordSaves || (found.safeTx != null && found.safeTx != safeTx)) return false
+        waiting.value = waiting.value.map { if (it.id == request) it.copy(safeTx = safeTx) else it }
+        return true
+    }
 }

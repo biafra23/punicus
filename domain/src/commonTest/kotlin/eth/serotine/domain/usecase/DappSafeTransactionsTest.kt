@@ -2,6 +2,7 @@ package eth.serotine.domain.usecase
 
 import eth.serotine.domain.model.AccountCustody
 import eth.serotine.domain.model.Address
+import eth.serotine.domain.model.Digest
 import eth.serotine.domain.model.DappTransactionRequest
 import eth.serotine.domain.model.Network
 import eth.serotine.domain.model.SafeSettingsCalls
@@ -56,6 +57,13 @@ class DappSafeTransactionsTest {
             waiting.value = waiting.value.filterNot { it.id == request }
             return DappAnswer.DELIVERED
         }
+        var recordSaves = true
+        override suspend fun recordSafeTx(request: DappRequestId, safeTx: Digest): Boolean {
+            val found = waiting.value.firstOrNull { it.id == request } ?: return false
+            if (!recordSaves || (found.safeTx != null && found.safeTx != safeTx)) return false
+            waiting.value = waiting.value.map { if (it.id == request) it.copy(safeTx = safeTx) else it }
+            return true
+        }
     }
 
     private val requests = FakeRequests()
@@ -83,6 +91,26 @@ class DappSafeTransactionsTest {
         clock = { now },
     )
 
+    private fun sign() = SignDappSafeTx(
+        requests,
+        SignSafeTx(world.signer, world.observeSafe, world.recovery, world.queue, Network.SEPOLIA),
+    )
+
+    private suspend fun signed(proposal: DappSafeProposal): DappSafeSigning {
+        val checked = assertIs<SafeTxSignCheck.Ready>(sign().check(proposal))
+        return sign().sign(proposal, checked, Unlock.WithBiometrics("x"))
+    }
+
+    private fun execution(request: eth.serotine.domain.model.SigningRequest, nonce: Long = 9) = SentTransfer(
+        network = Network.SEPOLIA,
+        account = world.alice.address,
+        nonce = nonce,
+        signed = SignedTransfer(byteArrayOf(2, 1, nonce.toByte())),
+        action = SentAction.SafeExecution(request),
+        maxCost = UInt256.ZERO,
+        sentAt = now,
+    )
+
     @Test
     fun aSafesTransactionIsProposedAsASafeTxAtItsNextNonceForAnOwnerHeldHereToSign() = runTest {
         requests.waiting.value = listOf(request(payment))
@@ -93,34 +121,97 @@ class DappSafeTransactionsTest {
         assertEquals(4L, tx.nonce)
         assertEquals(listOf(world.alice.address), proposed.heldOwners)
         assertEquals(SafeCallSimulation.Ran(100), proposed.proposal.simulation)
-        // Signed by Alice, it is queued, and the request is that Safe transaction from then on.
-        val sign = SignSafeTx(world.signer, world.observeSafe, world.recovery, world.queue, Network.SEPOLIA)
-        assertIs<SafeTxSigning.Signed>(sign(proposed.proposal.request, world.alice.address, Unlock.WithBiometrics("x")))
+        // Signed by Alice: tied to the request first, then queued, and the request is that Safe transaction.
+        assertIs<DappSafeSigning.Signed>(signed(proposed))
+        assertEquals(proposed.proposal.request.hash, requests.waiting.value.single().safeTx)
         val queued = assertIs<DappSafeProposing.AlreadyQueued>(propose()(request(payment).id))
         assertEquals(proposed.proposal.request.hash, queued.request.hash)
+    }
+
+    @Test
+    fun nothingIsSignedUnlessTheRequestIsTiedToItsSafeTransaction() = runTest {
+        requests.waiting.value = listOf(request(payment))
+        val proposed = assertIs<DappSafeProposing.Proposed>(propose()(request(payment).id)).proposal
+        requests.recordSaves = false
+        assertEquals(DappSafeSigning.NotRecorded, signed(proposed))
+        assertTrue(world.queue.requests.value.isEmpty())
+        assertTrue(world.signer.asked.isEmpty(), "no key was asked for")
+    }
+
+    @Test
+    fun aSameCallQueuedByHandIsNotTheRequestsSafeTransaction() = runTest {
+        // The user queued the same payment themselves, at nonce 4: the dApp's is proposed behind it, at 5.
+        world.queue.requests.value = listOf(
+            eth.serotine.domain.model.SigningRequest.of(
+                Network.SEPOLIA,
+                world.safe,
+                eth.serotine.domain.model.SafeTx.call(world.recipient, payment.value, ByteArray(0), 4),
+            ),
+        )
+        requests.waiting.value = listOf(request(payment))
+        val proposed = assertIs<DappSafeProposing.Proposed>(propose()(request(payment).id)).proposal
+        assertEquals(5L, proposed.proposal.request.nonce)
+    }
+
+    @Test
+    fun aRecordedSafeTransactionNoLongerQueuedIsNeverReplacedByAnother() = runTest {
+        requests.waiting.value = listOf(request(payment))
+        val proposed = assertIs<DappSafeProposing.Proposed>(propose()(request(payment).id)).proposal
+        assertIs<DappSafeSigning.Signed>(signed(proposed))
+        // Rejected here, and another transaction now holds nonce 4: it would be proposed at 5, as another.
+        world.queue.requests.value = listOf(
+            eth.serotine.domain.model.SigningRequest.of(
+                Network.SEPOLIA,
+                world.safe,
+                eth.serotine.domain.model.SafeTx.call(world.carol, UInt256.ZERO, ByteArray(0), 4),
+            ),
+        )
+        assertEquals(
+            DappSafeProposing.NoLongerQueued(proposed.proposal.request.hash),
+            propose()(request(payment).id),
+        )
+        // Not saved to the queue after the record, the same Safe transaction is proposed again to sign.
+        world.queue.requests.value = emptyList()
+        assertIs<DappSafeProposing.Proposed>(propose()(request(payment).id))
     }
 
     @Test
     fun theDappIsAnsweredWithTheExecutionsHashNeverTheSafeTxHash() = runTest {
         requests.waiting.value = listOf(request(payment))
         val proposed = assertIs<DappSafeProposing.Proposed>(propose()(request(payment).id)).proposal
-        val execution = SentTransfer(
-            network = Network.SEPOLIA,
-            account = world.alice.address,
-            nonce = 9,
-            signed = SignedTransfer(byteArrayOf(2, 1, 0)),
-            action = SentAction.SafeExecution(proposed.proposal.request),
-            maxCost = UInt256.ZERO,
-            sentAt = now,
+        // An older execution of the very same call, not this request's Safe transaction: never its answer.
+        val older = execution(
+            eth.serotine.domain.model.SigningRequest.of(
+                Network.SEPOLIA,
+                world.safe,
+                eth.serotine.domain.model.SafeTx.call(world.recipient, payment.value, ByteArray(0), 2),
+            ),
+            nonce = 7,
         )
+        world.sent.record(older)
         val answering = backgroundScope.launch { AnswerDappRequestsAtOnce(requests, world.sent, history)() }
         runCurrent()
         assertTrue(requests.hashes.isEmpty())
+        assertIs<DappSafeSigning.Signed>(signed(proposed))
+        runCurrent()
+        assertTrue(requests.hashes.isEmpty(), "signed and queued is not executed")
+        val execution = execution(proposed.proposal.request)
         world.sent.record(execution)
         runCurrent()
         assertEquals(listOf(request(payment).id to execution.hash), requests.hashes)
         assertTrue(execution.hash != "0x" + proposed.proposal.request.hash.hex)
         answering.cancel()
+    }
+
+    @Test
+    fun anExecutionOnAnotherNetworkIsNeverTheAnswer() {
+        val safeTx = eth.serotine.domain.model.SigningRequest.of(
+            Network.ETHEREUM,
+            world.safe,
+            eth.serotine.domain.model.SafeTx.call(world.recipient, payment.value, ByteArray(0), 4),
+        )
+        val elsewhere = execution(safeTx).copy(network = Network.ETHEREUM)
+        assertEquals(null, executionFor(safeTx.hash, listOf(elsewhere), emptyList()))
     }
 
     @Test
@@ -140,7 +231,24 @@ class DappSafeTransactionsTest {
         requests.waiting.value = listOf(request(payment))
         assertEquals(DappSafeProposing.Reverts(100), propose()(request(payment).id))
         world.inputs.simulation = Simulation.Succeeded("", 100)
+        // A token transfer whose token answers false moved nothing.
+        val transfer = DappTransactionRequest(
+            world.safe,
+            Address.of("0x" + "77".repeat(20)),
+            UInt256.ZERO,
+            eth.serotine.domain.model.Erc20.transferData(world.recipient, UInt256.of(1)),
+            null,
+        )
+        world.inputs.simulation = Simulation.Succeeded("0".repeat(64), 100)
+        requests.waiting.value = listOf(request(transfer))
+        assertEquals(DappSafeProposing.Reverts(100), propose()(request(transfer).id))
+        world.inputs.simulation = Simulation.Succeeded("", 100)
+        // A gas limit: a Safe transaction's gas is its executor's, so the dApp's is refused, never ignored.
+        val gas = DappTransactionRequest(world.safe, world.recipient, payment.value, ByteArray(0), 21_000)
+        requests.waiting.value = listOf(request(gas))
+        assertEquals(DappSafeProposing.Refused(DappSignRefusal.SAFE_GAS), propose()(request(gas).id))
         // No owner held here: nobody here can propose it.
+        requests.waiting.value = listOf(request(payment))
         world.accounts.setCustody(world.alice.id, AccountCustody.Watched)
         assertEquals(DappSafeProposing.NoOwnerHere, propose()(request(payment).id))
         // Never quoted as an account's own transaction.

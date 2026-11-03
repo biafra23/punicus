@@ -78,7 +78,10 @@ internal class WcStoredSession(
     )
 }
 
-/** A dApp's request waiting for its answer. */
+/**
+ * A dApp's request waiting for its answer. [safeTx]: for a Safe's `eth_sendTransaction`, the `safeTxHash`
+ * of the Safe transaction recorded for it (`0x` and 64 hex digits), once one is; set once.
+ */
 @Serializable
 internal class WcStoredRequest(
     val id: Long,
@@ -87,7 +90,10 @@ internal class WcStoredRequest(
     val method: String,
     val params: JsonElement,
     val expirySeconds: Long,
-)
+    val safeTx: String? = null,
+) {
+    fun withSafeTx(hash: String) = WcStoredRequest(id, topic, chainId, method, params, expirySeconds, hash)
+}
 
 /**
  * A message this side has to send, kept until the relay takes it: sealed already, so it goes out

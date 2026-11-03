@@ -313,22 +313,29 @@ everything on the chain side: the verified `call`, `estimateGasDetailed`,
     value must be in its verified ether, less what its queued transactions
     may move.
   - The call is run as a verified call from the Safe at the head. One that
-    reverts is shown so and not proposed.
+    reverts, or a token's `transfer` or `approve` that returns false, is
+    shown so and not proposed.
+  - A `gas` field is refused (-32602): a Safe transaction's gas is set by
+    the account that executes it, so the dApp's limit could not be applied.
   - It is signed on D6 by the first of the Safe's owners whose key is on
     this device, and queued. With none, D6's Sign is greyed out and says
     why. A proposal over a minute old is made again before it is signed.
   - Once queued it is an ordinary Safe transaction: its screen opens in D6's
     place, and there the other owners' signatures are collected (here, or
     through a QR code or text) and an account here executes it.
-  - A request queued once is that Safe transaction, never another. It is
-    found in the queue by its fields: the same recipient, value and data, a
-    plain call with no refund. Opened again, D6 offers to open it.
+  - A request signed for is that Safe transaction, never another. Its
+    `safeTxHash` is recorded with the request before an owner signs, and
+    nothing is signed unless that record is saved. Opened again, D6 offers
+    to open it. One no longer queued here (rejected, or its nonce taken) is
+    never proposed again as another: the request can then only be refused.
+    The same call queued or executed by hand is never taken for it.
   - Refuse stays offered while it is queued: it tells the dApp no and
     leaves the Safe transaction queued, for rejecting on its screen.
 - **A dApp is answered only with an Ethereum transaction hash.** For a Safe,
   that is the hash of the `execTransaction` sent, never the `safeTxHash`. The
-  app answers it while it runs, once a peer takes an execution of that Safe
-  transaction or a verified block includes it, found by the same fields. If
+  app answers it while it runs, once a peer takes an execution of the Safe
+  transaction recorded for it, on Sepolia, or a verified block includes
+  one. If
   the threshold cannot be met before the request expires, the dApp gets an
   error, and the Safe transaction stays queued. It is never left hanging,
   and never given a hash that is not a transaction.

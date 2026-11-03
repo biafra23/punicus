@@ -19,8 +19,11 @@ import eth.serotine.domain.usecase.DappSafeProposal
 import eth.serotine.domain.usecase.DappSafeProposing
 import eth.serotine.domain.usecase.ProposeDappSafeTx
 import eth.serotine.domain.usecase.SafeCallSimulation
-import eth.serotine.domain.usecase.SafeTxSigning
-import eth.serotine.domain.usecase.SignSafeTx
+import eth.serotine.domain.usecase.DappSafeSigning
+import eth.serotine.domain.usecase.SafeTxSignCheck
+import eth.serotine.domain.usecase.SignDappSafeTx
+import eth.serotine.domain.repository.ReadUnavailable
+import eth.serotine.domain.usecase.SafeTxRefusal
 import eth.serotine.domain.usecase.DappSignContent
 import eth.serotine.domain.usecase.DappSignRefusal
 import eth.serotine.domain.usecase.DappTransactionQuote
@@ -37,6 +40,8 @@ import eth.serotine.domain.usecase.TransferSending
 import eth.serotine.domain.repository.SentTransfer
 import eth.serotine.ui.components.Eip55
 import eth.serotine.ui.components.NotSentItem
+import eth.serotine.ui.components.CHECK_TOOK_THE_TIME
+import eth.serotine.ui.components.MIN_PROMPT_TIME
 import eth.serotine.ui.components.PROMPT_TIMED_OUT
 import eth.serotine.ui.components.QUOTE_MAX_AGE
 import eth.serotine.ui.components.STALE_QUOTE
@@ -51,7 +56,11 @@ import eth.serotine.ui.components.safeTxRefusalText
 import eth.serotine.ui.components.promptDeadline
 import eth.serotine.ui.dapprequest.DappRequestViewModel
 import eth.serotine.ui.dapprequest.SignInField
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -139,7 +148,8 @@ data class DappTransactionUiState(
  * before the screen was last hidden, is made again before anything is signed. The password typed is held
  * while the field is shown, handed to the signer in an [Unlock], and dropped once used and whenever the
  * screen is not shown (CLAUDE.md, *Trust*). From a Safe it is proposed instead ([proposeDappSafeTx]),
- * signed by the first of its owners held here and queued ([signSafeTx]), under the same minute.
+ * signed by the first of its owners held here and queued ([signDappSafeTx]), under the same minute: the
+ * Safe is checked first, within what is left of it, and leaving the screen stops that check.
  */
 class DappTransactionViewModel(
     /** The request, as its route names it: `topic/id`. */
@@ -148,7 +158,7 @@ class DappTransactionViewModel(
     private val quoteDappTransaction: QuoteDappTransaction,
     private val sendDappTransaction: SendDappTransaction,
     private val proposeDappSafeTx: ProposeDappSafeTx,
-    private val signSafeTx: SignSafeTx,
+    private val signDappSafeTx: SignDappSafeTx,
     private val refuseDappRequest: RefuseDappRequest,
     private val describeKeyStore: DescribeKeyStore,
     private val clock: () -> Long = ::epochSecondsNow,
@@ -184,7 +194,11 @@ class DappTransactionViewModel(
         /** The Safe transaction queued for it: `0x` and its hash. */
         val queued: String? = null,
         val openQueued: Boolean = false,
+        /** The Safe is being checked before a signature: leaving the screen stops it. */
+        val checking: Boolean = false,
     )
+
+    private var checkJob: Job? = null
 
     private val local = MutableStateFlow(Local())
 
@@ -214,7 +228,7 @@ class DappTransactionViewModel(
             notice = local.notice,
             explaining = local.explaining,
             done = local.done,
-            fromSafe = local.fromSafe,
+            fromSafe = base.fromSafe || local.fromSafe,
             queued = local.queued,
             openQueued = local.openQueued,
         )
@@ -358,7 +372,18 @@ class DappTransactionViewModel(
     fun dismissExplanation() = local.update { it.copy(explaining = null) }
 
     /** The screen stopped being shown: the password goes, and the quote is made again when it is shown. */
-    fun onHidden() = local.update { it.copy(unlock = it.unlock.copy(password = WalletPassword.EMPTY), hidden = true) }
+    fun onHidden() {
+        // A Safe still being checked before its signature stops: no prompt comes up over another screen.
+        if (local.value.checking) checkJob?.cancel()
+        local.update {
+            it.copy(
+                unlock = it.unlock.copy(password = WalletPassword.EMPTY),
+                hidden = true,
+                busy = it.busy && !it.checking,
+                checking = false,
+            )
+        }
+    }
 
     /** The screen is shown again: a quote made before it was hidden is made again. */
     fun onShown() {
@@ -416,6 +441,7 @@ class DappTransactionViewModel(
                         ": it would fail on chain. Ask the dApp again, or refuse.",
                 )
                 DappSafeProposing.NoOwnerHere -> base.copy(notQuoted = NO_OWNER_HERE)
+                is DappSafeProposing.NoLongerQueued -> base.copy(notQuoted = NO_LONGER_QUEUED)
                 // The review says why: a refused request shows its refusal, and only Refuse.
                 is DappSafeProposing.Refused, DappSafeProposing.Gone -> base
                 DappSafeProposing.Expired -> base.copy(notice = EXPIRED)
@@ -426,44 +452,79 @@ class DappTransactionViewModel(
 
     /** Signs [proposal] as the first of the Safe's owners held here, with [unlock], and queues it. */
     private fun signSafe(proposal: DappSafeProposal, unlock: Unlock) {
+        val proposedAt = local.value.quotedAt ?: return requote(note = STALE_QUOTE)
         // The password leaves the state now: it is in the unlock, which the signer zeroes after use.
         local.update {
-            it.copy(busy = true, notice = null, unlock = it.unlock.copy(password = WalletPassword.EMPTY, error = null))
+            it.copy(
+                busy = true,
+                checking = true,
+                notice = null,
+                unlock = it.unlock.copy(password = WalletPassword.EMPTY, error = null),
+            )
         }
-        viewModelScope.launch {
-            val signing = try {
-                withContext(NonCancellable) {
-                    signSafeTx(proposal.proposal.request, proposal.heldOwners.first(), unlock)
-                }
+        // The check has what is left of the proposal's minute, less the prompt's least time when the
+        // prompt signs: past that the signature could not be made in time anyway.
+        val checkUntil = (unlock as? Unlock.WithBiometrics)?.notAfter?.let { it - MIN_PROMPT_TIME }
+            ?: (proposedAt + QUOTE_MAX_AGE)
+        checkJob = viewModelScope.launch {
+            // The Safe is checked first, which leaving the screen cancels: no key is asked for, and no
+            // prompt shown, until it has passed.
+            val checked = try {
+                signDappSafeTx.check(proposal, budget = -checkUntil.elapsedNow())
+            } catch (e: CancellationException) {
+                throw e
             } catch (_: Exception) {
                 null // the use case promises not to throw; the backstop
             }
+            currentCoroutineContext().ensureActive()
+            local.update { it.copy(checking = false) }
+            val unproven = (checked as? SafeTxSignCheck.Refused)?.refusal ==
+                SafeTxRefusal.SafeUnavailable(ReadUnavailable.UNPROVEN)
+            if (checkUntil.hasPassedNow() && (checked is SafeTxSignCheck.Ready || unproven)) {
+                // The check took the time the proposal had left: nothing is signed, it is made again.
+                local.update { it.copy(busy = false) }
+                requote(note = CHECK_TOOK_THE_TIME)
+                return@launch
+            }
+            val signing = when (checked) {
+                // Tied to the request, signed and queued as one step, which leaving cannot cut in half.
+                is SafeTxSignCheck.Ready -> withContext(NonCancellable) {
+                    try {
+                        signDappSafeTx.sign(proposal, checked, unlock)
+                    } catch (_: Exception) {
+                        null // the use case promises not to throw; the backstop
+                    }
+                }
+                is SafeTxSignCheck.Refused -> DappSafeSigning.Refused(checked.refusal)
+                null -> null
+            }
             local.update { current ->
                 when (signing) {
-                    is SafeTxSigning.Signed -> if (signing.saved) {
+                    is DappSafeSigning.Signed -> if (signing.saved) {
                         current.copy(busy = false, queued = "0x" + signing.request.hash.hex, openQueued = true)
                     } else {
                         current.copy(busy = false, unlock = current.unlock.copy(error = NOT_QUEUED))
                     }
-                    is SafeTxSigning.NotSigned -> current.copy(
+                    is DappSafeSigning.NotSigned -> current.copy(
                         busy = false,
                         unlock = current.unlock.copy(
                             error = notSignedText(signing.signing, SIGN_FAILED),
                             biometrics = current.unlock.biometrics && biometricsStillOffered(signing.signing),
                         ),
                     )
-                    is SafeTxSigning.Refused -> current.copy(
+                    is DappSafeSigning.Refused -> current.copy(
                         busy = false,
                         explaining = TransactionExplanation(
                             "Cannot be signed",
                             safeTxRefusalText(signing.refusal, Network.SEPOLIA),
                         ),
                     )
+                    DappSafeSigning.NotRecorded -> current.copy(busy = false, unlock = current.unlock.copy(error = NOT_RECORDED))
                     null -> current.copy(busy = false, unlock = current.unlock.copy(error = SIGN_FAILED))
                 }
             }
-            if ((signing as? SafeTxSigning.NotSigned)?.signing == Signing.TimedOut) requote(note = PROMPT_TIMED_OUT)
-            if ((signing as? SafeTxSigning.Refused) != null) requote(note = null)
+            if ((signing as? DappSafeSigning.NotSigned)?.signing == Signing.TimedOut) requote(note = PROMPT_TIMED_OUT)
+            if (signing is DappSafeSigning.Refused) requote(note = null)
         }
     }
 
@@ -628,6 +689,10 @@ class DappTransactionViewModel(
         const val SIGN_FAILED = "Serotine could not finish this signature. Nothing was queued: try again."
         const val NOT_QUEUED = "Signed, but this device's queue cannot be saved right now, so nothing was queued: " +
             "sign it again in a moment."
+        const val NOT_RECORDED = "This request could not be tied to its Safe transaction right now, so nothing was " +
+            "signed: try again in a moment."
+        const val NO_LONGER_QUEUED = "The Safe transaction proposed for this request is no longer queued here, and it " +
+            "is never replaced by another one. Refuse answers the dApp; ask it again for a new one."
         const val SAFE_SHORT = "The Safe's verified balance, less what its queued transactions may move, cannot " +
             "pay this value. Refuse, or ask the dApp again once the Safe has more."
         const val NO_OWNER_HERE = "No owner of this Safe has its key on this device, so nobody here can sign it. " +

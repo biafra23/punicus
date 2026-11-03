@@ -1,6 +1,7 @@
 package eth.serotine.data.walletconnect
 
 import eth.serotine.domain.model.Address
+import eth.serotine.domain.model.Digest
 import eth.serotine.domain.model.Signature
 import eth.serotine.domain.repository.DappAnswer
 import eth.serotine.domain.repository.DappAsk
@@ -160,6 +161,7 @@ class WalletConnectDapps internal constructor(
                         WcRequests.decode(request.method, request.params)
                     },
                     expiresAtSeconds = request.expirySeconds,
+                    safeTx = request.safeTx?.let(Digest::parse),
                 )
             }
         }
@@ -183,6 +185,11 @@ class WalletConnectDapps internal constructor(
         override suspend fun refuse(request: DappRequestId, why: DappRequestError): DappAnswer {
             val wallet = walletConnect?.wallet ?: return DappAnswer.OFF
             return answer(wallet.respondError(request.session.topic, request.id, WcRequests.error(why)))
+        }
+
+        override suspend fun recordSafeTx(request: DappRequestId, safeTx: Digest): Boolean {
+            val wallet = walletConnect?.wallet ?: return false
+            return wallet.recordSafeTx(request.session.topic, request.id, "0x" + safeTx.hex)
         }
 
         private fun answer(answer: WcWallet.Answer): DappAnswer = when (answer) {

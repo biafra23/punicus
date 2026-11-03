@@ -71,6 +71,7 @@ class DappSigningTest {
         override suspend fun answerNull(request: DappRequestId) = done(request, null)
         override suspend fun answerTransaction(request: DappRequestId, hash: String) = done(request, hash)
         override suspend fun refuse(request: DappRequestId, why: DappRequestError) = done(request, why)
+        override suspend fun recordSafeTx(request: DappRequestId, safeTx: Digest) = error("not used")
     }
 
     private class FakeSigner : Signer {

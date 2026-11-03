@@ -382,6 +382,8 @@ class DappRequestViewModel(
             DappSignRefusal.SIGN_IN_NOT_YET_VALID -> "The sign-in is not valid yet."
             DappSignRefusal.TYPED_OTHER_CHAIN -> "The data names a network other than Sepolia."
             DappSignRefusal.PERMIT_OTHER_OWNER -> "The approval is for another account than the one asked to sign it."
+            DappSignRefusal.SAFE_GAS -> "It sets a gas limit, which a Safe's transaction cannot take: the account " +
+                "that executes it sets the gas. Ask the dApp again without one, or refuse."
             DappSignRefusal.TX_TO_ZERO_ADDRESS ->
                 "It sends to the zero address: nobody holds its key, so what it sends would be lost for good."
             DappSignRefusal.TYPED_TOO_LARGE ->

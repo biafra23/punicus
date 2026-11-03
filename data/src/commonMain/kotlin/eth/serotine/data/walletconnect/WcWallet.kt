@@ -68,6 +68,8 @@ internal data class WcRequestView(
     val method: String,
     val params: JsonElement,
     val expirySeconds: Long,
+    /** The Safe transaction recorded for it ([WcWallet.recordSafeTx]), `0x` and its hash; null before. */
+    val safeTx: String? = null,
 )
 
 /** What is waiting and what is open. */
@@ -548,6 +550,25 @@ internal class WcWallet(
         return true
     }
 
+    /**
+     * Records that request [requestId] on session [topic] is the Safe transaction [safeTx] (`0x` and 64
+     * hex digits), kept with the request until it is answered. True once saved, or when [safeTx] is
+     * recorded already; false when the request is not waiting, another is recorded, or it cannot be saved.
+     * Nothing is sent: it is this side's note, never the dApp's.
+     */
+    suspend fun recordSafeTx(topic: String, requestId: Long, safeTx: String): Boolean {
+        if (!safeTx.startsWith("0x") || WcEncoding.hexOrNull(safeTx.drop(2), SAFE_TX_HASH_BYTES) == null) return false
+        val hash = safeTx.lowercase()
+        return store.change(false) { state ->
+            val request = state.requests.find { it.topic == topic && it.id == requestId } ?: return@change false to null
+            when (request.safeTx) {
+                hash -> true to null
+                null -> true to state.copy(requests = state.requests.map { if (it === request) it.withSafeTx(hash) else it })
+                else -> false to null
+            }
+        }
+    }
+
     // ----- The dApp's side -----
 
     /**
@@ -745,7 +766,16 @@ internal class WcWallet(
             },
             requests = state.requests.mapNotNull { request ->
                 val session = sessions[request.topic] ?: return@mapNotNull null
-                WcRequestView(request.id, request.topic, session.dapp, request.chainId, request.method, request.params, request.expirySeconds)
+                WcRequestView(
+                    request.id,
+                    request.topic,
+                    session.dapp,
+                    request.chainId,
+                    request.method,
+                    request.params,
+                    request.expirySeconds,
+                    request.safeTx,
+                )
             },
         )
     }
@@ -813,3 +843,6 @@ internal class WcWallet(
         private fun JsonObject.string(key: String): String? = (this[key] as? JsonPrimitive)?.takeIf { it.isString }?.contentOrNull
     }
 }
+
+/** A `safeTxHash`'s length: 32 bytes, as every Keccak-256 digest. */
+private const val SAFE_TX_HASH_BYTES = 32

@@ -730,21 +730,25 @@ internal suspend fun safeBalanceOf(
     safe: Address,
     token: Address?,
 ): SafeBalanceRead {
+    if (token == null) return safeNativeBalanceOf(network, nativeBalances, safe)
     val unproven = SafeBalanceRead.Refused(SafeTxRefusal.Unavailable(ReadUnavailable.UNPROVEN))
-    if (token == null) {
-        return when (val reading = nativeBalances.observeBalance(network, safe).first()) {
-            is BalanceReading.Verified ->
-                reading.wei.toUInt256OrNull()?.let { SafeBalanceRead.Read(it, reading.blockNumber) } ?: unproven
-            BalanceReading.Syncing, is BalanceReading.LastKnown -> SafeBalanceRead.Refused(SafeTxRefusal.Syncing)
-            is BalanceReading.Unavailable -> SafeBalanceRead.Refused(SafeTxRefusal.Unavailable(reading.reason))
-        }
-    }
     return when (val reading = tokenBalances.observeBalance(network, safe, token).first()) {
         is TokenBalanceReading.Verified ->
             UInt256.parse(reading.units.decimal)?.let { SafeBalanceRead.Read(it, reading.blockNumber) } ?: unproven
         TokenBalanceReading.Syncing, is TokenBalanceReading.LastKnown -> SafeBalanceRead.Refused(SafeTxRefusal.Syncing)
         TokenBalanceReading.NotAToken -> SafeBalanceRead.NotAToken
         is TokenBalanceReading.Unavailable -> SafeBalanceRead.Refused(SafeTxRefusal.Unavailable(reading.reason))
+    }
+}
+
+/** [safe]'s verified balance of the network's currency, as [safeBalanceOf] reads it. */
+internal suspend fun safeNativeBalanceOf(network: Network, nativeBalances: NativeBalances, safe: Address): SafeBalanceRead {
+    val unproven = SafeBalanceRead.Refused(SafeTxRefusal.Unavailable(ReadUnavailable.UNPROVEN))
+    return when (val reading = nativeBalances.observeBalance(network, safe).first()) {
+        is BalanceReading.Verified ->
+            reading.wei.toUInt256OrNull()?.let { SafeBalanceRead.Read(it, reading.blockNumber) } ?: unproven
+        BalanceReading.Syncing, is BalanceReading.LastKnown -> SafeBalanceRead.Refused(SafeTxRefusal.Syncing)
+        is BalanceReading.Unavailable -> SafeBalanceRead.Refused(SafeTxRefusal.Unavailable(reading.reason))
     }
 }
 
