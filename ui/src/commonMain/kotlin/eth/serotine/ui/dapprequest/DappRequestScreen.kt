@@ -48,6 +48,9 @@ const val DAPP_REQUEST_PASSWORD_TAG = "dapp-request-password"
 const val DAPP_REQUEST_SIGN_TAG = "dapp-request-sign"
 const val DAPP_REQUEST_REFUSE_TAG = "dapp-request-refuse"
 
+/** Test tag of D5's every-field box, for UI tests. */
+const val DAPP_REQUEST_FIELDS_TAG = "dapp-request-fields"
+
 /**
  * Binds [DappRequestScreen] to its ViewModel; an answer, or a request no longer waiting, ends it
  * through [onDone]. The password goes whenever the screen is not shown.
@@ -78,9 +81,10 @@ fun DappRequestRoute(
 }
 
 /**
- * A dApp's request to sign a message (docs/walletconnect.md, screen D4) as a pure function of
- * [state]: who asks, marked as the dApp's claim; the account asked to sign, in full; Sepolia; the
- * message, field by field when it is a sign-in, as text, or as hex marked "not text"; the warnings;
+ * A dApp's request to sign (docs/walletconnect.md, screens D4 and D5) as a pure function of [state]:
+ * who asks, marked as the dApp's claim; the account asked to sign, in full; Sepolia; a message, field
+ * by field when it is a sign-in, as text, or as hex marked "not text"; or typed data, what it lets
+ * someone do when decoded, its domain and every field; the warnings;
  * and the unlock, with Refuse beside it. One that cannot be signed shows why, its Sign greyed out and
  * still tappable. Nothing on it is read from the chain.
  */
@@ -157,7 +161,9 @@ fun DappRequestScreen(
             }
             Text("On Sepolia, a test network", Modifier.padding(horizontal = 16.dp, vertical = 4.dp))
 
-            if (state.signIn.isNotEmpty()) {
+            if (state.typed) {
+                TypedDataSections(state)
+            } else if (state.signIn.isNotEmpty()) {
                 Heading("The sign-in")
                 state.signIn.forEach { field ->
                     Column(Modifier.padding(horizontal = 16.dp, vertical = 4.dp)) {
@@ -245,6 +251,62 @@ fun DappRequestScreen(
                 ) { Text("Refuse") }
             }
         }
+    }
+}
+
+/** Screen D5's part: what typed data lets someone do, when decoded; its domain; and every field. */
+@Composable
+private fun TypedDataSections(state: DappRequestUiState) {
+    state.meaning?.let { meaning ->
+        Heading("What signing it lets someone do")
+        Text(meaning, Modifier.padding(horizontal = 16.dp, vertical = 4.dp))
+        state.meaningFields.forEach { Field(it) }
+    }
+    Heading("Who checks the signature")
+    Text(
+        "As the data states it: the contract and network it is for.",
+        Modifier.padding(horizontal = 16.dp),
+        style = MaterialTheme.typography.bodySmall,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+    )
+    state.domainFields.forEach { Field(it) }
+    Heading(if (state.meaning == null) "Every field, not decoded" else "Every field")
+    Surface(
+        Modifier.padding(horizontal = 16.dp).fillMaxWidth().testTag(DAPP_REQUEST_FIELDS_TAG),
+        color = MaterialTheme.colorScheme.surfaceVariant,
+        shape = MaterialTheme.shapes.small,
+    ) {
+        SelectionContainer {
+            Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                state.typedRows.forEach { row ->
+                    Row(
+                        Modifier.padding(start = (row.depth * 16).dp),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        Text(
+                            row.label,
+                            style = MaterialTheme.typography.labelMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                        row.value?.let {
+                            Text(it, fontFamily = FontFamily.Monospace, style = MaterialTheme.typography.bodySmall)
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun Field(field: SignInField) {
+    Column(Modifier.padding(horizontal = 16.dp, vertical = 4.dp)) {
+        Text(
+            field.label,
+            style = MaterialTheme.typography.labelMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        SelectionContainer { Text(field.value) }
     }
 }
 

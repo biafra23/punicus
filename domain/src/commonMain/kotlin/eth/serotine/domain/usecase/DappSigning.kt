@@ -1,6 +1,13 @@
 package eth.serotine.domain.usecase
 
 import eth.serotine.domain.model.Account
+import eth.serotine.domain.repository.TokenCatalog
+import eth.serotine.domain.model.Eip712
+import eth.serotine.domain.model.UInt256
+import eth.serotine.domain.model.TypedDataMeaning
+import eth.serotine.domain.model.Token
+import eth.serotine.domain.model.EncodedTypedData
+import eth.serotine.domain.model.Digest
 import eth.serotine.domain.model.AccountCustody
 import eth.serotine.domain.model.AccountKind
 import eth.serotine.domain.model.Address
@@ -70,7 +77,19 @@ enum class DappSignRefusal(val error: DappRequestError) {
 
     /** A sign-in before its not-before time. */
     SIGN_IN_NOT_YET_VALID(DappRequestError.INVALID_PARAMS),
+
+    /** Typed data whose domain names another chain than the account's. */
+    TYPED_OTHER_CHAIN(DappRequestError.INVALID_PARAMS),
+
+    /** An ERC-2612 permit of another owner than the account asked to sign it. */
+    PERMIT_OTHER_OWNER(DappRequestError.INVALID_PARAMS),
+
+    /** Typed data with more values than D5 shows ([MAX_SHOWN_VALUES]): what would not be shown is not signed. */
+    TYPED_TOO_LARGE(DappRequestError.LIMIT_EXCEEDED),
 }
+
+/** The most values of typed data's message screen D5 shows, every one: more is refused, never cut. */
+const val MAX_SHOWN_VALUES: Int = 200
 
 /** What a message to sign is warned about: it may be signed, after the warning. */
 enum class DappSignWarning {
@@ -79,12 +98,36 @@ enum class DappSignWarning {
 
     /** Not a sign-in (EIP-4361): the app cannot say what signing it commits to. */
     NOT_A_SIGN_IN,
+
+    /** Typed data whose domain names no chain: a signature that may be used on any chain. */
+    NO_CHAIN_ID,
+
+    /** Typed data of a struct this app does not know: shown field by field, its meaning not decoded. */
+    NOT_DECODED,
+}
+
+/** What a request asks to have signed: a message, or typed data. */
+sealed interface DappSignContent {
+    /** A `personal_sign` [message], and the sign-in it spells when it is one. */
+    data class Message(val message: PersonalMessage, val signIn: SignInMessage?) : DappSignContent
+
+    /**
+     * `eth_signTypedData_v4`'s [typed] data, what it lets someone do when this app knows its struct
+     * ([meaning]), and the built-in tokens it names ([tokens], by address): the list's own claim of their
+     * symbol and decimals, pinned.
+     */
+    data class Typed(
+        val typed: EncodedTypedData,
+        val meaning: TypedDataMeaning?,
+        val tokens: Map<Address, Token>,
+    ) : DappSignContent
 }
 
 /**
- * A dApp's `personal_sign` request, reviewed (screen D4): who asks, which account is to sign, the
- * message as the dApp sent it and, when it is one, the sign-in it spells. [refusal] when it cannot be
- * signed; the [warnings] otherwise. Nothing in it is read from the chain: signing in reads nothing.
+ * A dApp's request to sign, reviewed (screens D4 and D5): who asks, which account is to sign, and what:
+ * a message as the dApp sent it, and the sign-in it spells when it is one; or typed data, with what it
+ * lets someone do when this app knows its struct. [refusal] when it cannot be signed; the [warnings]
+ * otherwise. Nothing in it is read from the chain: signing reads nothing.
  */
 data class DappMessageReview(
     val request: DappRequest,
@@ -92,46 +135,114 @@ data class DappMessageReview(
     val address: Address,
     /** The wallet's account at [address] on Sepolia, when there is one. */
     val account: Account?,
-    val message: PersonalMessage,
-    /** The sign-in [message] spells, or null when it is not one. */
-    val signIn: SignInMessage?,
+    val content: DappSignContent,
     val refusal: DappSignRefusal?,
     val warnings: Set<DappSignWarning>,
-)
+) {
+    /** The message, when [content] is one. */
+    val message: PersonalMessage? get() = (content as? DappSignContent.Message)?.message
+
+    /** The sign-in the message spells, when it is one. */
+    val signIn: SignInMessage? get() = (content as? DappSignContent.Message)?.signIn
+
+    /** The digest signing it signs, computed here: EIP-191's for a message, EIP-712's for typed data. */
+    val digest: Digest
+        get() = when (content) {
+            is DappSignContent.Message -> content.message.digest()
+            is DappSignContent.Typed -> content.typed.digest
+        }
+}
 
 /**
- * Reviews [request], a `personal_sign` asking [ask], against the wallet's [accounts] (null: the list
- * cannot be read) and the networks [enabled], at [nowSeconds] (docs/walletconnect.md, *Signing in*).
+ * Reviews [request], when it asks to have something signed (`personal_sign`, `eth_signTypedData_v4`;
+ * null otherwise), against the wallet's [accounts] (null: the list cannot be read), the networks
+ * [enabled] and the built-in [tokens] of Sepolia, at [nowSeconds] (docs/walletconnect.md, *Signing in*
+ * and *Typed data*).
  */
 fun reviewDappMessage(
     request: DappRequest,
-    ask: DappAsk.PersonalSign,
     accounts: List<Account>?,
     enabled: Set<Network>,
     nowSeconds: Long,
-): DappMessageReview {
-    val account = accounts?.firstOrNull { it.network == Network.SEPOLIA && it.address == ask.account }
-    val signIn = ask.message.text?.let(SignInMessage::parse)
-    val refusal = when {
-        request.chain != SEPOLIA_CHAIN -> DappSignRefusal.OTHER_CHAIN
-        ask.account !in request.sessionAccounts -> DappSignRefusal.NOT_SESSION_ACCOUNT
-        accounts == null -> DappSignRefusal.ACCOUNTS_UNREADABLE
-        account == null -> DappSignRefusal.NOT_IN_WALLET
-        account.kind == AccountKind.SAFE -> DappSignRefusal.SAFE
-        account.custody == AccountCustody.Watched -> DappSignRefusal.NO_KEY
-        Network.SEPOLIA !in enabled -> DappSignRefusal.SEPOLIA_OFF
-        signIn == null -> null
-        signIn.address != ask.account -> DappSignRefusal.SIGN_IN_OTHER_ADDRESS
-        signIn.chainId != Network.SEPOLIA.chainId -> DappSignRefusal.SIGN_IN_OTHER_CHAIN
-        signIn.expiresAtSeconds != null && signIn.expiresAtSeconds <= nowSeconds -> DappSignRefusal.SIGN_IN_EXPIRED
-        signIn.notBeforeSeconds != null && signIn.notBeforeSeconds > nowSeconds -> DappSignRefusal.SIGN_IN_NOT_YET_VALID
-        else -> null
+    tokens: List<Token> = emptyList(),
+): DappMessageReview? {
+    val (signer, content) = when (val ask = request.ask) {
+        is DappAsk.PersonalSign ->
+            ask.account to DappSignContent.Message(ask.message, ask.message.text?.let(SignInMessage::parse))
+        is DappAsk.SignTypedData -> {
+            val meaning = TypedDataMeaning.of(ask.typed)
+            val named = tokensOf(meaning)
+            val pinned = tokens.filter { it.address in named }.associateBy { it.address }
+            ask.account to DappSignContent.Typed(ask.typed, meaning, pinned)
+        }
+        else -> return null
+    }
+    val account = accounts?.firstOrNull { it.network == Network.SEPOLIA && it.address == signer }
+    val refusal = accountRefusal(request, signer, accounts, account, enabled) ?: when (content) {
+        is DappSignContent.Message -> signInRefusal(content.signIn, signer, nowSeconds)
+        is DappSignContent.Typed -> typedRefusal(content, signer)
     }
     val warnings = buildSet {
-        if (signIn == null) add(DappSignWarning.NOT_A_SIGN_IN)
-        if (signIn != null && !sameSite(signIn, request.dapp.url)) add(DappSignWarning.DOMAIN_NOT_DAPP_URL)
+        when (content) {
+            is DappSignContent.Message -> {
+                val signIn = content.signIn
+                if (signIn == null) add(DappSignWarning.NOT_A_SIGN_IN)
+                if (signIn != null && !sameSite(signIn, request.dapp.url)) add(DappSignWarning.DOMAIN_NOT_DAPP_URL)
+            }
+            is DappSignContent.Typed -> {
+                if ("chainId" !in content.typed.data.domain) add(DappSignWarning.NO_CHAIN_ID)
+                if (content.meaning == null) add(DappSignWarning.NOT_DECODED)
+            }
+        }
     }
-    return DappMessageReview(request, ask.account, account, ask.message, signIn, refusal, warnings)
+    return DappMessageReview(request, signer, account, content, refusal, warnings)
+}
+
+/** Why [signer] cannot sign [request] here, whatever it asks; null when it can. */
+private fun accountRefusal(
+    request: DappRequest,
+    signer: Address,
+    accounts: List<Account>?,
+    account: Account?,
+    enabled: Set<Network>,
+): DappSignRefusal? = when {
+    request.chain != SEPOLIA_CHAIN -> DappSignRefusal.OTHER_CHAIN
+    signer !in request.sessionAccounts -> DappSignRefusal.NOT_SESSION_ACCOUNT
+    accounts == null -> DappSignRefusal.ACCOUNTS_UNREADABLE
+    account == null -> DappSignRefusal.NOT_IN_WALLET
+    account.kind == AccountKind.SAFE -> DappSignRefusal.SAFE
+    account.custody == AccountCustody.Watched -> DappSignRefusal.NO_KEY
+    Network.SEPOLIA !in enabled -> DappSignRefusal.SEPOLIA_OFF
+    else -> null
+}
+
+private fun signInRefusal(signIn: SignInMessage?, signer: Address, nowSeconds: Long): DappSignRefusal? = when {
+    signIn == null -> null
+    signIn.address != signer -> DappSignRefusal.SIGN_IN_OTHER_ADDRESS
+    signIn.chainId != Network.SEPOLIA.chainId -> DappSignRefusal.SIGN_IN_OTHER_CHAIN
+    signIn.expiresAtSeconds != null && signIn.expiresAtSeconds <= nowSeconds -> DappSignRefusal.SIGN_IN_EXPIRED
+    signIn.notBeforeSeconds != null && signIn.notBeforeSeconds > nowSeconds -> DappSignRefusal.SIGN_IN_NOT_YET_VALID
+    else -> null
+}
+
+private fun typedRefusal(content: DappSignContent.Typed, signer: Address): DappSignRefusal? {
+    val chainId = content.typed.data.domain["chainId"]?.let(Eip712::unsignedOf)
+    return when {
+        Eip712.count(content.typed.data.message.values) > MAX_SHOWN_VALUES -> DappSignRefusal.TYPED_TOO_LARGE
+        chainId != null && chainId != UInt256.of(Network.SEPOLIA.chainId) -> DappSignRefusal.TYPED_OTHER_CHAIN
+        (content.meaning as? TypedDataMeaning.Permit)?.owner?.let { it != signer } == true ->
+            DappSignRefusal.PERMIT_OTHER_OWNER
+        else -> null
+    }
+}
+
+/** The tokens [meaning] names. */
+private fun tokensOf(meaning: TypedDataMeaning?): Set<Address> = when (meaning) {
+    is TypedDataMeaning.Permit -> setOf(meaning.token)
+    is TypedDataMeaning.Permit2Allowance -> setOf(meaning.token)
+    is TypedDataMeaning.Permit2Transfer -> setOf(meaning.token)
+    is TypedDataMeaning.CowOrder -> setOf(meaning.sellToken, meaning.buyToken)
+    null -> emptySet()
 }
 
 /**
@@ -177,6 +288,8 @@ class ObserveDappMessages(
     private val requests: DappRequests,
     private val accounts: AccountRepository,
     private val networks: NetworkSettings,
+    /** The built-in tokens, which name the tokens typed data refers to. */
+    private val tokens: TokenCatalog,
     private val clock: () -> Long = ::epochSecondsNow,
     private val tickSeconds: Long = 15,
 ) {
@@ -188,13 +301,12 @@ class ObserveDappMessages(
             }
         }
         val accountLists = accounts.observeAccounts()
-        return combine(requests.observe(), accountLists, networks.observe(), ticks) { waiting, list, enabled, _ ->
+        val known = tokens.observeTokens(Network.SEPOLIA)
+        val enabled = networks.observe()
+        return combine(requests.observe(), accountLists, enabled, known, ticks) { waiting, list, on, pinned, _ ->
             val loaded = (list as? AccountList.Loaded)?.accounts
             val now = clock()
-            waiting.mapNotNull { request ->
-                val ask = request.ask as? DappAsk.PersonalSign ?: return@mapNotNull null
-                reviewDappMessage(request, ask, loaded, enabled, now)
-            }
+            waiting.mapNotNull { request -> reviewDappMessage(request, loaded, on, now, pinned) }
         }.distinctUntilChanged()
     }
 }
@@ -224,10 +336,11 @@ sealed interface DappMessageSigning {
 }
 
 /**
- * Signs a dApp's `personal_sign` request (screen D4) and answers it with the signature. The request
+ * Signs a dApp's request to sign (screens D4 and D5) and answers it with the signature. The request
  * is reviewed again first, now ([reviewDappMessage]): one that cannot be signed is refused, and one
- * the dApp stopped waiting for is not signed at all. The digest is the message's EIP-191 one, computed
- * here; the signer signs it under [unlock] as given (docs/walletconnect.md, *Signing in*).
+ * the dApp stopped waiting for is not signed at all. The digest is computed here, EIP-191's for a
+ * message and EIP-712's for typed data; the signer signs it under [unlock] as given
+ * (docs/walletconnect.md, *Signing in* and *Typed data*).
  */
 class SignDappMessage(
     private val requests: DappRequests,
@@ -238,12 +351,12 @@ class SignDappMessage(
 ) {
     suspend operator fun invoke(id: DappRequestId, unlock: Unlock): DappMessageSigning {
         val request = requests.observe().first().firstOrNull { it.id == id } ?: return DappMessageSigning.Gone
-        val ask = request.ask as? DappAsk.PersonalSign ?: return DappMessageSigning.Gone
         val list = (accounts.observeAccounts().first() as? AccountList.Loaded)?.accounts
-        val review = reviewDappMessage(request, ask, list, networks.observe().first(), clock())
+        val review = reviewDappMessage(request, list, networks.observe().first(), clock())
+            ?: return DappMessageSigning.Gone
         review.refusal?.let { return DappMessageSigning.Refused(it) }
         if (request.expiresAtSeconds <= clock()) return DappMessageSigning.Expired
-        val signature = when (val signing = signer.sign(ask.account, ask.message.digest(), unlock)) {
+        val signature = when (val signing = signer.sign(review.address, review.digest, unlock)) {
             is Signing.Signed -> signing.signature
             else -> return DappMessageSigning.NotSigned(signing)
         }
@@ -269,10 +382,8 @@ class RefuseDappRequest(
 ) {
     suspend operator fun invoke(id: DappRequestId): DappAnswer {
         val request = requests.observe().first().firstOrNull { it.id == id } ?: return DappAnswer.NO_SUCH_REQUEST
-        val refusal = (request.ask as? DappAsk.PersonalSign)?.let { ask ->
-            val list = (accounts.observeAccounts().first() as? AccountList.Loaded)?.accounts
-            reviewDappMessage(request, ask, list, networks.observe().first(), clock()).refusal
-        }
+        val list = (accounts.observeAccounts().first() as? AccountList.Loaded)?.accounts
+        val refusal = reviewDappMessage(request, list, networks.observe().first(), clock())?.refusal
         return requests.refuse(id, refusal?.error ?: DappRequestError.USER_REJECTED)
     }
 }
@@ -309,7 +420,7 @@ class AnswerDappRequestsAtOnce(private val requests: DappRequests, private val r
         return notSaved
     }
 
-    /** The answer [request] needs no one's decision for, given; null for a message, which waits for the user. */
+    /** The answer [request] needs no one's decision for, given; null for one to sign, which waits for the user. */
     private suspend fun answerAtOnce(request: DappRequest): DappAnswer? = when (val ask = request.ask) {
         is DappAsk.SwitchChain -> if (ask.chainId == Network.SEPOLIA.chainId) {
             requests.answerNull(request.id)
@@ -318,6 +429,6 @@ class AnswerDappRequestsAtOnce(private val requests: DappRequests, private val r
         }
         is DappAsk.NotAnsweredYet -> requests.refuse(request.id, DappRequestError.UNSUPPORTED_METHOD)
         is DappAsk.Malformed -> requests.refuse(request.id, DappRequestError.INVALID_PARAMS)
-        is DappAsk.PersonalSign -> null
+        is DappAsk.PersonalSign, is DappAsk.SignTypedData -> null
     }
 }

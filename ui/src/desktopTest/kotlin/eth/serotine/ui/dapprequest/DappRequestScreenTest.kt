@@ -92,6 +92,33 @@ class DappRequestScreenTest {
     }
 
     @Test
+    fun typedDataShowsWhatItLetsSomeoneDoItsDomainAndEveryField() {
+        show(
+            state.copy(
+                title = "Approval request",
+                signIn = emptyList(),
+                typed = true,
+                meaning = "Lets 0x3fC9…7FAD take up to 250 USDC from this account.",
+                domainFields = listOf(SignInField("Network", "Sepolia (11155111)")),
+                typedRows = listOf(TypedRow(0, "value", "250000000")),
+            ),
+        )
+
+        rule.onNodeWithText("What signing it lets someone do").assertExists()
+        rule.onNodeWithText("Lets 0x3fC9…7FAD take up to 250 USDC from this account.").assertExists()
+        rule.onNodeWithText("Sepolia (11155111)").performScrollTo().assertExists()
+        rule.onNodeWithTag(DAPP_REQUEST_FIELDS_TAG).performScrollTo().assertExists()
+        rule.onNodeWithText("250000000").assertExists()
+    }
+
+    @Test
+    fun typedDataNotDecodedSaysSo() {
+        show(state.copy(title = "Data to sign", signIn = emptyList(), typed = true, typedRows = listOf(TypedRow(0, "contents", "Hi"))))
+
+        rule.onNodeWithText("Every field, not decoded").performScrollTo().assertExists()
+    }
+
+    @Test
     fun anExplanationIsShownAndDismissed() {
         show(state.copy(explaining = RequestExplanation("Cannot be signed", "The sign-in has expired.")))
 

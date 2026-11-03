@@ -54,9 +54,9 @@ class WcRequestsTest {
     }
 
     @Test
-    fun theOtherMethodsAreNotAnsweredYet() {
+    fun aTransactionIsNotAnsweredYet() {
         assertEquals(DappAsk.NotAnsweredYet("eth_sendTransaction"), decode("eth_sendTransaction", "[]"))
-        assertEquals(DappAsk.NotAnsweredYet("eth_signTypedData_v4"), decode("eth_signTypedData_v4", "[]"))
+        assertEquals(DappAsk.Malformed("eth_signTypedData_v4"), decode("eth_signTypedData_v4", "[]"))
     }
 
     @Test

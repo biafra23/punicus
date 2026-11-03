@@ -29,7 +29,7 @@ class PersonalMessage private constructor(private val bytes: ByteArray) {
         } catch (_: CharacterCodingException) {
             return@lazy null
         }
-        decoded.takeIf(::shownAsText)
+        decoded.takeIf(ShownText::isPlain)
     }
 
     /**
@@ -61,46 +61,6 @@ class PersonalMessage private constructor(private val bytes: ByteArray) {
             if (hex.length % 2 != 0 || hex.length > 2 * MAX_BYTES) return null
             if (!hex.all { it in '0'..'9' || it in 'a'..'f' || it in 'A'..'F' }) return null
             return PersonalMessage(hex.hexToBytes())
-        }
-
-        // Characters that draw nothing, or draw a line break that is not one: a control, a formatting
-        // character (a right-to-left override, a zero-width space), a line or paragraph separator.
-        private val HIDDEN = setOf(
-            CharCategory.CONTROL,
-            CharCategory.FORMAT,
-            CharCategory.LINE_SEPARATOR,
-            CharCategory.PARAGRAPH_SEPARATOR,
-        )
-
-        // Unicode's Default_Ignorable_Code_Point (DerivedCoreProperties.txt): drawn as nothing even by a
-        // font that lacks them. Some are formatting characters, caught above already; the others are
-        // marks or letters (U+034F, the variation selectors, the Hangul fillers), or outside the BMP,
-        // where Char.category sees only a surrogate (the tag characters, U+E0000 to U+E0FFF).
-        private val DEFAULT_IGNORABLE = listOf(
-            0x00AD..0x00AD, 0x034F..0x034F, 0x061C..0x061C, 0x115F..0x1160, 0x17B4..0x17B5,
-            0x180B..0x180F, 0x200B..0x200F, 0x202A..0x202E, 0x2060..0x206F, 0x3164..0x3164,
-            0xFE00..0xFE0F, 0xFEFF..0xFEFF, 0xFFA0..0xFFA0, 0xFFF0..0xFFF8, 0x1BCA0..0x1BCA3,
-            0x1D173..0x1D17A, 0xE0000..0xE0FFF,
-        )
-
-        /** Whether every code point of [text] draws as itself (line breaks and tabs among them). */
-        private fun shownAsText(text: String): Boolean {
-            var at = 0
-            while (at < text.length) {
-                val char = text[at]
-                val low = text.getOrNull(at + 1)
-                // Strict UTF-8 decoding leaves no lone surrogate: a high one is always followed by its low one.
-                val codePoint = if (char.isHighSurrogate() && low != null && low.isLowSurrogate()) {
-                    0x10000 + ((char.code - 0xD800) shl 10) + (low.code - 0xDC00)
-                } else {
-                    char.code
-                }
-                at += if (codePoint > 0xFFFF) 2 else 1
-                if (char == '\n' || char == '\r' || char == '\t') continue
-                if (codePoint <= 0xFFFF && char.category in HIDDEN) return false
-                if (DEFAULT_IGNORABLE.any { codePoint in it }) return false
-            }
-            return true
         }
     }
 }

@@ -27,6 +27,7 @@ import eth.serotine.domain.usecase.PairDapp
 import eth.serotine.domain.usecase.RejectDappProposal
 import eth.serotine.ui.FakeAccounts
 import eth.serotine.ui.FakeDappRequests
+import eth.serotine.ui.FakeTokenCatalog
 import eth.serotine.ui.FakeDappSessions
 import eth.serotine.ui.MemoryNetworkSettings
 import eth.serotine.ui.OffDappRequests
@@ -99,7 +100,7 @@ class DappViewModelsTest {
         )
         val vm = ConnectionsViewModel(
             observe(),
-            ObserveDappMessages(requests, accounts, networks, clock = { 1_700_000_000 }),
+            ObserveDappMessages(requests, accounts, networks, FakeTokenCatalog(), clock = { 1_700_000_000 }),
             DisconnectDapp(sessions),
             ExtendDappSession(sessions),
             clock = { 1_700_000_000 },
@@ -125,7 +126,7 @@ class DappViewModelsTest {
         main()
         val vm = ConnectionsViewModel(
             ObserveDappConnections(OffDappSessions, accounts, networks),
-            ObserveDappMessages(OffDappRequests, accounts, networks),
+            ObserveDappMessages(OffDappRequests, accounts, networks, FakeTokenCatalog()),
             DisconnectDapp(OffDappSessions),
             ExtendDappSession(OffDappSessions),
         )

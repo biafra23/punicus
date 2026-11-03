@@ -1,6 +1,14 @@
 package eth.serotine.ui.dapprequest
 
 import eth.serotine.domain.model.Account
+import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.flow.Flow
+import eth.serotine.domain.repository.TokenCatalog
+import eth.serotine.domain.model.TypedValue
+import eth.serotine.domain.model.TypedField
+import eth.serotine.domain.model.TypedData
+import eth.serotine.domain.model.Token
+import eth.serotine.domain.model.Eip712
 import eth.serotine.domain.model.AccountCustody
 import eth.serotine.domain.model.AccountKind
 import eth.serotine.domain.model.Address
@@ -108,9 +116,47 @@ class DappRequestViewModelTest {
         now + 300,
     )
 
+    private val usdc = Token(Address.of("0x1c7d4b196cb0c7b01d743fbc6116a902379c7238"), "USDC", "USD Coin", 6, null)
+    private val tokens = object : TokenCatalog {
+        override fun observeTokens(network: Network): Flow<List<Token>> = flowOf(listOf(usdc))
+    }
+
+    private fun permit(id: Long): DappRequest {
+        val data = TypedData(
+            types = mapOf(
+                "EIP712Domain" to listOf(
+                    TypedField("name", "string"),
+                    TypedField("chainId", "uint256"),
+                    TypedField("verifyingContract", "address"),
+                ),
+                "Permit" to listOf(
+                    TypedField("owner", "address"),
+                    TypedField("spender", "address"),
+                    TypedField("value", "uint256"),
+                    TypedField("nonce", "uint256"),
+                    TypedField("deadline", "uint256"),
+                ),
+            ),
+            primaryType = "Permit",
+            domain = mapOf(
+                "name" to TypedValue.Text("USD Coin"),
+                "chainId" to TypedValue.Number("11155111"),
+                "verifyingContract" to TypedValue.Text(usdc.address.hex),
+            ),
+            message = mapOf(
+                "owner" to TypedValue.Text(held.address.hex),
+                "spender" to TypedValue.Text("0x3fc91a3afd70395cd496c647d5a6cc9d4b2b7fad"),
+                "value" to TypedValue.Text("250000000"),
+                "nonce" to TypedValue.Number("0"),
+                "deadline" to TypedValue.Number("1793703600"),
+            ),
+        )
+        return request(id).copy(ask = DappAsk.SignTypedData(held.address, Eip712.encode(data)!!))
+    }
+
     private fun TestScope.viewModel(id: Long = 1): DappRequestViewModel {
         Dispatchers.setMain(UnconfinedTestDispatcher(testScheduler))
-        val observe = ObserveDappMessages(requests, accounts, networks, clock = { now })
+        val observe = ObserveDappMessages(requests, accounts, networks, tokens, clock = { now })
         val vm = DappRequestViewModel(
             "t/$id",
             observe,
@@ -165,6 +211,35 @@ class DappRequestViewModelTest {
         ticks.value = 1
         runCurrent()
         assertEquals("The dApp waits for an answer for about a minute more.", vm.uiState.value.waits)
+    }
+
+    @Test
+    fun aPermitIsShownAsTheApprovalItIsWithItsDomainAndEveryField() = runTest {
+        requests.waiting.value = listOf(permit(3))
+        val vm = viewModel(3)
+        val state = vm.uiState.value
+        assertTrue(state.typed)
+        assertEquals("Approval request", state.title)
+        assertEquals("Sign", state.signLabel)
+        assertTrue(state.meaning!!.startsWith("Lets 0x3fC9…7FAD take up to 250 USDC from this account, until at 1793703600."))
+        assertEquals(
+            listOf(
+                SignInField("Token", "USDC · ${Eip55.format(usdc.address)}"),
+                SignInField("Spender", "0x3fC91A3afd70395Cd496C647d5a6CC9D4B2b7FAD"),
+                SignInField("Amount", "250 USDC"),
+                SignInField("Until", "at 1793703600"),
+            ),
+            state.meaningFields,
+        )
+        assertEquals(listOf("Name", "Network", "Contract"), state.domainFields.map { it.label })
+        assertEquals("Sepolia (11155111)", state.domainFields[1].value)
+        assertEquals(listOf("owner", "spender", "value", "nonce", "deadline"), state.typedRows.map { it.label })
+        assertEquals("250000000", state.typedRows[2].value)
+        assertTrue(state.warnings.isEmpty())
+        vm.onPasswordChange("correct horse")
+        vm.sign()
+        runCurrent()
+        assertEquals(permit(3).id, requests.signatures.single().first)
     }
 
     @Test

@@ -1,6 +1,7 @@
 package eth.serotine.domain.repository
 
 import eth.serotine.domain.model.Address
+import eth.serotine.domain.model.EncodedTypedData
 import eth.serotine.domain.model.PersonalMessage
 import eth.serotine.domain.model.Signature
 import kotlinx.coroutines.flow.Flow
@@ -18,12 +19,18 @@ sealed interface DappAsk {
     /** `personal_sign`: [account] to sign [message], as the dApp sent it. */
     data class PersonalSign(val account: Address, val message: PersonalMessage) : DappAsk
 
+    /**
+     * `eth_signTypedData_v4`: [account] to sign [typed], the typed data the dApp sent, checked against
+     * EIP-712 and its digest computed here ([eth.serotine.domain.model.Eip712]).
+     */
+    data class SignTypedData(val account: Address, val typed: EncodedTypedData) : DappAsk
+
     /** `wallet_switchEthereumChain` to [chainId]: answered at once, Sepolia alone being a session's chain. */
     data class SwitchChain(val chainId: Long) : DappAsk
 
     /**
-     * A method on the closed list that this version does not answer yet ([method]: typed data, a
-     * transaction): answered at once with the unsupported-method error, never left waiting.
+     * A method on the closed list that this version does not answer yet ([method]: a transaction):
+     * answered at once with the unsupported-method error, never left waiting.
      */
     data class NotAnsweredYet(val method: String) : DappAsk
 
@@ -60,6 +67,9 @@ enum class DappRequestError {
 
     /** -32602: its parameters are not the method's. */
     INVALID_PARAMS,
+
+    /** -32005 (EIP-1474): more than this app takes, though the method's. */
+    LIMIT_EXCEEDED,
 }
 
 /** What answering a request came to. */
