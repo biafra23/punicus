@@ -16,11 +16,14 @@ import eth.serotine.domain.repository.NetworkSettings
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 
+@OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
 class DappConnectionsTest {
 
     private fun account(network: Network, last: Char, kind: AccountKind = AccountKind.EOA, custody: AccountCustody = AccountCustody.InKeyStore) =
@@ -49,8 +52,23 @@ class DappConnectionsTest {
             return DappApproval.Approved(DappSessionId("t"), delivered = true)
         }
         override suspend fun reject(proposal: DappProposalId) = true
-        override suspend fun disconnect(session: DappSessionId) = true
+        override suspend fun disconnect(session: DappSessionId): Boolean {
+            disconnected += session
+            connections.value = (connections.value as DappConnections.On).let { on ->
+                on.copy(sessions = on.sessions.filterNot { it.id == session })
+            }
+            return true
+        }
         override suspend fun extend(session: DappSessionId) = true
+        val updated = mutableListOf<Pair<DappSessionId, List<Address>>>()
+        val disconnected = mutableListOf<DappSessionId>()
+        override suspend fun updateAccounts(session: DappSessionId, accounts: List<Address>): Boolean {
+            updated += session to accounts
+            connections.value = (connections.value as DappConnections.On).let { on ->
+                on.copy(sessions = on.sessions.map { if (it.id == session) it.copy(accounts = accounts) else it })
+            }
+            return true
+        }
     }
 
     private val sessions = FakeSessions()
@@ -90,6 +108,27 @@ class DappConnectionsTest {
         assertTrue(sessions.approved.isEmpty())
         assertTrue(approve(proposal, listOf(held.address, watchedSafe.address)) is DappApproval.Approved)
         assertEquals(listOf(proposal to listOf(held.address, watchedSafe.address)), sessions.approved)
+    }
+
+    @Test
+    fun anAccountRemovedFromTheWalletLeavesEverySessionAndASessionLeftWithNoneEnds() = runTest {
+        val metadata = eth.serotine.domain.repository.DappMetadata("dApp", "https://dapp.test", "")
+        fun session(topic: String, vararg seen: Account) = eth.serotine.domain.repository.DappSession(
+            DappSessionId(topic), metadata, seen.map { it.address }, listOf("personal_sign"), 0, true,
+        )
+        sessions.connections.value = DappConnections.On(
+            DappRelayLink.CONNECTED,
+            emptyList(),
+            listOf(session("both", held, watchedSafe), session("only", held), session("other", watchedSafe)),
+        )
+        val following = backgroundScope.launch { FollowDappAccounts(sessions, accounts)() }
+        runCurrent()
+        assertTrue(sessions.updated.isEmpty() && sessions.disconnected.isEmpty())
+        accounts.remove(held.id)
+        runCurrent()
+        assertEquals(listOf(DappSessionId("both") to listOf(watchedSafe.address)), sessions.updated)
+        assertEquals(listOf(DappSessionId("only")), sessions.disconnected)
+        following.cancel()
     }
 
     @Test

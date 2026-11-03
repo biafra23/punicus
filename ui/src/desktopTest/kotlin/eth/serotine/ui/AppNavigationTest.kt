@@ -398,6 +398,8 @@ class AppNavigationTest {
         screenCaptureDebugSwitch = null,
         networkDemand = NetworkDemand(),
         networkSettings = MemoryNetworkSettings(),
+        dappSessions = OffDappSessions,
+        dappConnectionsOff = true,
     )
 
     private val daily = Account(

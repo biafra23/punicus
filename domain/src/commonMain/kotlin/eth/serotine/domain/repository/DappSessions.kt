@@ -151,4 +151,7 @@ interface DappSessions {
 
     /** Extends [session] to seven days from now. True once saved. */
     suspend fun extend(session: DappSessionId): Boolean
+
+    /** Gives [session] the Sepolia [accounts] instead, telling the dApp (`accountsChanged`). True once saved. */
+    suspend fun updateAccounts(session: DappSessionId, accounts: List<Address>): Boolean
 }

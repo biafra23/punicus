@@ -108,6 +108,33 @@ class DisconnectDapp(private val sessions: DappSessions) {
     suspend operator fun invoke(session: DappSessionId): Boolean = sessions.disconnect(session)
 }
 
+/**
+ * Keeps each session's accounts to those still in the wallet, while it runs: one removed from the
+ * wallet is taken out of every session that sees it, the dApp told (`accountsChanged`), and a session
+ * left with none is ended. The host runs it beside the relay connection.
+ */
+class FollowDappAccounts(private val sessions: DappSessions, private val accounts: AccountRepository) {
+    suspend operator fun invoke() {
+        combine(sessions.observe(), accounts.observeAccounts()) { connections, list -> connections to list }
+            .collect { (connections, list) ->
+                val on = connections as? DappConnections.On ?: return@collect
+                // An unreadable list is no news of a removal: nothing is changed on its word.
+                val loaded = list as? AccountList.Loaded ?: return@collect
+                // Nor is a damaged list set aside, which reads as one without its accounts.
+                if (loaded.damagedListSetAside) return@collect
+                val held = loaded.accounts.filter { it.network == Network.SEPOLIA }.map { it.address }.toSet()
+                for (session in on.sessions) {
+                    val kept = session.accounts.filter { it in held }
+                    when {
+                        kept.size == session.accounts.size -> Unit
+                        kept.isEmpty() -> sessions.disconnect(session.id)
+                        else -> sessions.updateAccounts(session.id, kept)
+                    }
+                }
+            }
+    }
+}
+
 /** Extends a session to seven days from now (screen D1). */
 class ExtendDappSession(private val sessions: DappSessions) {
     suspend operator fun invoke(session: DappSessionId): Boolean = sessions.extend(session)

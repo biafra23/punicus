@@ -21,6 +21,7 @@ import eth.serotine.android.widget.RateWidgetPairs
 import eth.serotine.data.account.FileAccountRepository
 import eth.serotine.data.cow.FileCowOrders
 import eth.serotine.data.cow.HttpCowApi
+import eth.serotine.data.walletconnect.WalletConnectDapps
 import eth.serotine.data.engine.AndroidDnsServers
 import eth.serotine.data.engine.MyotisHost
 import eth.serotine.data.history.FileHistoryStarts
@@ -52,6 +53,7 @@ import eth.serotine.domain.model.PriceId
 import eth.serotine.domain.model.RatePair
 import eth.serotine.domain.repository.AccountList
 import eth.serotine.domain.usecase.FollowAccountLogs
+import eth.serotine.domain.usecase.FollowDappAccounts
 import eth.serotine.domain.usecase.FollowDebugScreen
 import eth.serotine.domain.usecase.FollowExchangeRate
 import eth.serotine.domain.usecase.FollowInterfaceMode
@@ -254,6 +256,15 @@ class SerotineApplication : Application() {
     private val waitingSwaps by lazy { FileWaitingSwaps(filesDir.resolve("waiting-swaps.json").path) }
 
     /**
+     * dApp sessions over WalletConnect (docs/walletconnect.md), with this build type's project ID:
+     * off without one. Their state is in the app's files, which stay out of backups and device
+     * transfers (data_extraction_rules.xml), as ruling 8 asks.
+     */
+    private val dapps by lazy {
+        WalletConnectDapps(filesDir.resolve("walletconnect/state.json").path, WalletConnectDapps.projectIdFor(debuggable))
+    }
+
+    /**
      * The exchange rate last verified, for the widget, beside the other files: a price and its
      * times, public data only. Read without the engine, so drawing a widget never starts it.
      */
@@ -406,6 +417,8 @@ class SerotineApplication : Application() {
             screenCaptureDebugSwitch = if (debuggable) ScreenCaptureDebugSwitch() else null,
             networkDemand = networkDemand,
             networkSettings = networkSettings,
+            dappSessions = dapps,
+            dappConnectionsOff = WalletConnectDapps.projectIdFor(debuggable).isEmpty(),
         )
     }
 
@@ -439,6 +452,7 @@ class SerotineApplication : Application() {
     private var accountLogs: Job? = null
     private var cowOrderEnds: Job? = null
     private var rateFollowing: Job? = null
+    private var dappRelay: Job? = null
     private val sleep = Runnable { node.pause() }
     private val stopAppWork = Runnable {
         following?.cancel()
@@ -451,6 +465,8 @@ class SerotineApplication : Application() {
         accountLogs = null
         cowOrderEnds?.cancel()
         cowOrderEnds = null
+        dappRelay?.cancel()
+        dappRelay = null
     }
 
     /** The activity in front, for the biometric prompt. */
@@ -512,6 +528,23 @@ class SerotineApplication : Application() {
         if (sentTransactions?.isActive != true) sentTransactions = scope.launch { followSentTransactions() }
         if (accountLogs?.isActive != true) accountLogs = scope.launch { followAccountLogs() }
         if (cowOrderEnds?.isActive != true) cowOrderEnds = scope.launch { proveCowOrderEnds() }
+        // The relay connection while the app holds its work: dApp messages arrive while it is open.
+        if (dappRelay?.isActive != true) dappRelay = scope.launch { runDappRelay() }
+    }
+
+    /** Keeps WalletConnect's relay connection (docs/walletconnect.md) until stopped; a failure ends it alone. */
+    private suspend fun runDappRelay() {
+        try {
+            coroutineScope {
+                // Each session's accounts kept to those still in the wallet (accountsChanged).
+                launch { FollowDappAccounts(dapps, accounts)() }
+                dapps.run()
+            }
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            System.err.println("Serotine: the WalletConnect relay connection stopped: ${e::class.simpleName}")
+        }
     }
 
     /** Turns the engine's networking on for one more hold. Main thread. */

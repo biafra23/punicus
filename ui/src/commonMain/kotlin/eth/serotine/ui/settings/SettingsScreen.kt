@@ -24,6 +24,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.semantics
@@ -34,6 +35,10 @@ import eth.serotine.ui.components.LightClientHealthDot
 import eth.serotine.ui.components.StaleAnchorBanner
 import eth.serotine.ui.components.StaleAnchorDialog
 import eth.serotine.ui.components.StaleAnchorWarning
+import eth.serotine.ui.components.Unavailable
+import eth.serotine.ui.components.UnavailableDialog
+import eth.serotine.ui.components.UnavailableNotice
+import eth.serotine.ui.components.unavailable
 import eth.serotine.ui.mode.LocalInterfaceMode
 
 /** Test tag of the app's version line, for UI tests. */
@@ -48,6 +53,10 @@ const val SETTINGS_DETAILED_VIEW_TAG = "settings-detailed-view"
 /** Test tag of the Debug tab's row, for UI tests. */
 const val SETTINGS_DEBUG_SCREEN_TAG = "settings-debug-screen"
 
+/** What a tap on Connected dApps says in a build without a WalletConnect project ID (docs/walletconnect.md, ruling 2). */
+internal const val CONNECTIONS_OFF =
+    "This build has dApp connections switched off: it was built without a WalletConnect project ID."
+
 /** Test tag of a network's row, followed by its chain id, for UI tests. */
 const val SETTINGS_NETWORK_TAG = "settings-network-"
 
@@ -59,6 +68,8 @@ fun SettingsRoute(
     onTokens: () -> Unit,
     onSecurity: () -> Unit,
     modifier: Modifier = Modifier,
+    onConnections: () -> Unit = {},
+    connectionsOff: Boolean = false,
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
     // The same state in the view the user chose (docs/simple-ui.md).
@@ -76,6 +87,8 @@ fun SettingsRoute(
             onCancelTurnOff = viewModel::cancelTurnOff,
             onSyncPastStaleAnchor = viewModel::syncPastStaleAnchor,
             onDetailedViewChange = viewModel::showDetailedView,
+            onConnections = onConnections,
+            connectionsOff = connectionsOff,
         )
         InterfaceMode.DETAILED -> SettingsScreen(
             state,
@@ -90,6 +103,8 @@ fun SettingsRoute(
             onCancelTurnOff = viewModel::cancelTurnOff,
             onSyncPastStaleAnchor = viewModel::syncPastStaleAnchor,
             onDetailedViewChange = viewModel::showDetailedView,
+            onConnections = onConnections,
+            connectionsOff = connectionsOff,
         )
     }
 }
@@ -120,8 +135,14 @@ fun SettingsScreen(
     onCancelTurnOff: () -> Unit = {},
     onSyncPastStaleAnchor: (chainId: Long) -> Unit = {},
     onDetailedViewChange: (Boolean) -> Unit = {},
+    onConnections: () -> Unit = {},
+    connectionsOff: Boolean = false,
 ) {
     var asking by remember { mutableStateOf<StaleAnchorWarning?>(null) }
+    var explainingConnections by remember { mutableStateOf(false) }
+    if (explainingConnections) {
+        UnavailableDialog(UnavailableNotice("Connected dApps", CONNECTIONS_OFF), onDismiss = { explainingConnections = false })
+    }
     asking?.let { warning ->
         StaleAnchorDialog(
             warning,
@@ -164,6 +185,22 @@ fun SettingsScreen(
                 modifier = Modifier.clickable(onClick = onSecurity),
                 headlineContent = { Text("Security") },
                 supportingContent = { Text("Wallet password · Biometric unlock") },
+            )
+            Section("dApps")
+            // Greyed out in a build without a WalletConnect project ID, and still tappable: the tap says why.
+            ListItem(
+                modifier = Modifier
+                    .clickable(onClick = { if (connectionsOff) explainingConnections = true else onConnections() })
+                    .unavailable(connectionsOff),
+                headlineContent = {
+                    Text("Connected dApps", color = if (connectionsOff) Unavailable.contentColor() else Color.Unspecified)
+                },
+                supportingContent = {
+                    Text(
+                        if (connectionsOff) "Switched off in this build" else "WalletConnect · Sepolia only",
+                        color = if (connectionsOff) Unavailable.contentColor() else Color.Unspecified,
+                    )
+                },
             )
             Section("Networks")
             state.networks.forEach { network ->

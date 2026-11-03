@@ -113,6 +113,9 @@ class WalletConnectDapps internal constructor(
 
     override suspend fun extend(session: DappSessionId): Boolean = walletConnect?.wallet?.extend(session.topic) ?: false
 
+    override suspend fun updateAccounts(session: DappSessionId, accounts: List<Address>): Boolean =
+        walletConnect?.wallet?.updateAccounts(session.topic, accounts.map { it.hex }) ?: false
+
     private fun proposal(view: WcProposalView) = DappProposal(
         id = DappProposalId(view.pairingTopic, view.id),
         dapp = metadata(view.dapp),
