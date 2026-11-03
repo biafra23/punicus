@@ -45,7 +45,8 @@ class DappTransactionRequest(
     override fun hashCode(): Int =
         listOf(from, to, value, callData.contentHashCode(), gas).hashCode()
 
-    override fun toString(): String = "DappTransactionRequest(${from.hex} → ${to.hex}, $value wei, ${callData.size} bytes)"
+    override fun toString(): String =
+        "DappTransactionRequest(${from.hex} → ${to.hex}, $value wei, ${callData.size} bytes)"
 
     companion object {
         /** The most call data a dApp's transaction may carry. */

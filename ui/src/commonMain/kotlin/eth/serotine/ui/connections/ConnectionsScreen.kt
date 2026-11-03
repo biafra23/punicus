@@ -123,7 +123,9 @@ fun ConnectionsScreen(
                 state.requests.forEach { request ->
                     ListItem(
                         modifier = Modifier
-                            .clickable { if (request.transaction) onTransaction(request.key) else onRequest(request.key) }
+                            .clickable {
+                                if (request.transaction) onTransaction(request.key) else onRequest(request.key)
+                            }
                             .testTag(CONNECTIONS_REQUEST_TAG + request.key),
                         headlineContent = { Text(request.name) },
                         supportingContent = {

@@ -725,7 +725,7 @@ class AppGraph(
             transactionInputs,
             sentTransfers,
         ),
-        SendDappTransaction(dappRequests, signer, broadcaster, sentTransfers, receipts),
+        SendDappTransaction(dappRequests, accounts, networkSettings, signer, broadcaster, sentTransfers, receipts),
         RefuseDappRequest(dappRequests, accounts, networkSettings),
         DescribeKeyStore(keys),
     )

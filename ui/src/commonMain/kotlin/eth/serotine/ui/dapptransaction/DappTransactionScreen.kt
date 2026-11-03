@@ -32,6 +32,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.dp
@@ -126,7 +127,11 @@ fun DappTransactionScreen(
             return@Scaffold
         }
         if (state.ended) {
-            Text(state.notice.orEmpty(), Modifier.padding(padding).padding(16.dp), color = MaterialTheme.colorScheme.error)
+            Text(
+                state.notice.orEmpty(),
+                Modifier.padding(padding).padding(16.dp),
+                color = MaterialTheme.colorScheme.error,
+            )
             return@Scaffold
         }
         Column(Modifier.padding(padding).fillMaxSize().imePadding().verticalScroll(rememberScrollState())) {
@@ -162,7 +167,12 @@ fun DappTransactionScreen(
                     shape = MaterialTheme.shapes.small,
                 ) {
                     SelectionContainer {
-                        Text("0x$hex", Modifier.padding(12.dp), fontFamily = FontFamily.Monospace, style = MaterialTheme.typography.bodySmall)
+                        Text(
+                            "0x$hex",
+                            Modifier.padding(12.dp),
+                            fontFamily = FontFamily.Monospace,
+                            style = MaterialTheme.typography.bodySmall,
+                        )
                     }
                 }
             }
@@ -194,7 +204,11 @@ fun DappTransactionScreen(
                     else -> state.quote.forEach { Field(it) }
                 }
             }
-            Text(state.waits, Modifier.padding(horizontal = 16.dp, vertical = 4.dp), style = MaterialTheme.typography.bodySmall)
+            Text(
+                state.waits,
+                Modifier.padding(horizontal = 16.dp, vertical = 4.dp),
+                style = MaterialTheme.typography.bodySmall,
+            )
             state.notice?.let { Text(it, Modifier.padding(16.dp), color = MaterialTheme.colorScheme.error) }
             Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 val notSent = state.notSent
@@ -220,12 +234,14 @@ fun DappTransactionScreen(
                         signTag = DAPP_TRANSACTION_SEND_TAG,
                     )
                 }
-                if (notSent == null) {
-                    OutlinedButton(
-                        onClick = onRefuse,
-                        enabled = !state.busy,
-                        modifier = Modifier.fillMaxWidth().testTag(DAPP_TRANSACTION_REFUSE_TAG),
-                    ) { Text("Refuse") }
+                // Greyed out, still tappable, while a transaction signed for it may be on its way: the tap says why.
+                OutlinedButton(
+                    onClick = onRefuse,
+                    enabled = !state.busy,
+                    modifier = Modifier.fillMaxWidth().unavailable(state.refuseUnavailable)
+                        .testTag(DAPP_TRANSACTION_REFUSE_TAG),
+                ) {
+                    Text("Refuse", color = if (state.refuseUnavailable) Unavailable.contentColor() else Color.Unspecified)
                 }
             }
         }
@@ -252,7 +268,11 @@ private fun Party(name: String?, address: String) {
 @Composable
 private fun Field(field: SignInField) {
     Column(Modifier.padding(horizontal = 16.dp, vertical = 4.dp)) {
-        Text(field.label, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Text(
+            field.label,
+            style = MaterialTheme.typography.labelMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
         SelectionContainer { Text(field.value) }
     }
 }

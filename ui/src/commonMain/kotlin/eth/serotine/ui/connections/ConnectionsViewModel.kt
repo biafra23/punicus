@@ -71,7 +71,10 @@ class ConnectionsViewModel(
                             url = review.request.dapp.url,
                             transaction = review.content is DappSignContent.Transaction,
                             line = when {
-                                review.content is DappSignContent.Transaction -> "Asks you to send a transaction · Review"
+                                review.content is DappSignContent.Transaction && review.refusal != null ->
+                                    "Asks for a transaction that cannot be sent · Review"
+                                review.content is DappSignContent.Transaction ->
+                                    "Asks you to send a transaction · Review"
                                 review.refusal != null -> "Asks for a signature that cannot be given · Review"
                                 review.signIn != null -> "Asks you to sign in · Review"
                                 review.message == null -> "Asks you to sign data · Review"

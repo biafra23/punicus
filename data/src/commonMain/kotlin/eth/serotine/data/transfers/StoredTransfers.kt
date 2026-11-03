@@ -10,6 +10,8 @@ import eth.serotine.domain.model.Token
 import eth.serotine.domain.model.TransferAsset
 import eth.serotine.domain.model.UInt256
 import eth.serotine.domain.repository.SafeListing
+import eth.serotine.domain.repository.DappRequestId
+import eth.serotine.domain.repository.DappSessionId
 import eth.serotine.domain.repository.SentAction
 import eth.serotine.domain.repository.SentTransfer
 import kotlinx.serialization.Serializable
@@ -121,10 +123,14 @@ internal class StoredSwap(
     )
 }
 
-/** A dApp's transaction: its recipient [to], its [value] in wei, and the [dapp] it was sent for (its claim). */
+/**
+ * A dApp's transaction: its recipient [to], its [value] in wei, the [dapp] it was sent for (its claim),
+ * and the request it answers: request [id] on the session [topic].
+ */
 @Serializable
-internal class StoredDappCall(val to: String, val value: String, val dapp: String) {
-    fun toAction() = SentAction.DappCall(Address.of(to), UInt256.of(value), dapp)
+internal class StoredDappCall(val to: String, val value: String, val dapp: String, val topic: String, val id: Long) {
+    fun toAction() =
+        SentAction.DappCall(Address.of(to), UInt256.of(value), dapp, DappRequestId(DappSessionId(topic), id))
 }
 
 /** A CoW order's cancellation on chain: the order [uid], at the settlement contract [settlement]. */
@@ -198,7 +204,9 @@ internal fun storedTransfer(transfer: SentTransfer): StoredTransfer {
             is SentAction.Swap, is SentAction.CowCancellation, is SentAction.DappCall,
             -> null
         },
-        dappCall = (action as? SentAction.DappCall)?.let { StoredDappCall(it.to.hex, it.value.toDecimal(), it.dapp) },
+        dappCall = (action as? SentAction.DappCall)?.let {
+            StoredDappCall(it.to.hex, it.value.toDecimal(), it.dapp, it.request.session.topic, it.request.id)
+        },
         approval = (action as? SentAction.TokenApproval)?.let {
             StoredApproval(stored(it.token), it.spender.hex, it.amount.toDecimal())
         },

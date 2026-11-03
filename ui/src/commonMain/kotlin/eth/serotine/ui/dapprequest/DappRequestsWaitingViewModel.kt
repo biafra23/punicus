@@ -24,7 +24,9 @@ class DappRequestsWaitingViewModel(observeDappMessages: ObserveDappMessages) : V
 
     val waiting: StateFlow<List<DappWaiting>> = observeDappMessages()
         .map { reviews ->
-            reviews.map { DappWaiting(ConnectionsViewModel.requestKey(it.request.id), it.content is DappSignContent.Transaction) }
+            reviews.map {
+                DappWaiting(ConnectionsViewModel.requestKey(it.request.id), it.content is DappSignContent.Transaction)
+            }
         }
         .distinctUntilChanged()
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())

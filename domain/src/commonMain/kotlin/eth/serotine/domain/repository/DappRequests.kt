@@ -36,7 +36,8 @@ sealed interface DappAsk {
     data class SwitchChain(val chainId: Long) : DappAsk
 
     /**
-     * A method on the closed list that this version does not answer yet ([method]): answered at once with the unsupported-method error, never left waiting.
+     * A method on the closed list that this version does not answer yet ([method]): answered at once
+     * with the unsupported-method error, never left waiting.
      */
     data class NotAnsweredYet(val method: String) : DappAsk
 

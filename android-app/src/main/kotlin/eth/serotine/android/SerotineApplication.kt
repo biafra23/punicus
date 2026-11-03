@@ -549,7 +549,9 @@ class SerotineApplication : Application() {
             }
         }
         launch {
-            reportingFailure("answering the dApps' requests") { AnswerDappRequestsAtOnce(dapps.requests)() }
+            reportingFailure("answering the dApps' requests") {
+                AnswerDappRequestsAtOnce(dapps.requests, sentTransfers)()
+            }
         }
         reportingFailure("the WalletConnect relay connection") { dapps.run() }
     }

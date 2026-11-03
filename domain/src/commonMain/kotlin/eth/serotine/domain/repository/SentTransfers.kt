@@ -189,8 +189,10 @@ sealed interface SentAction {
 
     /**
      * A dApp's transaction (`eth_sendTransaction`, docs/walletconnect.md): [value] wei and a call to
-     * [to], for the dApp that stated itself as [dapp] (its claim). What the call moves is the call's;
-     * the record holds its value and its fee.
+     * [to], for the dApp that stated itself as [dapp] (its claim), the answer to its [request]. What
+     * the call moves is the call's; the record holds its value and its fee. Naming the request is what
+     * keeps it from being signed twice, and what answers the dApp once a peer took it, however it was
+     * sent.
      */
-    data class DappCall(val to: Address, val value: UInt256, val dapp: String) : SentAction
+    data class DappCall(val to: Address, val value: UInt256, val dapp: String, val request: DappRequestId) : SentAction
 }

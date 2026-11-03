@@ -32,6 +32,8 @@ import eth.serotine.domain.repository.Unlock
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -90,7 +92,7 @@ class DappTransactionsTest {
 
     private fun quote() = QuoteDappTransaction(requests, accounts, networks, ListCatalog(), balances, inputs, sent, clock = { now })
 
-    private fun send() = SendDappTransaction(requests, signer, broadcaster, sent, receipts, clock = { now })
+    private fun send() = SendDappTransaction(requests, accounts, networks, signer, broadcaster, sent, receipts, clock = { now })
 
     @Test
     fun aPaymentIsQuotedAsSendQuotesOneSignedSentAndAnsweredWithItsHash() = runTest {
@@ -106,7 +108,38 @@ class DappTransactionsTest {
         assertEquals(listOf(quoted.id to sending.hash), requests.hashes)
         assertTrue(sending.hash.startsWith("0x"))
         val record = sent.transfers.value.single()
-        assertEquals(SentAction.DappCall(recipient, transaction.value, "Example dApp"), record.action)
+        assertEquals(SentAction.DappCall(recipient, transaction.value, "Example dApp", quoted.id), record.action)
+    }
+
+    @Test
+    fun aRequestSignedOnceIsNeverSignedAgainAndOnceSentItsDappIsAnsweredAtOnce() = runTest {
+        requests.waiting.value = listOf(request(1, payment()))
+        val quoted = assertIs<DappTransactionQuoting.Quoted>(quote()(request(1, payment()).id)).quote
+        broadcaster.answer = Broadcast.Unavailable("no peer")
+        send()(quoted, Unlock.WithBiometrics("x"))
+        val record = sent.transfers.value.single()
+        assertTrue(record.maybeSent)
+        // The screen left, the request opened again: it is the record, never a new signature.
+        assertEquals(DappTransactionQuoting.AlreadySigned(record), quote()(quoted.id))
+        assertEquals(DappTransactionSending.AlreadySigned(record), send()(quoted, Unlock.WithBiometrics("x")))
+        assertEquals(1, broadcaster.sent.size)
+        // Sent by a retry from its status: the dApp is answered with its hash at once.
+        val answering = backgroundScope.launch { AnswerDappRequestsAtOnce(requests, sent)() }
+        runCurrent()
+        assertTrue(requests.hashes.isEmpty())
+        sent.transfers.value = listOf(record.copy(maybeSent = false))
+        runCurrent()
+        assertEquals(listOf(quoted.id to record.hash), requests.hashes)
+        answering.cancel()
+    }
+
+    @Test
+    fun aRequestThatCannotBeSentAnyMoreIsNotSigned() = runTest {
+        requests.waiting.value = listOf(request(1, payment()))
+        val quoted = assertIs<DappTransactionQuoting.Quoted>(quote()(request(1, payment()).id)).quote
+        accounts.setCustody(held.id, AccountCustody.Watched)
+        assertEquals(DappTransactionSending.Refused(DappSignRefusal.NO_KEY), send()(quoted, Unlock.WithBiometrics("x")))
+        assertTrue(signer.asked.isEmpty())
     }
 
     @Test

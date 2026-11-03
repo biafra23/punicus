@@ -14,6 +14,7 @@ import eth.serotine.domain.repository.NetworkSettings
 import eth.serotine.domain.repository.ReceiptTracker
 import eth.serotine.domain.repository.SentAction
 import eth.serotine.domain.repository.SentTransfer
+import eth.serotine.domain.repository.SentTransferList
 import eth.serotine.domain.repository.SentTransfers
 import eth.serotine.domain.repository.Signer
 import eth.serotine.domain.repository.TokenCatalog
@@ -52,6 +53,12 @@ sealed interface DappTransactionQuoting {
     /** The gas limit the dApp asks for is below [estimate], the verified estimate: it would run out of gas. */
     data class GasTooLow(val asked: Long, val estimate: Long) : DappTransactionQuoting
 
+    /**
+     * It is signed already: [transfer], recorded as the answer to this request. Never signed again: one
+     * maybe sent is retried, byte for byte; one a peer took answers the dApp ([AnswerDappRequestsAtOnce]).
+     */
+    data class AlreadySigned(val transfer: SentTransfer) : DappTransactionQuoting
+
     /** The dApp stopped waiting. */
     data object Expired : DappTransactionQuoting
 
@@ -74,7 +81,7 @@ class QuoteDappTransaction(
     private val tokens: TokenCatalog,
     private val nativeBalances: NativeBalances,
     inputs: TransactionInputs,
-    sentTransfers: SentTransfers,
+    private val sentTransfers: SentTransfers,
     private val clock: () -> Long = ::epochSecondsNow,
 ) {
     private val network = Network.SEPOLIA
@@ -89,6 +96,7 @@ class QuoteDappTransaction(
         val transaction = (review.content as? DappSignContent.Transaction)?.transaction
             ?: return DappTransactionQuoting.Gone
         review.refusal?.let { return DappTransactionQuoting.Refused(it) }
+        signedFor(sentTransfers, id)?.let { return DappTransactionQuoting.AlreadySigned(it) }
         if (request.expiresAtSeconds <= clock()) return DappTransactionQuoting.Expired
 
         quoter.heldBack(transaction.from)?.let { return DappTransactionQuoting.NotQuoted(it) }
@@ -97,7 +105,14 @@ class QuoteDappTransaction(
             is NativeRead.NotRead -> return DappTransactionQuoting.NotQuoted(read.refusal)
         }
         val call = when (
-            val quoting = quoter.quote(transaction.from, transaction.to, transaction.value, transaction.data, level, native)
+            val quoting = quoter.quote(
+                transaction.from,
+                transaction.to,
+                transaction.value,
+                transaction.data,
+                level,
+                native,
+            )
         ) {
             is CallQuoting.Quoted -> quoting.quote
             is CallQuoting.Refused -> return DappTransactionQuoting.NotQuoted(quoting.refusal)
@@ -132,6 +147,11 @@ class QuoteDappTransaction(
     }
 }
 
+/** The transaction signed as the answer to request [id], when there is one in the record. */
+internal suspend fun signedFor(sentTransfers: SentTransfers, id: DappRequestId): SentTransfer? =
+    (sentTransfers.observe().first() as? SentTransferList.Loaded)?.transfers
+        ?.firstOrNull { (it.action as? SentAction.DappCall)?.request == id }
+
 /** What [SendDappTransaction] came to. */
 sealed interface DappTransactionSending {
     /** Sent: [hash], and the dApp answered with it ([answer]: delivered, or saved and sent again). */
@@ -139,6 +159,12 @@ sealed interface DappTransactionSending {
 
     /** Not signed or not sent: [sending] says why, its signed bytes kept for a retry where there are some. */
     data class NotSent(val sending: TransferSending) : DappTransactionSending
+
+    /** Not signed: reviewed again, now, it cannot be sent ([refusal]). */
+    data class Refused(val refusal: DappSignRefusal) : DappTransactionSending
+
+    /** Not signed again: [transfer] is signed already as the answer to this request. */
+    data class AlreadySigned(val transfer: SentTransfer) : DappTransactionSending
 
     /** The dApp stopped waiting before it was signed: nothing was signed. */
     data object Expired : DappTransactionSending
@@ -158,6 +184,8 @@ sealed interface DappTransactionSending {
  */
 class SendDappTransaction(
     private val requests: DappRequests,
+    private val accounts: AccountRepository,
+    private val networks: NetworkSettings,
     private val signer: Signer,
     private val broadcaster: Broadcaster,
     private val sentTransfers: SentTransfers,
@@ -168,9 +196,21 @@ class SendDappTransaction(
 
     suspend operator fun invoke(quote: DappTransactionQuote, unlock: Unlock): DappTransactionSending {
         val request = requests.observe().first().firstOrNull { it.id == quote.id } ?: return DappTransactionSending.Gone
+        // Reviewed again, now, as a message is before it is signed: an account removed, a key gone or
+        // Sepolia turned off since the quote refuses it.
+        val list = (accounts.observeAccounts().first() as? AccountList.Loaded)?.accounts
+        reviewDappMessage(request, list, networks.observe().first(), clock())?.refusal
+            ?.let { return DappTransactionSending.Refused(it) }
+        signedFor(sentTransfers, quote.id)?.let { return DappTransactionSending.AlreadySigned(it) }
         if (request.expiresAtSeconds <= clock()) return DappTransactionSending.Expired
-        val action = SentAction.DappCall(quote.call.transaction.to, quote.call.transaction.value, request.dapp.name)
-        val sending = signAndSend(signer, broadcaster, sentTransfers, Network.SEPOLIA, quote.call, action, clock, unlock)
+        val action = SentAction.DappCall(
+            quote.call.transaction.to,
+            quote.call.transaction.value,
+            request.dapp.name,
+            quote.id,
+        )
+        val sending =
+            signAndSend(signer, broadcaster, sentTransfers, Network.SEPOLIA, quote.call, action, clock, unlock)
         return answered(quote.id, sending)
     }
 

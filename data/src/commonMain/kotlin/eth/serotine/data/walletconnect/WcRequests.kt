@@ -121,34 +121,31 @@ internal object WcRequests {
     private fun sendTransaction(params: JsonElement): DappAsk.SendTransaction? {
         val fields = (params as? JsonArray)?.singleOrNull() as? JsonObject ?: return null
         if (!TRANSACTION_FIELDS.containsAll(fields.keys)) return null
-        fun text(key: String): String? = fields[key]?.let { (it as? JsonPrimitive)?.takeIf { p -> p.isString }?.content ?: "" }
+        // A field given as anything but a string reads as "", which no check below takes.
+        fun text(key: String): String? =
+            fields[key]?.let { (it as? JsonPrimitive)?.takeIf { value -> value.isString }?.content ?: "" }
         fun address(key: String): Address? = text(key)?.takeIf(WcWallet::isAddress)?.let(Address::parse)
-        fun quantity(key: String): UInt256? = text(key)?.let { hex ->
-            hex.takeIf(QUANTITY::matches)?.substring(2)?.let { UInt256.fromBigEndian(it.padStart(64, '0').hexBytes()) }
-                ?: return null
-        }
+        fun quantity(key: String): UInt256? = text(key)?.takeIf(QUANTITY::matches)?.substring(2)
+            ?.let { digits -> WcEncoding.hexOrNull(digits.padStart(64, '0'))?.let(UInt256::fromBigEndian) }
         val from = address("from") ?: return null
         val to = address("to") ?: return null
         val value = if ("value" in fields) quantity("value") ?: return null else UInt256.ZERO
         val data = listOfNotNull(text("data"), text("input")).distinct()
         if (data.size > 1) return null
         val bytes = data.singleOrNull()?.let { hex ->
-            if (!hex.startsWith("0x") || hex.length % 2 != 0 || hex.length > 2 + 2 * DappTransactionRequest.MAX_DATA_BYTES) {
-                return null
-            }
-            hex.substring(2).takeIf { digits -> digits.all { it in '0'..'9' || it in 'a'..'f' || it in 'A'..'F' } }
-                ?.hexBytes() ?: return null
+            hex.takeIf { it.startsWith("0x") && it.length <= 2 + 2 * DappTransactionRequest.MAX_DATA_BYTES }
+                ?.substring(2)?.let(WcEncoding::hexOrNull) ?: return null
         } ?: ByteArray(0)
         val gases = listOf("gas", "gasLimit").filter { it in fields }.map { quantity(it) ?: return null }.distinct()
         if (gases.size > 1) return null
-        val gas = gases.singleOrNull()?.let { limit -> limit.toLongOrNull()?.takeIf { it in 1..MAX_GAS } ?: return null }
+        val gas = gases.singleOrNull()?.let { limit ->
+            limit.toLongOrNull()?.takeIf { it in 1..MAX_GAS } ?: return null
+        }
         if ("chainId" in fields && quantity("chainId") != UInt256.of(SEPOLIA_CHAIN_ID)) return null
         if ("type" in fields && quantity("type") != UInt256.of(2)) return null
         if ("accessList" in fields && (fields["accessList"] as? JsonArray)?.isEmpty() != true) return null
         return DappAsk.SendTransaction(DappTransactionRequest(from, to, value, bytes, gas))
     }
-
-    private fun String.hexBytes(): ByteArray = ByteArray(length / 2) { substring(2 * it, 2 * it + 2).toInt(16).toByte() }
 
     /**
      * How deep [json] nests, counted without recursion, and no further than [MAX_PARAMS_DEPTH] + 1: what
@@ -202,7 +199,8 @@ internal object WcRequests {
     }
 
     /** The fields a transaction may name; any other is refused. */
-    private val TRANSACTION_FIELDS = setOf("from", "to", "value", "data", "input", "gas", "gasLimit", "chainId", "type", "accessList")
+    private val TRANSACTION_FIELDS =
+        setOf("from", "to", "value", "data", "input", "gas", "gasLimit", "chainId", "type", "accessList")
 
     /** The largest gas limit a dApp may ask for: Sepolia's block gas limit is below it. */
     private const val MAX_GAS = 60_000_000L

@@ -8,6 +8,7 @@ import eth.serotine.domain.model.Token
 import eth.serotine.domain.model.UInt256
 import eth.serotine.domain.model.WalletPassword
 import eth.serotine.domain.repository.DappAnswer
+import eth.serotine.domain.repository.DappRequestError
 import eth.serotine.domain.repository.DappRequestId
 import eth.serotine.domain.repository.DappSessionId
 import eth.serotine.domain.repository.Signing
@@ -42,6 +43,7 @@ import eth.serotine.ui.dapprequest.DappRequestViewModel
 import eth.serotine.ui.dapprequest.SignInField
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -97,6 +99,8 @@ data class DappTransactionUiState(
     val unlock: UnlockStep = UnlockStep(),
     val busy: Boolean = false,
     val notSent: NotSentItem? = null,
+    /** Refuse is greyed out, still tappable: a transaction signed for it may be on its way already. */
+    val refuseUnavailable: Boolean = false,
     val notice: String? = null,
     val explaining: TransactionExplanation? = null,
     val done: Boolean = false,
@@ -122,6 +126,8 @@ class DappTransactionViewModel(
     private val describeKeyStore: DescribeKeyStore,
     private val clock: () -> Long = ::epochSecondsNow,
     private val timeSource: TimeSource = TimeSource.Monotonic,
+    /** When how long the dApp waits is said again: every 15 seconds while the screen is open. */
+    ticks: Flow<Unit> = DappRequestViewModel.every15Seconds(),
 ) : ViewModel() {
 
     private val id: DappRequestId? = requestKey.split('/').takeIf { it.size == 2 }?.let { (topic, number) ->
@@ -137,6 +143,8 @@ class DappTransactionViewModel(
         val unlock: UnlockStep = UnlockStep(),
         val busy: Boolean = false,
         val notSent: Pair<NotSentItem, SentTransfer>? = null,
+        /** The dApp asks for a gas limit below the verified estimate: refused as invalid, not declined. */
+        val gasTooLow: Boolean = false,
         val notice: String? = null,
         val explaining: TransactionExplanation? = null,
         val done: Boolean = false,
@@ -152,7 +160,7 @@ class DappTransactionViewModel(
         }
         .distinctUntilChanged()
 
-    val uiState: StateFlow<DappTransactionUiState> = combine(shownReview, local) { shown, local ->
+    val uiState: StateFlow<DappTransactionUiState> = combine(shownReview, local, ticks) { shown, local, _ ->
         val (review, base) = shown
             ?: return@combine if (local.notice != null && !local.done) {
                 DappTransactionUiState(loading = false, ended = true, notice = local.notice)
@@ -167,6 +175,7 @@ class DappTransactionViewModel(
             unlock = local.unlock,
             busy = local.busy,
             notSent = local.notSent?.first,
+            refuseUnavailable = local.notSent?.second?.maybeSent == true,
             notice = local.notice,
             explaining = local.explaining,
             done = local.done,
@@ -202,17 +211,25 @@ class DappTransactionViewModel(
                     is DappTransactionQuoting.Quoted ->
                         current.copy(quoting = false, quote = quoting.quote, quotedAt = mark, hidden = false)
                     is DappTransactionQuoting.NotQuoted ->
-                        current.copy(quoting = false, quote = null, notQuoted = callRefusalText(quoting.refusal, Network.SEPOLIA))
+                        current.copy(
+                            quoting = false,
+                            quote = null,
+                            notQuoted = callRefusalText(quoting.refusal, Network.SEPOLIA),
+                        )
                     is DappTransactionQuoting.GasTooLow -> current.copy(
                         quoting = false,
                         quote = null,
-                        notQuoted = "The dApp asks for a gas limit of ${quoting.asked}, below the ${quoting.estimate} " +
+                        gasTooLow = true,
+                        notQuoted = "The dApp asks for a gas limit of ${quoting.asked}, below the " +
+                            "${quoting.estimate} " +
                             "the verified estimate needs: it would run out of gas. Ask the dApp again, or refuse.",
                     )
                     // The review says why: a refused request shows its refusal, and only Refuse.
                     is DappTransactionQuoting.Refused -> current.copy(quoting = false, quote = null)
                     DappTransactionQuoting.Expired -> current.copy(quoting = false, quote = null, notice = EXPIRED)
                     DappTransactionQuoting.Gone -> current.copy(quoting = false, quote = null)
+                    is DappTransactionQuoting.AlreadySigned ->
+                        signedEarlier(current.copy(quoting = false, quote = null), quoting.transfer)
                     null -> current.copy(quoting = false, quote = null, notQuoted = QUOTE_FAILED)
                 }
             }
@@ -251,8 +268,12 @@ class DappTransactionViewModel(
         if (local.value.busy) return
         local.update { it.copy(busy = true) }
         job = viewModelScope.launch {
-            val sending = withContext(NonCancellable) { sendDappTransaction.retry(request, transfer) }
-            local.update { after(it, sending) }
+            val sending = try {
+                withContext(NonCancellable) { sendDappTransaction.retry(request, transfer) }
+            } catch (_: Exception) {
+                null // the use case promises not to throw; the backstop: the retry stays offered
+            }
+            local.update { if (sending == null) it.copy(busy = false) else after(it, sending) }
         }
     }
 
@@ -260,10 +281,15 @@ class DappTransactionViewModel(
     fun refuse() {
         val request = id ?: return
         if (local.value.busy) return
+        if (local.value.notSent?.second?.maybeSent == true) {
+            local.update { it.copy(explaining = TransactionExplanation("Cannot be refused now", MAYBE_SENT)) }
+            return
+        }
+        val why = if (local.value.gasTooLow) DappRequestError.INVALID_PARAMS else null
         local.update { it.copy(busy = true, notice = null, unlock = it.unlock.copy(password = WalletPassword.EMPTY)) }
         viewModelScope.launch {
             val answer = try {
-                withContext(NonCancellable) { refuseDappRequest(request) }
+                withContext(NonCancellable) { refuseDappRequest(request, why) }
             } catch (_: Exception) {
                 DappAnswer.NOT_SAVED
             }
@@ -325,8 +351,34 @@ class DappTransactionViewModel(
         }
     }
 
+    /** Where [local] goes when [transfer] was signed already as this request's answer: never signed again. */
+    private fun signedEarlier(local: Local, transfer: SentTransfer): Local = if (transfer.maybeSent) {
+        val item = NotSentItem(
+            "Signed earlier, but it may not have reached the network. Try again sends the same signed " +
+                "transaction, never a new one.",
+            canRetry = true,
+        )
+        local.copy(busy = false, notSent = item to transfer)
+    } else {
+        local.copy(busy = false, notice = "Sent already as ${transfer.hash}: the dApp is being told.")
+    }
+
     private fun after(local: Local, sending: DappTransactionSending?): Local = when (sending) {
-        is DappTransactionSending.Sent -> local.copy(busy = false, notSent = null, done = true)
+        is DappTransactionSending.Sent -> when (sending.answer) {
+            DappAnswer.DELIVERED, DappAnswer.NOT_DELIVERED -> local.copy(busy = false, notSent = null, done = true)
+            // Sent all the same: said, never closed in silence; the record answers it once it can.
+            else -> local.copy(
+                busy = false,
+                notSent = null,
+                notice = "Sent as ${sending.hash}, but the dApp could not be told: " +
+                    (answerLine(sending.answer) ?: "") + " It is in Activity.",
+            )
+        }
+        is DappTransactionSending.Refused -> local.copy(
+            busy = false,
+            explaining = TransactionExplanation("Cannot be sent", refusalLine(sending.refusal)),
+        )
+        is DappTransactionSending.AlreadySigned -> signedEarlier(local, sending.transfer)
         is DappTransactionSending.NotSent -> when (val inner = sending.sending) {
             is TransferSending.NotSigned -> local.copy(
                 busy = false,
@@ -389,6 +441,8 @@ class DappTransactionViewModel(
         const val SEND_FAILED = "Sending failed. Nothing was sent to the dApp."
         const val QUOTE_FAILED = "The transaction could not be worked out right now. Try again."
         const val NOT_QUOTED_YET = "The transaction is still being worked out from verified state."
+        const val MAYBE_SENT = "A transaction signed for this request may be on its way already. Try again, " +
+            "or wait for it in Activity: refusing now would tell the dApp no while it may still be mined."
         const val NOT_DECODED = "Serotine does not decode this call, so it cannot tell what it does: its data is " +
             "shown as it is. Send it only if you trust this dApp."
         const val APPROVAL_NOTE = "An approval moves nothing itself, but the spender may then take the tokens " +

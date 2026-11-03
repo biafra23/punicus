@@ -103,11 +103,12 @@ class DappTransactionViewModelTest {
             "t/$id",
             ObserveDappMessages(requests, accounts, networks, catalog, clock = { now }),
             QuoteDappTransaction(requests, accounts, networks, catalog, balances, inputs, sent, clock = { now }),
-            SendDappTransaction(requests, signer, broadcaster, sent, FakeReceipts(), clock = { now }),
+            SendDappTransaction(requests, accounts, networks, signer, broadcaster, sent, FakeReceipts(), clock = { now }),
             RefuseDappRequest(requests, accounts, networks, clock = { now }),
             DescribeKeyStore(FakeKeys()),
             clock = { now },
             timeSource = clock,
+            ticks = kotlinx.coroutines.flow.flowOf(Unit),
         )
         backgroundScope.launch { vm.uiState.collect {} }
         runCurrent()
@@ -195,6 +196,35 @@ class DappTransactionViewModelTest {
         assertTrue(broadcaster.sent[0].contentEquals(broadcaster.sent[1]))
         assertEquals(1, requests.hashes.size)
         assertTrue(vm.uiState.value.done)
+    }
+
+    @Test
+    fun aRequestSignedEarlierIsNeverSignedAgainAndCannotBeRefusedWhileItMayBeOnItsWay() = runTest {
+        requests.waiting.value = listOf(request(1, payment))
+        broadcaster.answers += Broadcast.Unavailable("no peer")
+        val first = viewModel()
+        first.onPasswordChange("correct horse")
+        first.send()
+        runCurrent()
+        assertNotNull(first.uiState.value.notSent)
+        // The screen left and opened again: the record, never a new signature.
+        val again = viewModel()
+        assertNotNull(again.uiState.value.notSent)
+        assertTrue(again.uiState.value.refuseUnavailable)
+        again.refuse()
+        assertEquals("Cannot be refused now", again.uiState.value.explaining?.title)
+        assertTrue(requests.refusals.isEmpty())
+        assertEquals(1, signer.asked.size)
+    }
+
+    @Test
+    fun aGasLimitBelowTheEstimateIsRefusedAsInvalid() = runTest {
+        requests.waiting.value = listOf(request(1, DappTransactionRequest(held.address, recipient, UInt256.ZERO, ByteArray(0), 5_000)))
+        val vm = viewModel()
+        assertNotNull(vm.uiState.value.notQuoted)
+        vm.refuse()
+        runCurrent()
+        assertEquals(listOf(request(1, payment).id to DappRequestError.INVALID_PARAMS), requests.refusals)
     }
 
     @Test
