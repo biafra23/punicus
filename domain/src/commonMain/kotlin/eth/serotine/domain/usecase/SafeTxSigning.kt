@@ -519,26 +519,45 @@ class SignSafeTx(
      * Signs [checked]'s request as its owner with [unlock], and queues it with the valid
      * signatures that check found: against the Safe's state it verified, not read again.
      */
-    suspend fun sign(checked: SafeTxSignCheck.Ready, unlock: Unlock): SafeTxSigning {
+    suspend fun sign(checked: SafeTxSignCheck.Ready, unlock: Unlock): SafeTxSigning =
+        when (val made = signature(checked, unlock)) {
+            is SafeTxSignature.Made -> queue(checked, made.request)
+            is SafeTxSignature.NotMade -> made.outcome
+        }
+
+    /** [sign]'s first half: the request with [checked]'s owner's signature, checked, not queued yet. */
+    internal suspend fun signature(checked: SafeTxSignCheck.Ready, unlock: Unlock): SafeTxSignature {
         val request = checked.request
         val owner = checked.owner
         val signature = when (val signing = signer.sign(owner, request.hash, unlock)) {
             is Signing.Signed -> signing.signature
-            else -> return SafeTxSigning.NotSigned(signing)
+            else -> return SafeTxSignature.NotMade(SafeTxSigning.NotSigned(signing))
         }
         // The key store's signature is checked like a co-signer's: one that recovers to another
         // address is never kept, nor shared.
         if (recovery.recover(request.hash, signature) != owner) {
-            return SafeTxSigning.Refused(SafeTxRefusal.BadSignature(owner))
+            return SafeTxSignature.NotMade(SafeTxSigning.Refused(SafeTxRefusal.BadSignature(owner)))
         }
         // What is queued is checked: the carried signatures that count, with this one.
-        val signed = SigningRequest.of(request.network, request.safe, request.tx, checked.valid)
-            .withSignatures(listOf(SafeSignature.Ecdsa(owner, signature)))
-        queue.prune(AccountId(request.network, request.safe), checked.state.nonce)
+        return SafeTxSignature.Made(
+            SigningRequest.of(request.network, request.safe, request.tx, checked.valid)
+                .withSignatures(listOf(SafeSignature.Ecdsa(owner, signature))),
+        )
+    }
+
+    /** [sign]'s second half: [signed], [signature]'s, queued. */
+    internal suspend fun queue(checked: SafeTxSignCheck.Ready, signed: SigningRequest): SafeTxSigning.Signed {
+        queue.prune(AccountId(signed.network, signed.safe), checked.state.nonce)
         val saved = queue.save(signed)
         // Shown and shared with what the Safe accepts now of what was queued here before.
         return SafeTxSigning.Signed(recovery.validOnly(saved ?: signed, checked.state.owners), saved = saved != null)
     }
+}
+
+/** What [SignSafeTx.signature] came to: the signed request, or the outcome that ends the signing. */
+internal sealed interface SafeTxSignature {
+    data class Made(val request: SigningRequest) : SafeTxSignature
+    data class NotMade(val outcome: SafeTxSigning) : SafeTxSignature
 }
 
 /** What [SignSafeTx.check] came to. */

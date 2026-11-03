@@ -323,12 +323,15 @@ everything on the chain side: the verified `call`, `estimateGasDetailed`,
   - Once queued it is an ordinary Safe transaction: its screen opens in D6's
     place, and there the other owners' signatures are collected (here, or
     through a QR code or text) and an account here executes it.
-  - A request signed for is that Safe transaction, never another. Its
-    `safeTxHash` is recorded with the request before an owner signs, and
-    nothing is signed unless that record is saved. Opened again, D6 offers
-    to open it. One no longer queued here (rejected, or its nonce taken) is
-    never proposed again as another: the request can then only be refused.
-    The same call queued or executed by hand is never taken for it.
+  - A request signed for is that Safe transaction, never another. Once an
+    owner's signature is made, its `safeTxHash` is recorded with the
+    request before it is queued, and nothing is queued unless that record is
+    saved; a signature not made records nothing. Opened again, D6 offers to
+    open it. One no longer queued here is proposed again as itself while its
+    nonce is free; once another transaction takes that nonce, or the Safe's
+    nonce moves on, it is never proposed as another, and the request can only
+    be refused. The same call queued or executed by hand is never taken for
+    it.
   - Refuse stays offered while it is queued: it tells the dApp no and
     leaves the Safe transaction queued, for rejecting on its screen.
 - **A dApp is answered only with an Ethereum transaction hash.** For a Safe,

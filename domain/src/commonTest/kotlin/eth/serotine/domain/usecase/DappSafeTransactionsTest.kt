@@ -129,13 +129,32 @@ class DappSafeTransactionsTest {
     }
 
     @Test
-    fun nothingIsSignedUnlessTheRequestIsTiedToItsSafeTransaction() = runTest {
+    fun nothingIsQueuedUnlessTheRequestIsTiedToItsSafeTransaction() = runTest {
         requests.waiting.value = listOf(request(payment))
         val proposed = assertIs<DappSafeProposing.Proposed>(propose()(request(payment).id)).proposal
         requests.recordSaves = false
         assertEquals(DappSafeSigning.NotRecorded, signed(proposed))
-        assertTrue(world.queue.requests.value.isEmpty())
-        assertTrue(world.signer.asked.isEmpty(), "no key was asked for")
+        assertTrue(world.queue.requests.value.isEmpty(), "its signature dropped: never queued, never shared")
+        assertEquals(null, requests.waiting.value.single().safeTx)
+    }
+
+    @Test
+    fun aSignatureNotMadeTiesNothing() = runTest {
+        requests.waiting.value = listOf(request(payment))
+        val proposed = assertIs<DappSafeProposing.Proposed>(propose()(request(payment).id)).proposal
+        world.signer.answer = eth.serotine.domain.repository.Signing.WrongPassword
+        assertIs<DappSafeSigning.NotSigned>(signed(proposed))
+        assertEquals(null, requests.waiting.value.single().safeTx)
+        // Another transaction takes nonce 4 meanwhile: the request is simply proposed at 5.
+        world.queue.requests.value = listOf(
+            eth.serotine.domain.model.SigningRequest.of(
+                Network.SEPOLIA,
+                world.safe,
+                eth.serotine.domain.model.SafeTx.call(world.carol, UInt256.ZERO, ByteArray(0), 4),
+            ),
+        )
+        val again = assertIs<DappSafeProposing.Proposed>(propose()(request(payment).id)).proposal
+        assertEquals(5L, again.proposal.request.nonce)
     }
 
     @Test

@@ -73,8 +73,8 @@ sealed interface DappSafeProposing {
 
     /**
      * The Safe transaction recorded for it, [safeTx], is no longer queued here and is not the one it would
-     * be proposed as now: it was rejected here, or its nonce moved on. Never proposed as another, so it can
-     * only be refused.
+     * be proposed as now: another took its nonce, or the Safe's nonce moved on. Never proposed as another,
+     * so it can only be refused. (While its nonce is still free it is proposed again as itself.)
      */
     data class NoLongerQueued(val safeTx: Digest) : DappSafeProposing
 
@@ -136,25 +136,26 @@ class ProposeDappSafeTx(
         // run as a verified call below.
         val balance = async { safeNativeBalanceOf(network, nativeBalances, safe.address) }
         val queuedList = async { queue.observe(safe).first() }
-        val before = when (val read = balance.await()) {
-            is SafeBalanceRead.Read -> read
-            SafeBalanceRead.NotAToken -> return@cancellingReads DappSafeProposing.InsufficientFunds // not for ether
-            is SafeBalanceRead.Refused -> return@cancellingReads DappSafeProposing.SafeRefused(read.refusal)
-        }
         val safeNonce = reading.state.nonce
         val pending = pendingOf(queuedList.await(), safeNonce, network)
         val nonce = nextNonce(pending, safeNonce)
-        val queuedAmount = pending.filter { it.nonce < nonce }.queuedMoves(null)
-            ?: return@cancellingReads DappSafeProposing.InsufficientFunds
-        val available = before.amount.minusOrNull(queuedAmount)?.takeIf { it >= transaction.value }
-            ?: return@cancellingReads DappSafeProposing.InsufficientFunds
         val signingRequest =
             SigningRequest.of(network, safe.address, SafeTx.call(transaction.to, transaction.value, transaction.data, nonce))
-        signingRequest.unsignable()?.let { return@cancellingReads DappSafeProposing.SafeRefused(it) }
         // Recorded once, it is that Safe transaction or none: never another one, at another nonce.
         if (recorded != null && signingRequest.hash != recorded) {
             return@cancellingReads DappSafeProposing.NoLongerQueued(recorded)
         }
+        signingRequest.unsignable()?.let { return@cancellingReads DappSafeProposing.SafeRefused(it) }
+        val before = when (val read = balance.await()) {
+            is SafeBalanceRead.Read -> read
+            // Ether has no token contract: only a token's read answers this.
+            SafeBalanceRead.NotAToken -> return@cancellingReads DappSafeProposing.InsufficientFunds
+            is SafeBalanceRead.Refused -> return@cancellingReads DappSafeProposing.SafeRefused(read.refusal)
+        }
+        val queuedAmount = pending.filter { it.nonce < nonce }.queuedMoves(null)
+            ?: return@cancellingReads DappSafeProposing.InsufficientFunds
+        val available = before.amount.minusOrNull(queuedAmount)?.takeIf { it >= transaction.value }
+            ?: return@cancellingReads DappSafeProposing.InsufficientFunds
         val tokenCall = transaction.meaning is DappCallMeaning.TokenTransfer ||
             transaction.meaning is DappCallMeaning.TokenApproval
         val simulation = when (
@@ -204,9 +205,10 @@ sealed interface DappSafeSigning {
 
 /**
  * Signs a dApp's [DappSafeProposal] as the first of the Safe's owners held here and queues it, as
- * [SignSafeTx] signs one (screen D6). The request is tied to the Safe transaction first
- * ([DappRequests.recordSafeTx]): nothing is signed unless that is saved, so a request signed for is that
- * Safe transaction, never another, and is answered from its execution alone.
+ * [SignSafeTx] signs one (screen D6). Once the signature is made, and before it is queued, the request
+ * is tied to the Safe transaction ([DappRequests.recordSafeTx]): nothing is queued unless that is saved, so
+ * a request signed for is that Safe transaction, never another, and is answered from its execution alone.
+ * A signature not made (a wrong password, a prompt cancelled) ties nothing.
  */
 class SignDappSafeTx(
     private val requests: DappRequests,
@@ -216,14 +218,20 @@ class SignDappSafeTx(
     suspend fun check(proposal: DappSafeProposal, budget: Duration = SAFE_CHECK_BUDGET): SafeTxSignCheck =
         signSafeTx.check(proposal.proposal.request, proposal.heldOwners.first(), budget)
 
-    /** Ties [proposal]'s request to it, then signs [checked] with [unlock] and queues it. */
+    /** Signs [checked] with [unlock], ties [proposal]'s request to it, and queues it. */
     suspend fun sign(proposal: DappSafeProposal, checked: SafeTxSignCheck.Ready, unlock: Unlock): DappSafeSigning {
-        if (!requests.recordSafeTx(proposal.id, checked.request.hash)) return DappSafeSigning.NotRecorded
-        return when (val signing = signSafeTx.sign(checked, unlock)) {
-            is SafeTxSigning.Signed -> DappSafeSigning.Signed(signing.request, signing.saved)
-            is SafeTxSigning.NotSigned -> DappSafeSigning.NotSigned(signing.signing)
-            is SafeTxSigning.Refused -> DappSafeSigning.Refused(signing.refusal)
+        val signed = when (val made = signSafeTx.signature(checked, unlock)) {
+            is SafeTxSignature.Made -> made.request
+            is SafeTxSignature.NotMade -> return when (val outcome = made.outcome) {
+                is SafeTxSigning.NotSigned -> DappSafeSigning.NotSigned(outcome.signing)
+                is SafeTxSigning.Refused -> DappSafeSigning.Refused(outcome.refusal)
+                is SafeTxSigning.Signed -> DappSafeSigning.Signed(outcome.request, outcome.saved)
+            }
         }
+        // Not tied, it is dropped: never queued, never shared, so it can never run for this request.
+        if (!requests.recordSafeTx(proposal.id, signed.hash)) return DappSafeSigning.NotRecorded
+        val queued = signSafeTx.queue(checked, signed)
+        return DappSafeSigning.Signed(queued.request, queued.saved)
     }
 }
 
