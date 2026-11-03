@@ -1,5 +1,6 @@
 package eth.serotine.domain.usecase
 
+import eth.serotine.domain.model.AccountKind
 import eth.serotine.domain.model.Network
 import eth.serotine.domain.model.UInt256
 import eth.serotine.domain.repository.AccountList
@@ -100,6 +101,8 @@ class QuoteDappTransaction(
             ?: return DappTransactionQuoting.Gone
         val transaction = (review.content as? DappSignContent.Transaction)?.transaction
             ?: return DappTransactionQuoting.Gone
+        // A Safe's is a Safe transaction (ProposeDappSafeTx), never quoted as an account's own.
+        if (review.account?.kind == AccountKind.SAFE) return DappTransactionQuoting.Gone
         // First: one signed already is that transaction, whatever the review says now (a key gone, Sepolia
         // off): it needs nothing more to be retried, and must never be refused while it may be mined.
         signedFor(sentTransfers, history, id)?.let { return DappTransactionQuoting.AlreadySigned(it) }
@@ -245,8 +248,9 @@ class SendDappTransaction(
         // Sepolia turned off since the quote refuses it.
         signedFor(sentTransfers, history, quote.id)?.let { return DappTransactionSending.AlreadySigned(it) }
         val list = (accounts.observeAccounts().first() as? AccountList.Loaded)?.accounts
-        reviewDappMessage(request, list, networks.observe().first(), clock())?.refusal
-            ?.let { return DappTransactionSending.Refused(it) }
+        val review = reviewDappMessage(request, list, networks.observe().first(), clock())
+        review?.refusal?.let { return DappTransactionSending.Refused(it) }
+        if (review?.account?.kind == AccountKind.SAFE) return DappTransactionSending.Gone
         if (request.expiresAtSeconds <= clock()) return DappTransactionSending.Expired
         val action = SentAction.DappCall(
             quote.call.transaction.to,
