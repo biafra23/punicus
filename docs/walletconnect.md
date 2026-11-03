@@ -2,8 +2,10 @@
 
 How a dApp connects to Serotine and asks it to sign or send for one of its
 accounts, and how Serotine uses another wallet (MetaMask, say) as the signer
-of a Safe owner. Both go over WalletConnect v2. This page is a design: none of
-it is built. Issue #22 tracks it. A dApp-connection PR is held to this page
+of a Safe owner. Both go over WalletConnect v2. Direction 1, dApps connecting
+to Serotine, is built (`feature/walletconnect-wallet`, part 1 of *The plan*);
+direction 2, an external wallet as a Safe owner's signer, is still a design.
+Issue #22 tracks both. A dApp-connection PR is held to this page
 together with docs/wallet-ux.md (the screens and their rules),
 docs/keys-and-signing.md (what is signed, and where keys live) and
 docs/embedding-myotis.md (what the engine reads and sends). Where this page

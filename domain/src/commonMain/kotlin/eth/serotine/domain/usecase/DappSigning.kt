@@ -193,10 +193,11 @@ data class DappMessageReview(
 }
 
 /**
- * Reviews [request], when it asks to have something signed (`personal_sign`, `eth_signTypedData_v4`;
- * null otherwise), against the wallet's [accounts] (null: the list cannot be read), the networks
- * [enabled] and the built-in [tokens] of Sepolia, at [nowSeconds] (docs/walletconnect.md, *Signing in*
- * and *Typed data*).
+ * Reviews [request], when it asks to have something signed or sent (`personal_sign`,
+ * `eth_signTypedData_v4`, `eth_sendTransaction`; null otherwise), against the wallet's [accounts] (null:
+ * the list cannot be read), the networks [enabled] and the built-in [tokens] of Sepolia, at [nowSeconds]
+ * (docs/walletconnect.md, *Signing in*, *Typed data* and *Transactions*). A transaction's refusals are
+ * here too: one to the zero address, and from a Safe a gas limit or a call of the Safe itself.
  */
 fun reviewDappMessage(
     request: DappRequest,
@@ -338,9 +339,10 @@ private fun site(authority: String, scheme: String): Pair<String, Int>? {
 }
 
 /**
- * The `personal_sign` requests waiting, each reviewed ([reviewDappMessage]), oldest first (screens D1
- * and D4). Reviewed again every [tickSeconds] as well as on each change, so a sign-in whose expiry or
- * not-before time passes says so. [clock] is now in unix seconds.
+ * The requests waiting to be signed or sent (`personal_sign`, `eth_signTypedData_v4`,
+ * `eth_sendTransaction`), each reviewed ([reviewDappMessage]), oldest first (screens D1, D4, D5 and D6).
+ * Reviewed again every [tickSeconds] as well as on each change, so a sign-in whose expiry or not-before
+ * time passes says so. [clock] is now in unix seconds.
  */
 class ObserveDappMessages(
     private val requests: DappRequests,
