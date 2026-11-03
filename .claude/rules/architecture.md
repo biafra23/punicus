@@ -27,10 +27,14 @@ Entities and value objects (`Account`, `Address`, `AccountKind`), the ports
 
 - Pure Kotlin. Its only libraries are coroutines (`Flow`) and kotlincrypto's
   Keccak-256 (`sha3`).
-- Keccak-256 is allowed for one purpose: transaction encoding and hashing.
-  That means the EIP-1559 signing digest and transaction hash, the EIP-712
-  `SafeTx` hash, the CREATE2 address and EIP-55 (owner ruling, 2026-10-18,
-  #50). Nothing else may come in under that ruling.
+- Keccak-256 is allowed for any of Ethereum's hashing, as pure computation
+  (owner ruling, 2026-10-18, #50; widened from a closed list of uses by the
+  owner's ruling, 2026-11-03, on #218). That covers every signing digest
+  (EIP-1559, EIP-191, any EIP-712: a `SafeTx`, a CoW order, a dApp's typed
+  data), transaction hashes, CREATE2 addresses, EIP-55, ABI selectors and
+  event topics. A digest a signer signs is computed in `:domain`.
+- The ruling covers that one library. Any other library in `:domain` still
+  needs a ruling, and JSON is still reached through a port.
 - Targets desktop JVM and iOS. Deliberately NO Android target: Android
   consumers resolve its JVM variant, so nothing in it can ever import
   `android.*`.

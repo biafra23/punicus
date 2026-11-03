@@ -283,15 +283,17 @@ everything on the chain side: the verified `call`, `estimateGasDetailed`,
   - `ExternalWallets` (direction 2): start a pairing, which returns its `wc:`
     URI; observe the connected wallets and their accounts; ask one to sign a
     `SafeTx`; disconnect.
-- **The EIP-4361 parser is in `:domain`'s model**, pure Kotlin: it parses
-  text and hashes nothing.
-- **The message digests are behind a port, `MessageDigests`, implemented in
-  `:data`:** the EIP-191 digest of a message, and the EIP-712 encoding and
-  hash of arbitrary typed data, its JSON parsed there. `:domain` may use
-  Keccak-256 only for the closed list of the owner's ruling (2026-10-18,
-  #50; docs/architecture.md), and reaches JSON only through a port; neither
-  digest is on that list. Whether to extend the list with them instead is
-  the owner's decision, open (*Open decisions*, below).
+- **In `:domain`'s model, pure Kotlin:** the EIP-4361 parser, the EIP-191
+  digest of a message, and the EIP-712 encoder and hash for arbitrary typed
+  data. Keccak-256 may do any of Ethereum's hashing there (owner ruling,
+  2026-10-18, #50, widened 2026-11-03 on #218; docs/architecture.md), so the
+  digest the user approves is computed where the use case can show what it
+  is the hash of.
+- **The typed data's JSON is read behind a port**, `TypedDataCodec`,
+  implemented in `:data`, since `:domain` reaches JSON only through one. It
+  parses strictly, with size limits, into `:domain`'s typed-data model: the
+  types, the primary type, the domain and the message. Anything that is not
+  exactly EIP-712 JSON is refused, never repaired.
 - **No key reaches the WalletConnect layer.** A local signature goes through
   the signer port. Nothing is imported from an external wallet, and nothing
   about it is kept but its address and its session.
@@ -370,9 +372,6 @@ The owner's, each recorded here and in the rules before its code lands:
 
 - dApp sessions on Ethereum and Gnosis Chain (ruling 9).
 - Each optional WalletConnect service (ruling 7).
-- Whether the EIP-191 digest and arbitrary EIP-712 hashing join the closed
-  list of Keccak-256 uses in `:domain` (owner ruling, 2026-10-18, #50).
-  Until then they sit behind the `MessageDigests` port (*Architecture*).
 
 ## Risks to check early
 

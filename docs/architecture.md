@@ -33,10 +33,13 @@ rule in code.
 - `:domain` depends on nothing of ours and on no framework. Its libraries are
   coroutines' `Flow` and kotlincrypto's Keccak-256 (`sha3`), both pure Kotlin
   on every target. Keccak-256 is there by the owner's ruling (2026-10-18,
-  #50) for the transaction encoding and hashing alone: the EIP-1559 signing
-  digest and transaction hash, a Safe transaction's EIP-712 hash, the CREATE2
-  address of a Safe and EIP-55. It is the one library besides coroutines, and
-  nothing else comes in under it. It has
+  #50), widened (owner ruling, 2026-11-03, on #218) from a closed list of
+  uses to any of Ethereum's hashing, as pure computation: every signing
+  digest (EIP-1559, EIP-191, EIP-712 for a Safe transaction, a CoW order or
+  a dApp's typed data), transaction hashes, CREATE2 addresses, EIP-55, ABI
+  selectors and event topics. The digest a signer signs is computed here,
+  where the use case can show what it is the hash of. It is the one library
+  besides coroutines, and any other still needs a ruling. It has
   no Android target on purpose: Android
   consumers resolve its JVM variant, as they do kotlinx-coroutines, so nothing
   in it can ever import `android.*` (and that variant emits Java 17 class
