@@ -228,6 +228,15 @@ class ArchitectureChecks(unittest.TestCase):
         self.assertIn("LOG-NO-PRINT", ids)
         self.assertIn("NET-ENDPOINTS", ids)
 
+    def test_each_rpc_word_is_its_own_violation(self) -> None:
+        tree = self.minimal_tree()
+        tree.write("data/src/commonMain/kotlin/eth/serotine/data/Rpc.kt",
+                   'val a = "jsonrpc"\nval b = "JsonRpc"\nval c = "eth_getBalance"\n')
+        keys = {key for check_id, key, _ in tree.violations(CHECKER.check_architecture) if check_id == "NET-ENDPOINTS"}
+        rel = "data/src/commonMain/kotlin/eth/serotine/data/Rpc.kt"
+        # An entry accepting the first word never covers the second.
+        self.assertEqual({f"{rel}:rpc:jsonrpc", f"{rel}:rpc:eth_getbalance"}, keys)
+
     def test_a_url_inside_a_comment_is_not_a_cleartext_literal(self) -> None:
         tree = self.minimal_tree()
         tree.write("data/src/commonMain/kotlin/eth/serotine/data/Y.kt", '// see http://example.org\nval x = 1\n')
