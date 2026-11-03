@@ -29,6 +29,7 @@ import eth.serotine.data.settings.FileAmountsHidden
 import eth.serotine.data.settings.FileInterfaceMode
 import eth.serotine.data.settings.FileSwapVenue
 import eth.serotine.data.swaps.FileWaitingSwaps
+import eth.serotine.data.walletconnect.WalletConnectDapps
 import eth.serotine.data.tokens.BuiltInTokenCatalog
 import eth.serotine.data.tokens.FileUserTokens
 import eth.serotine.data.transfers.FileSentTransfers
@@ -36,6 +37,7 @@ import eth.serotine.data.transfers.FileTransactionHistory
 import eth.serotine.data.upgrade.FileKnownUpgradeStore
 import eth.serotine.domain.model.Network
 import eth.serotine.domain.usecase.FollowAccountLogs
+import eth.serotine.domain.usecase.FollowDappAccounts
 import eth.serotine.domain.usecase.FollowDebugScreen
 import eth.serotine.domain.usecase.FollowInterfaceMode
 import eth.serotine.domain.usecase.FollowNetworks
@@ -184,7 +186,33 @@ private fun openWallet(dataDir: File) {
         FileNetworkSettings(dataDir.resolve("networks.json").path, defaultOn = { it.testnet == development })
     // The screens' holds on a network with no account on it yet (Watch, Add token).
     val networkDemand = NetworkDemand()
+    // dApp sessions over WalletConnect (docs/walletconnect.md), with the project ID of this build: a
+    // development run's (the debug one), an installed app's (the release one); off without one.
+    val dappProjectId = WalletConnectDapps.projectIdFor(debug = development)
+    val dapps = WalletConnectDapps(dataDir.resolve("walletconnect/state.json").path, dappProjectId)
     application(exitProcessOnExit = false) {
+        LaunchedEffect(Unit) {
+            // The relay connection while the app runs: dApp messages arrive while it is open. A failure
+            // ends it alone.
+            try {
+                dapps.run()
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                System.err.println("Serotine: the WalletConnect relay connection stopped: ${e::class.simpleName}")
+            }
+        }
+        LaunchedEffect(Unit) {
+            // Each session's accounts kept to those a dApp may still be offered (accountsChanged). A
+            // failure ends it alone, never the relay connection.
+            try {
+                FollowDappAccounts(dapps, accounts, networkSettings)()
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                System.err.println("Serotine: following the dApp sessions' accounts stopped: ${e::class.simpleName}")
+            }
+        }
         LaunchedEffect(Unit) {
             // Each network's light client runs while it is on and needed (docs/networks.md, *The
             // engine host*); following the setting also records each network's default. A failure
@@ -361,6 +389,8 @@ private fun openWallet(dataDir: File) {
                 screenCaptureDebugSwitch = null,
                 networkDemand = networkDemand,
                 networkSettings = networkSettings,
+                dappSessions = dapps,
+                dappConnectionsOff = dappProjectId.isEmpty(),
             )
         }
         Window(

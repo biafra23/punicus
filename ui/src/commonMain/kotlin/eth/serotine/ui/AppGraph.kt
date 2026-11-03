@@ -14,7 +14,14 @@ import eth.serotine.domain.repository.CowChain
 import eth.serotine.domain.repository.CowOrders
 import eth.serotine.domain.repository.DebugLog
 import eth.serotine.domain.repository.DebugScreenSetting
+import eth.serotine.domain.repository.DappSessions
 import eth.serotine.domain.repository.DisplayCurrencySetting
+import eth.serotine.domain.usecase.ApproveDappProposal
+import eth.serotine.domain.usecase.DisconnectDapp
+import eth.serotine.domain.usecase.ExtendDappSession
+import eth.serotine.domain.usecase.ObserveDappConnections
+import eth.serotine.domain.usecase.PairDapp
+import eth.serotine.domain.usecase.RejectDappProposal
 import eth.serotine.domain.repository.HistoryStarts
 import eth.serotine.domain.repository.InterfaceModeSetting
 import eth.serotine.domain.repository.KeyStore
@@ -151,7 +158,10 @@ import eth.serotine.ui.addtoken.AddTokenViewModel
 import eth.serotine.ui.coworder.CowOrderViewModel
 import eth.serotine.ui.createaccount.CreateAccountViewModel
 import eth.serotine.ui.createsafe.CreateSafeViewModel
+import eth.serotine.ui.connections.ConnectionsViewModel
 import eth.serotine.ui.currency.CurrencyViewModel
+import eth.serotine.ui.dappproposal.DappProposalViewModel
+import eth.serotine.ui.pairdapp.PairDappViewModel
 import eth.serotine.ui.debug.DebugTabViewModel
 import eth.serotine.ui.debug.DebugViewModel
 import eth.serotine.ui.deriveaccount.DeriveAccountViewModel
@@ -296,6 +306,13 @@ class AppGraph(
     private val networkDemand: NetworkDemand,
     /** Which networks are on: the host's one instance, which its `FollowNetworks` follows. */
     private val networkSettings: NetworkSettings,
+    /** dApp sessions over WalletConnect (docs/walletconnect.md): the host's one instance, whose relay it runs. */
+    private val dappSessions: DappSessions,
+    /**
+     * Whether this build carries no WalletConnect project ID, so that dApp connections are switched
+     * off and Settings shows Connected dApps greyed out (ruling 2).
+     */
+    val dappConnectionsOff: Boolean,
 ) {
     /** The one [WalletChanges] of the app: imports and removals never interleave. */
     private val walletChanges = WalletChanges()
@@ -667,6 +684,21 @@ class AppGraph(
     /** The Debug tab: the debug log. */
     fun debugViewModel(): DebugViewModel =
         DebugViewModel(ObserveDebugLog(debugLog), SetDebugLogLevel(debugLog), ClearDebugLog(debugLog))
+
+    private fun observeDappConnections() = ObserveDappConnections(dappSessions, accounts, networkSettings)
+
+    fun connectionsViewModel(): ConnectionsViewModel =
+        ConnectionsViewModel(observeDappConnections(), DisconnectDapp(dappSessions), ExtendDappSession(dappSessions))
+
+    fun pairDappViewModel(): PairDappViewModel = PairDappViewModel(PairDapp(dappSessions))
+
+    /** The review of the proposal [proposalKey] names (`pairing/id`, as its route carries it). */
+    fun dappProposalViewModel(proposalKey: String): DappProposalViewModel = DappProposalViewModel(
+        proposalKey,
+        observeDappConnections(),
+        ApproveDappProposal(dappSessions, accounts, networkSettings),
+        RejectDappProposal(dappSessions),
+    )
 
     fun currencyViewModel(): CurrencyViewModel =
         CurrencyViewModel(displayCurrencies(), SetDisplayCurrency(priceFeeds, displayCurrency, accounts))

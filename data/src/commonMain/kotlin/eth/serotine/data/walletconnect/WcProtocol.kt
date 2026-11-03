@@ -41,6 +41,12 @@ internal object WcProtocol {
     /** Request ids remembered per topic, against replays (docs/walletconnect.md, *What the relay learns*). */
     const val SEEN_IDS_PER_TOPIC = 2_000
 
+    /**
+     * Requests a session may have waiting at once. One more is answered with [Error.LIMIT_EXCEEDED]:
+     * a dApp cannot grow the state file, which every message rewrites, without bound.
+     */
+    const val PENDING_REQUESTS_PER_SESSION = 20
+
     /** A Sign method's relay tag for its request, its response, and how long the relay holds it. */
     class Method(val name: String, val requestTag: Int, val responseTag: Int, val ttlSeconds: Long)
 
@@ -79,6 +85,9 @@ internal object WcProtocol {
         SESSION_SETTLEMENT_FAILED(7000, "Session settlement failed."),
         REQUEST_EXPIRED(8000, "Request expired."),
         WC_METHOD_UNSUPPORTED(10001, "Unsupported wc_ method."),
+
+        /** EIP-1474: the session has [PENDING_REQUESTS_PER_SESSION] requests waiting already. */
+        LIMIT_EXCEEDED(-32005, "Too many requests waiting."),
 
         /** EIP-1193: the user declined. */
         PROVIDER_USER_REJECTED(4001, "User rejected the request."),

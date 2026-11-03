@@ -40,7 +40,8 @@ internal data class WcRelayMessage(val topic: String, val message: String, val p
  * one connection at a time that [run] keeps open.
  *
  * - **Reconnects** with an exponential backoff ([backoff]) whenever the connection cannot be had or
- *   drops, with a fresh URL each time ([connectionUrl]: a new auth token), and subscribes again to
+ *   drops, starting again from its first step only after a connection that lasted
+ *   [HEALTHY_CONNECTION_MILLIS], with a fresh URL each time ([connectionUrl]: a new auth token), and subscribes again to
  *   every topic it holds.
  * - **Every message is handed to [onMessage], then acknowledged** to the relay, so a message whose
  *   handling did not finish (the app killed in between) is delivered again. [onMessage] must not wait
@@ -103,7 +104,7 @@ internal class WcRelayClient(
                 delay(backoff(attempt++))
                 continue
             }
-            attempt = 0
+            val openedAt = nowMillis()
             try {
                 coroutineScope {
                     val reader = launch { read(connected) }
@@ -121,6 +122,8 @@ internal class WcRelayClient(
                     connected.close()
                 }
             }
+            // Only a connection that lasted counts as the relay being back: one dropped at once keeps backing off.
+            if (nowMillis() - openedAt >= HEALTHY_CONNECTION_MILLIS) attempt = 0
             delay(backoff(attempt++))
         }
     }
@@ -319,6 +322,9 @@ internal class WcRelayClient(
     private fun nextId(): Long = nowMillis() * 1000 + (counter++ % 1000)
 
     companion object {
+        /** How long a connection must last for the backoff to start again from its first step. */
+        const val HEALTHY_CONNECTION_MILLIS = 60_000L
+
         /** 1 s, doubling to at most a minute, each within ±20 % so that many clients do not retry at once. */
         fun defaultBackoff(attempt: Int): Duration {
             val base = 1_000L shl minOf(attempt, 6)

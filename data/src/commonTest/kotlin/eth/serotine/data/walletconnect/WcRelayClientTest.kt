@@ -152,4 +152,29 @@ class WcRelayClientTest {
         val late = WcRelayClient.defaultBackoff(30)
         assertTrue(late in 48.seconds..72.seconds)
     }
+
+    @Test
+    fun aRelayThatDropsEachConnectionAtOnceKeepsBeingBackedOff() = runTest {
+        val attempts = mutableListOf<Int>()
+        val dropping = WcRelayConnector {
+            object : WcRelaySocket {
+                override suspend fun receive(): String? = null
+                override suspend fun send(text: String) = error("closed")
+                override suspend fun close() {}
+            }
+        }
+        val client = WcRelayClient(
+            connector = dropping,
+            connectionUrl = { "wss://relay.test" },
+            onMessage = {},
+            nowMillis = { testScheduler.currentTime },
+            backoff = { attempt -> attempts += attempt; 1.seconds },
+        )
+        backgroundScope.launch { client.run() }
+        advanceTimeBy(5_500.milliseconds)
+        runCurrent()
+        // Each connection was dropped at once: the backoff climbs, never starts again from its first step.
+        assertEquals(listOf(0, 1, 2, 3, 4, 5), attempts)
+    }
 }
+

@@ -308,9 +308,13 @@ everything on the chain side: the verified `call`, `estimateGasDetailed`,
   Android, opening another wallet sends Serotine to the background, where the
   socket may drop and the engine pauses after 30 s. On resume Serotine
   resubscribes and picks up the answer, which the relay holds for its TTL.
-  The Android host registers the `wc:` scheme. The project ID comes from the
-  build (ruling 2); without one, Connections is greyed out, and a tap says
-  this build has WalletConnect switched off.
+  The relay connection runs while the app is in front (Android, iOS) or open
+  (the desktop), beside `FollowDappAccounts`, which keeps each session's
+  accounts to those still in the wallet. The project ID comes from the build
+  (ruling 2); without one, Connected dApps is greyed out, and a tap says this
+  build has WalletConnect switched off. The state is in a directory of its
+  own, `walletconnect/`, owner-only and, on iOS, out of iCloud and computer
+  backups; Android keeps all its files out of backups and device transfers.
 - Use cases and screens follow the five-step checklist at the end of
   docs/architecture.md.
 
@@ -330,13 +334,22 @@ the first thing that does.
 3. **App ID on each project**: the Android package name and the iOS bundle
    ID of that build. With those set, another app cannot use the project's ID
    to pass itself off as Serotine.
-4. **The two IDs as GitHub Actions secrets** on the repository. Part 1.1
-   names the Gradle property and the secrets, and says which to set. CI
-   passes each build its own ID; a pull request from a fork gets none, and
-   builds with WalletConnect switched off.
-5. **For a local build**, the debug ID goes in the git-ignored
-   `local.properties` or in `~/.gradle/gradle.properties`. Without one, the
-   build has WalletConnect switched off and says so (*Architecture*).
+4. **The two IDs as GitHub Actions secrets** on the repository, which the
+   workflows pass to Gradle as the properties `walletConnectProjectIdDebug`
+   and `walletConnectProjectIdRelease` (as the environment variables
+   `ORG_GRADLE_PROJECT_walletConnectProjectIdDebug` and
+   `ORG_GRADLE_PROJECT_walletConnectProjectIdRelease`). `:data` writes them
+   into a generated, uncommitted source file; an ID that is not letters and
+   digits fails the build. The workflows pass them once the secrets exist; a
+   pull request from a fork gets none, and builds with WalletConnect
+   switched off.
+5. **For a local build**, the debug ID goes in `~/.gradle/gradle.properties`
+   as `walletConnectProjectIdDebug=<id>`, never in a file of the repository.
+   Which ID a build uses: the Android debug app, a desktop development run
+   and the iOS debug binary the debug one; the release app, the desktop
+   installers and the iOS release binary the release one. Without one, the
+   build has WalletConnect switched off, and Settings shows Connected dApps
+   greyed out, a tap saying why.
 6. **The plan and its terms.** Reown has a free tier and paid plans. Before
    release, the owner checks the free tier's limits against the expected
    number of sessions, and reads the terms (*Risks to check early*).
@@ -388,7 +401,8 @@ merge part PRs into the feature branch itself.
       Sepolia is the spike once the ID exists.
    2. dApp sessions: pairing, the proposal, the Sepolia-only namespace, the
       session list, disconnect, expiry and extend, `accountsChanged`. Screens
-      D1 to D3.
+      D1 to D3. Opening a `wc:` link on Android, which arrives at D2 with the
+      link filled in, follows in a part of its own (1.2a).
    3. Signing in for an EOA: `personal_sign` and EIP-4361. Screen D4.
    4. The other EOA requests: `eth_signTypedData_v4` (D5) and
       `eth_sendTransaction` (D6).

@@ -415,5 +415,46 @@ class WcWalletTest {
         settle()
         assertEquals("true", dapp.received.getValue(topic).last()["result"]?.jsonPrimitive?.content)
     }
+
+    @Test
+    fun aSessionMayHaveOnlySoManyRequestsWaiting() = runTest {
+        val running = walletConnect()
+        val dapp = dapp()
+        val topic = settled(running, dapp)
+        repeat(WcProtocol.PENDING_REQUESTS_PER_SESSION + 1) { dapp.sendOnSession(personalSign(1_000L + it)) }
+        settle()
+        assertEquals(WcProtocol.PENDING_REQUESTS_PER_SESSION, running.view().requests.size)
+        val refused = dapp.received.getValue(topic).last()
+        assertEquals("${1_000L + WcProtocol.PENDING_REQUESTS_PER_SESSION}", refused["id"]?.jsonPrimitive?.content)
+        assertEquals(-32005, refused.getValue("error").jsonObject.getValue("code").jsonPrimitive.int)
+    }
+
+    @Test
+    fun requestsPastTheirExpiryDoNotCountTowardsTheCap() = runTest {
+        val running = walletConnect()
+        val dapp = dapp()
+        settled(running, dapp)
+        val soon = now() / 1000 + 5
+        repeat(WcProtocol.PENDING_REQUESTS_PER_SESSION) { dapp.sendOnSession(personalSign(2_000L + it, expiry = soon)) }
+        settle()
+        repeat(10) { settle() } // past their expiry, before the minute's sweep
+        dapp.sendOnSession(personalSign(3_000))
+        settle()
+        assertEquals(listOf(3_000L), running.view().requests.map { it.id })
+    }
+
+    @Test
+    fun anExtensionWhileTheRelayCannotBeReachedIsSavedAndSentOnceItIsBack() = runTest {
+        val running = walletConnect()
+        val dapp = dapp()
+        val topic = settled(running, dapp)
+        relay.refusing = true
+        relay.dropConnections()
+        // Saved, so true, although the relay has not taken it yet: it waits in the outbox.
+        assertTrue(running.wallet.extend(topic))
+        relay.refusing = false
+        repeat(30) { settle() }
+        assertEquals("wc_sessionExtend", dapp.received.getValue(topic).last()["method"]?.jsonPrimitive?.content)
+    }
 }
 

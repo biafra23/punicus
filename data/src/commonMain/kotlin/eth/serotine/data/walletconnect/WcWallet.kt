@@ -379,8 +379,8 @@ internal class WcWallet(
 
     /**
      * Rejects proposal [proposalId] on [pairingTopic] with [why] (the user's refusal, unless the proposal
-     * asked for more than a session here may have). True once saved and delivered; saved but not yet
-     * delivered, it is sent again.
+     * asked for more than a session here may have). True once saved: the answer is in the outbox then,
+     * sent now when the relay takes it, else on the next connection.
      */
     suspend fun reject(pairingTopic: String, proposalId: Long, why: WcProtocol.Error = WcProtocol.Error.USER_REJECTED): Boolean {
         val keys = mutableListOf<Long>()
@@ -400,8 +400,9 @@ internal class WcWallet(
             true to state.copy(proposals = state.proposals - proposal).queuing(listOfNotNull(rejection), nowSeconds(), keys)
         }
         // Nothing goes out for a change that was not saved: the proposal would still be shown.
-        if (!saved || keys.isEmpty()) return false
-        return sendQueued(keys)
+        if (!saved) return false
+        sendQueued(keys)
+        return true
     }
 
     /**
@@ -480,7 +481,10 @@ internal class WcWallet(
         return true
     }
 
-    /** Extends session [topic] to [WcProtocol.SESSION_SECONDS] from now. True once delivered. */
+    /**
+     * Extends session [topic] to [WcProtocol.SESSION_SECONDS] from now. True once saved: the extension is
+     * in the outbox then, sent now when the relay takes it, else on the next connection.
+     */
     suspend fun extend(topic: String): Boolean {
         val expiry = nowSeconds() + WcProtocol.SESSION_SECONDS
         val keys = mutableListOf<Long>()
@@ -497,12 +501,14 @@ internal class WcWallet(
                 .queuing(listOf(extension), nowSeconds(), keys)
         }
         if (!saved) return false
-        return sendQueued(keys)
+        sendQueued(keys)
+        return true
     }
 
     /**
      * Gives session [topic] the Sepolia accounts at [addresses] instead: a session update, then the
-     * `accountsChanged` event where the session carries it. True once both are delivered.
+     * `accountsChanged` event where the session carries it. True once saved: both are in the outbox then,
+     * sent now when the relay takes them, else on the next connection.
      */
     suspend fun updateAccounts(topic: String, addresses: List<String>): Boolean {
         if (addresses.isEmpty() || addresses.toSet().size != addresses.size || !addresses.all(::isAddress)) return false
@@ -538,7 +544,8 @@ internal class WcWallet(
                 .queuing(messages, nowSeconds(), keys)
         }
         if (!saved) return false
-        return sendQueued(keys)
+        sendQueued(keys)
+        return true
     }
 
     // ----- The dApp's side -----
@@ -652,6 +659,11 @@ internal class WcWallet(
                 val stated = request["expiryTimestamp"]?.let { (it as? JsonPrimitive)?.longOrNull ?: -1 }
                 if (stated != null && stated <= now) {
                     return listOf(reply(error(id, WcProtocol.Error.REQUEST_EXPIRED))) to state
+                }
+                // Only those still live: expired ones wait for the minute's sweep, and count for nothing.
+                val waiting = state.requests.count { it.topic == session.topic && it.expirySeconds > now }
+                if (waiting >= WcProtocol.PENDING_REQUESTS_PER_SESSION) {
+                    return listOf(reply(error(id, WcProtocol.Error.LIMIT_EXCEEDED))) to state
                 }
                 val expiry = (stated ?: (now + WcProtocol.REQUEST_SECONDS)).coerceAtMost(now + WcProtocol.MAX_REQUEST_SECONDS)
                 val stored = WcStoredRequest(id, session.topic, chainId, name, request["params"] ?: JsonNull, expiry)

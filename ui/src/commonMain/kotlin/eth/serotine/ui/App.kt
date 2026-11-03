@@ -58,7 +58,10 @@ import eth.serotine.ui.coworder.CowOrderRoute
 import eth.serotine.ui.coworder.SwapAgain
 import eth.serotine.ui.createaccount.CreateAccountRoute
 import eth.serotine.ui.createsafe.CreateSafeRoute
+import eth.serotine.ui.connections.ConnectionsRoute
 import eth.serotine.ui.currency.CurrencyRoute
+import eth.serotine.ui.dappproposal.DappProposalRoute
+import eth.serotine.ui.pairdapp.PairDappRoute
 import eth.serotine.ui.debug.DebugRoute
 import eth.serotine.ui.debug.DebugViewModel
 import eth.serotine.ui.deriveaccount.DeriveAccountRoute
@@ -382,7 +385,39 @@ private fun Destinations(
                     onCurrency = { navController.navigate(Destination.CURRENCY) { launchSingleTop = true } },
                     onTokens = { navController.navigate(Destination.TOKENS) { launchSingleTop = true } },
                     onSecurity = { navController.navigate(Destination.SECURITY) { launchSingleTop = true } },
+                    onConnections = { navController.navigate(Destination.CONNECTIONS) { launchSingleTop = true } },
+                    connectionsOff = graph.dappConnectionsOff,
                 )
+            }
+            composable(Destination.CONNECTIONS) {
+                ConnectionsRoute(
+                    viewModel { graph.connectionsViewModel() },
+                    onBack = { navController.leave(Destination.CONNECTIONS) },
+                    onPair = { navController.navigate(Destination.PAIR_DAPP) { launchSingleTop = true } },
+                    onProposal = { key ->
+                        navController.navigate("${Destination.DAPP_PROPOSAL}/$key") { launchSingleTop = true }
+                    },
+                )
+            }
+            composable(Destination.PAIR_DAPP) {
+                PairDappRoute(
+                    viewModel { graph.pairDappViewModel() },
+                    onBack = { navController.leave(Destination.PAIR_DAPP) },
+                    onPaired = { navController.leave(Destination.PAIR_DAPP) },
+                )
+            }
+            composable(DAPP_PROPOSAL_ROUTE) { entry ->
+                val pairing = entry.savedStateHandle.get<String>(PAIRING)?.lowercase()?.takeIf(TOPIC::matches)
+                val id = entry.savedStateHandle.get<String>(PROPOSAL)?.toLongOrNull()
+                if (pairing != null && id != null) {
+                    DappProposalRoute(
+                        viewModel { graph.dappProposalViewModel("$pairing/$id") },
+                        onBack = { navController.popBackStack(DAPP_PROPOSAL_ROUTE, inclusive = true) },
+                        onDone = { navController.popBackStack(DAPP_PROPOSAL_ROUTE, inclusive = true) },
+                    )
+                } else {
+                    LaunchedEffect(Unit) { navController.popBackStack(DAPP_PROPOSAL_ROUTE, inclusive = true) }
+                }
             }
             composable(Destination.SECURITY) {
                 SecurityRoute(
@@ -928,6 +963,9 @@ private fun WithAccount(
 
 private object Destination {
     const val ACCOUNTS = "accounts"
+    const val CONNECTIONS = "connections"
+    const val PAIR_DAPP = "pairdapp"
+    const val DAPP_PROPOSAL = "dappproposal"
     const val ACCOUNT = "account"
     const val RECEIVE = "receive"
     const val ACTIVITY = "activity"
@@ -970,6 +1008,8 @@ private const val ASSET = "asset"
 
 /** The transfer status's, a Safe transaction's and an Activity detail's route argument: the transaction hash. */
 private const val HASH = "hash"
+private const val PAIRING = "pairing"
+private const val PROPOSAL = "proposal"
 
 /** An Activity detail's optional route argument: the log index of an event's log in its block. */
 private const val LOG = "log"
@@ -1017,6 +1057,12 @@ private val ORDER_UID = Regex("^0x[0-9a-f]{112}$")
 /** The detail of a row of an account's Activity: a transaction by its hash, an event by its log too. */
 private const val ACTIVITY_DETAIL_ROUTE =
     "${Destination.ACTIVITY}/{$CHAIN}/{$ADDRESS}/${Destination.ACTIVITY_DETAIL}/{$HASH}?$LOG={$LOG}"
+
+/** A dApp's session proposal, by its pairing's topic and its id there (docs/walletconnect.md, screen D3). */
+private const val DAPP_PROPOSAL_ROUTE = "${Destination.DAPP_PROPOSAL}/{$PAIRING}/{$PROPOSAL}"
+
+/** A WalletConnect topic: 64 hex digits. */
+private val TOPIC = Regex("^[0-9a-f]{64}$")
 
 /** Where a transfer stands, by its network and its hash. */
 private const val TRANSFER_ROUTE = "${Destination.TRANSFER}/{$CHAIN}/{$HASH}"

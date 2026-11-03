@@ -158,7 +158,7 @@ class SettingsScreenTest {
         show(screenCaptureAllowed = false)
 
         rule.onNodeWithText("Allow screen recording").assertExists()
-        rule.onNodeWithTag(SETTINGS_SCREEN_CAPTURE_TAG).assertIsOff().performClick()
+        rule.onNodeWithTag(SETTINGS_SCREEN_CAPTURE_TAG).performScrollTo().assertIsOff().performClick()
         assertEquals(listOf(true), screenCaptureChanges)
     }
 
@@ -166,8 +166,24 @@ class SettingsScreenTest {
     fun theDebugBuildsRowSaysWhenCaptureIsAllowed() {
         show(screenCaptureAllowed = true)
 
-        rule.onNodeWithTag(SETTINGS_SCREEN_CAPTURE_TAG).assertIsOn().performClick()
+        rule.onNodeWithTag(SETTINGS_SCREEN_CAPTURE_TAG).performScrollTo().assertIsOn().performClick()
         assertEquals(listOf(false), screenCaptureChanges)
+    }
+
+    @Test
+    fun connectedDappsOpensAndInABuildWithoutAProjectIdSaysWhyItIsGreyedOut() {
+        var opened = 0
+        rule.setContent {
+            SettingsScreen(
+                SettingsUiState(networks = emptyList(), version = "1.0"),
+                onCurrency = {}, onTokens = {}, onSecurity = {}, onScreenCaptureChange = {}, onDebugScreenChange = {},
+                onConnections = { opened++ },
+                connectionsOff = true,
+            )
+        }
+        rule.onNodeWithText("Connected dApps").performScrollTo().performClick()
+        assertEquals(0, opened)
+        rule.onNodeWithText(CONNECTIONS_OFF).assertExists()
     }
 
     @Test
