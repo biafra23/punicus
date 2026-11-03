@@ -43,7 +43,6 @@ import eth.serotine.ui.components.notSignedText
 import eth.serotine.ui.components.promptDeadline
 import eth.serotine.ui.dapprequest.DappRequestViewModel
 import eth.serotine.ui.dapprequest.SignInField
-import kotlinx.coroutines.Job
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -147,13 +146,14 @@ class DappTransactionViewModel(
         val notSent: Pair<NotSentItem, SentTransfer>? = null,
         /** The dApp asks for a gas limit below the verified estimate: refused as invalid, not declined. */
         val gasTooLow: Boolean = false,
+        /** A transaction signed for this request was sent or mined: the dApp is being told its hash. */
+        val signedAndSent: Boolean = false,
         val notice: String? = null,
         val explaining: TransactionExplanation? = null,
         val done: Boolean = false,
     )
 
     private val local = MutableStateFlow(Local())
-    private var job: Job? = null
 
     private val shownReview = observeDappMessages()
         .map { reviews ->
@@ -177,7 +177,7 @@ class DappTransactionViewModel(
             unlock = local.unlock,
             busy = local.busy,
             notSent = local.notSent?.first,
-            refuseUnavailable = local.notSent?.second?.maybeSent == true,
+            refuseUnavailable = local.notSent?.second?.maybeSent == true || local.signedAndSent,
             notice = local.notice,
             explaining = local.explaining,
             done = local.done,
@@ -203,7 +203,7 @@ class DappTransactionViewModel(
         local.update {
             it.copy(quoting = true, notQuoted = null, gasTooLow = false, unlock = it.unlock.copy(error = note))
         }
-        job = viewModelScope.launch {
+        viewModelScope.launch {
             val quoting = try {
                 quoteDappTransaction(request)
             } catch (_: Exception) {
@@ -271,7 +271,7 @@ class DappTransactionViewModel(
         val (_, transfer) = local.value.notSent ?: return
         if (local.value.busy) return
         local.update { it.copy(busy = true) }
-        job = viewModelScope.launch {
+        viewModelScope.launch {
             val sending = try {
                 withContext(NonCancellable) { sendDappTransaction.retry(request, transfer) }
             } catch (_: Exception) {
@@ -285,8 +285,9 @@ class DappTransactionViewModel(
     fun refuse() {
         val request = id ?: return
         if (local.value.busy) return
-        if (local.value.notSent?.second?.maybeSent == true) {
-            local.update { it.copy(explaining = TransactionExplanation("Cannot be refused now", MAYBE_SENT)) }
+        if (local.value.notSent?.second?.maybeSent == true || local.value.signedAndSent) {
+            val reason = if (local.value.signedAndSent) BEING_TOLD else MAYBE_SENT
+            local.update { it.copy(explaining = TransactionExplanation("Cannot be refused now", reason)) }
             return
         }
         val why = if (local.value.gasTooLow) DappRequestError.INVALID_PARAMS else null
@@ -340,7 +341,7 @@ class DappTransactionViewModel(
         local.update {
             it.copy(busy = true, notice = null, unlock = it.unlock.copy(password = WalletPassword.EMPTY, error = null))
         }
-        job = viewModelScope.launch {
+        viewModelScope.launch {
             val sending = try {
                 withContext(NonCancellable) { sendDappTransaction(quote, unlock) }
             } catch (_: Exception) {
@@ -369,6 +370,7 @@ class DappTransactionViewModel(
             local.copy(
                 busy = false,
                 notSent = null,
+                signedAndSent = true,
                 notice = "Sent already as ${answer.transfer.hash}: the dApp is being told.",
             )
         SignedState.DROPPED -> local.copy(
@@ -381,7 +383,9 @@ class DappTransactionViewModel(
 
     private fun after(local: Local, sending: DappTransactionSending?): Local = when (sending) {
         is DappTransactionSending.Sent -> when (sending.answer) {
-            DappAnswer.DELIVERED, DappAnswer.NOT_DELIVERED -> local.copy(busy = false, notSent = null, done = true)
+            // No such request right after a send: the app's own answer (AnswerDappRequestsAtOnce) went first.
+            DappAnswer.DELIVERED, DappAnswer.NOT_DELIVERED, DappAnswer.NO_SUCH_REQUEST ->
+                local.copy(busy = false, notSent = null, done = true)
             // Sent all the same: said, never closed in silence; the record answers it once it can.
             else -> local.copy(
                 busy = false,
@@ -457,6 +461,8 @@ class DappTransactionViewModel(
         const val SEND_FAILED = "Sending failed. Nothing was sent to the dApp."
         const val QUOTE_FAILED = "The transaction could not be worked out right now. Try again."
         const val NOT_QUOTED_YET = "The transaction is still being worked out from verified state."
+        const val BEING_TOLD = "The transaction signed for this request was sent, and the dApp is being told its " +
+            "hash: it is no longer for refusing."
         const val MAYBE_SENT = "A transaction signed for this request may be on its way already. Try again, " +
             "or wait for it in Activity: refusing now would tell the dApp no while it may still be mined."
         const val NOT_DECODED = "Serotine does not decode this call, so it cannot tell what it does: its data is " +

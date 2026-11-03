@@ -12,7 +12,16 @@ private val connected = ConnectionsUiState(
     loading = false,
     link = "Connected to WalletConnect's relay",
     proposals = listOf(ProposalRow("p/1", "Uniswap Interface", "https://app.uniswap.org", "Asks to connect · Review")),
-    requests = listOf(RequestRow("t2/7", "Example dApp", "https://example.org", "Asks you to sign in · Review")),
+    requests = listOf(
+        RequestRow("t2/7", "Example dApp", "https://example.org", "Asks you to sign in · Review"),
+        RequestRow(
+            "t2/8",
+            "Example dApp",
+            "https://example.org",
+            "Asks you to send a transaction · Review",
+            transaction = true,
+        ),
+    ),
     sessions = listOf(
         SessionRow("t1", "Safe{Wallet}", "https://app.safe.global", "Sees 1 account · Ends in 6 days"),
         SessionRow("t2", "Example dApp", "https://example.org", "Sees 2 accounts · Ends in 5 hours · Not confirmed by the dApp yet"),

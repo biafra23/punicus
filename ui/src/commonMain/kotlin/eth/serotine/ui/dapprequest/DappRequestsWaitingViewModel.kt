@@ -15,9 +15,9 @@ import kotlinx.coroutines.flow.stateIn
 data class DappWaiting(val key: String, val transaction: Boolean)
 
 /**
- * The requests to sign waiting, oldest first, as their routes name them (`topic/id`): what the app
- * opens screen D4 for as each arrives, and which it has opened in this run, so that one left
- * unanswered is not opened again (it stays in Connected dApps). Scoped to the host, as the navigation
+ * The requests waiting, oldest first, by their keys (`topic/id`) and kinds: what the app opens their
+ * screen for as each arrives (D6 for a transaction, D4 otherwise), and which it has opened in this
+ * run, so that one left unanswered is not opened again (it stays in Connected dApps). Scoped to the host, as the navigation
  * it drives is; a configuration change keeps it.
  */
 class DappRequestsWaitingViewModel(observeDappMessages: ObserveDappMessages) : ViewModel() {
