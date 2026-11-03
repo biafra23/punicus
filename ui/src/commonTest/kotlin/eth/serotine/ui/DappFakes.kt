@@ -56,6 +56,7 @@ internal object OffDappRequests : DappRequests {
     override fun observe(): Flow<List<DappRequest>> = flowOf(emptyList())
     override suspend fun answerSignature(request: DappRequestId, signature: Signature) = DappAnswer.OFF
     override suspend fun answerNull(request: DappRequestId) = DappAnswer.OFF
+    override suspend fun answerTransaction(request: DappRequestId, hash: String) = DappAnswer.OFF
     override suspend fun refuse(request: DappRequestId, why: DappRequestError) = DappAnswer.OFF
 }
 
@@ -76,6 +77,9 @@ internal class FakeDappRequests : DappRequests {
     override suspend fun answerSignature(request: DappRequestId, signature: Signature): DappAnswer =
         answered(request).also { signatures += request to signature }
     override suspend fun answerNull(request: DappRequestId): DappAnswer = answered(request)
+    val hashes = mutableListOf<Pair<DappRequestId, String>>()
+    override suspend fun answerTransaction(request: DappRequestId, hash: String): DappAnswer =
+        answered(request).also { hashes += request to hash }
     override suspend fun refuse(request: DappRequestId, why: DappRequestError): DappAnswer =
         answered(request).also { refusals += request to why }
 }

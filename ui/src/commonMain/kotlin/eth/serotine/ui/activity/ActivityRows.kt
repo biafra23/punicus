@@ -255,6 +255,8 @@ internal class ActivityRows(
                 Triple("Deployed", transfer.account, "Paid by")
             }
             is SentAction.CowCancellation -> Triple("Cancelled a CoW order on chain", action.settlement, "On CoW ·")
+            // The dApp's name is its own claim: said as such.
+            is SentAction.DappCall -> Triple("Sent for a dApp stating it is “${action.dapp}”", action.to, "To")
         }
         val (status, state) = statusOf(entry)
         return ActivityRow(

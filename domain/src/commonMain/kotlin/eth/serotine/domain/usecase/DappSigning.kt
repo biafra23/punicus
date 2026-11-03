@@ -1,6 +1,8 @@
 package eth.serotine.domain.usecase
 
 import eth.serotine.domain.model.Account
+import eth.serotine.domain.model.DappTransactionRequest
+import eth.serotine.domain.model.DappCallMeaning
 import eth.serotine.domain.repository.TokenCatalog
 import eth.serotine.domain.model.Eip712
 import eth.serotine.domain.model.UInt256
@@ -23,6 +25,13 @@ import eth.serotine.domain.repository.DappRequestError
 import eth.serotine.domain.repository.DappRequestId
 import eth.serotine.domain.repository.DappRequests
 import eth.serotine.domain.repository.NetworkSettings
+import eth.serotine.domain.repository.SentTransfers
+import eth.serotine.domain.repository.SentTransferList
+import eth.serotine.domain.repository.SentTransfer
+import eth.serotine.domain.repository.HistoryEntry
+import eth.serotine.domain.repository.HistoryList
+import eth.serotine.domain.repository.SentAction
+import eth.serotine.domain.repository.TransactionHistory
 import eth.serotine.domain.repository.Signer
 import eth.serotine.domain.repository.Signing
 import eth.serotine.domain.repository.Unlock
@@ -84,6 +93,9 @@ enum class DappSignRefusal(val error: DappRequestError) {
     /** An ERC-2612 permit of another owner than the account asked to sign it. */
     PERMIT_OTHER_OWNER(DappRequestError.INVALID_PARAMS),
 
+    /** A transaction to the zero address: nobody holds its key, so what it sends is lost for good. */
+    TX_TO_ZERO_ADDRESS(DappRequestError.INVALID_PARAMS),
+
     /** Typed data with more values than D5 shows ([MAX_SHOWN_VALUES]): what would not be shown is not signed. */
     TYPED_TOO_LARGE(DappRequestError.LIMIT_EXCEEDED),
 }
@@ -121,6 +133,16 @@ sealed interface DappSignContent {
         val meaning: TypedDataMeaning?,
         val tokens: Map<Address, Token>,
     ) : DappSignContent
+
+    /**
+     * `eth_sendTransaction`'s [transaction], what its call does ([DappTransactionRequest.meaning]),
+     * and the built-in token it calls when it is one ([tokens]). Quoted and sent by
+     * [QuoteDappTransaction] and [SendDappTransaction], never signed as a message.
+     */
+    data class Transaction(
+        val transaction: DappTransactionRequest,
+        val tokens: Map<Address, Token>,
+    ) : DappSignContent
 }
 
 /**
@@ -145,11 +167,15 @@ data class DappMessageReview(
     /** The sign-in the message spells, when it is one. */
     val signIn: SignInMessage? get() = (content as? DappSignContent.Message)?.signIn
 
-    /** The digest signing it signs, computed here: EIP-191's for a message, EIP-712's for typed data. */
-    val digest: Digest
+    /**
+     * The digest signing it signs, computed here: EIP-191's for a message, EIP-712's for typed data;
+     * null for a transaction, which is quoted and signed as one.
+     */
+    val digest: Digest?
         get() = when (content) {
             is DappSignContent.Message -> content.message.digest()
             is DappSignContent.Typed -> content.typed.digest
+            is DappSignContent.Transaction -> null
         }
 }
 
@@ -175,12 +201,19 @@ fun reviewDappMessage(
             val pinned = tokens.filter { it.address in named }.associateBy { it.address }
             ask.account to DappSignContent.Typed(ask.typed, meaning, pinned)
         }
+        is DappAsk.SendTransaction -> {
+            val token = ask.transaction.to
+            val pinned = tokens.filter { it.address == token }.associateBy { it.address }
+            ask.transaction.from to DappSignContent.Transaction(ask.transaction, pinned)
+        }
         else -> return null
     }
     val account = accounts?.firstOrNull { it.network == Network.SEPOLIA && it.address == signer }
     val refusal = accountRefusal(request, signer, accounts, account, enabled) ?: when (content) {
         is DappSignContent.Message -> signInRefusal(content.signIn, signer, nowSeconds)
         is DappSignContent.Typed -> typedRefusal(content, signer)
+        is DappSignContent.Transaction ->
+            DappSignRefusal.TX_TO_ZERO_ADDRESS.takeIf { content.transaction.to == Address.ZERO }
     }
     val warnings = buildSet {
         when (content) {
@@ -192,6 +225,9 @@ fun reviewDappMessage(
             is DappSignContent.Typed -> {
                 if ("chainId" !in content.typed.data.domain) add(DappSignWarning.NO_CHAIN_ID)
                 if (content.meaning == null) add(DappSignWarning.NOT_DECODED)
+            }
+            is DappSignContent.Transaction -> {
+                if (content.transaction.meaning is DappCallMeaning.NotDecoded) add(DappSignWarning.NOT_DECODED)
             }
         }
     }
@@ -355,8 +391,10 @@ class SignDappMessage(
         val review = reviewDappMessage(request, list, networks.observe().first(), clock())
             ?: return DappMessageSigning.Gone
         review.refusal?.let { return DappMessageSigning.Refused(it) }
+        // A transaction is quoted and sent as one (SendDappTransaction), never signed as a message.
+        val digest = review.digest ?: return DappMessageSigning.Gone
         if (request.expiresAtSeconds <= clock()) return DappMessageSigning.Expired
-        val signature = when (val signing = signer.sign(review.address, review.digest, unlock)) {
+        val signature = when (val signing = signer.sign(review.address, digest, unlock)) {
             is Signing.Signed -> signing.signature
             else -> return DappMessageSigning.NotSigned(signing)
         }
@@ -380,11 +418,12 @@ class RefuseDappRequest(
     private val networks: NetworkSettings,
     private val clock: () -> Long = ::epochSecondsNow,
 ) {
-    suspend operator fun invoke(id: DappRequestId): DappAnswer {
+    /** Refuses request [id], with [why] when given (what a screen found the request asks wrongly), else as reviewed. */
+    suspend operator fun invoke(id: DappRequestId, why: DappRequestError? = null): DappAnswer {
         val request = requests.observe().first().firstOrNull { it.id == id } ?: return DappAnswer.NO_SUCH_REQUEST
         val list = (accounts.observeAccounts().first() as? AccountList.Loaded)?.accounts
         val refusal = reviewDappMessage(request, list, networks.observe().first(), clock())?.refusal
-        return requests.refuse(id, refusal?.error ?: DappRequestError.USER_REJECTED)
+        return requests.refuse(id, why ?: refusal?.error ?: DappRequestError.USER_REJECTED)
     }
 }
 
@@ -396,39 +435,67 @@ class RefuseDappRequest(
  * answer that could not be saved is tried again every [retrySeconds] until it is, or the request goes.
  * Returns only by cancellation; the host runs it while dApp messages arrive.
  */
-class AnswerDappRequestsAtOnce(private val requests: DappRequests, private val retrySeconds: Long = 30) {
+class AnswerDappRequestsAtOnce(
+    private val requests: DappRequests,
+    private val sentTransfers: SentTransfers,
+    private val history: TransactionHistory,
+    private val retrySeconds: Long = 30,
+) {
     suspend operator fun invoke() {
-        requests.observe().collectLatest { waiting ->
-            var current = waiting
+        combine(requests.observe(), sentTransfers.observe(), history.observe()) { waiting, record, entries ->
+            Triple(waiting, record, entries)
+        }.collectLatest { (waiting, record, entries) ->
+            var current = Triple(waiting, record, entries)
             // Each new list starts over. One answered already has left it; answered again from an older
             // list, it is no longer waiting, and nothing is sent.
-            while (answerAll(current)) {
+            while (answerAll(current.first, current.second, current.third)) {
                 delay(retrySeconds.seconds)
-                current = requests.observe().first()
+                current = Triple(requests.observe().first(), sentTransfers.observe().first(), history.observe().first())
             }
         }
     }
 
     /** Answers those of [waiting] that need no decision; true when one of the answers could not be saved. */
-    private suspend fun answerAll(waiting: List<DappRequest>): Boolean {
+    private suspend fun answerAll(waiting: List<DappRequest>, record: SentTransferList, entries: HistoryList): Boolean {
+        val sent = (record as? SentTransferList.Loaded)?.transfers.orEmpty()
+        val past = (entries as? HistoryList.Loaded)?.entries.orEmpty()
         var notSaved = false
         for (request in waiting) {
             // Each answer runs to its end, its send included: a new list cancels only what follows it.
-            val answer = withContext(NonCancellable) { answerAtOnce(request) } ?: continue
+            val answer = withContext(NonCancellable) { answerAtOnce(request, sent, past) } ?: continue
             if (answer == DappAnswer.NOT_SAVED) notSaved = true
         }
         return notSaved
     }
 
-    /** The answer [request] needs no one's decision for, given; null for one to sign, which waits for the user. */
-    private suspend fun answerAtOnce(request: DappRequest): DappAnswer? = when (val ask = request.ask) {
-        is DappAsk.SwitchChain -> if (ask.chainId == Network.SEPOLIA.chainId) {
-            requests.answerNull(request.id)
-        } else {
-            requests.refuse(request.id, DappRequestError.UNRECOGNIZED_CHAIN)
+    /**
+     * The answer [request] needs no one's decision for, given; null for one to sign, which waits for the
+     * user. A transaction signed as its answer and taken by a peer ([sent], not maybe sent) or seen in a
+     * verified block ([past], the history) answers it with its hash, however it was sent: from D6, by a
+     * retry there or from its status, or mined anyway.
+     */
+    private suspend fun answerAtOnce(
+        request: DappRequest,
+        sent: List<SentTransfer>,
+        past: List<HistoryEntry>,
+    ): DappAnswer? =
+        when (val ask = request.ask) {
+            is DappAsk.SwitchChain -> if (ask.chainId == Network.SEPOLIA.chainId) {
+                requests.answerNull(request.id)
+            } else {
+                requests.refuse(request.id, DappRequestError.UNRECOGNIZED_CHAIN)
+            }
+            is DappAsk.NotAnsweredYet -> requests.refuse(request.id, DappRequestError.UNSUPPORTED_METHOD)
+            is DappAsk.Malformed -> requests.refuse(request.id, DappRequestError.INVALID_PARAMS)
+            is DappAsk.SendTransaction -> {
+                fun answers(transfer: SentTransfer) = (transfer.action as? SentAction.DappCall)?.request == request.id
+                val recorded = sent.firstOrNull(::answers)
+                val entry = past.firstOrNull { answers(it.transfer) }
+                val transfer = recorded ?: entry?.transfer
+                val state = transfer?.let { stateOf(recorded, entry) }
+                transfer?.takeIf { state == SignedState.SENT || state == SignedState.MINED }
+                    ?.let { requests.answerTransaction(request.id, it.hash) }
+            }
+            is DappAsk.PersonalSign, is DappAsk.SignTypedData -> null
         }
-        is DappAsk.NotAnsweredYet -> requests.refuse(request.id, DappRequestError.UNSUPPORTED_METHOD)
-        is DappAsk.Malformed -> requests.refuse(request.id, DappRequestError.INVALID_PARAMS)
-        is DappAsk.PersonalSign, is DappAsk.SignTypedData -> null
-    }
 }

@@ -187,6 +187,7 @@ import org.junit.Test
 import org.junit.rules.TestWatcher
 import org.junit.runner.Description
 import eth.serotine.domain.model.PersonalMessage
+import eth.serotine.domain.model.DappTransactionRequest
 import eth.serotine.domain.repository.DappAsk
 import eth.serotine.domain.repository.DappMetadata
 import eth.serotine.domain.repository.DappRequest
@@ -571,6 +572,21 @@ class AppNavigationTest {
         rule.onNodeWithContentDescription("Back").performClick()
         // Security is still there, as the user left it: the request opened over it, not in its place.
         rule.onNodeWithText("Biometric unlock").assertIsDisplayed()
+    }
+
+    @Test
+    fun aDappsTransactionOpensItsOwnReview() {
+        showApp()
+        val transaction = DappTransactionRequest(
+            Address.of("0x" + "0".repeat(39) + "1"),
+            Address.of("0x" + "0".repeat(39) + "2"),
+            UInt256.ZERO,
+            ByteArray(0),
+            null,
+        )
+        dappRequests.waiting.value = listOf(signInRequest(5).copy(ask = DappAsk.SendTransaction(transaction)))
+        rule.waitUntil { rule.onAllNodesWithText("Transaction request").fetchSemanticsNodes().isNotEmpty() }
+        rule.onNodeWithText("Message to sign").assertDoesNotExist()
     }
 
     @Test

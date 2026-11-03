@@ -148,7 +148,11 @@ class DappRequestViewModel(
 
     /** The request's review as the screen shows it, worked out once per review, not per keystroke or tick. */
     private val shownReview = observeDappMessages()
-        .map { reviews -> reviews.find { it.request.id == id }?.let { review -> review to shown(review) } }
+        .map { reviews ->
+            // A transaction is screen D6's, never this one's.
+            reviews.find { it.request.id == id && it.content !is DappSignContent.Transaction }
+                ?.let { review -> review to shown(review) }
+        }
         .distinctUntilChanged()
 
     val uiState: StateFlow<DappRequestUiState> = combine(shownReview, local, ticks) { shown, local, _ ->
@@ -192,6 +196,8 @@ class DappRequestViewModel(
                     messageSize = bytesLine(content.message.size),
                 )
             }
+            // Filtered out above: a transaction is screen D6's.
+            is DappSignContent.Transaction -> common
             is DappSignContent.Typed -> {
                 val typed = TypedDataText(content, formatTime)
                 common.copy(
@@ -376,6 +382,8 @@ class DappRequestViewModel(
             DappSignRefusal.SIGN_IN_NOT_YET_VALID -> "The sign-in is not valid yet."
             DappSignRefusal.TYPED_OTHER_CHAIN -> "The data names a network other than Sepolia."
             DappSignRefusal.PERMIT_OTHER_OWNER -> "The approval is for another account than the one asked to sign it."
+            DappSignRefusal.TX_TO_ZERO_ADDRESS ->
+                "It sends to the zero address: nobody holds its key, so what it sends would be lost for good."
             DappSignRefusal.TYPED_TOO_LARGE ->
                 "The data has more fields than this screen can show, and Serotine signs nothing it cannot show in full."
         }

@@ -29,6 +29,7 @@ class ConnectionsScreenTest {
                 onPair = { paired++ },
                 onProposal = { opened += it },
                 onRequest = { opened += it },
+                onTransaction = { opened += "transaction:$it" },
                 onExtend = { extended += it },
                 onDisconnect = { disconnected += it },
             )

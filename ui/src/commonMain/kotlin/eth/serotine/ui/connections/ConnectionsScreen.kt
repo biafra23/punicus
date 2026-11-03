@@ -45,6 +45,7 @@ fun ConnectionsRoute(
     onPair: () -> Unit,
     onProposal: (String) -> Unit,
     onRequest: (String) -> Unit,
+    onTransaction: (String) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
@@ -54,6 +55,7 @@ fun ConnectionsRoute(
         onPair = onPair,
         onProposal = onProposal,
         onRequest = onRequest,
+        onTransaction = onTransaction,
         onExtend = viewModel::extend,
         onDisconnect = viewModel::disconnect,
         modifier = modifier,
@@ -75,6 +77,7 @@ fun ConnectionsScreen(
     onPair: () -> Unit,
     onProposal: (String) -> Unit,
     onRequest: (String) -> Unit,
+    onTransaction: (String) -> Unit,
     onExtend: (String) -> Unit,
     onDisconnect: (String) -> Unit,
     modifier: Modifier = Modifier,
@@ -120,7 +123,9 @@ fun ConnectionsScreen(
                 state.requests.forEach { request ->
                     ListItem(
                         modifier = Modifier
-                            .clickable { onRequest(request.key) }
+                            .clickable {
+                                if (request.transaction) onTransaction(request.key) else onRequest(request.key)
+                            }
                             .testTag(CONNECTIONS_REQUEST_TAG + request.key),
                         headlineContent = { Text(request.name) },
                         supportingContent = {

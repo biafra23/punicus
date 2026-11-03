@@ -159,6 +159,17 @@ private val activityRows = listOf(
         state = ActivityState.DONE,
         opens = ActivityKey("0x" + "6".repeat(64)),
     ),
+    // A dApp's transaction, its name the dApp's own claim.
+    ActivityRow(
+        key = "0x" + "d".repeat(64),
+        title = "Sent for a dApp stating it is “Example dApp”",
+        detail = "To 0xfB69…d359",
+        about = "0xfB6916095ca1df60bB79Ce92cE3Ea74c37c5d359",
+        time = "Oct 19, 2026, 3:30 PM",
+        status = "In block 9,411,870",
+        state = ActivityState.DONE,
+        opens = ActivityKey("0x" + "d".repeat(64)),
+    ),
     ActivityRow(
         key = "0x" + "1".repeat(64),
         title = "Sent 0.25 ETH",

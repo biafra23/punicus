@@ -375,7 +375,9 @@ class SerotineWallet {
             },
             scope.launch {
                 // The requests that need no one's decision, answered at once.
-                reportingFailure("answering the dApps' requests") { AnswerDappRequestsAtOnce(dapps.requests)() }
+                reportingFailure("answering the dApps' requests") {
+                    AnswerDappRequestsAtOnce(dapps.requests, sentTransfers, transactionHistory)()
+                }
             },
             scope.launch {
                 // How each transaction sent from here ends is recorded whatever screen is open (issue #85).

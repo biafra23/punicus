@@ -69,6 +69,7 @@ class DappSigningTest {
         }
         override suspend fun answerSignature(request: DappRequestId, signature: Signature) = done(request, signature)
         override suspend fun answerNull(request: DappRequestId) = done(request, null)
+        override suspend fun answerTransaction(request: DappRequestId, hash: String) = done(request, hash)
         override suspend fun refuse(request: DappRequestId, why: DappRequestError) = done(request, why)
     }
 
@@ -302,7 +303,7 @@ class DappSigningTest {
             asking(4, DappAsk.NotAnsweredYet("eth_sendTransaction")),
             asking(5, DappAsk.Malformed("personal_sign")),
         )
-        val answering = backgroundScope.launch { AnswerDappRequestsAtOnce(requests)() }
+        val answering = backgroundScope.launch { AnswerDappRequestsAtOnce(requests, MemorySentTransfers(), MemoryTransactionHistory())() }
         runCurrent()
         assertEquals<List<Pair<DappRequestId, Any?>>>(
             listOf(
@@ -321,7 +322,7 @@ class DappSigningTest {
     fun anAnswerThatCouldNotBeSavedIsTriedAgainUntilItIs() = runTest {
         requests.answer = DappAnswer.NOT_SAVED
         requests.waiting.value = listOf(request(1).copy(ask = DappAsk.NotAnsweredYet("eth_sendTransaction")))
-        val answering = backgroundScope.launch { AnswerDappRequestsAtOnce(requests, retrySeconds = 30)() }
+        val answering = backgroundScope.launch { AnswerDappRequestsAtOnce(requests, MemorySentTransfers(), MemoryTransactionHistory(), retrySeconds = 30)() }
         runCurrent()
         assertTrue(requests.answered.isEmpty())
         requests.answer = DappAnswer.DELIVERED

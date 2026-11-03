@@ -151,8 +151,7 @@ everything on the chain side: the verified `call`, `estimateGasDetailed`,
   4200 for a method not answered; 4902 for a switch to a chain other than
   Sepolia (EIP-3326); -32602 for parameters that are not the method's.
 - **What needs no one's decision is answered at once**, by the app while it
-  runs: `wallet_switchEthereumChain`, and parameters out of shape. Until part
-  1.4b, `eth_sendTransaction` is too, with 4200.
+  runs: `wallet_switchEthereumChain`, and parameters out of shape.
 - JSON from outside the device (the relay's frames, a dApp's messages, typed
   data) is read only when it nests at most 64 deep, measured without
   recursion: a deeper document would overflow the reader's stack. A
@@ -250,8 +249,20 @@ everything on the chain side: the verified `call`, `estimateGasDetailed`,
 
 - **The request's fields are applied or refused, field by field, never
   accepted and ignored** (Myotis #314). `from`, `to`, `value` and `data` are
-  applied. For `gas`, the fee fields, `nonce`, `type`, `chainId` and an access
-  list, the part PR sets out which are applied and which refused.
+  applied. For the others (part 1.4b):
+  - `input` stands for `data`, `gasLimit` for `gas`; given both, they must be
+    the same.
+  - `gas` is applied as the gas limit when it covers the verified estimate;
+    below it the transaction would run out of gas, so it is refused (-32602),
+    never raised.
+  - `chainId` must be Sepolia's, `type` `0x2` (EIP-1559, which every
+    transaction here is), and an `accessList` empty.
+  - Refused: `nonce` (the account's next one is the wallet's, behind its own
+    transactions not mined yet), `gasPrice`, `maxFeePerGas` and
+    `maxPriorityFeePerGas` (the fees are the wallet's, from the verified fee
+    history, as Send's), a missing `to` (no contract is created for a dApp),
+    and any other field. Refused fields are answered -32602 at once.
+  - A transaction to the zero address is refused, as Send refuses one.
 - **The review shows only what Serotine works out itself:**
   - the recipient, the value, and the calldata decoded for the ABIs the app
     knows (ERC-20 `transfer` and `approve`, Safe's own methods, the Uniswap
@@ -266,6 +277,28 @@ everything on the chain side: the verified `call`, `estimateGasDetailed`,
 - **An EOA's transaction** is signed by the signer port, sent through
   `sendRawTransactionDetailed`, and the dApp is answered with its hash. Its
   inclusion comes from a verified receipt.
+  - It is quoted as Send quotes a transfer: the fees at the normal level, the
+    call run as a verified call at the head, the balance it leaves. A quote
+    over a minute old is made again before it is signed.
+  - The dApp is answered once a peer took it. One no peer took is kept, its
+    signed bytes sent again by Try again, never signed anew, and the dApp is
+    answered when that sends it.
+  - The record names the request it answers, and the history keeps it once
+    the record lets it go. So a request is signed once, whatever happens to
+    the screen and whatever is reviewed now: opened again, it shows the
+    transaction signed for it, never a new quote. Whenever a peer takes that
+    transaction, or a verified block includes it (from D6, a retry from its
+    status, or mined anyway), the dApp is answered with its hash, by the app
+    while it runs. One whose nonce another transaction took can never be
+    mined: the request can then only be refused.
+  - It is reviewed again just before it is signed: an account removed, a key
+    gone or Sepolia turned off since the quote refuses it.
+  - While a transaction signed for it may be on its way, Refuse is greyed
+    out, and a tap says why: refusing would tell the dApp no while it may
+    still be mined.
+  - It is recorded as Send's are, which keeps its nonce and shows its status
+    in Activity: "Sent for a dApp stating it is …", the name the dApp's own
+    claim.
 - **A Safe's transaction** becomes a `SafeTx` with operation `CALL`, and
   every Safe rule applies as for a transaction the user builds: the
   fallback-handler and module refusals (owner rulings, 2026-10-18, #63 and on
@@ -444,7 +477,11 @@ their mockups come with the PR that builds each.
   the unlock. Drawn by D4's screen, which shows typed data in place of the
   message.
 - **D6 Transaction request**: the decoded call, the simulation, the fee; for
-  a Safe, its signatures so far and who executes.
+  a Safe, its signatures so far and who executes. The EOA's half comes with
+  part 1.4b: who asks, the account and the recipient in full, the value, the
+  call decoded (a payment, an ERC-20 `transfer` or `approve`) or its data
+  raw and marked not decoded, the fee at most, the balance left at least,
+  the verified run; the unlock, and Refuse.
 - **D7 Connect a wallet** (direction 2): the QR code, "Open in wallet", and
   the wallet's accounts matched against the Safe's owners.
 - **D8 Waiting for a signature** (direction 2): what was asked, of which

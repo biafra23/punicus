@@ -1,6 +1,8 @@
 package eth.serotine.data.walletconnect
 
 import eth.serotine.domain.model.Address
+import eth.serotine.domain.model.DappTransactionRequest
+import eth.serotine.domain.model.UInt256
 import eth.serotine.domain.model.Eip712
 import eth.serotine.domain.model.TypedData
 import eth.serotine.domain.model.TypedField
@@ -29,6 +31,7 @@ internal object WcRequests {
         "personal_sign" -> personalSign(params) ?: DappAsk.Malformed(method)
         "wallet_switchEthereumChain" -> switchChain(params) ?: DappAsk.Malformed(method)
         "eth_signTypedData_v4" -> signTypedData(params) ?: DappAsk.Malformed(method)
+        "eth_sendTransaction" -> sendTransaction(params) ?: DappAsk.Malformed(method)
         else -> DappAsk.NotAnsweredYet(method)
     }
 
@@ -105,6 +108,46 @@ internal object WcRequests {
     private fun JsonObject.text(key: String): String? = (this[key] as? JsonPrimitive)?.takeIf { it.isString }?.content
 
     /**
+     * `eth_sendTransaction`'s `[transaction]`, exactly one object, each field applied or refused
+     * (docs/walletconnect.md, *Transactions*; Myotis #314):
+     * - applied: `from` and `to` (required; no contract creation), `value` (hex, 0 without one),
+     *   `data` or `input` (hex; the same when both), `gas` or `gasLimit` (hex; the same when both), the
+     *   limit the transaction is signed with when it covers the verified estimate;
+     * - checked: `chainId` Sepolia's, `type` `0x2`, an empty `accessList`;
+     * - refused: `nonce` (the wallet takes the account's next one), `gasPrice`, `maxFeePerGas` and
+     *   `maxPriorityFeePerGas` (the fees are the wallet's own, from the verified fee history), and any
+     *   other field.
+     */
+    private fun sendTransaction(params: JsonElement): DappAsk.SendTransaction? {
+        val fields = (params as? JsonArray)?.singleOrNull() as? JsonObject ?: return null
+        if (!TRANSACTION_FIELDS.containsAll(fields.keys)) return null
+        // A field given as anything but a string reads as "", which no check below takes.
+        fun text(key: String): String? =
+            fields[key]?.let { (it as? JsonPrimitive)?.takeIf { value -> value.isString }?.content ?: "" }
+        fun address(key: String): Address? = text(key)?.takeIf(WcWallet::isAddress)?.let(Address::parse)
+        fun quantity(key: String): UInt256? = text(key)?.takeIf(QUANTITY::matches)?.substring(2)
+            ?.let { digits -> WcEncoding.hexOrNull(digits.padStart(64, '0'))?.let(UInt256::fromBigEndian) }
+        val from = address("from") ?: return null
+        val to = address("to") ?: return null
+        val value = if ("value" in fields) quantity("value") ?: return null else UInt256.ZERO
+        val data = listOfNotNull(text("data"), text("input")).distinct()
+        if (data.size > 1) return null
+        val bytes = data.singleOrNull()?.let { hex ->
+            hex.takeIf { it.startsWith("0x") && it.length <= 2 + 2 * DappTransactionRequest.MAX_DATA_BYTES }
+                ?.substring(2)?.let(WcEncoding::hexOrNull) ?: return null
+        } ?: ByteArray(0)
+        val gases = listOf("gas", "gasLimit").filter { it in fields }.map { quantity(it) ?: return null }.distinct()
+        if (gases.size > 1) return null
+        val gas = gases.singleOrNull()?.let { limit ->
+            limit.toLongOrNull()?.takeIf { it in 1..MAX_GAS } ?: return null
+        }
+        if ("chainId" in fields && quantity("chainId") != UInt256.of(SEPOLIA_CHAIN_ID)) return null
+        if ("type" in fields && quantity("type") != UInt256.of(2)) return null
+        if ("accessList" in fields && (fields["accessList"] as? JsonArray)?.isEmpty() != true) return null
+        return DappAsk.SendTransaction(DappTransactionRequest(from, to, value, bytes, gas))
+    }
+
+    /**
      * How deep [json] nests, counted without recursion, and no further than [MAX_PARAMS_DEPTH] + 1: what
      * keeps a dApp's tree from overflowing the stack of whatever walks it next.
      */
@@ -154,6 +197,18 @@ internal object WcRequests {
         DappRequestError.INVALID_PARAMS -> WcProtocol.Error.INVALID_PARAMS
         DappRequestError.LIMIT_EXCEEDED -> WcProtocol.Error.LIMIT_EXCEEDED
     }
+
+    /** The fields a transaction may name; any other is refused. */
+    private val TRANSACTION_FIELDS =
+        setOf("from", "to", "value", "data", "input", "gas", "gasLimit", "chainId", "type", "accessList")
+
+    /** The largest gas limit a dApp may ask for: Sepolia's block gas limit is below it. */
+    private const val MAX_GAS = 60_000_000L
+
+    private const val SEPOLIA_CHAIN_ID = 11_155_111L
+
+    /** A JSON-RPC quantity: `0x` and at most 64 hex digits. */
+    private val QUANTITY = Regex("^0x[0-9a-fA-F]{1,64}$")
 
     /** The deepest a request's parameters may nest: deeper ones are answered as invalid, never kept. */
     const val MAX_PARAMS_DEPTH = 32
