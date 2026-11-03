@@ -462,6 +462,67 @@ class AppNavigationTest {
     }
 
     @Test
+    fun aWalletConnectLinkTheAppWasOpenedWithLandsOnConnectADappFilledIn() {
+        showApp()
+        val link = "wc:" + "a".repeat(64) + "@2?relay-protocol=irn&symKey=" + "b".repeat(64)
+        graph.incomingDappLink.offer(link)
+        rule.waitForIdle()
+        rule.onNodeWithTag(eth.serotine.ui.pairdapp.PAIR_DAPP_FIELD_TAG).assertIsDisplayed()
+        rule.onNodeWithText(link).assertExists()
+        // Taken: nothing waits for the next screen to open.
+        kotlin.test.assertNull(graph.incomingDappLink.pending.value)
+    }
+
+    @Test
+    fun aLinkStillWaitingOpensConnectADappAgainOnceTheUserIsElsewhere() {
+        showApp()
+        val first = "wc:" + "a".repeat(64) + "@2?relay-protocol=irn&symKey=" + "b".repeat(64)
+        graph.incomingDappLink.offer(first)
+        rule.waitForIdle()
+        rule.onNodeWithTag(eth.serotine.ui.pairdapp.PAIR_DAPP_FIELD_TAG).assertIsDisplayed()
+        rule.onNodeWithContentDescription("Back").performClick()
+        rule.waitForIdle()
+        // A link left waiting, as one is while a Connect is under way: the next screen shown opens it.
+        val second = "wc:" + "c".repeat(64) + "@2?relay-protocol=irn&symKey=" + "d".repeat(64)
+        graph.incomingDappLink.offer(second)
+        rule.waitForIdle()
+        rule.onNodeWithText(second).assertExists()
+        kotlin.test.assertNull(graph.incomingDappLink.pending.value)
+    }
+
+    @Test
+    fun aWalletConnectLinkWaitsWhileAnUpdateIsRequired() {
+        showApp()
+        report.value = NetworkUpgrade(NetworkUpgrade.Phase.ACTIVE, activationTime = null, forkId = null, 4)
+        rule.waitUntil { rule.onAllNodesWithTag(UPDATE_REQUIRED_TAG).fetchSemanticsNodes().isNotEmpty() }
+        val link = "wc:" + "a".repeat(64) + "@2?relay-protocol=irn&symKey=" + "b".repeat(64)
+        graph.incomingDappLink.offer(link)
+        rule.waitForIdle()
+        // The update screen stays the only one, and the link waits for it to go.
+        assertEquals(listOf("update-required"), screens())
+        assertEquals(link, graph.incomingDappLink.pending.value)
+
+        // The update screen goes: the link that waited lands on Connect a dApp.
+        status.value = LightClientStatus.Synced(headBlock = 100, headTimestamp = null, finalized = null)
+        rule.waitUntil { rule.onAllNodesWithText(link).fetchSemanticsNodes().isNotEmpty() }
+        kotlin.test.assertNull(graph.incomingDappLink.pending.value)
+    }
+
+    @Test
+    fun aWalletConnectLinkWaitsWhileAFlowCoversTheTabBar() {
+        showApp()
+        rule.onNodeWithContentDescription("Add account").performClick()
+        rule.onNodeWithText("Import recovery phrase").performClick()
+        rule.onNodeWithTag(MNEMONIC_FIELD_TAG).assertIsDisplayed()
+        val link = "wc:" + "a".repeat(64) + "@2?relay-protocol=irn&symKey=" + "b".repeat(64)
+        graph.incomingDappLink.offer(link)
+        rule.waitForIdle()
+        // The key operation stays in front, and the link waits for it to end.
+        rule.onNodeWithTag(MNEMONIC_FIELD_TAG).assertIsDisplayed()
+        assertEquals(link, graph.incomingDappLink.pending.value)
+    }
+
+    @Test
     fun theFloatingActionButtonAddsAnAccountFromItsSeedPhrase() {
         showApp()
         rule.onNodeWithText("No accounts yet").assertIsDisplayed()

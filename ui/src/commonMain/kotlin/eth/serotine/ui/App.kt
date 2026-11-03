@@ -90,6 +90,7 @@ import eth.serotine.ui.update.UpdateRequiredRoute
 import eth.serotine.ui.update.UpdateRequiredUiState
 import eth.serotine.ui.update.UpdateRequiredViewModel
 import eth.serotine.ui.watch.WatchRoute
+import kotlinx.coroutines.flow.combine
 
 /**
  * The whole shared UI, identical on every host. A host renders this inside its own
@@ -249,6 +250,27 @@ private fun Destinations(
             navController.navigate(Tab.ACCOUNTS.graph) {
                 popUpTo(Destination.UPDATE_REQUIRED) { inclusive = true }
             }
+        }
+    }
+    // A `wc:` link the platform opened the app with opens Connect a dApp in the Settings tab, as a tap
+    // there would, and the screen takes the link from there. Not while an update is required (that
+    // screen replaces every other) nor while a flow covers the tab bar: the link waits.
+    // Looked at again whenever the screen shown changes, so a link that waited on Connect a dApp (for
+    // a Connect under way) is opened again once that screen is left, never stranded.
+    LaunchedEffect(updateRequired) {
+        if (updateRequired) return@LaunchedEffect
+        combine(graph.incomingDappLink.pending, navController.currentBackStackEntryFlow) { link, entry ->
+            link to entry
+        }.collect { (link, entry) ->
+            if (link == null || entry.destination.route == Destination.PAIR_DAPP) return@collect
+            val current = entry.destination.hierarchy.firstNotNullOfOrNull { route ->
+                Tab.entries.firstOrNull { it.graph == route.route }
+            }
+            // A flow outside the tabs covers the bar (a key operation, a review being signed): the link
+            // waits for it to end, as a tap in Settings would have to, and opens once a tab is shown.
+            current ?: return@collect
+            navController.select(Tab.SETTINGS, current)
+            navController.navigate(Destination.PAIR_DAPP) { launchSingleTop = true }
         }
     }
     // The Debug tab turned off while its screen is shown: that screen goes, back to Accounts, and
