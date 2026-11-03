@@ -53,8 +53,8 @@ Loaded when you edit CLAUDE.md, a file under `.claude/`, or a doc.
 - docs/wallet-ux.md and docs/swaps.md apply the rulings to the screens and
   the swaps, and say so themselves: where such a page and the rules under
   `.claude/` disagree, the rules win and the page is fixed.
-  docs/embedding-myotis.md and docs/networks.md record their areas the same
-  way.
+  docs/embedding-myotis.md, docs/networks.md and docs/walletconnect.md
+  record their areas the same way.
 - A doc records an owner ruling with its date, as the rules do.
 
 ## The Myotis sibling

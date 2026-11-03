@@ -675,5 +675,8 @@ user to update — before it, and, after it, nothing else.
   sources* before the code lands. Prices, the token list and Safe
   co-signing are decided there (2026-10-16), each without an off-chain
   service. CoW Protocol's order API is the first off-chain service allowed
-  (2026-10-22), for the swaps the user sends to CoW (docs/swaps.md). The dApp
-  connection protocol is still open.
+  (2026-10-22), for the swaps the user sends to CoW (docs/swaps.md).
+  WalletConnect's relay is the second (2026-11-03, #22), for dApp
+  connections (docs/walletconnect.md). It carries requests and answers and
+  never chain state: what a dApp asks about the chain is read through the
+  engine.

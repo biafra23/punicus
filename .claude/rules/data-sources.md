@@ -1,5 +1,5 @@
 ---
-description: "Data sources. The embedded engine is the only source of chain data; the three networks; Chainlink prices; the built-in token list; Safe co-signing without a service; history from the log index; swaps on Uniswap and CoW; CoW's order API."
+description: "Data sources. The embedded engine is the only source of chain data; the three networks; Chainlink prices; the built-in token list; Safe co-signing without a service; history from the log index; swaps on Uniswap and CoW; CoW's order API; dApp connections over WalletConnect."
 paths:
   - "domain/**/*"
   - "data/**/*"
@@ -208,9 +208,34 @@ and #144.)
   below the verified Uniswap quote less the gas and the tolerance. A pair
   with no Uniswap route is not offered on CoW.
 
+## dApps connect over WalletConnect v2; its relay is an off-chain service
+
+(Owner rulings, 2026-11-03, #22, accepting its recommendations;
+docs/walletconnect.md is the contract.)
+
+- **WalletConnect v2 is the dApp connection protocol**, in both directions: a
+  dApp connects to Serotine, and Serotine connects to an external wallet that
+  signs for a Safe owner.
+- **The relay never supplies chain state.** It sees the device's IP address,
+  the topics, the timing and size of messages and the project ID. The
+  payloads are end-to-end encrypted: it cannot read or forge one, only
+  withhold, delay or replay it. A request seen before on its topic is
+  dropped, so a replay never prompts the user again.
+- **What arrives through it is untrusted input**, decoded and shown as such.
+  The dApp's name and URL are shown as "stated by the dApp, not verified".
+- **The Reown project ID is never committed.** A Gradle property supplies it
+  at build time, from a CI secret, with separate IDs for debug and release. A
+  build without one has WalletConnect switched off and says so.
+- **The optional services stay off:** the Verify API, fetching dApp icons
+  (a request to a host the dApp chooses, which reveals the IP address), the
+  push (echo) server and Link Mode.
+- **A dApp session names Sepolia alone, for now.** Ethereum and Gnosis Chain
+  come by a later ruling, recorded here first. A proposal that requires
+  another chain is rejected.
+- **dApps connecting to Serotine come first**; an external wallet as a Safe
+  owner's signer follows (docs/walletconnect.md, *The plan*).
+
 ## Open decisions
 
-Each is recorded here before its code lands. Today: the dApp connection
-protocol. WalletConnect's relay is an off-chain service, and a request that
-arrives through it is untrusted input, decoded and shown as such. Until
-decided, it is not wired in.
+Each is recorded here before its code lands. Today: dApp sessions on
+Ethereum and Gnosis Chain, and each optional WalletConnect service above.
