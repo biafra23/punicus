@@ -307,6 +307,41 @@ everything on the chain side: the verified `call`, `estimateGasDetailed`,
 - Use cases and screens follow the five-step checklist at the end of
   docs/architecture.md.
 
+## Setting up the project ID
+
+(Ruling 2.) The relay serves only an app that sends a project ID. The owner
+sets it up outside the app, once. Everything else in this plan, from the
+code to the tests against a fake relay, needs no ID. Part 1.1's live test is
+the first thing that does.
+
+1. **An account on the WalletConnect (Reown) dashboard**, under the owner's
+   own account: the project is the owner's.
+2. **Two projects of type Wallet (WalletKit)**, one for the debug build and
+   one for the release build. They are separate because ruling 2 asks for
+   separate IDs, and because the two Android apps have different package
+   names.
+3. **App ID on each project**: the Android package name and the iOS bundle
+   ID of that build. With those set, another app cannot use the project's ID
+   to pass itself off as Serotine.
+4. **The two IDs as GitHub Actions secrets** on the repository. Part 1.1
+   names the Gradle property and the secrets, and says which to set. CI
+   passes each build its own ID; a pull request from a fork gets none, and
+   builds with WalletConnect switched off.
+5. **For a local build**, the debug ID goes in the git-ignored
+   `local.properties` or in `~/.gradle/gradle.properties`. Without one, the
+   build has WalletConnect switched off and says so (*Architecture*).
+6. **The plan and its terms.** Reown has a free tier and paid plans. Before
+   release, the owner checks the free tier's limits against the expected
+   number of sessions, and reads the terms (*Risks to check early*).
+
+Not needed, since rulings 7 and 9 leave them out: the Verify API, push and
+Link Mode need no registration. The `wc:` scheme on Android is a manifest
+entry, with no domain to verify. A listing in WalletGuide, WalletConnect's
+directory of wallets, is what puts Serotine in the wallet pickers dApps
+show. It is optional, reviewed by WalletConnect, and asked for by the owner
+when the time comes, likely not before dApp sessions reach Ethereum. Until
+then a user connects with a `wc:` link.
+
 ## The screens
 
 Numbered D1 to D8. Each gets a preview per state and one in the dark theme;
