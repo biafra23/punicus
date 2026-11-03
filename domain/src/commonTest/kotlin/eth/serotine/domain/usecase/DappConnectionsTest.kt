@@ -155,6 +155,31 @@ class DappConnectionsTest {
     }
 
     @Test
+    fun aNetworkOffFromTheStartEndsNoSessionOnlyOneTurnedOffWhileRunning() = runTest {
+        val metadata = eth.serotine.domain.repository.DappMetadata("dApp", "https://dapp.test", "")
+        sessions.connections.value = DappConnections.On(
+            DappRelayLink.CONNECTED,
+            emptyList(),
+            listOf(
+                eth.serotine.domain.repository.DappSession(
+                    DappSessionId("s"), metadata, listOf(held.address), listOf("personal_sign"), 0, true,
+                ),
+            ),
+        )
+        // An unreadable setting reads as a release build's defaults: Sepolia off.
+        enabled.value = setOf(Network.ETHEREUM)
+        val following = backgroundScope.launch { FollowDappAccounts(sessions, accounts, networks)() }
+        runCurrent()
+        assertTrue(sessions.disconnected.isEmpty(), "never read as on, so never known to be off")
+        enabled.value = setOf(Network.ETHEREUM, Network.SEPOLIA)
+        runCurrent()
+        enabled.value = setOf(Network.ETHEREUM)
+        runCurrent()
+        assertEquals(listOf(DappSessionId("s")), sessions.disconnected, "turned off while running")
+        following.cancel()
+    }
+
+    @Test
     fun aPastedUriIsTrimmed() = runTest {
         PairDapp(sessions)("  wc:abc@2?x \n")
         assertEquals(listOf("wc:abc@2?x"), sessions.paired)

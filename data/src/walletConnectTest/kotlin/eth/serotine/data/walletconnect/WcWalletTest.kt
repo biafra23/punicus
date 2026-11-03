@@ -430,6 +430,55 @@ class WcWalletTest {
     }
 
     @Test
+    fun aPairingMayHaveOnlySoManyProposalsWaiting() = runTest {
+        val running = walletConnect()
+        val dapp = dapp()
+        dapp.subscribePairing()
+        assertIs<WcWallet.Pairing.Paired>(running.wallet.pair(dapp.uri()))
+        repeat(WcProtocol.PENDING_PROPOSALS_PER_PAIRING + 1) {
+            dapp.propose(100L + it, JsonObject(emptyMap()), buildJsonObject { put("eip155", sepoliaAsk) })
+        }
+        settle()
+        assertEquals(WcProtocol.PENDING_PROPOSALS_PER_PAIRING, running.view().proposals.size)
+        val refused = dapp.received.getValue(dapp.pairingTopic).last()
+        assertEquals("${100L + WcProtocol.PENDING_PROPOSALS_PER_PAIRING}", refused["id"]?.jsonPrimitive?.content)
+        assertEquals(-32005, refused.getValue("error").jsonObject.getValue("code").jsonPrimitive.int)
+    }
+
+    @Test
+    fun anOptionalNamespaceOfAnotherChainAddsNothingToTheSepoliaSession() = runTest {
+        val running = walletConnect()
+        val dapp = dapp()
+        dapp.subscribePairing()
+        assertIs<WcWallet.Pairing.Paired>(running.wallet.pair(dapp.uri()))
+        dapp.propose(
+            1,
+            JsonObject(emptyMap()),
+            buildJsonObject {
+                put(WcProtocol.SEPOLIA, namespace(listOf(WcProtocol.SEPOLIA), listOf("personal_sign"), emptyList()))
+                put("eip155:1", namespace(listOf("eip155:1"), listOf("eth_sendTransaction"), listOf("chainChanged")))
+            },
+        )
+        settle()
+        val proposal = running.view().proposals.single()
+        assertNull(proposal.refusal)
+        assertEquals(setOf("personal_sign"), proposal.methods, "what is asked on chain 1 is not Sepolia's")
+        assertEquals(emptySet(), proposal.events)
+    }
+
+    @Test
+    fun anIdForgottenFromTheSeenWindowIsStillSeen() {
+        var state = WcState()
+        repeat(WcProtocol.SEEN_IDS_PER_TOPIC) { state = state.seeing("t", 10_000L + it) }
+        assertTrue(state.hasSeen("t", 10_000L))
+        state = state.seeing("t", 20_000L) // the window is full: 10_000 is forgotten
+        assertFalse(10_000L in state.seen.getValue("t"))
+        assertTrue(state.hasSeen("t", 10_000L), "below the window: an old id, never prompted again")
+        assertFalse(state.hasSeen("t", 30_000L), "a new id is not")
+        assertFalse(state.hasSeen("other", 10_000L))
+    }
+
+    @Test
     fun requestsPastTheirExpiryDoNotCountTowardsTheCap() = runTest {
         val running = walletConnect()
         val dapp = dapp()

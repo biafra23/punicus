@@ -97,8 +97,11 @@ everything on the chain side: the verified `call`, `estimateGasDetailed`,
 - It can replay a message it recorded: the ciphertext still decrypts. So
   the client keeps the JSON-RPC ids it has seen per topic, with the session
   state of ruling 8 so that a restart does not forget them, and drops a
-  request it has seen. A replayed `eth_sendTransaction` never prompts the
-  user a second time.
+  request it has seen. It keeps the last 2,000 per topic. Once that many
+  are kept, an id below the smallest of them counts as seen too: a Sign id
+  is the time in milliseconds times 1,000 plus a random part, so a new
+  request's is above every older one. A replayed `eth_sendTransaction`
+  never prompts the user a second time.
 - Nothing about the chain is taken from it, or from the dApp. Everything a
   request screen says about the chain is read through the light client.
 
@@ -109,7 +112,12 @@ everything on the chain side: the verified `call`, `estimateGasDetailed`,
 - The user pastes a `wc:` URI, or opens one from a `wc:` link on Android.
   Scanning a QR code needs a camera library, chosen later.
 - A proposal whose required namespaces name any chain but Sepolia is
-  rejected. Optional namespaces are approved with Sepolia alone (ruling 9).
+  rejected. Optional namespaces are approved with Sepolia alone (ruling 9):
+  an optional namespace that does not name Sepolia adds no method or event
+  to the session.
+- A pairing has at most 5 proposals waiting, as a session has at most 20
+  requests. One more is answered with -32005, so no peer holding a
+  pairing's key can grow the stored state without bound.
 - The proposal screen lists every account, and the user chooses which the
   dApp sees. An account that cannot be offered is greyed out, never hidden
   (owner ruling, 2026-10-18, #55), and a tap says why:
@@ -354,6 +362,12 @@ everything on the chain side: the verified `call`, `estimateGasDetailed`,
   accounts and its expiry, and each can be disconnected.
 - Expiry, extension, ping and delete follow the protocol. When the user
   changes which accounts a session sees, the dApp gets `accountsChanged`.
+- An account removed from the wallet, whose key was removed, or whose
+  network was turned off leaves every session that sees it, and a session
+  left with none ends. A network counts as turned off only once it was read
+  as on while the app runs. A network setting that cannot be read is
+  answered with the build's defaults, and a release build's has Sepolia off,
+  so that alone ends no session. Its requests are refused all the same.
 - Sessions survive a restart (ruling 8). A request that arrived while the
   app was closed is answered once it opens, while it has not expired.
 
