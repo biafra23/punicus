@@ -82,8 +82,14 @@ everything on the chain side: the verified `call`, `estimateGasDetailed`,
 
 (Ruling 1.)
 
+- **Who runs it.** Today a centralised service: its gateway nodes are run by
+  Reown (formerly WalletConnect Inc.), the nodes behind them by a selected
+  group of operators. A permissionless network is on WalletConnect's
+  roadmap, not known to be live when this was written (November 2026).
+  Serotine does not call the relay decentralised.
 - It sees the device's IP address, the topics it subscribes to, and the
-  timing and size of its messages, and the project ID.
+  timing and size of its messages, and the project ID. The dApp's side
+  connects to the same relay, so it can link the two ends of a session.
 - The payloads are end-to-end encrypted: it cannot read or forge one.
 - It can withhold or delay a message. A request it holds back expires, and
   the dApp gets nothing; a response it holds back reaches the dApp late or
@@ -264,10 +270,11 @@ everything on the chain side: the verified `call`, `estimateGasDetailed`,
   - The crypto is in the app already: libsodium (X25519, ChaCha20-Poly1305
     IETF, Ed25519) on all three targets, KotlinCrypto's SHA-256 and HMAC, and
     `Hkdf` in `data.keys`. kotlinx-serialization reads the JSON.
-  - The one new dependency is Ktor's WebSocket client at the Ktor pin
-    (3.3.3), on the engines Ktor already uses (CIO on Android and the
-    desktop, Darwin on iOS), checked against the minSdk 29 budget
-    (`scripts/check_apk_min_api.py`).
+  - No new dependency: Ktor's WebSocket client is part of
+    `ktor-client-core` at the Ktor pin (3.3.3), which the app ships already,
+    on the engines Ktor already uses (CIO on Android and the desktop, Darwin
+    on iOS). The final PR's APK check (`scripts/check_apk_min_api.py`)
+    covers it against the minSdk 29 budget.
   - It covers: typed envelopes 0 and 1; X25519 key agreement and HKDF to the
     symmetric key, the topic being `sha256(symKey)`; `wc:` pairing URIs; relay
     auth, a JWT signed with an Ed25519 `did:key`; the `irn_*` JSON-RPC calls,
@@ -375,8 +382,10 @@ merge part PRs into the feature branch itself.
 1. **`feature/walletconnect-wallet`, direction 1** (ruling 10):
    1. The protocol core in `:data`: the crypto, the envelopes, the relay
       client, pairing, the wallet role of a session, persistence. Tests run
-      against the spec's vectors and a fake relay. An `@Ignore`d live test
-      pairs with Reown's sample dApp on Sepolia, as an early spike.
+      against the spec's vectors and a fake relay. A live test against the
+      real relay runs only with a project ID
+      (`-PwalletConnectLiveTest=<id>`); pairing with Reown's sample dApp on
+      Sepolia is the spike once the ID exists.
    2. dApp sessions: pairing, the proposal, the Sepolia-only namespace, the
       session list, disconnect, expiry and extend, `accountsChanged`. Screens
       D1 to D3.

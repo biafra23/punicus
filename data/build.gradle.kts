@@ -134,10 +134,17 @@ kotlin {
         val envelopeTest by creating {
             dependsOn(commonTest.get())
         }
+        // WalletConnect's tests (eth.serotine.data.walletconnect), which need libsodium
+        // (WcCrypto) for the same reason.
+        val walletConnectTest by creating {
+            dependsOn(commonTest.get())
+        }
         val desktopTest by getting {
             dependsOn(envelopeTest)
+            dependsOn(walletConnectTest)
         }
         iosTest.get().dependsOn(envelopeTest)
+        iosTest.get().dependsOn(walletConnectTest)
         val androidUnitTest by getting {
             dependencies {
                 implementation(libs.secp256k1.kmp.jni.jvm)
@@ -168,6 +175,15 @@ providers.gradleProperty("myotisLibraryDir").orNull?.let { dir ->
 }
 // CowApiSepoliaTest asks CoW Protocol's real order API on Sepolia (api.cow.fi), so it needs the
 // network and runs only with -PcowApiNetwork; without it, it is skipped.
+// WalletConnectRelayLiveTest connects to WalletConnect's real relay, so it needs the network and a
+// Reown project ID (docs/walletconnect.md, *Setting up the project ID*), and runs only with
+// -PwalletConnectLiveTest=<id>; without it, it is skipped. A property of its own, never the one a
+// build passes the app's ID in, so that no build runs it by the way.
+providers.gradleProperty("walletConnectLiveTest").orNull?.let { projectId ->
+    tasks.matching { it.name == "desktopTest" }.configureEach {
+        (this as Test).systemProperty("serotine.walletConnectLiveTest", projectId)
+    }
+}
 if (providers.gradleProperty("cowApiNetwork").isPresent) {
     tasks.matching { it.name == "desktopTest" }.configureEach {
         (this as Test).systemProperty("serotine.cowApiNetwork", "true")
