@@ -169,7 +169,17 @@ internal class WcRelayClient(
         val answer = call("irn_subscribe", buildJsonObject { put("topic", topic) })
         if (answer !is Answer.Result) return false
         val id = (answer.value as? JsonPrimitive)?.contentOrNull
-        lock.withLock { if (topic in topics) topics[topic] = id }
+        val stillWanted = lock.withLock { (topic in topics).also { if (it) topics[topic] = id } }
+        // Unsubscribed while this subscription was on its way: undone now that the relay has named it.
+        if (!stillWanted && id != null) {
+            call(
+                "irn_unsubscribe",
+                buildJsonObject {
+                    put("topic", topic)
+                    put("id", id)
+                },
+            )
+        }
         return true
     }
 
@@ -185,7 +195,10 @@ internal class WcRelayClient(
         while (true) {
             val current = socket.filterNotNull().first()
             val answer = CompletableDeferred<Answer>()
-            val id = lock.withLock { nextId().also { pending[it] = answer } }
+            // Registered only while [current] is still the connection: one that has dropped has failed its
+            // pending requests already, and a request registered after that would never be answered.
+            val id = lock.withLock { if (socket.value === current) nextId().also { pending[it] = answer } else null }
+                ?: continue
             val request = buildJsonObject {
                 put("id", id)
                 put("jsonrpc", "2.0")

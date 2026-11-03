@@ -34,6 +34,7 @@ internal interface WcTransport {
 
 /** A proposal waiting for the user, as the screens show it. No key is in it. */
 internal data class WcProposalView(
+    val pairingTopic: String,
     val id: Long,
     val dapp: WcMetadata,
     val requiredChains: Set<String>,
@@ -140,16 +141,36 @@ internal class WcWallet(
         awaitCancellation()
     }
 
+    /**
+     * Forgets what has expired. A request that expired on a session still open is answered with
+     * [WcProtocol.Error.REQUEST_EXPIRED]: a dApp is never left without an answer while it may listen.
+     */
     private suspend fun expireNow() {
         val now = nowSeconds()
-        val gone = store.change(emptyList<String>()) { state ->
+        val outgoing = store.change<List<Outgoing>?>(null) { state ->
             val kept = state.expiring(now)
             val gone = (state.pairings.map { it.topic } + state.sessions.map { it.topic }) -
                 (kept.pairings.map { it.topic } + kept.sessions.map { it.topic }).toSet()
-            val changed = kept.proposals.size != state.proposals.size || kept.requests.size != state.requests.size
-            gone to (if (gone.isEmpty() && !changed) null else kept)
-        }
-        for (topic in gone) outbox.send(Outgoing.Unsubscribe(topic))
+            val open = kept.sessions.associateBy { it.topic }
+            val expired = state.requests.filterNot { request -> kept.requests.any { it.topic == request.topic && it.id == request.id } }
+            val errors = expired.mapNotNull { request ->
+                val session = open[request.topic] ?: return@mapNotNull null
+                expiredAnswer(session, request.id)
+            }
+            val changed = kept.proposals.size != state.proposals.size || expired.isNotEmpty()
+            (errors + gone.map { Outgoing.Unsubscribe(it) }) to (if (gone.isEmpty() && !changed) null else kept)
+        } ?: return
+        for (item in outgoing) outbox.send(item)
+    }
+
+    private fun expiredAnswer(session: WcStoredSession, requestId: Long): Outgoing.Publish {
+        val key = checkNotNull(WcEncoding.hexOrNull(session.symKey, WC_KEY_BYTES))
+        return Outgoing.Publish(
+            session.topic,
+            WcEnvelope.sealType0(key, error(requestId, WcProtocol.Error.REQUEST_EXPIRED)),
+            WcProtocol.SESSION_REQUEST.ttlSeconds,
+            WcProtocol.SESSION_REQUEST.responseTag,
+        )
     }
 
     // ----- The user's side -----
@@ -211,11 +232,11 @@ internal class WcWallet(
     }
 
     /**
-     * Approves proposal [proposalId] with the Sepolia accounts at [addresses] (`0x` and 40 hex
+     * Approves proposal [proposalId] on [pairingTopic] with the Sepolia accounts at [addresses] (`0x` and 40 hex
      * digits): settles a session with the methods and events the proposal asks for that are on the
      * lists, then answers the proposal with this side's public key.
      */
-    suspend fun approve(proposalId: Long, addresses: List<String>): Approval {
+    suspend fun approve(pairingTopic: String, proposalId: Long, addresses: List<String>): Approval {
         if (addresses.isEmpty() || addresses.toSet().size != addresses.size || !addresses.all(::isAddress)) {
             return Approval.InvalidAccounts
         }
@@ -225,7 +246,8 @@ internal class WcWallet(
             class Settled(val topic: String, val pairingTopic: String, val settle: String, val answer: String)
             var settled: Settled? = null
             val outcome = store.change<Approval>(Approval.NotSaved) { state ->
-                val proposal = state.proposals.find { it.id == proposalId } ?: return@change Approval.NoSuchProposal to null
+                val proposal = state.proposals.find { it.pairingTopic == pairingTopic && it.id == proposalId }
+                    ?: return@change Approval.NoSuchProposal to null
                 if (proposal.expirySeconds <= now) {
                     return@change Approval.Expired to state.copy(proposals = state.proposals - proposal)
                 }
@@ -304,11 +326,15 @@ internal class WcWallet(
         }
     }
 
-    /** Rejects proposal [proposalId] with [why] (the user's refusal unless the proposal asked for too much). True once delivered. */
-    suspend fun reject(proposalId: Long, why: WcProtocol.Error = WcProtocol.Error.USER_REJECTED): Boolean {
+    /**
+     * Rejects proposal [proposalId] on [pairingTopic] with [why] (the user's refusal, unless the proposal
+     * asked for more than a session here may have). True once saved and delivered.
+     */
+    suspend fun reject(pairingTopic: String, proposalId: Long, why: WcProtocol.Error = WcProtocol.Error.USER_REJECTED): Boolean {
         var message: Pair<String, String>? = null
-        store.change(false) { state ->
-            val proposal = state.proposals.find { it.id == proposalId } ?: return@change false to null
+        val saved = store.change(false) { state ->
+            val proposal = state.proposals.find { it.pairingTopic == pairingTopic && it.id == proposalId }
+                ?: return@change false to null
             val pairing = state.pairings.find { it.topic == proposal.pairingTopic }
             if (pairing != null) {
                 val key = checkNotNull(WcEncoding.hexOrNull(pairing.symKey, WC_KEY_BYTES))
@@ -316,37 +342,59 @@ internal class WcWallet(
             }
             true to state.copy(proposals = state.proposals - proposal)
         }
-        val (topic, envelope) = message ?: return false
+        // Nothing goes out for a change that was not saved: the proposal would still be shown.
+        val (topic, envelope) = message?.takeIf { saved } ?: return false
         return transport.publish(topic, envelope, WcProtocol.SESSION_PROPOSE.ttlSeconds, WcProtocol.SESSION_PROPOSE_REJECT_TAG)
     }
 
     /** What [respond] and [respondError] did. */
     enum class Answer { DELIVERED, NOT_DELIVERED, NO_SUCH_REQUEST, EXPIRED, NOT_SAVED }
 
-    /** Answers request [requestId] with [value], the method's result. */
-    suspend fun respond(requestId: Long, value: JsonElement): Answer = answer(requestId) { result(requestId, value) }
+    /**
+     * Answers request [requestId] on session [topic] with [value], the method's result. A request is
+     * named by its topic and id together: ids are unique per topic only.
+     */
+    suspend fun respond(topic: String, requestId: Long, value: JsonElement): Answer =
+        answer(topic, requestId) { result(requestId, value) }
 
-    /** Answers request [requestId] with [why]. */
-    suspend fun respondError(requestId: Long, why: WcProtocol.Error): Answer = answer(requestId) { error(requestId, why) }
+    /** Answers request [requestId] on session [topic] with [why]. */
+    suspend fun respondError(topic: String, requestId: Long, why: WcProtocol.Error): Answer =
+        answer(topic, requestId) { error(requestId, why) }
 
-    private suspend fun answer(requestId: Long, payload: () -> ByteArray): Answer {
+    private suspend fun answer(topic: String, requestId: Long, payload: () -> ByteArray): Answer {
         val now = nowSeconds()
-        var message: Pair<String, String>? = null
+        var message: Outgoing.Publish? = null
         val outcome = store.change(Answer.NOT_SAVED) { state ->
-            val request = state.requests.find { it.id == requestId } ?: return@change Answer.NO_SUCH_REQUEST to null
-            val session = state.sessions.find { it.topic == request.topic }
+            val request = state.requests.find { it.topic == topic && it.id == requestId }
+                ?: return@change Answer.NO_SUCH_REQUEST to null
+            val session = state.sessions.find { it.topic == topic }
             val kept = state.copy(requests = state.requests - request)
-            if (request.expirySeconds <= now || session == null) return@change Answer.EXPIRED to kept
+            if (session == null) return@change Answer.EXPIRED to kept
+            if (request.expirySeconds <= now) {
+                // Past its expiry: the dApp is told so, never handed a late answer.
+                message = expiredAnswer(session, requestId)
+                return@change Answer.EXPIRED to kept
+            }
             val key = checkNotNull(WcEncoding.hexOrNull(session.symKey, WC_KEY_BYTES))
-            message = session.topic to WcEnvelope.sealType0(key, payload())
+            message = Outgoing.Publish(
+                topic,
+                WcEnvelope.sealType0(key, payload()),
+                WcProtocol.SESSION_REQUEST.ttlSeconds,
+                WcProtocol.SESSION_REQUEST.responseTag,
+            )
             Answer.DELIVERED to kept
         }
-        val (topic, envelope) = message ?: return outcome
-        val sent = transport.publish(topic, envelope, WcProtocol.SESSION_REQUEST.ttlSeconds, WcProtocol.SESSION_REQUEST.responseTag)
-        return if (sent) Answer.DELIVERED else Answer.NOT_DELIVERED
+        // Nothing goes out for a change that was not saved: the request would still be shown, and answerable again.
+        val publish = message?.takeIf { outcome != Answer.NOT_SAVED } ?: return outcome
+        val sent = transport.publish(publish.topic, publish.message, publish.ttlSeconds, publish.tag)
+        return when {
+            outcome == Answer.EXPIRED -> Answer.EXPIRED
+            sent -> Answer.DELIVERED
+            else -> Answer.NOT_DELIVERED
+        }
     }
 
-    /** Ends session [topic], telling the dApp. True when it was a session here. */
+    /** Ends session [topic], telling the dApp. True when it was a session here and its end was saved. */
     suspend fun disconnect(topic: String): Boolean {
         var message: String? = null
         val known = store.change(false) { state ->
@@ -359,18 +407,18 @@ internal class WcWallet(
             message = WcEnvelope.sealType0(key, request(rpcId(), WcProtocol.SESSION_DELETE.name, params))
             true to state.forgetting(topic)
         }
-        message?.let {
-            transport.publish(topic, it, WcProtocol.SESSION_DELETE.ttlSeconds, WcProtocol.SESSION_DELETE.requestTag)
-        }
+        // Not saved: the session is still here and still followed, so the dApp is not told it ended.
+        val envelope = message?.takeIf { known } ?: return false
+        transport.publish(topic, envelope, WcProtocol.SESSION_DELETE.ttlSeconds, WcProtocol.SESSION_DELETE.requestTag)
         transport.unsubscribe(topic)
-        return known
+        return true
     }
 
     /** Extends session [topic] to [WcProtocol.SESSION_SECONDS] from now. True once delivered. */
     suspend fun extend(topic: String): Boolean {
         val expiry = nowSeconds() + WcProtocol.SESSION_SECONDS
         var message: String? = null
-        store.change(false) { state ->
+        val saved = store.change(false) { state ->
             val session = state.sessions.find { it.topic == topic } ?: return@change false to null
             val key = checkNotNull(WcEncoding.hexOrNull(session.symKey, WC_KEY_BYTES))
             message = WcEnvelope.sealType0(
@@ -379,7 +427,7 @@ internal class WcWallet(
             )
             true to state.copy(sessions = state.sessions.map { if (it.topic == topic) it.copy(expirySeconds = expiry) else it })
         }
-        val envelope = message ?: return false
+        val envelope = message?.takeIf { saved } ?: return false
         return transport.publish(topic, envelope, WcProtocol.SESSION_EXTEND.ttlSeconds, WcProtocol.SESSION_EXTEND.requestTag)
     }
 
@@ -390,7 +438,7 @@ internal class WcWallet(
     suspend fun updateAccounts(topic: String, addresses: List<String>): Boolean {
         if (addresses.isEmpty() || addresses.toSet().size != addresses.size || !addresses.all(::isAddress)) return false
         val messages = mutableListOf<Triple<String, Long, Int>>()
-        store.change(false) { state ->
+        val saved = store.change(false) { state ->
             val session = state.sessions.find { it.topic == topic } ?: return@change false to null
             val key = checkNotNull(WcEncoding.hexOrNull(session.symKey, WC_KEY_BYTES))
             val accounts = addresses.map { "${WcProtocol.SEPOLIA}:${it.lowercase()}" }
@@ -416,7 +464,7 @@ internal class WcWallet(
             }
             true to state.copy(sessions = state.sessions.map { if (it.topic == topic) it.copy(accounts = accounts) else it })
         }
-        if (messages.isEmpty()) return false
+        if (!saved || messages.isEmpty()) return false
         return messages.map { (envelope, ttl, tag) -> transport.publish(topic, envelope, ttl, tag) }.all { it }
     }
 
@@ -488,13 +536,9 @@ internal class WcWallet(
             ) to state.forgetting(pairing.topic)
             // Not answered in v1 (docs/walletconnect.md): the dApp falls back to its session proposal.
             "wc_sessionAuthenticate" -> emptyList<Outgoing>() to state
+            // Answered under the method's own tag where it is one of Sign's, a pairing ping's otherwise.
             else -> listOf(
-                Outgoing.Publish(
-                    pairing.topic,
-                    WcEnvelope.sealType0(key, error(id, WcProtocol.Error.WC_METHOD_UNSUPPORTED)),
-                    WcProtocol.SESSION_PROPOSE.ttlSeconds,
-                    WcProtocol.SESSION_PROPOSE.responseTag,
-                ),
+                reply(error(id, WcProtocol.Error.WC_METHOD_UNSUPPORTED), WcProtocol.BY_NAME[method] ?: WcProtocol.PAIRING_PING),
             ) to state
         }
     }
@@ -594,6 +638,7 @@ internal class WcWallet(
             proposals = state.proposals.map { proposal ->
                 val ask = WcProtocol.ask(proposal.requiredNamespaces, proposal.optionalNamespaces)
                 WcProposalView(
+                    pairingTopic = proposal.pairingTopic,
                     id = proposal.id,
                     dapp = proposal.dapp,
                     requiredChains = ask?.requiredChains.orEmpty(),
@@ -623,8 +668,12 @@ internal class WcWallet(
         }
     }
 
-    /** A JSON-RPC id for a request of this side: the time in milliseconds, then six random digits, as the reference clients make them. */
-    private fun rpcId(): Long = nowMillis() * 1_000_000 + Random.nextInt(1_000_000)
+    /**
+     * A JSON-RPC id for a request of this side: the time in milliseconds, then three random digits, as
+     * the reference clients' `payloadId()` makes them. Below 2^53, so a dApp that reads it as a JavaScript
+     * number reads it exactly, and its answer names the same id.
+     */
+    private fun rpcId(): Long = nowMillis() * 1_000 + Random.nextInt(1_000)
 
     companion object {
         /** The longest name, description or URL a dApp's metadata may state, and the most icons. */

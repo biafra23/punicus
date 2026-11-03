@@ -74,6 +74,8 @@ class WcPairingUriTest {
             "wc:$topic@2?relay-protocol=irn&symKey=$key&expiryTimestamp=soon",
             "wc:$topic@2?relay-protocol=irn&symKey=$key&methods=%5Bwc_session%3BPropose%5D",
             "wc:$topic@2?relay-protocol=irn&symKey=%zz",
+            // Another script's digits are not hex, however digitToInt reads them.
+            "wc:$topic@2?relay-protocol=irn&symKey=${key.dropLast(1)}\u0663",
             "wc:$topic@2?relay-protocol=irn&symKey=$key" + "&x".repeat(WcPairingUri.MAX_CHARS),
         )
         for (text in malformed) {

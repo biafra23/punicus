@@ -384,7 +384,7 @@ merge part PRs into the feature branch itself.
       client, pairing, the wallet role of a session, persistence. Tests run
       against the spec's vectors and a fake relay. A live test against the
       real relay runs only with a project ID
-      (`-PwalletConnectProjectId=<id>`); pairing with Reown's sample dApp on
+      (`-PwalletConnectLiveTest=<id>`); pairing with Reown's sample dApp on
       Sepolia is the spike once the ID exists.
    2. dApp sessions: pairing, the proposal, the Sepolia-only namespace, the
       session list, disconnect, expiry and extend, `accountsChanged`. Screens

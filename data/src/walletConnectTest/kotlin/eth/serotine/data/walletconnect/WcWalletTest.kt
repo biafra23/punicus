@@ -65,8 +65,14 @@ class WcWalletTest {
         val wallet get() = walletConnect.wallet
     }
 
+    /** While true, every write of the state fails, as on a full disk. */
+    private var writesFail = false
+
     private fun TestScope.walletConnect(): Running {
-        val store = WcStore(file.toString(), StandardTestDispatcher(testScheduler))
+        val store = WcStore(file.toString(), StandardTestDispatcher(testScheduler)) { path, bytes ->
+            if (writesFail) throw kotlinx.io.IOException("disk full")
+            WcStore.writePrivately(path, bytes)
+        }
         val walletConnect = WalletConnect(
             store = store,
             connector = relay.connector("wallet"),
@@ -78,7 +84,7 @@ class WcWalletTest {
         return Running(walletConnect, job)
     }
 
-    private fun TestScope.dapp() = FakeDapp(relay, backgroundScope) { now() }
+    private fun TestScope.dapp(name: String = "dapp") = FakeDapp(relay, backgroundScope, name) { now() }
 
     /** A second of virtual time, background work included (see WcRelayClientTest). */
     private fun TestScope.settle() {
@@ -94,7 +100,7 @@ class WcWalletTest {
         assertIs<WcWallet.Pairing.Paired>(running.wallet.pair(dapp.uri()))
         dapp.propose(1, JsonObject(emptyMap()), buildJsonObject { put("eip155", sepoliaAsk) })
         settle()
-        val approval = assertIs<WcWallet.Approval.Approved>(running.wallet.approve(1, listOf(account)))
+        val approval = assertIs<WcWallet.Approval.Approved>(running.wallet.approve(dapp.pairingTopic, 1, listOf(account)))
         assertTrue(approval.delivered)
         settle()
         assertTrue(dapp.followSession(1))
@@ -120,7 +126,7 @@ class WcWalletTest {
         assertEquals(setOf("eth_sendTransaction", "personal_sign"), proposal.methods) // never eth_sign
         assertEquals(setOf("accountsChanged", "chainChanged"), proposal.events)
 
-        val approval = assertIs<WcWallet.Approval.Approved>(running.wallet.approve(1, listOf(account)))
+        val approval = assertIs<WcWallet.Approval.Approved>(running.wallet.approve(dapp.pairingTopic, 1, listOf(account)))
         settle()
         // The dApp derives the same session key and topic from the wallet's answer.
         assertTrue(dapp.followSession(1))
@@ -150,8 +156,8 @@ class WcWalletTest {
         dapp.propose(7, buildJsonObject { put("eip155", namespace(listOf("eip155:1"), listOf("personal_sign"), emptyList())) }, JsonObject(emptyMap()))
         settle()
         assertEquals(WcProtocol.Error.UNSUPPORTED_CHAINS, running.view().proposals.single().refusal)
-        assertEquals(WcWallet.Approval.Refused(WcProtocol.Error.UNSUPPORTED_CHAINS), running.wallet.approve(7, listOf(account)))
-        assertTrue(running.wallet.reject(7, WcProtocol.Error.UNSUPPORTED_CHAINS))
+        assertEquals(WcWallet.Approval.Refused(WcProtocol.Error.UNSUPPORTED_CHAINS), running.wallet.approve(dapp.pairingTopic, 7, listOf(account)))
+        assertTrue(running.wallet.reject(dapp.pairingTopic, 7, WcProtocol.Error.UNSUPPORTED_CHAINS))
         settle()
         val answer = dapp.received.getValue(dapp.pairingTopic).single()
         assertEquals(5100, answer.getValue("error").jsonObject.getValue("code").jsonPrimitive.int)
@@ -193,7 +199,7 @@ class WcWalletTest {
         val request = running.view().requests.single()
         assertEquals("personal_sign", request.method)
         assertEquals("Test dApp", request.dapp.name)
-        assertEquals(WcWallet.Answer.DELIVERED, running.wallet.respond(42, JsonPrimitive("0xsignature")))
+        assertEquals(WcWallet.Answer.DELIVERED, running.wallet.respond(topic, 42, JsonPrimitive("0xsignature")))
         settle()
         assertEquals("0xsignature", dapp.received.getValue(topic).last()["result"]?.jsonPrimitive?.content)
 
@@ -311,5 +317,68 @@ class WcWalletTest {
         val state = WcState(pairings = listOf(WcStoredPairing("t", pairingKey, 0)))
         assertFalse(pairingKey in state.toString()) // ...and no toString shows one
         assertFalse(pairingKey in state.pairings.single().toString())
+    }
+
+    private fun personalSign(id: Long, expiry: Long? = null) = request(
+        id,
+        "wc_sessionRequest",
+        buildJsonObject {
+            putJsonObject("request") {
+                put("method", "personal_sign")
+                putJsonArray("params") { add(JsonPrimitive("0x00")) }
+                if (expiry != null) put("expiryTimestamp", expiry)
+            }
+            put("chainId", WcProtocol.SEPOLIA)
+        },
+    )
+
+    @Test
+    fun theSameRequestIdOnTwoSessionsIsAnsweredOnTheRightOne() = runTest {
+        val running = walletConnect()
+        val first = dapp("dapp-1")
+        val second = dapp("dapp-2")
+        val firstTopic = settled(running, first)
+        val secondTopic = settled(running, second)
+        first.sendOnSession(personalSign(99))
+        second.sendOnSession(personalSign(99))
+        settle()
+        assertEquals(2, running.view().requests.size)
+        assertEquals(WcWallet.Answer.DELIVERED, running.wallet.respond(secondTopic, 99, JsonPrimitive("0xsecond")))
+        settle()
+        assertEquals("0xsecond", second.received.getValue(secondTopic).last()["result"]?.jsonPrimitive?.content)
+        assertTrue(first.received.getValue(firstTopic).none { it["result"]?.jsonPrimitive?.content == "0xsecond" })
+        assertEquals(listOf(firstTopic), running.view().requests.map { it.topic })
+    }
+
+    @Test
+    fun aRequestThatExpiresUnansweredIsAnsweredWithRequestExpired() = runTest {
+        val running = walletConnect()
+        val dapp = dapp()
+        val topic = settled(running, dapp)
+        dapp.sendOnSession(personalSign(77, expiry = now() / 1000 + 10))
+        settle()
+        assertEquals(1, running.view().requests.size)
+        repeat(70) { settle() } // past the expiry, and past the next minute's sweep
+        val answer = dapp.received.getValue(topic).last()
+        assertEquals(8000, answer.getValue("error").jsonObject.getValue("code").jsonPrimitive.int)
+        assertTrue(running.view().requests.isEmpty())
+    }
+
+    @Test
+    fun nothingGoesOutForAnAnswerThatCouldNotBeSaved() = runTest {
+        val running = walletConnect()
+        val dapp = dapp()
+        val topic = settled(running, dapp)
+        dapp.sendOnSession(personalSign(55))
+        settle()
+        val before = dapp.received.getValue(topic).size
+        writesFail = true
+        assertEquals(WcWallet.Answer.NOT_SAVED, running.wallet.respond(topic, 55, JsonPrimitive("0xsig")))
+        assertFalse(running.wallet.disconnect(topic))
+        settle()
+        assertEquals(before, dapp.received.getValue(topic).size)
+        writesFail = false
+        assertEquals(1, running.view().requests.size)
+        assertEquals(1, running.view().sessions.size)
     }
 }

@@ -15,17 +15,17 @@ import kotlin.time.Duration.Companion.seconds
  * WalletConnect's real relay, through Ktor's CIO engine: two clients, each with its own auth key and
  * token, connect with the project ID, one subscribes to a fresh topic, the other publishes an envelope
  * on it, and it arrives. It needs the network and a Reown project ID (docs/walletconnect.md, *Setting
- * up the project ID*), so it is skipped unless run with `-PwalletConnectProjectId=<id>`
+ * up the project ID*), so it is skipped unless run with `-PwalletConnectLiveTest=<id>`
  * (data/build.gradle.kts), e.g.
- * `./gradlew :data:desktopTest --tests '*WalletConnectRelayLiveTest*' -PwalletConnectProjectId=<id>`.
+ * `./gradlew :data:desktopTest --tests '*WalletConnectRelayLiveTest*' -PwalletConnectLiveTest=<id>`.
  * What it catches: a relay that no longer takes this client's token or its JSON-RPC (part 1.1's spike).
  */
 class WalletConnectRelayLiveTest {
 
     @Test
     fun anEnvelopePublishedOnTheRealRelayReachesItsSubscriber(): Unit = runBlocking {
-        val projectId = System.getProperty("serotine.walletConnectProjectId")
-        assumeTrue("needs -PwalletConnectProjectId", !projectId.isNullOrEmpty())
+        val projectId = System.getProperty("serotine.walletConnectLiveTest")
+        assumeTrue("needs -PwalletConnectLiveTest", !projectId.isNullOrEmpty())
         val connector = KtorRelayConnector(walletConnectHttpEngine())
         fun url(seed: ByteArray): String {
             val token = WcRelayAuth.token(

@@ -177,10 +177,11 @@ providers.gradleProperty("myotisLibraryDir").orNull?.let { dir ->
 // network and runs only with -PcowApiNetwork; without it, it is skipped.
 // WalletConnectRelayLiveTest connects to WalletConnect's real relay, so it needs the network and a
 // Reown project ID (docs/walletconnect.md, *Setting up the project ID*), and runs only with
-// -PwalletConnectProjectId=<id>; without it, it is skipped.
-providers.gradleProperty("walletConnectProjectId").orNull?.let { projectId ->
+// -PwalletConnectLiveTest=<id>; without it, it is skipped. A property of its own, never the one a
+// build passes the app's ID in, so that no build runs it by the way.
+providers.gradleProperty("walletConnectLiveTest").orNull?.let { projectId ->
     tasks.matching { it.name == "desktopTest" }.configureEach {
-        (this as Test).systemProperty("serotine.walletConnectProjectId", projectId)
+        (this as Test).systemProperty("serotine.walletConnectLiveTest", projectId)
     }
 }
 if (providers.gradleProperty("cowApiNetwork").isPresent) {

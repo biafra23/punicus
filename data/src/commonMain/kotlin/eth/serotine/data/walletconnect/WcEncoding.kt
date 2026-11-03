@@ -30,11 +30,19 @@ internal object WcEncoding {
         if (length != null && text.length != length * 2) return null
         val out = ByteArray(text.length / 2)
         for (i in out.indices) {
-            val high = text[2 * i].digitToIntOrNull(16) ?: return null
-            val low = text[2 * i + 1].digitToIntOrNull(16) ?: return null
+            val high = hexDigit(text[2 * i]) ?: return null
+            val low = hexDigit(text[2 * i + 1]) ?: return null
             out[i] = ((high shl 4) or low).toByte()
         }
         return out
+    }
+
+    /** An ASCII hex digit's value: never another script's digits, which `digitToInt` would take. */
+    private fun hexDigit(c: Char): Int? = when (c) {
+        in '0'..'9' -> c - '0'
+        in 'a'..'f' -> c - 'a' + 10
+        in 'A'..'F' -> c - 'A' + 10
+        else -> null
     }
 
     fun base64(bytes: ByteArray): String = base64Padded.encode(bytes)

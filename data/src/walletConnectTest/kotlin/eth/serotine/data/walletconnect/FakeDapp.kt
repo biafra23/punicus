@@ -20,7 +20,7 @@ import kotlin.time.Duration.Companion.milliseconds
  * makes a pairing, proposes a session, derives the session's key from the wallet's answer, and sends
  * requests. Everything it receives is opened and kept per topic ([received]).
  */
-internal class FakeDapp(relay: FakeRelay, scope: CoroutineScope, nowMillis: () -> Long) {
+internal class FakeDapp(relay: FakeRelay, scope: CoroutineScope, name: String = "dapp", nowMillis: () -> Long) {
 
     val pairingKey: ByteArray = WcKeys.newSymKey()
     val pairingTopic: String = WcKeys.topicOf(pairingKey)
@@ -39,7 +39,7 @@ internal class FakeDapp(relay: FakeRelay, scope: CoroutineScope, nowMillis: () -
     val sent = mutableMapOf<String, MutableList<String>>()
 
     val client = WcRelayClient(
-        connector = relay.connector("dapp"),
+        connector = relay.connector(name),
         connectionUrl = { "wss://relay.test?auth=dapp" },
         onMessage = { message ->
             val key = if (message.topic == pairingTopic) pairingKey else sessionKey
