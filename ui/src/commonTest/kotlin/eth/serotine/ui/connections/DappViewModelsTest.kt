@@ -79,7 +79,7 @@ class DappViewModelsTest {
             listOf(proposal()),
             listOf(DappSession(DappSessionId("t1"), dapp, listOf(held.address), listOf("personal_sign"), 1_700_000_000 + 6 * 86_400 + 10, true)),
         )
-        val vm = ConnectionsViewModel(observe(), DisconnectDapp(sessions), ExtendDappSession(sessions)) { 1_700_000_000 }
+        val vm = ConnectionsViewModel(observe(), DisconnectDapp(sessions), ExtendDappSession(sessions), clock = { 1_700_000_000 })
         backgroundScope.launch { vm.uiState.collect {} }
         runCurrent()
         val state = vm.uiState.value
