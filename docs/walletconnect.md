@@ -88,6 +88,11 @@ everything on the chain side: the verified `call`, `estimateGasDetailed`,
 - It can withhold or delay a message. A request it holds back expires, and
   the dApp gets nothing; a response it holds back reaches the dApp late or
   not at all. Neither signs anything.
+- It can replay a message it recorded: the ciphertext still decrypts. So
+  the client keeps the JSON-RPC ids it has seen per topic, with the session
+  state of ruling 8 so that a restart does not forget them, and drops a
+  request it has seen. A replayed `eth_sendTransaction` never prompts the
+  user a second time.
 - Nothing about the chain is taken from it, or from the dApp. Everything a
   request screen says about the chain is read through the light client.
 
@@ -268,7 +273,8 @@ everything on the chain side: the verified `call`, `estimateGasDetailed`,
     auth, a JWT signed with an Ed25519 `did:key`; the `irn_*` JSON-RPC calls,
     with acks, and reconnect with backoff; the session lifecycle in both
     roles (propose and settle, request and response, update, extend, ping,
-    delete, expiry); persistence (ruling 8).
+    delete, expiry); a request seen before on its topic dropped, the ids
+    kept with the session (*What the relay learns*); persistence (ruling 8).
 - **Ports in `:domain`, one concern each:**
   - `DappSessions`: pair from a `wc:` URI; observe proposals and sessions;
     approve with the chosen accounts; reject; disconnect.

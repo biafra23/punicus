@@ -219,7 +219,8 @@ docs/walletconnect.md is the contract.)
 - **The relay never supplies chain state.** It sees the device's IP address,
   the topics, the timing and size of messages and the project ID. The
   payloads are end-to-end encrypted: it cannot read or forge one, only
-  withhold or delay it.
+  withhold, delay or replay it. A request seen before on its topic is
+  dropped, so a replay never prompts the user again.
 - **What arrives through it is untrusted input**, decoded and shown as such.
   The dApp's name and URL are shown as "stated by the dApp, not verified".
 - **The Reown project ID is never committed.** A Gradle property supplies it
