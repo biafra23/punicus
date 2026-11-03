@@ -142,6 +142,8 @@ private fun DappTransactionNotSentPreview() = DappTransactionPreview(
             "Signed, but not sent: no peer took it right now. Try again sends the same signed transaction, not a new one.",
             canRetry = true,
         ),
+        // No peer answered: it may be on its way, so Refuse is greyed out.
+        refuseUnavailable = true,
     ),
 )
 
