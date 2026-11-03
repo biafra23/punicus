@@ -306,11 +306,32 @@ everything on the chain side: the verified `call`, `estimateGasDetailed`,
   2026-10-18, #57), no gas refund. Its owners sign it: keys on this device,
   co-signers through a QR code or text (owner ruling, 2026-10-16), and, once
   direction 2 lands, an external wallet. A local EOA executes it until then.
+  Part 1.5 builds it:
+  - It is proposed as a Safe transfer is: a plain call of the request's
+    recipient, value and data, no refund, at the Safe's next nonce behind
+    its queued transactions. The Safe is verified as one first, and the
+    value must be in its verified ether, less what its queued transactions
+    may move.
+  - The call is run as a verified call from the Safe at the head. One that
+    reverts is shown so and not proposed.
+  - It is signed on D6 by the first of the Safe's owners whose key is on
+    this device, and queued. With none, D6's Sign is greyed out and says
+    why. A proposal over a minute old is made again before it is signed.
+  - Once queued it is an ordinary Safe transaction: its screen opens in D6's
+    place, and there the other owners' signatures are collected (here, or
+    through a QR code or text) and an account here executes it.
+  - A request queued once is that Safe transaction, never another. It is
+    found in the queue by its fields: the same recipient, value and data, a
+    plain call with no refund. Opened again, D6 offers to open it.
+  - Refuse stays offered while it is queued: it tells the dApp no and
+    leaves the Safe transaction queued, for rejecting on its screen.
 - **A dApp is answered only with an Ethereum transaction hash.** For a Safe,
-  that is the hash of the `execTransaction` sent, never the `safeTxHash`. If
+  that is the hash of the `execTransaction` sent, never the `safeTxHash`. The
+  app answers it while it runs, once a peer takes an execution of that Safe
+  transaction or a verified block includes it, found by the same fields. If
   the threshold cannot be met before the request expires, the dApp gets an
-  error. It is never left hanging, and never given a hash that is not a
-  transaction.
+  error, and the Safe transaction stays queued. It is never left hanging,
+  and never given a hash that is not a transaction.
 
 ### The session's life
 
@@ -481,7 +502,12 @@ their mockups come with the PR that builds each.
   part 1.4b: who asks, the account and the recipient in full, the value, the
   call decoded (a payment, an ERC-20 `transfer` or `approve`) or its data
   raw and marked not decoded, the fee at most, the balance left at least,
-  the verified run; the unlock, and Refuse.
+  the verified run; the unlock, and Refuse. The Safe's half comes with part
+  1.5: that it is proposed as a Safe transaction; its nonce and the
+  transactions queued ahead, the threshold, what the Safe has left at least,
+  the call run from the Safe, the owner who signs here, and that the
+  executing account pays the fee; Sign and queue, and Refuse. Once queued,
+  its Safe transaction screen shows its signatures so far and who executes.
 - **D7 Connect a wallet** (direction 2): the QR code, "Open in wallet", and
   the wallet's accounts matched against the Safe's owners.
 - **D8 Waiting for a signature** (direction 2): what was asked, of which

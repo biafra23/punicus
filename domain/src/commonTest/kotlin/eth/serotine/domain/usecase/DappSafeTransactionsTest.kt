@@ -150,4 +150,24 @@ class DappSafeTransactionsTest {
         )
         assertEquals(DappTransactionQuoting.Gone, quote(request(payment).id))
     }
+
+    @Test
+    fun aModuleEnabledIsRefusedAndAValueTheSafeCannotPayIsNotProposed() = runTest {
+        // Enabling a module, whatever the module: refused (owner ruling, 2026-10-18, on #54).
+        val data = SafeSettingsCalls.ENABLE_MODULE + ByteArray(12) + ByteArray(20) { 0x77 }
+        val module = DappTransactionRequest(world.safe, world.safe, UInt256.ZERO, data, null)
+        requests.waiting.value = listOf(request(module))
+        assertIs<DappSafeProposing.SafeRefused>(propose()(request(module).id))
+        // More than the Safe's verified ether.
+        val large = DappTransactionRequest(world.safe, world.recipient, UInt256.of("2000000000000000000"), ByteArray(0), null)
+        requests.waiting.value = listOf(request(large))
+        assertEquals(DappSafeProposing.InsufficientFunds, propose()(request(large).id))
+        assertTrue(world.queue.requests.value.isEmpty(), "nothing is queued by a proposal")
+    }
+
+    @Test
+    fun anExpiredRequestIsNotProposed() = runTest {
+        requests.waiting.value = listOf(request(payment).copy(expiresAtSeconds = now))
+        assertEquals(DappSafeProposing.Expired, propose()(request(payment).id))
+    }
 }

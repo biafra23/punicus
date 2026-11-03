@@ -1,6 +1,5 @@
 package eth.serotine.domain.usecase
 
-import eth.serotine.domain.model.AccountCustody
 import eth.serotine.domain.model.AccountId
 import eth.serotine.domain.model.Address
 import eth.serotine.domain.model.DappTransactionRequest
@@ -39,9 +38,11 @@ import kotlinx.coroutines.flow.first
 data class DappSafeProposal internal constructor(
     val review: DappMessageReview,
     val proposal: SafeTxProposal,
-    val heldOwners: List<Address>,
 ) {
     val id: DappRequestId get() = review.request.id
+
+    /** The Safe's owners whose keys are on this device, in the Safe's order: who may sign it here. */
+    val heldOwners: List<Address> get() = proposal.safe.ownersHeld
 }
 
 /** What [ProposeDappSafeTx] came to. */
@@ -117,10 +118,7 @@ class ProposeDappSafeTx(
             is SafeCheck.Verified -> check.reading
             is SafeCheck.Refused -> return DappSafeProposing.SafeRefused(check.refusal)
         }
-        val held = list.orEmpty()
-            .filter { it.network == network && it.custody == AccountCustody.InKeyStore && it.address in reading.state.owners }
-            .map { it.address }
-        if (held.isEmpty()) return DappSafeProposing.NoOwnerHere
+        if (reading.ownersHeld.isEmpty()) return DappSafeProposing.NoOwnerHere
         // The Safe's ether alone: a dApp's value is ether, and what its call moves of a token is the call's,
         // run as a verified call below.
         val balance = when (val reading = nativeBalances.observeBalance(network, safe).first()) {
@@ -156,7 +154,7 @@ class ProposeDappSafeTx(
             balanceBlock = balance.blockNumber,
             simulation = simulation,
         )
-        return DappSafeProposing.Proposed(DappSafeProposal(review, proposal, held))
+        return DappSafeProposing.Proposed(DappSafeProposal(review, proposal))
     }
 }
 

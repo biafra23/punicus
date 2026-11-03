@@ -22,9 +22,11 @@ import eth.serotine.domain.repository.Signing
 import eth.serotine.domain.repository.Simulation
 import eth.serotine.domain.usecase.DescribeKeyStore
 import eth.serotine.domain.usecase.ObserveDappMessages
+import eth.serotine.domain.usecase.ProposeDappSafeTx
 import eth.serotine.domain.usecase.QuoteDappTransaction
 import eth.serotine.domain.usecase.RefuseDappRequest
 import eth.serotine.domain.usecase.SendDappTransaction
+import eth.serotine.domain.usecase.SignSafeTx
 import eth.serotine.ui.FakeAccounts
 import eth.serotine.ui.FakeBalances
 import eth.serotine.ui.FakeBroadcaster
@@ -36,6 +38,7 @@ import eth.serotine.ui.FakeTokenCatalog
 import eth.serotine.ui.FakeTransactionInputs
 import eth.serotine.ui.MemoryNetworkSettings
 import eth.serotine.ui.MemorySentTransfers
+import eth.serotine.ui.SafeWorld
 import eth.serotine.ui.components.STALE_QUOTE
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -85,6 +88,7 @@ class DappTransactionViewModelTest {
     private val broadcaster = FakeBroadcaster()
     private val signer = FakeSigner()
     private val clock = TestTimeSource()
+    private val safes = SafeWorld()
 
     private fun request(id: Long, transaction: DappTransactionRequest) = DappRequest(
         DappRequestId(DappSessionId("t"), id),
@@ -105,6 +109,9 @@ class DappTransactionViewModelTest {
             ObserveDappMessages(requests, accounts, networks, catalog, clock = { now }),
             QuoteDappTransaction(requests, accounts, networks, catalog, balances, inputs, sent, history, clock = { now }),
             SendDappTransaction(requests, accounts, networks, signer, broadcaster, sent, history, FakeReceipts(), clock = { now }),
+            // A Safe's side, never reached from an account held here.
+            ProposeDappSafeTx(requests, accounts, networks, catalog, safes.observeSafe, balances, inputs, safes.queue, clock = { now }),
+            SignSafeTx(signer, safes.observeSafe, safes.recovery, safes.queue, Network.SEPOLIA),
             RefuseDappRequest(requests, accounts, networks, clock = { now }),
             DescribeKeyStore(FakeKeys()),
             clock = { now },
