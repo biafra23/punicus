@@ -19,8 +19,14 @@ data class ConnectionsUiState(
 /** A proposal waiting for the user: [key] opens its review (screen D3). */
 data class ProposalRow(val key: String, val name: String, val url: String, val line: String)
 
-/** A request to sign waiting for the user: [key] opens its review (screen D4). */
-data class RequestRow(val key: String, val name: String, val url: String, val line: String)
+/** A request waiting for the user: [key] opens its review, screen D6 for a [transaction], D4 otherwise. */
+data class RequestRow(
+    val key: String,
+    val name: String,
+    val url: String,
+    val line: String,
+    val transaction: Boolean = false,
+)
 
 /** An open session: [key] names it to Extend and Disconnect. */
 data class SessionRow(val key: String, val name: String, val url: String, val line: String)

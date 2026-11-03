@@ -28,6 +28,7 @@ private fun ConnectionsPreview(state: ConnectionsUiState, darkTheme: Boolean = f
             onPair = {},
             onProposal = {},
             onRequest = {},
+            onTransaction = {},
             onExtend = {},
             onDisconnect = {},
         )

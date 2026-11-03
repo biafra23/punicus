@@ -216,7 +216,18 @@ class FileSentTransfersTest {
 
         assertEquals(listOf(cancellation), stored())
         val text = SystemFileSystem.source(file).buffered().use { it.readString() }
-        assertTrue(text.startsWith("""{"version":7,"""), "written as format 7: $text")
+        assertTrue(text.startsWith("""{"version":8,"""), "written as format 8: $text")
+    }
+
+    @Test
+    fun aDappsTransactionIsRecordedWithItsRecipientValueAndDapp() = runTest {
+        val call = transfer(7).copy(action = SentAction.DappCall(bob, UInt256.of(1_000), "Example dApp"))
+
+        record().record(call)
+
+        assertEquals(listOf(call), stored())
+        val text = SystemFileSystem.source(file).buffered().use { it.readString() }
+        assertTrue(text.startsWith("""{"version":8,"""), "written as format 8: $text")
     }
 
     @Test

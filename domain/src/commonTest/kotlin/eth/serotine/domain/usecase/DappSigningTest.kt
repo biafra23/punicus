@@ -69,6 +69,7 @@ class DappSigningTest {
         }
         override suspend fun answerSignature(request: DappRequestId, signature: Signature) = done(request, signature)
         override suspend fun answerNull(request: DappRequestId) = done(request, null)
+        override suspend fun answerTransaction(request: DappRequestId, hash: String) = done(request, hash)
         override suspend fun refuse(request: DappRequestId, why: DappRequestError) = done(request, why)
     }
 

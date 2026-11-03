@@ -1,6 +1,7 @@
 package eth.serotine.domain.repository
 
 import eth.serotine.domain.model.Address
+import eth.serotine.domain.model.DappTransactionRequest
 import eth.serotine.domain.model.EncodedTypedData
 import eth.serotine.domain.model.PersonalMessage
 import eth.serotine.domain.model.Signature
@@ -25,12 +26,17 @@ sealed interface DappAsk {
      */
     data class SignTypedData(val account: Address, val typed: EncodedTypedData) : DappAsk
 
+    /**
+     * `eth_sendTransaction`: [transaction], its fields applied as docs/walletconnect.md sets out (the
+     * others were refused by the adapter, never accepted and ignored).
+     */
+    data class SendTransaction(val transaction: DappTransactionRequest) : DappAsk
+
     /** `wallet_switchEthereumChain` to [chainId]: answered at once, Sepolia alone being a session's chain. */
     data class SwitchChain(val chainId: Long) : DappAsk
 
     /**
-     * A method on the closed list that this version does not answer yet ([method]: a transaction):
-     * answered at once with the unsupported-method error, never left waiting.
+     * A method on the closed list that this version does not answer yet ([method]): answered at once with the unsupported-method error, never left waiting.
      */
     data class NotAnsweredYet(val method: String) : DappAsk
 
@@ -106,6 +112,9 @@ interface DappRequests {
 
     /** Answers [request] with [signature], as the 65 bytes `r ‖ s ‖ v`, `v` being 27 or 28. */
     suspend fun answerSignature(request: DappRequestId, signature: Signature): DappAnswer
+
+    /** Answers [request] with [hash], `0x` and 64 hex digits: the transaction it asked for, sent. */
+    suspend fun answerTransaction(request: DappRequestId, hash: String): DappAnswer
 
     /** Answers [request] with JSON's null: what `wallet_switchEthereumChain` answers when it succeeds. */
     suspend fun answerNull(request: DappRequestId): DappAnswer

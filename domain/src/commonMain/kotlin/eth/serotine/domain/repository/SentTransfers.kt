@@ -186,4 +186,11 @@ sealed interface SentAction {
      * finalized, nothing can fill the order. It moves nothing but the fee.
      */
     data class CowCancellation(val settlement: Address, val uid: CowOrderUid) : SentAction
+
+    /**
+     * A dApp's transaction (`eth_sendTransaction`, docs/walletconnect.md): [value] wei and a call to
+     * [to], for the dApp that stated itself as [dapp] (its claim). What the call moves is the call's;
+     * the record holds its value and its fee.
+     */
+    data class DappCall(val to: Address, val value: UInt256, val dapp: String) : SentAction
 }

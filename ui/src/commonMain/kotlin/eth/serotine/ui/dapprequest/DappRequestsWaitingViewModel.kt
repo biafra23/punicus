@@ -2,6 +2,7 @@ package eth.serotine.ui.dapprequest
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import eth.serotine.domain.usecase.DappSignContent
 import eth.serotine.domain.usecase.ObserveDappMessages
 import eth.serotine.ui.connections.ConnectionsViewModel
 import kotlinx.coroutines.flow.SharingStarted
@@ -9,6 +10,9 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
+
+/** A request waiting, by [key] (`topic/id`); a [transaction] opens screen D6, anything else D4. */
+data class DappWaiting(val key: String, val transaction: Boolean)
 
 /**
  * The requests to sign waiting, oldest first, as their routes name them (`topic/id`): what the app
@@ -18,8 +22,10 @@ import kotlinx.coroutines.flow.stateIn
  */
 class DappRequestsWaitingViewModel(observeDappMessages: ObserveDappMessages) : ViewModel() {
 
-    val waiting: StateFlow<List<String>> = observeDappMessages()
-        .map { reviews -> reviews.map { ConnectionsViewModel.requestKey(it.request.id) } }
+    val waiting: StateFlow<List<DappWaiting>> = observeDappMessages()
+        .map { reviews ->
+            reviews.map { DappWaiting(ConnectionsViewModel.requestKey(it.request.id), it.content is DappSignContent.Transaction) }
+        }
         .distinctUntilChanged()
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
 

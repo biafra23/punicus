@@ -23,7 +23,9 @@ import eth.serotine.domain.usecase.ExtendDappSession
 import eth.serotine.domain.usecase.ObserveDappConnections
 import eth.serotine.domain.usecase.ObserveDappMessages
 import eth.serotine.domain.usecase.PairDapp
+import eth.serotine.domain.usecase.QuoteDappTransaction
 import eth.serotine.domain.usecase.RefuseDappRequest
+import eth.serotine.domain.usecase.SendDappTransaction
 import eth.serotine.domain.usecase.RejectDappProposal
 import eth.serotine.domain.usecase.SignDappMessage
 import eth.serotine.domain.repository.HistoryStarts
@@ -166,6 +168,7 @@ import eth.serotine.ui.connections.ConnectionsViewModel
 import eth.serotine.ui.currency.CurrencyViewModel
 import eth.serotine.ui.dappproposal.DappProposalViewModel
 import eth.serotine.ui.dapprequest.DappRequestViewModel
+import eth.serotine.ui.dapptransaction.DappTransactionViewModel
 import eth.serotine.ui.dapprequest.DappRequestsWaitingViewModel
 import eth.serotine.ui.pairdapp.IncomingDappLink
 import eth.serotine.ui.pairdapp.PairDappViewModel
@@ -708,6 +711,24 @@ class AppGraph(
     /** The requests to sign waiting, which the app opens their review for as each arrives. */
     fun dappRequestsWaitingViewModel(): DappRequestsWaitingViewModel =
         DappRequestsWaitingViewModel(observeDappMessages())
+
+    /** The review of the transaction [requestKey] names (`topic/id`, as its route carries it): screen D6. */
+    fun dappTransactionViewModel(requestKey: String): DappTransactionViewModel = DappTransactionViewModel(
+        requestKey,
+        observeDappMessages(),
+        QuoteDappTransaction(
+            dappRequests,
+            accounts,
+            networkSettings,
+            tokenCatalog,
+            nativeBalances,
+            transactionInputs,
+            sentTransfers,
+        ),
+        SendDappTransaction(dappRequests, signer, broadcaster, sentTransfers, receipts),
+        RefuseDappRequest(dappRequests, accounts, networkSettings),
+        DescribeKeyStore(keys),
+    )
 
     /** The review of the request [requestKey] names (`topic/id`, as its route carries it): screen D4. */
     fun dappRequestViewModel(requestKey: String): DappRequestViewModel = DappRequestViewModel(

@@ -170,6 +170,11 @@ class WalletConnectDapps internal constructor(
             return answer(wallet.respond(request.session.topic, request.id, hex))
         }
 
+        override suspend fun answerTransaction(request: DappRequestId, hash: String): DappAnswer {
+            val wallet = walletConnect?.wallet ?: return DappAnswer.OFF
+            return answer(wallet.respond(request.session.topic, request.id, JsonPrimitive(hash)))
+        }
+
         override suspend fun answerNull(request: DappRequestId): DappAnswer {
             val wallet = walletConnect?.wallet ?: return DappAnswer.OFF
             return answer(wallet.respond(request.session.topic, request.id, JsonNull))

@@ -65,6 +65,7 @@ import eth.serotine.ui.currency.CurrencyRoute
 import eth.serotine.ui.dappproposal.DappProposalRoute
 import eth.serotine.ui.dapprequest.DappRequestRoute
 import eth.serotine.ui.dapprequest.DappRequestsWaitingViewModel
+import eth.serotine.ui.dapptransaction.DappTransactionRoute
 import eth.serotine.ui.pairdapp.PairDappRoute
 import eth.serotine.ui.debug.DebugRoute
 import eth.serotine.ui.debug.DebugViewModel
@@ -306,7 +307,7 @@ private fun Destinations(
         wanted = remember(graph) {
             graph.incomingDappLink.pending.map { link -> listOfNotNull(link?.let { Destination.PAIR_DAPP }) }
         },
-        waitOn = setOf(Destination.PAIR_DAPP, DAPP_REQUEST_ROUTE),
+        waitOn = setOf(Destination.PAIR_DAPP, DAPP_REQUEST_ROUTE, DAPP_TRANSACTION_ROUTE),
     )
     // A dApp's request to sign opens its review (screen D4) as it arrives, each one once in this run:
     // one left unanswered stays in Connected dApps. Not over another request's review, nor over a dApp
@@ -315,11 +316,16 @@ private fun Destinations(
         navController,
         enabled = !updateRequired,
         wanted = remember(dappRequests) {
-            dappRequests.waiting.map { keys -> keys.map { "${Destination.DAPP_REQUEST}/$it" } }
+            dappRequests.waiting.map { waiting ->
+                waiting.map {
+                    "${if (it.transaction) Destination.DAPP_TRANSACTION else Destination.DAPP_REQUEST}/${it.key}"
+                }
+            }
         },
-        waitOn = setOf(DAPP_REQUEST_ROUTE, Destination.PAIR_DAPP, DAPP_PROPOSAL_ROUTE),
-        done = { route -> dappRequests.wasOpened(route.removePrefix("${Destination.DAPP_REQUEST}/")) },
-        onOpen = { route -> dappRequests.opened(route.removePrefix("${Destination.DAPP_REQUEST}/")) },
+        waitOn = setOf(DAPP_REQUEST_ROUTE, DAPP_TRANSACTION_ROUTE, Destination.PAIR_DAPP, DAPP_PROPOSAL_ROUTE),
+        // The route names its screen, then the request: `dapprequest/topic/id`.
+        done = { route -> dappRequests.wasOpened(route.substringAfter('/')) },
+        onOpen = { route -> dappRequests.opened(route.substringAfter('/')) },
     )
     // The Debug tab turned off while its screen is shown: that screen goes, back to Accounts, and
     // the filter typed goes with the log it was for. Not before the setting is read (null), so a
@@ -470,6 +476,9 @@ private fun Destinations(
                     onRequest = { key ->
                         navController.navigate("${Destination.DAPP_REQUEST}/$key") { launchSingleTop = true }
                     },
+                    onTransaction = { key ->
+                        navController.navigate("${Destination.DAPP_TRANSACTION}/$key") { launchSingleTop = true }
+                    },
                 )
             }
             composable(Destination.PAIR_DAPP) {
@@ -503,6 +512,19 @@ private fun Destinations(
                     )
                 } else {
                     LaunchedEffect(Unit) { navController.popBackStack(DAPP_REQUEST_ROUTE, inclusive = true) }
+                }
+            }
+            composable(DAPP_TRANSACTION_ROUTE) { entry ->
+                val topic = entry.savedStateHandle.get<String>(DAPP_SESSION)?.lowercase()?.takeIf(TOPIC::matches)
+                val id = entry.savedStateHandle.get<String>(DAPP_REQUEST_ID)?.toLongOrNull()
+                if (topic != null && id != null) {
+                    DappTransactionRoute(
+                        viewModel { graph.dappTransactionViewModel("$topic/$id") },
+                        onBack = { navController.popBackStack(DAPP_TRANSACTION_ROUTE, inclusive = true) },
+                        onDone = { navController.popBackStack(DAPP_TRANSACTION_ROUTE, inclusive = true) },
+                    )
+                } else {
+                    LaunchedEffect(Unit) { navController.popBackStack(DAPP_TRANSACTION_ROUTE, inclusive = true) }
                 }
             }
             composable(Destination.SECURITY) {
@@ -1053,6 +1075,7 @@ private object Destination {
     const val PAIR_DAPP = "pairdapp"
     const val DAPP_PROPOSAL = "dappproposal"
     const val DAPP_REQUEST = "dapprequest"
+    const val DAPP_TRANSACTION = "dapptransaction"
     const val ACCOUNT = "account"
     const val RECEIVE = "receive"
     const val ACTIVITY = "activity"
@@ -1152,6 +1175,9 @@ private const val DAPP_PROPOSAL_ROUTE = "${Destination.DAPP_PROPOSAL}/{$PAIRING}
 
 /** A dApp's request to sign, by its session's topic and its id there (docs/walletconnect.md, screen D4). */
 private const val DAPP_REQUEST_ROUTE = "${Destination.DAPP_REQUEST}/{$DAPP_SESSION}/{$DAPP_REQUEST_ID}"
+
+/** A dApp's transaction, by its session's topic and its id there (docs/walletconnect.md, screen D6). */
+private const val DAPP_TRANSACTION_ROUTE = "${Destination.DAPP_TRANSACTION}/{$DAPP_SESSION}/{$DAPP_REQUEST_ID}"
 
 /** A WalletConnect topic: 64 hex digits. */
 private val TOPIC = Regex("^[0-9a-f]{64}$")

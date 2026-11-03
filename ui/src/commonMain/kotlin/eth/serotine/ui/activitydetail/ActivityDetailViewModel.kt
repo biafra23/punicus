@@ -232,6 +232,11 @@ class ActivityDetailViewModel(
                 fields += DetailField("CoW order", action.uid.hex, DetailKind.HASH)
                 fields += addressOf("Settlement contract", action.settlement, names)
             }
+            is SentAction.DappCall -> {
+                fields += addressOf("To", action.to, names)
+                fields += DetailField("Value", rows.amount(action.value, TransferAsset.Native))
+                fields += DetailField("For the dApp", "${action.dapp} (stated by the dApp, not verified)")
+            }
         }
         fields += DetailField("Transaction hash", transfer.hash, DetailKind.HASH)
         fields += DetailField("Nonce", transfer.nonce.toString())

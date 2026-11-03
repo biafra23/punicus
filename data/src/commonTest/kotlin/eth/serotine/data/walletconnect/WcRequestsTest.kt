@@ -1,6 +1,8 @@
 package eth.serotine.data.walletconnect
 
 import eth.serotine.domain.model.Address
+import eth.serotine.domain.model.UInt256
+import eth.serotine.domain.model.DappTransactionRequest
 import eth.serotine.domain.model.PersonalMessage
 import eth.serotine.domain.model.Signature
 import eth.serotine.domain.repository.DappAsk
@@ -54,9 +56,46 @@ class WcRequestsTest {
     }
 
     @Test
-    fun aTransactionIsNotAnsweredYet() {
-        assertEquals(DappAsk.NotAnsweredYet("eth_sendTransaction"), decode("eth_sendTransaction", "[]"))
+    fun aMethodOutOfShapeIsMalformed() {
+        assertEquals(DappAsk.Malformed("eth_sendTransaction"), decode("eth_sendTransaction", "[]"))
         assertEquals(DappAsk.Malformed("eth_signTypedData_v4"), decode("eth_signTypedData_v4", "[]"))
+        assertEquals(DappAsk.NotAnsweredYet("eth_foo"), decode("eth_foo", "[]"))
+    }
+
+    private val other = Address.of("0x00000000000000000000000000000000000000b2")
+
+    private fun transaction(fields: String) = decode("eth_sendTransaction", """[{"from": "${account.hex}", "to": "${other.hex}"$fields}]""")
+
+    @Test
+    fun aTransactionsFieldsAreAppliedOrRefused() {
+        assertEquals(DappAsk.SendTransaction(DappTransactionRequest(account, other, UInt256.ZERO, ByteArray(0), null)), transaction(""))
+        assertEquals(
+            DappAsk.SendTransaction(DappTransactionRequest(account, other, UInt256.of(255), byteArrayOf(1, 2), 21_000)),
+            transaction(""", "value": "0xff", "data": "0x0102", "gas": "0x5208", "chainId": "0xaa36a7", "type": "0x2", "accessList": []"""),
+        )
+        // input stands for data, gasLimit for gas: the same when both are given.
+        assertEquals(transaction(""", "data": "0x0102", "gas": "0x5208""""), transaction(""", "input": "0x0102", "gasLimit": "0x5208""""))
+        assertEquals(transaction(""", "data": "0x0102""""), transaction(""", "data": "0x0102", "input": "0x0102""""))
+        val malformed = DappAsk.Malformed("eth_sendTransaction")
+        for (fields in listOf(
+            """, "nonce": "0x1"""",
+            """, "gasPrice": "0x1"""",
+            """, "maxFeePerGas": "0x1"""",
+            """, "maxPriorityFeePerGas": "0x1"""",
+            """, "chainId": "0x1"""",
+            """, "type": "0x0"""",
+            """, "accessList": [{"address": "${other.hex}", "storageKeys": []}]""",
+            """, "data": "0x0102", "input": "0x0103"""",
+            """, "data": "0x012"""",
+            """, "value": "255"""",
+            """, "value": 255""",
+            """, "gas": "0x0"""",
+            """, "from2": "x"""",
+        )) {
+            assertEquals(malformed, transaction(fields), fields)
+        }
+        // No contract creation: a recipient is required.
+        assertEquals(malformed, decode("eth_sendTransaction", """[{"from": "${account.hex}"}]"""))
     }
 
     @Test

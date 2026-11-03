@@ -7,6 +7,7 @@ import eth.serotine.domain.repository.DappProposalId
 import eth.serotine.domain.repository.DappRequestId
 import eth.serotine.domain.repository.DappRelayLink
 import eth.serotine.domain.repository.DappSessionId
+import eth.serotine.domain.usecase.DappSignContent
 import eth.serotine.domain.usecase.DisconnectDapp
 import eth.serotine.domain.usecase.ExtendDappSession
 import eth.serotine.domain.usecase.ObserveDappConnections
@@ -68,7 +69,9 @@ class ConnectionsViewModel(
                             key = requestKey(review.request.id),
                             name = review.request.dapp.name,
                             url = review.request.dapp.url,
+                            transaction = review.content is DappSignContent.Transaction,
                             line = when {
+                                review.content is DappSignContent.Transaction -> "Asks you to send a transaction · Review"
                                 review.refusal != null -> "Asks for a signature that cannot be given · Review"
                                 review.signIn != null -> "Asks you to sign in · Review"
                                 review.message == null -> "Asks you to sign data · Review"
