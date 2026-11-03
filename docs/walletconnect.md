@@ -317,6 +317,10 @@ everything on the chain side: the verified `call`, `estimateGasDetailed`,
     shown so and not proposed.
   - A `gas` field is refused (-32602): a Safe transaction's gas is set by
     the account that executes it, so the dApp's limit could not be applied.
+  - A call of the Safe itself is refused (4100), whatever it changes: D6
+    decodes no settings change, so none is signed from a dApp. The Safe's
+    owners, threshold, guard, modules and fallback handler change from its
+    own screens alone.
   - It is signed on D6 by the first of the Safe's owners whose key is on
     this device, and queued. With none, D6's Sign is greyed out and says
     why. A proposal over a minute old is made again before it is signed.
@@ -337,11 +341,12 @@ everything on the chain side: the verified `call`, `estimateGasDetailed`,
 - **A dApp is answered only with an Ethereum transaction hash.** For a Safe,
   that is the hash of the `execTransaction` sent, never the `safeTxHash`. The
   app answers it while it runs, once a peer takes an execution of the Safe
-  transaction recorded for it, on Sepolia, or a verified block includes
-  one. If
-  the threshold cannot be met before the request expires, the dApp gets an
-  error, and the Safe transaction stays queued. It is never left hanging,
-  and never given a hash that is not a transaction.
+  transaction recorded for it, sent from this device on Sepolia, or a
+  verified block includes one. An execution a co-signer sends from another
+  device does not answer it. If the request expires first (the threshold
+  not met in time, or executed elsewhere), the dApp gets an error, and the
+  Safe transaction stays queued. It is never left hanging, and never given
+  a hash that is not a transaction.
 
 ### The session's life
 

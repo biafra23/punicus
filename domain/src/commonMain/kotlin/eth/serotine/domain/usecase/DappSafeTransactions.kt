@@ -88,10 +88,11 @@ sealed interface DappSafeProposing {
 /**
  * Proposes a dApp's `eth_sendTransaction` from a Safe as a Safe transaction (docs/walletconnect.md,
  * *Transactions*): a `SafeTx` with operation `CALL` and no refund, of the request's value and call data to
- * its recipient, at the Safe's next nonce behind its queued transactions. Every Safe rule applies, as for
- * one the user builds ([SigningRequest.unsignable]): no delegate call, no gas terms, no call of the Safe
- * itself that is not exactly one of its settings changes, no fallback handler set but the pinned one, no
- * module enabled (owner rulings, 2026-10-18, #63, on #54 and #57). The call is run as a verified call from
+ * its recipient, at the Safe's next nonce behind its queued transactions. No call of the Safe itself is
+ * proposed at all ([DappSignRefusal.SAFE_SELF_CALL]): D6 decodes no settings change. Every Safe rule applies
+ * besides, as for one the user builds ([SigningRequest.unsignable]): no delegate call, no gas terms, no
+ * fallback handler set but the pinned one, no module enabled (owner rulings, 2026-10-18, #63, on #54 and
+ * #57). The call is run as a verified call from
  * the Safe, which must not revert (nor, for a token's `transfer` or `approve`, return false), and its value
  * must be in the Safe's verified balance with what its queued transactions may move. A request is the Safe
  * transaction recorded for it ([DappRequest.safeTx]) once one is, never another. [clock] is in unix seconds.

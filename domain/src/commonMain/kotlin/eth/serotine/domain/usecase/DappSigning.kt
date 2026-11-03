@@ -102,6 +102,13 @@ enum class DappSignRefusal(val error: DappRequestError) {
      */
     SAFE_GAS(DappRequestError.INVALID_PARAMS),
 
+    /**
+     * A Safe's transaction that calls the Safe itself: a change of its owners, threshold, guard, modules or
+     * fallback handler. D6 decodes none of them, so none is signed from a dApp: the Safe's settings change
+     * from the Safe's own screens alone.
+     */
+    SAFE_SELF_CALL(DappRequestError.UNAUTHORIZED),
+
     /** Typed data with more values than D5 shows ([MAX_SHOWN_VALUES]): what would not be shown is not signed. */
     TYPED_TOO_LARGE(DappRequestError.LIMIT_EXCEEDED),
 }
@@ -221,6 +228,7 @@ fun reviewDappMessage(
         is DappSignContent.Typed -> typedRefusal(content, signer)
         is DappSignContent.Transaction -> when {
             content.transaction.to == Address.ZERO -> DappSignRefusal.TX_TO_ZERO_ADDRESS
+            account?.kind == AccountKind.SAFE && content.transaction.to == signer -> DappSignRefusal.SAFE_SELF_CALL
             account?.kind == AccountKind.SAFE && content.transaction.gas != null -> DappSignRefusal.SAFE_GAS
             else -> null
         }

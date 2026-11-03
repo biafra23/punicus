@@ -689,8 +689,8 @@ class DappTransactionViewModel(
         const val SIGN_FAILED = "Serotine could not finish this signature. Nothing was queued: try again."
         const val NOT_QUEUED = "Signed, but this device's queue cannot be saved right now, so nothing was queued: " +
             "sign it again in a moment."
-        const val NOT_RECORDED = "This request could not be tied to its Safe transaction right now, so nothing was " +
-            "signed: try again in a moment."
+        const val NOT_RECORDED = "This request could not be tied to its Safe transaction right now, so the signature " +
+            "was dropped and nothing was queued: try again in a moment."
         const val NO_LONGER_QUEUED = "The Safe transaction proposed for this request is no longer queued here, and it " +
             "is never replaced by another one. Refuse answers the dApp; ask it again for a new one."
         const val SAFE_SHORT = "The Safe's verified balance, less what its queued transactions may move, cannot " +

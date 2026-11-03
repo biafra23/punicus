@@ -384,6 +384,8 @@ class DappRequestViewModel(
             DappSignRefusal.PERMIT_OTHER_OWNER -> "The approval is for another account than the one asked to sign it."
             DappSignRefusal.SAFE_GAS -> "It sets a gas limit, which a Safe's transaction cannot take: the account " +
                 "that executes it sets the gas. Ask the dApp again without one, or refuse."
+            DappSignRefusal.SAFE_SELF_CALL -> "It calls the Safe itself, which changes its owners, threshold, guard, " +
+                "modules or fallback handler. A dApp cannot do that here: change the Safe's settings on its own screen."
             DappSignRefusal.TX_TO_ZERO_ADDRESS ->
                 "It sends to the zero address: nobody holds its key, so what it sends would be lost for good."
             DappSignRefusal.TYPED_TOO_LARGE ->

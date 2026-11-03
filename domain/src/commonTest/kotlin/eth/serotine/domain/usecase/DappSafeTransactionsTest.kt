@@ -235,7 +235,8 @@ class DappSafeTransactionsTest {
 
     @Test
     fun everySafeRuleAppliesAndAnOwnerHeldHereIsNeeded() = runTest {
-        // A call of the Safe itself that sets a fallback handler other than the pinned one: refused (#63).
+        // A call of the Safe itself, here setting a fallback handler other than the pinned one: refused before
+        // any Safe rule, since D6 decodes no settings change.
         val handler = DappTransactionRequest(
             world.safe,
             world.safe,
@@ -244,7 +245,17 @@ class DappSafeTransactionsTest {
             null,
         )
         requests.waiting.value = listOf(request(handler))
-        assertIs<DappSafeProposing.SafeRefused>(propose()(request(handler).id))
+        assertEquals(DappSafeProposing.Refused(DappSignRefusal.SAFE_SELF_CALL), propose()(request(handler).id))
+        // An exact settings change too, its threshold lowered: the Safe's own screens change its settings.
+        val owner = DappTransactionRequest(
+            world.safe,
+            world.safe,
+            UInt256.ZERO,
+            SafeSettingsCalls.changeThreshold(1),
+            null,
+        )
+        requests.waiting.value = listOf(request(owner))
+        assertEquals(DappSafeProposing.Refused(DappSignRefusal.SAFE_SELF_CALL), propose()(request(owner).id))
         // A call that reverts, run from the Safe.
         world.inputs.simulation = Simulation.Reverted(100)
         requests.waiting.value = listOf(request(payment))
@@ -284,7 +295,7 @@ class DappSafeTransactionsTest {
         val data = SafeSettingsCalls.ENABLE_MODULE + ByteArray(12) + ByteArray(20) { 0x77 }
         val module = DappTransactionRequest(world.safe, world.safe, UInt256.ZERO, data, null)
         requests.waiting.value = listOf(request(module))
-        assertIs<DappSafeProposing.SafeRefused>(propose()(request(module).id))
+        assertEquals(DappSafeProposing.Refused(DappSignRefusal.SAFE_SELF_CALL), propose()(request(module).id))
         // More than the Safe's verified ether.
         val large = DappTransactionRequest(world.safe, world.recipient, UInt256.of("2000000000000000000"), ByteArray(0), null)
         requests.waiting.value = listOf(request(large))
