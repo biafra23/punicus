@@ -5,6 +5,8 @@ import eth.serotine.domain.model.AccountCustody
 import eth.serotine.domain.model.AccountKind
 import eth.serotine.domain.model.Address
 import eth.serotine.domain.model.Network
+import eth.serotine.domain.model.PersonalMessage
+import eth.serotine.domain.repository.DappAsk
 import eth.serotine.domain.repository.DappConnections
 import eth.serotine.domain.repository.DappMetadata
 import eth.serotine.domain.repository.DappPairing
@@ -12,17 +14,22 @@ import eth.serotine.domain.repository.DappProposal
 import eth.serotine.domain.repository.DappProposalId
 import eth.serotine.domain.repository.DappRefusal
 import eth.serotine.domain.repository.DappRelayLink
+import eth.serotine.domain.repository.DappRequest
+import eth.serotine.domain.repository.DappRequestId
 import eth.serotine.domain.repository.DappSession
 import eth.serotine.domain.repository.DappSessionId
 import eth.serotine.domain.usecase.ApproveDappProposal
 import eth.serotine.domain.usecase.DisconnectDapp
 import eth.serotine.domain.usecase.ExtendDappSession
 import eth.serotine.domain.usecase.ObserveDappConnections
+import eth.serotine.domain.usecase.ObserveDappMessages
 import eth.serotine.domain.usecase.PairDapp
 import eth.serotine.domain.usecase.RejectDappProposal
 import eth.serotine.ui.FakeAccounts
+import eth.serotine.ui.FakeDappRequests
 import eth.serotine.ui.FakeDappSessions
 import eth.serotine.ui.MemoryNetworkSettings
+import eth.serotine.ui.OffDappRequests
 import eth.serotine.ui.OffDappSessions
 import eth.serotine.ui.dappproposal.DappProposalViewModel
 import eth.serotine.ui.pairdapp.PairDappViewModel
@@ -58,6 +65,7 @@ class DappViewModelsTest {
     private val accounts = FakeAccounts(held, watched)
     private val networks = MemoryNetworkSettings(setOf(Network.SEPOLIA))
     private val sessions = FakeDappSessions()
+    private val requests = FakeDappRequests()
     private val dapp = DappMetadata("Test dApp", "https://dapp.test", "A dApp")
     private val proposalId = DappProposalId("a".repeat(64), 7)
 
@@ -79,12 +87,29 @@ class DappViewModelsTest {
             listOf(proposal()),
             listOf(DappSession(DappSessionId("t1"), dapp, listOf(held.address), listOf("personal_sign"), 1_700_000_000 + 6 * 86_400 + 10, true)),
         )
-        val vm = ConnectionsViewModel(observe(), DisconnectDapp(sessions), ExtendDappSession(sessions), clock = { 1_700_000_000 })
+        requests.waiting.value = listOf(
+            DappRequest(
+                DappRequestId(DappSessionId("t1"), 9),
+                dapp,
+                listOf(held.address),
+                "eip155:11155111",
+                DappAsk.PersonalSign(held.address, PersonalMessage.of("Hello".encodeToByteArray())!!),
+                1_700_000_300,
+            ),
+        )
+        val vm = ConnectionsViewModel(
+            observe(),
+            ObserveDappMessages(requests, accounts, networks, clock = { 1_700_000_000 }),
+            DisconnectDapp(sessions),
+            ExtendDappSession(sessions),
+            clock = { 1_700_000_000 },
+        )
         backgroundScope.launch { vm.uiState.collect {} }
         runCurrent()
         val state = vm.uiState.value
         assertEquals("Connected to WalletConnect's relay", state.link)
         assertEquals("${proposalId.pairing}/7", state.proposals.single().key)
+        assertEquals(RequestRow("t1/9", "Test dApp", "https://dapp.test", "Asks you to sign a message · Review"), state.requests.single())
         assertEquals("Sees 1 account · Ends in 6 days", state.sessions.single().line)
         vm.disconnect("t1")
         runCurrent()
@@ -100,6 +125,7 @@ class DappViewModelsTest {
         main()
         val vm = ConnectionsViewModel(
             ObserveDappConnections(OffDappSessions, accounts, networks),
+            ObserveDappMessages(OffDappRequests, accounts, networks),
             DisconnectDapp(OffDappSessions),
             ExtendDappSession(OffDappSessions),
         )

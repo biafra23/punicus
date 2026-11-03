@@ -37,6 +37,7 @@ import eth.serotine.data.transfers.FileTransactionHistory
 import eth.serotine.data.upgrade.FileKnownUpgradeStore
 import eth.serotine.domain.model.Network
 import eth.serotine.domain.usecase.FollowAccountLogs
+import eth.serotine.domain.usecase.AnswerDappRequestsAtOnce
 import eth.serotine.domain.usecase.FollowDappAccounts
 import eth.serotine.domain.usecase.FollowDebugScreen
 import eth.serotine.domain.usecase.FollowInterfaceMode
@@ -211,6 +212,16 @@ private fun openWallet(dataDir: File) {
                 throw e
             } catch (e: Exception) {
                 System.err.println("Serotine: following the dApp sessions' accounts stopped: ${e::class.simpleName}")
+            }
+        }
+        LaunchedEffect(Unit) {
+            // The requests that need no one's decision, answered at once. A failure ends it alone.
+            try {
+                AnswerDappRequestsAtOnce(dapps.requests)()
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                System.err.println("Serotine: answering the dApps' requests stopped: ${e::class.simpleName}")
             }
         }
         LaunchedEffect(Unit) {
@@ -390,6 +401,7 @@ private fun openWallet(dataDir: File) {
                 networkDemand = networkDemand,
                 networkSettings = networkSettings,
                 dappSessions = dapps,
+                dappRequests = dapps.requests,
                 dappConnectionsOff = dappProjectId.isEmpty(),
             )
         }

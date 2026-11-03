@@ -146,6 +146,17 @@ everything on the chain side: the verified `call`, `estimateGasDetailed`,
 - Every request must name `eip155:11155111`. A request for another chain, or
   a `from` or an address that is not one of the session's accounts, is
   refused.
+- The errors: 4001 when the user declines; 4100 for an account or a chain
+  the session does not give the dApp, or an account that cannot sign here;
+  4200 for a method not answered; 4902 for a switch to a chain other than
+  Sepolia (EIP-3326); -32602 for parameters that are not the method's.
+- **What needs no one's decision is answered at once**, by the app while it
+  runs: `wallet_switchEthereumChain`, and parameters out of shape. Until part
+  1.4, `eth_signTypedData_v4` and `eth_sendTransaction` are too, with 4200.
+- Parameters are read strictly: `personal_sign` takes exactly
+  `[message, address]`. The message is the bytes its `0x` hex spells, or, when
+  it is not `0x` and hex, the text's UTF-8 bytes, as wallets read it. Either
+  way, the bytes shown are the bytes signed. At most 16 KiB.
 
 ### Signing in (`personal_sign`, EIP-4361)
 
@@ -155,10 +166,16 @@ everything on the chain side: the verified `call`, `estimateGasDetailed`,
   under the account's unlock, as Send does. `eth_sign`, which would sign a
   digest the dApp chose, stays refused.
 - **The message is shown as the dApp sent it.** Bytes that decode as UTF-8
-  are shown as text; others as hex, marked "not text".
+  are shown as text; others as hex, marked "not text". So is text holding a
+  control character other than a line break or a tab, a formatting one (a
+  right-to-left override, a zero-width space), or a line or paragraph
+  separator, which could make it read as something it does not say.
 - **A message that parses as EIP-4361** is shown field by field: the domain,
   the address, the statement, the URI, the chain id, the nonce, when it was
-  issued, and its expiry and not-before times where it has them.
+  issued, and its expiry and not-before times where it has them. It parses
+  only when its domain is a plain host (ASCII, or an IPv6 address) with an
+  optional port and no user part, so that no domain reads as one site and is
+  another.
   - The address must be the account asked to sign, and the chain id that
     account's network. Otherwise the request is refused.
   - A message past its expiry, or before its not-before time, is refused.
@@ -171,6 +188,13 @@ everything on the chain side: the verified `call`, `estimateGasDetailed`,
   commits to.
 - Signing in reads nothing from the chain. The screen says nothing about the
   account's balance or state beyond what the account screens already show.
+- **A request opens its review (D4) as it arrives**, in the Settings tab,
+  once per run of the app: one left unanswered waits in Connected dApps. It
+  waits while a flow covers the tab bar (a key operation, a review being
+  signed), as a `wc:` link does.
+- A request that cannot be signed (a check above, a watched account, a
+  Safe) is shown with the reason, its Sign greyed out, and can only be
+  refused; Refuse answers with the error that reason has.
 
 ### Typed data (`eth_signTypedData_v4`)
 
@@ -373,8 +397,11 @@ their mockups come with the PR that builds each.
 - **D3 Session proposal**: the dApp's stated name and URL, marked as not
   verified; the chain; the methods it asks for, those outside the closed list
   marked as refused; the accounts to choose from; Approve and Reject.
-- **D4 Sign-in request**: the EIP-4361 fields, or the message as text or
-  hex; the domain warning; the unlock.
+- **D4 Sign-in request**: the dApp's stated name and URL, marked as not
+  verified; the account asked to sign, in full; the EIP-4361 fields, or the
+  message as text or hex; the domain warning or the not-a-sign-in warning;
+  how long the dApp waits; the unlock, and Refuse. D1 lists the requests
+  waiting, each opening D4.
 - **D5 Typed-data request**: the decoded struct or its fields; the domain;
   the unlock.
 - **D6 Transaction request**: the decoded call, the simulation, the fee; for

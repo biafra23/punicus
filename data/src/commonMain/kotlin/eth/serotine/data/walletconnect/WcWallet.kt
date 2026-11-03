@@ -807,14 +807,7 @@ internal class WcWallet(
         }.toString().encodeToByteArray()
 
         /** JSON-RPC's own error for params out of shape. */
-        fun invalidParams(id: Long): ByteArray = buildJsonObject {
-            put("id", id)
-            put("jsonrpc", "2.0")
-            putJsonObject("error") {
-                put("code", -32602)
-                put("message", "Invalid params.")
-            }
-        }.toString().encodeToByteArray()
+        fun invalidParams(id: Long): ByteArray = error(id, WcProtocol.Error.INVALID_PARAMS)
 
         private fun JsonObject.string(key: String): String? = (this[key] as? JsonPrimitive)?.takeIf { it.isString }?.contentOrNull
     }

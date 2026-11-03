@@ -4,11 +4,13 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import eth.serotine.domain.repository.DappConnections
 import eth.serotine.domain.repository.DappProposalId
+import eth.serotine.domain.repository.DappRequestId
 import eth.serotine.domain.repository.DappRelayLink
 import eth.serotine.domain.repository.DappSessionId
 import eth.serotine.domain.usecase.DisconnectDapp
 import eth.serotine.domain.usecase.ExtendDappSession
 import eth.serotine.domain.usecase.ObserveDappConnections
+import eth.serotine.domain.usecase.ObserveDappMessages
 import eth.serotine.ui.components.epochSecondsNow
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
@@ -21,11 +23,12 @@ import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 
 /**
- * Connected dApps' ViewModel (screen D1): the proposals and sessions, each session's end, and
- * Extend and Disconnect. [clock] is now, in unix seconds.
+ * Connected dApps' ViewModel (screen D1): the proposals, the requests to sign and the sessions,
+ * each session's end, and Extend and Disconnect. [clock] is now, in unix seconds.
  */
 class ConnectionsViewModel(
     observeDappConnections: ObserveDappConnections,
+    observeDappMessages: ObserveDappMessages,
     private val disconnectDapp: DisconnectDapp,
     private val extendDappSession: ExtendDappSession,
     private val clock: () -> Long = ::epochSecondsNow,
@@ -37,9 +40,10 @@ class ConnectionsViewModel(
 
     val uiState: StateFlow<ConnectionsUiState> = combine(
         observeDappConnections(),
+        observeDappMessages(),
         notice,
         ticks,
-    ) { overview, notice, _ ->
+    ) { overview, messages, notice, _ ->
         when (val connections = overview.connections) {
             DappConnections.Off -> ConnectionsUiState(loading = false, off = true)
             is DappConnections.On -> {
@@ -56,6 +60,18 @@ class ConnectionsViewModel(
                                 "Asks for more than Serotine offers · Review"
                             } else {
                                 "Asks to connect · Review"
+                            },
+                        )
+                    },
+                    requests = messages.map { review ->
+                        RequestRow(
+                            key = requestKey(review.request.id),
+                            name = review.request.dapp.name,
+                            url = review.request.dapp.url,
+                            line = when {
+                                review.refusal != null -> "Asks for a signature that cannot be given · Review"
+                                review.signIn != null -> "Asks you to sign in · Review"
+                                else -> "Asks you to sign a message · Review"
                             },
                         )
                     },
@@ -92,6 +108,9 @@ class ConnectionsViewModel(
 
     companion object {
         const val NOT_SAVED = "That could not be saved. Nothing was changed."
+
+        /** A request as a route carries it: `topic/id`. */
+        fun requestKey(id: DappRequestId): String = "${id.session.topic}/${id.id}"
 
         /** A proposal as a route carries it: `pairing/id`. */
         fun proposalKey(id: DappProposalId): String = "${id.pairing}/${id.id}"

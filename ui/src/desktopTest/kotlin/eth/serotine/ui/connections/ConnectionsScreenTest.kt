@@ -28,6 +28,7 @@ class ConnectionsScreenTest {
                 onBack = {},
                 onPair = { paired++ },
                 onProposal = { opened += it },
+                onRequest = { opened += it },
                 onExtend = { extended += it },
                 onDisconnect = { disconnected += it },
             )
@@ -38,6 +39,7 @@ class ConnectionsScreenTest {
         loading = false,
         link = "Connected to WalletConnect's relay",
         proposals = listOf(ProposalRow("p/1", "A dApp", "https://a.test", "Asks to connect · Review")),
+        requests = listOf(RequestRow("t1/9", "B dApp", "https://b.test", "Asks you to sign in · Review")),
         sessions = listOf(SessionRow("t1", "B dApp", "https://b.test", "Sees 1 account · Ends in 6 days")),
     )
 
@@ -46,7 +48,8 @@ class ConnectionsScreenTest {
         show(state)
 
         rule.onNodeWithTag(CONNECTIONS_PROPOSAL_TAG + "p/1").performClick()
-        assertEquals(listOf("p/1"), opened)
+        rule.onNodeWithTag(CONNECTIONS_REQUEST_TAG + "t1/9").performClick()
+        assertEquals(listOf("p/1", "t1/9"), opened)
         rule.onNodeWithText("Extend").performClick()
         assertEquals(listOf("t1"), extended)
         rule.onNodeWithText("Disconnect").performClick()

@@ -1,11 +1,17 @@
 package eth.serotine.ui
 
 import eth.serotine.domain.model.Address
+import eth.serotine.domain.model.Signature
+import eth.serotine.domain.repository.DappAnswer
 import eth.serotine.domain.repository.DappApproval
 import eth.serotine.domain.repository.DappConnections
 import eth.serotine.domain.repository.DappPairing
 import eth.serotine.domain.repository.DappProposalId
 import eth.serotine.domain.repository.DappRelayLink
+import eth.serotine.domain.repository.DappRequest
+import eth.serotine.domain.repository.DappRequestError
+import eth.serotine.domain.repository.DappRequestId
+import eth.serotine.domain.repository.DappRequests
 import eth.serotine.domain.repository.DappSessionId
 import eth.serotine.domain.repository.DappSessions
 import kotlinx.coroutines.flow.Flow
@@ -43,4 +49,33 @@ internal class FakeDappSessions : DappSessions {
     override suspend fun disconnect(session: DappSessionId) = saves.also { disconnected += session }
     override suspend fun extend(session: DappSessionId) = saves.also { extended += session }
     override suspend fun updateAccounts(session: DappSessionId, accounts: List<Address>) = saves
+}
+
+/** [DappRequests] of a build without a project ID: none, and every answer says it is off. */
+internal object OffDappRequests : DappRequests {
+    override fun observe(): Flow<List<DappRequest>> = flowOf(emptyList())
+    override suspend fun answerSignature(request: DappRequestId, signature: Signature) = DappAnswer.OFF
+    override suspend fun answerNull(request: DappRequestId) = DappAnswer.OFF
+    override suspend fun refuse(request: DappRequestId, why: DappRequestError) = DappAnswer.OFF
+}
+
+/** [DappRequests] over [waiting], a test sets; an answer takes the request away and is recorded. */
+internal class FakeDappRequests : DappRequests {
+    val waiting = MutableStateFlow<List<DappRequest>>(emptyList())
+    var answer = DappAnswer.DELIVERED
+    val signatures = mutableListOf<Pair<DappRequestId, Signature>>()
+    val refusals = mutableListOf<Pair<DappRequestId, DappRequestError>>()
+
+    override fun observe(): Flow<List<DappRequest>> = waiting
+    private fun answered(request: DappRequestId): DappAnswer {
+        if (answer == DappAnswer.DELIVERED || answer == DappAnswer.NOT_DELIVERED) {
+            waiting.value = waiting.value.filterNot { it.id == request }
+        }
+        return answer
+    }
+    override suspend fun answerSignature(request: DappRequestId, signature: Signature): DappAnswer =
+        answered(request).also { signatures += request to signature }
+    override suspend fun answerNull(request: DappRequestId): DappAnswer = answered(request)
+    override suspend fun refuse(request: DappRequestId, why: DappRequestError): DappAnswer =
+        answered(request).also { refusals += request to why }
 }

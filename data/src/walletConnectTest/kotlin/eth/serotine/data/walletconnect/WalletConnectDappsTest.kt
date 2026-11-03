@@ -4,6 +4,13 @@ package eth.serotine.data.walletconnect
 
 import eth.serotine.data.walletconnect.FakeDapp.Companion.namespace
 import eth.serotine.domain.model.Address
+import eth.serotine.domain.model.PersonalMessage
+import eth.serotine.domain.model.Signature
+import eth.serotine.domain.repository.DappAnswer
+import eth.serotine.domain.repository.DappAsk
+import eth.serotine.domain.repository.DappRequestError
+import eth.serotine.domain.repository.DappRequestId
+import eth.serotine.domain.repository.DappSessionId
 import eth.serotine.domain.repository.DappApproval
 import eth.serotine.domain.repository.DappConnections
 import eth.serotine.domain.repository.DappPairing
@@ -20,12 +27,18 @@ import kotlinx.coroutines.test.runTest
 import kotlinx.io.files.Path
 import kotlinx.io.files.SystemFileSystem
 import kotlinx.io.files.SystemTemporaryDirectory
+import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.add
+import kotlinx.serialization.json.addJsonObject
+import kotlinx.serialization.json.buildJsonArray
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.int
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.put
+import kotlinx.serialization.json.putJsonObject
 import kotlin.random.Random
 import kotlin.test.AfterTest
 import kotlin.test.Test
@@ -121,6 +134,69 @@ class WalletConnectDappsTest {
         settle()
         val answer = dapp.received.getValue(dapp.pairingTopic).single()
         assertEquals(5100, answer.getValue("error").jsonObject.getValue("code").jsonPrimitive.int)
+    }
+
+    @Test
+    fun aSessionsRequestsArriveDecodedAndAreAnswered() = runTest {
+        val dapps = dapps()
+        val dapp = FakeDapp(relay, backgroundScope) { now() }
+        dapp.subscribePairing()
+        dapps.pair(dapp.uri())
+        val methods = listOf("personal_sign", "wallet_switchEthereumChain")
+        dapp.propose(
+            3,
+            JsonObject(emptyMap()),
+            buildJsonObject { put("eip155", namespace(listOf(WcProtocol.SEPOLIA), methods, emptyList())) },
+        )
+        settle()
+        val proposal = assertIs<DappConnections.On>(dapps.observe().first()).proposals.single()
+        assertIs<DappApproval.Approved>(dapps.approve(proposal.id, listOf(account)))
+        settle()
+        assertTrue(dapp.followSession(3))
+        fun sessionRequest(id: Long, method: String, params: JsonArray) = FakeDapp.request(
+            id,
+            "wc_sessionRequest",
+            buildJsonObject {
+                putJsonObject("request") {
+                    put("method", method)
+                    put("params", params)
+                }
+                put("chainId", WcProtocol.SEPOLIA)
+            },
+        )
+        dapp.sendOnSession(
+            sessionRequest(20, "personal_sign", buildJsonArray { add(JsonPrimitive("0x68656c6c6f")); add(JsonPrimitive(account.hex)) }),
+        )
+        dapp.sendOnSession(
+            sessionRequest(21, "wallet_switchEthereumChain", buildJsonArray { addJsonObject { put("chainId", "0x1") } }),
+        )
+        settle()
+        val waiting = dapps.requests.observe().first()
+        assertEquals(listOf(20L, 21L), waiting.map { it.id.id })
+        val sign = waiting.first()
+        assertEquals(listOf(account), sign.sessionAccounts)
+        assertEquals("Test dApp", sign.dapp.name)
+        assertEquals(WcProtocol.SEPOLIA, sign.chain)
+        assertEquals(DappAsk.PersonalSign(account, PersonalMessage.ofHex("68656c6c6f")!!), sign.ask)
+        assertEquals(DappAsk.SwitchChain(1), waiting.last().ask)
+
+        val signature = Signature("1".padStart(64, '0'), "2".padStart(64, '0'), 0)
+        assertEquals(DappAnswer.DELIVERED, dapps.requests.answerSignature(sign.id, signature))
+        assertEquals(DappAnswer.DELIVERED, dapps.requests.refuse(waiting.last().id, DappRequestError.UNRECOGNIZED_CHAIN))
+        assertEquals(DappAnswer.NO_SUCH_REQUEST, dapps.requests.answerNull(sign.id))
+        settle()
+        val answers = dapp.received.getValue(checkNotNull(dapp.sessionTopic)).associateBy { it.getValue("id").jsonPrimitive.content }
+        assertEquals(WcRequests.signatureHex(signature), answers.getValue("20").getValue("result").jsonPrimitive.content)
+        assertEquals(4902, answers.getValue("21").getValue("error").jsonObject.getValue("code").jsonPrimitive.int)
+        assertTrue(dapps.requests.observe().first().isEmpty())
+    }
+
+    @Test
+    fun withoutAProjectIdThereAreNoRequests() = runTest {
+        val off = dapps(projectId = "")
+        assertTrue(off.requests.observe().first().isEmpty())
+        val id = DappRequestId(DappSessionId("t"), 1)
+        assertEquals(DappAnswer.OFF, off.requests.refuse(id, DappRequestError.USER_REJECTED))
     }
 
     @Test
