@@ -35,10 +35,12 @@ data class SignInMessage(
         // A host and an optional port, in ASCII alone: no user part (`app.example.org@evil.test` would read as
         // one site and be another), and no character that only looks like a letter or a space.
         private val AUTHORITY = Regex("^([A-Za-z0-9-]+(\\.[A-Za-z0-9-]+)*|\\[[0-9A-Fa-f:.]+])(:[0-9]{1,5})?$")
-        private val URI = Regex("^[A-Za-z][A-Za-z0-9+.-]*:\\S+$")
+        // RFC 3986 URIs, and EIP-4361's request ID, are printable ASCII alone: no character that only looks
+        // like one of a site's, as for the domain.
+        private val URI = Regex("^[A-Za-z][A-Za-z0-9+.-]*:[!-~]+$")
         private val NONCE = Regex("^[A-Za-z0-9]{8,}$")
         private val CHAIN_ID = Regex("^[1-9][0-9]{0,17}$")
-        private val REQUEST_ID = Regex("^\\S*$")
+        private val REQUEST_ID = Regex("^[!-~]*$")
 
         // RFC 3339 names its parts; ISO 8601's other forms (week dates, no offset) are not it.
         private val DATE_TIME = Regex("^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\.\\d{1,9})?(Z|[+-]\\d{2}:\\d{2})$")
@@ -46,7 +48,8 @@ data class SignInMessage(
         /**
          * [text] read as an EIP-4361 message, or null when it is not exactly one: every line in the
          * order the EIP gives, a domain that is a host (ASCII letters, digits, dots and hyphens, or an
-         * IPv6 address in brackets) with an optional port and no user part, version 1, an EIP-55 address (one case, or mixed case with a correct
+         * IPv6 address in brackets) with an optional port and no user part, a URI, resources and request
+         * ID in printable ASCII, version 1, an EIP-55 address (one case, or mixed case with a correct
          * checksum), a nonce of at least eight letters and digits, and RFC 3339 times. Line breaks are
          * `\n` alone. Nothing is repaired: a message that is not one is shown as it is, with the warning
          * that it is not a sign-in.

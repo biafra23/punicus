@@ -36,6 +36,16 @@ class PersonalMessageTest {
         assertNull(PersonalMessage.of("pay \u202Eevil".encodeToByteArray())?.text)
         assertNull(PersonalMessage.of("ex\u200Bample.com".encodeToByteArray())?.text)
         assertNull(PersonalMessage.of("line\u2028break".encodeToByteArray())?.text)
+        // Drawn as nothing outside the BMP: the tag characters ("ASCII smuggling"), U+E0041 being TAG LATIN CAPITAL A.
+        assertNull(PersonalMessage.of("pay\uDB40\uDC41evil".encodeToByteArray())?.text)
+        assertNull(PersonalMessage.of("sign\uDB40\uDC01".encodeToByteArray())?.text)
+        // Default-ignorable marks and letters in the BMP: a variation selector, the combining grapheme joiner,
+        // a Hangul filler.
+        assertNull(PersonalMessage.of("ok\uFE0F".encodeToByteArray())?.text)
+        assertNull(PersonalMessage.of("a\u034Fb".encodeToByteArray())?.text)
+        assertNull(PersonalMessage.of("\u3164name".encodeToByteArray())?.text)
+        // A character outside the BMP that draws is text.
+        assertEquals("gm \uD83D\uDC4B", PersonalMessage.of("gm \uD83D\uDC4B".encodeToByteArray())?.text)
     }
 
     @Test

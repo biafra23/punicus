@@ -168,14 +168,18 @@ everything on the chain side: the verified `call`, `estimateGasDetailed`,
 - **The message is shown as the dApp sent it.** Bytes that decode as UTF-8
   are shown as text; others as hex, marked "not text". So is text holding a
   control character other than a line break or a tab, a formatting one (a
-  right-to-left override, a zero-width space), or a line or paragraph
-  separator, which could make it read as something it does not say.
+  right-to-left override, a zero-width space), a line or paragraph
+  separator, or any other character Unicode says draws nothing (its
+  default-ignorable code points, the tag characters and the variation
+  selectors among them), which could make it read as something it does not
+  say.
 - **A message that parses as EIP-4361** is shown field by field: the domain,
   the address, the statement, the URI, the chain id, the nonce, when it was
   issued, and its expiry and not-before times where it has them. It parses
   only when its domain is a plain host (ASCII, or an IPv6 address) with an
-  optional port and no user part, so that no domain reads as one site and is
-  another.
+  optional port and no user part, and its URI, resources and request ID are
+  printable ASCII, as RFC 3986 has them, so that none reads as one site and
+  is another.
   - The address must be the account asked to sign, and the chain id that
     account's network. Otherwise the request is refused.
   - A message past its expiry, or before its not-before time, is refused.
