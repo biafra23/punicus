@@ -134,10 +134,17 @@ kotlin {
         val envelopeTest by creating {
             dependsOn(commonTest.get())
         }
+        // WalletConnect's tests (eth.serotine.data.walletconnect), which need libsodium
+        // (WcCrypto) for the same reason.
+        val walletConnectTest by creating {
+            dependsOn(commonTest.get())
+        }
         val desktopTest by getting {
             dependsOn(envelopeTest)
+            dependsOn(walletConnectTest)
         }
         iosTest.get().dependsOn(envelopeTest)
+        iosTest.get().dependsOn(walletConnectTest)
         val androidUnitTest by getting {
             dependencies {
                 implementation(libs.secp256k1.kmp.jni.jvm)
