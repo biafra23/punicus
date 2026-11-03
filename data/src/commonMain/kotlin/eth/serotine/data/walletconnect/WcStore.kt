@@ -90,9 +90,25 @@ internal class WcStoredRequest(
 )
 
 /**
+ * A message this side has to send, kept until the relay takes it: sealed already, so it goes out
+ * even once its session's key is forgotten (a delete). [expirySeconds]: when the relay would no
+ * longer hold it, after which it is dropped.
+ */
+@Serializable
+internal class WcStoredOutgoing(
+    val key: Long,
+    val topic: String,
+    val message: String,
+    val ttlSeconds: Long,
+    val tag: Int,
+    val expirySeconds: Long,
+)
+
+/**
  * Everything WalletConnect keeps (docs/walletconnect.md, ruling 8): the relay-auth seed, the
- * pairings and sessions with their keys, the proposals and requests waiting for the user, and per
- * topic the request ids seen, so that a replay is dropped across restarts too. No account key is
+ * pairings and sessions with their keys, the proposals and requests waiting for the user, the
+ * messages waiting for the relay, and per topic the request ids seen, so that a replay is dropped
+ * across restarts too. No account key is
  * here, and none of it is ever logged: [toString] says nothing of the keys.
  */
 @Serializable
@@ -103,9 +119,10 @@ internal class WcState(
     val proposals: List<WcStoredProposal> = emptyList(),
     val requests: List<WcStoredRequest> = emptyList(),
     val seen: Map<String, List<Long>> = emptyMap(),
+    val outbox: List<WcStoredOutgoing> = emptyList(),
 ) {
-    override fun toString(): String =
-        "WcState(pairings=${pairings.size}, sessions=${sessions.size}, proposals=${proposals.size}, requests=${requests.size})"
+    override fun toString(): String = "WcState(pairings=${pairings.size}, sessions=${sessions.size}, " +
+        "proposals=${proposals.size}, requests=${requests.size}, outbox=${outbox.size})"
 
     fun copy(
         relayAuthSeed: String? = this.relayAuthSeed,
@@ -114,7 +131,8 @@ internal class WcState(
         proposals: List<WcStoredProposal> = this.proposals,
         requests: List<WcStoredRequest> = this.requests,
         seen: Map<String, List<Long>> = this.seen,
-    ) = WcState(relayAuthSeed, pairings, sessions, proposals, requests, seen)
+        outbox: List<WcStoredOutgoing> = this.outbox,
+    ) = WcState(relayAuthSeed, pairings, sessions, proposals, requests, seen, outbox)
 
     /** Whether request [id] has been seen on [topic]. */
     fun hasSeen(topic: String, id: Long): Boolean = seen[topic]?.contains(id) == true
@@ -123,7 +141,7 @@ internal class WcState(
     fun seeing(topic: String, id: Long): WcState =
         copy(seen = seen + (topic to ((seen[topic].orEmpty() + id).takeLast(WcProtocol.SEEN_IDS_PER_TOPIC))))
 
-    /** Without [topic]'s pairing or session, and what belongs to it. */
+    /** Without [topic]'s pairing or session, and what belongs to it but the messages waiting to go out. */
     fun forgetting(topic: String): WcState = copy(
         pairings = pairings.filterNot { it.topic == topic },
         sessions = sessions.filterNot { it.topic == topic },
@@ -140,6 +158,7 @@ internal class WcState(
         return kept.copy(
             proposals = kept.proposals.filter { it.expirySeconds > nowSeconds },
             requests = kept.requests.filter { it.expirySeconds > nowSeconds },
+            outbox = kept.outbox.filter { it.expirySeconds > nowSeconds },
         )
     }
 }

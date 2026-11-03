@@ -46,6 +46,7 @@ internal class WalletConnect(
     /** Keeps the relay connection and the sessions going until cancelled. */
     suspend fun run(): Nothing = coroutineScope {
         launch { relay.run() }
+        launch { relay.state.collect { if (it == WcRelayClient.State.CONNECTED) wallet.relayConnected() } }
         wallet.run()
     }
 

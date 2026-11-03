@@ -381,4 +381,39 @@ class WcWalletTest {
         assertEquals(1, running.view().requests.size)
         assertEquals(1, running.view().sessions.size)
     }
+
+    @Test
+    fun anAnswerTheRelayCouldNotTakeIsSentOnceItIsBackEvenAfterARestart() = runTest {
+        val first = walletConnect()
+        val dapp = dapp()
+        val topic = settled(first, dapp)
+        dapp.sendOnSession(personalSign(66))
+        settle()
+        relay.refusing = true
+        relay.dropConnections()
+        // Saved and taken off the list, but not delivered: kept in the outbox, never lost.
+        assertEquals(WcWallet.Answer.NOT_DELIVERED, first.wallet.respond(topic, 66, JsonPrimitive("0xlate")))
+        assertTrue(first.view().requests.isEmpty())
+        first.job.cancel()
+        settle()
+
+        walletConnect()
+        settle()
+        relay.refusing = false
+        repeat(30) { settle() } // past the attempt that waited for a connection, and the reconnection
+        assertEquals("0xlate", dapp.received.getValue(topic).last()["result"]?.jsonPrimitive?.content)
+    }
+
+    @Test
+    fun aUriNamingAnOpenSessionsTopicIsRefusedAndTheSessionKept() = runTest {
+        val running = walletConnect()
+        val dapp = dapp()
+        val topic = settled(running, dapp)
+        val crafted = "wc:$topic@2?relay-protocol=irn&symKey=${WcEncoding.hex(WcKeys.newSymKey())}"
+        assertEquals(WcWallet.Pairing.TopicInUse, running.wallet.pair(crafted))
+        dapp.sendOnSession(request(31, "wc_sessionPing", JsonObject(emptyMap())), tag = 1114)
+        settle()
+        assertEquals("true", dapp.received.getValue(topic).last()["result"]?.jsonPrimitive?.content)
+    }
 }
+

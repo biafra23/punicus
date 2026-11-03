@@ -9,6 +9,8 @@ import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonElement
@@ -88,8 +90,11 @@ internal data class WcView(
  *   at once, never shown.
  * - **What it keeps is no account key**: the pairings' and sessions' keys, which protect messages
  *   only (ruling 8). The session's own X25519 private key exists only during [approve].
- * - **The automatic answers** (pings, errors, deletes) go out through an outbox that [run] drains, so
- *   that [onMessage], which runs on the relay client's reader, never waits on the relay.
+ * - **Every message this side sends is saved first**, in the state's outbox, in the same write as
+ *   the change it belongs to, and sent from there: removed once the relay took it, sent again on
+ *   the next connection, at the next start, or within a minute when it did not. An answer is never
+ *   lost to a relay that could not be reached, and [onMessage], which runs on the relay client's
+ *   reader, never waits on the relay.
  *
  * [nowMillis] is the clock. Never throws, but for cancellation and for [onMessage] when the state
  * cannot be saved (the message is then not acknowledged, and comes again).
@@ -105,7 +110,44 @@ internal class WcWallet(
         class Unsubscribe(val topic: String) : Outgoing
     }
 
-    private val outbox = Channel<Outgoing>(Channel.UNLIMITED)
+    /** Unsubscriptions, which need no saving: a topic followed for too long costs only the relay's deliveries. */
+    private val unsubscriptions = Channel<String>(Channel.UNLIMITED)
+
+    /** A signal that the saved outbox has something to send, which [run] sends. */
+    private val outboxFilled = Channel<Unit>(Channel.CONFLATED)
+    private val sending = Mutex()
+
+    /** [publishes] added to the outbox, sent from there; the keys they are kept under go to [keys]. */
+    private fun WcState.queuing(publishes: List<Outgoing.Publish>, now: Long, keys: MutableList<Long>? = null): WcState {
+        if (publishes.isEmpty()) return this
+        val entries = publishes.map {
+            WcStoredOutgoing(Random.nextLong(), it.topic, it.message, it.ttlSeconds, it.tag, now + it.ttlSeconds)
+        }
+        keys?.addAll(entries.map { it.key })
+        return copy(outbox = outbox + entries)
+    }
+
+    /**
+     * Sends the outbox in order, each message removed once the relay took it, and stops at the first
+     * the relay did not take: the rest wait for the next connection. With [only], those messages
+     * alone. True when every one of them went out.
+     */
+    private suspend fun sendQueued(only: List<Long>? = null): Boolean = sending.withLock {
+        val queued = store.change(emptyList<WcStoredOutgoing>()) { state -> state.outbox to null }
+            .filter { only == null || it.key in only }
+        val now = nowSeconds()
+        for (entry in queued) {
+            if (entry.expirySeconds <= now) continue // the relay would not hold it any longer: forgotten by expiry
+            if (!transport.publish(entry.topic, entry.message, entry.ttlSeconds, entry.tag)) return@withLock false
+            store.change(Unit) { state -> Unit to state.copy(outbox = state.outbox.filterNot { it.key == entry.key }) }
+        }
+        true
+    }
+
+    /** The relay connection is open again: what waits in the outbox goes out ([WalletConnect.run] calls it). */
+    fun relayConnected() {
+        outboxFilled.trySend(Unit)
+    }
 
     private fun nowSeconds(): Long = nowMillis() / 1000
 
@@ -117,25 +159,23 @@ internal class WcWallet(
      * cancelled. The relay client runs beside it ([WalletConnect.run]).
      */
     suspend fun run(): Nothing = coroutineScope {
-        launch { expireNow() }
+        launch {
+            expireNow()
+            outboxFilled.trySend(Unit) // what an earlier run could not send
+        }
         launch {
             val state = store.observe().first()
             for (topic in state.pairings.map { it.topic } + state.sessions.map { it.topic }) {
                 launch { transport.subscribe(topic) }
             }
         }
-        launch {
-            for (outgoing in outbox) {
-                when (outgoing) {
-                    is Outgoing.Publish -> transport.publish(outgoing.topic, outgoing.message, outgoing.ttlSeconds, outgoing.tag)
-                    is Outgoing.Unsubscribe -> transport.unsubscribe(outgoing.topic)
-                }
-            }
-        }
+        launch { for (topic in unsubscriptions) transport.unsubscribe(topic) }
+        launch { for (signal in outboxFilled) sendQueued() }
         launch {
             while (true) {
                 delay(1.minutes)
                 expireNow()
+                outboxFilled.trySend(Unit)
             }
         }
         awaitCancellation()
@@ -147,7 +187,7 @@ internal class WcWallet(
      */
     private suspend fun expireNow() {
         val now = nowSeconds()
-        val outgoing = store.change<List<Outgoing>?>(null) { state ->
+        val gone = store.change<List<String>>(emptyList()) { state ->
             val kept = state.expiring(now)
             val gone = (state.pairings.map { it.topic } + state.sessions.map { it.topic }) -
                 (kept.pairings.map { it.topic } + kept.sessions.map { it.topic }).toSet()
@@ -157,10 +197,11 @@ internal class WcWallet(
                 val session = open[request.topic] ?: return@mapNotNull null
                 expiredAnswer(session, request.id)
             }
-            val changed = kept.proposals.size != state.proposals.size || expired.isNotEmpty()
-            (errors + gone.map { Outgoing.Unsubscribe(it) }) to (if (gone.isEmpty() && !changed) null else kept)
-        } ?: return
-        for (item in outgoing) outbox.send(item)
+            val changed = kept.proposals.size != state.proposals.size || expired.isNotEmpty() ||
+                kept.outbox.size != state.outbox.size
+            gone to (if (gone.isEmpty() && !changed) null else kept.queuing(errors, now))
+        }
+        for (topic in gone) unsubscriptions.send(topic)
     }
 
     private fun expiredAnswer(session: WcStoredSession, requestId: Long): Outgoing.Publish {
@@ -189,6 +230,9 @@ internal class WcWallet(
         /** It names the methods the dApp will send, and a session proposal is not among them. */
         data object NoProposal : Pairing
 
+        /** Its topic is an open session's: a URI made to take that session over, refused. */
+        data object TopicInUse : Pairing
+
         /** The state could not be saved. */
         data object NotSaved : Pairing
     }
@@ -207,17 +251,23 @@ internal class WcWallet(
             expirySeconds = (uri.expirySeconds ?: (now + WcProtocol.INACTIVE_PAIRING_SECONDS))
                 .coerceAtMost(now + WcProtocol.ACTIVE_PAIRING_SECONDS),
         )
-        val saved = store.change(false) { state ->
-            if (state.pairings.any { it.topic == stored.topic }) true to null
-            else true to state.copy(pairings = state.pairings + stored)
+        val saved = store.change<Pairing?>(Pairing.NotSaved) { state ->
+            when {
+                // A session's topic would have its messages opened with the URI's key, and the session
+                // forgotten with the pairing: refused.
+                state.sessions.any { it.topic == stored.topic } -> Pairing.TopicInUse to null
+                // A known pairing keeps its own key.
+                state.pairings.any { it.topic == stored.topic } -> null to null
+                else -> null to state.copy(pairings = state.pairings + stored)
+            }
         }
-        if (!saved) return Pairing.NotSaved
+        if (saved != null) return saved
         return Pairing.Paired(uri.topic, subscribed = transport.subscribe(uri.topic))
     }
 
     /** What [approve] did. */
     sealed interface Approval {
-        /** Settled on [topic]; [delivered] false when the relay did not take both messages. */
+        /** Settled on [topic]; [delivered] false when the relay has not taken both messages yet: they are sent again. */
         data class Approved(val topic: String, val delivered: Boolean) : Approval
 
         data object NoSuchProposal : Approval
@@ -243,8 +293,8 @@ internal class WcWallet(
         val now = nowSeconds()
         val selfPrivate = WcKeys.newPrivateKey()
         try {
-            class Settled(val topic: String, val pairingTopic: String, val settle: String, val answer: String)
-            var settled: Settled? = null
+            var settledTopic: String? = null
+            val keys = mutableListOf<Long>()
             val outcome = store.change<Approval>(Approval.NotSaved) { state ->
                 val proposal = state.proposals.find { it.pairingTopic == pairingTopic && it.id == proposalId }
                     ?: return@change Approval.NoSuchProposal to null
@@ -297,30 +347,31 @@ internal class WcWallet(
                     putJsonObject("relay") { put("protocol", "irn") }
                     put("responderPublicKey", selfPublic)
                 }
-                settled = Settled(
-                    topic = topic,
-                    pairingTopic = pairing.topic,
-                    settle = WcEnvelope.sealType0(symKey, request(settleId, WcProtocol.SESSION_SETTLE.name, settleParams)),
-                    answer = WcEnvelope.sealType0(pairingKey, result(proposal.id, answerResult)),
+                val settle = Outgoing.Publish(
+                    topic,
+                    WcEnvelope.sealType0(symKey, request(settleId, WcProtocol.SESSION_SETTLE.name, settleParams)),
+                    WcProtocol.SESSION_SETTLE.ttlSeconds,
+                    WcProtocol.SESSION_SETTLE.requestTag,
+                )
+                val answer = Outgoing.Publish(
+                    pairing.topic,
+                    WcEnvelope.sealType0(pairingKey, result(proposal.id, answerResult)),
+                    WcProtocol.SESSION_PROPOSE.ttlSeconds,
+                    WcProtocol.SESSION_PROPOSE.responseTag,
                 )
                 symKey.fill(0)
+                settledTopic = topic
                 val activePairing = WcStoredPairing(pairing.topic, pairing.symKey, now + WcProtocol.ACTIVE_PAIRING_SECONDS, true)
                 Approval.Approved(topic, delivered = false) to state.copy(
                     proposals = state.proposals - proposal,
                     sessions = state.sessions + session,
                     pairings = state.pairings.map { if (it.topic == pairing.topic) activePairing else it },
-                )
+                ).queuing(listOf(settle, answer), now, keys)
             }
-            val done = settled
-            if (outcome !is Approval.Approved || done == null) return outcome
-            transport.subscribe(done.topic)
-            val settleSent = transport.publish(
-                done.topic, done.settle, WcProtocol.SESSION_SETTLE.ttlSeconds, WcProtocol.SESSION_SETTLE.requestTag,
-            )
-            val answerSent = transport.publish(
-                done.pairingTopic, done.answer, WcProtocol.SESSION_PROPOSE.ttlSeconds, WcProtocol.SESSION_PROPOSE.responseTag,
-            )
-            return Approval.Approved(done.topic, delivered = settleSent && answerSent)
+            val topic = settledTopic
+            if (outcome !is Approval.Approved || topic == null) return outcome
+            transport.subscribe(topic)
+            return Approval.Approved(topic, delivered = sendQueued(keys))
         } finally {
             selfPrivate.fill(0)
         }
@@ -328,26 +379,35 @@ internal class WcWallet(
 
     /**
      * Rejects proposal [proposalId] on [pairingTopic] with [why] (the user's refusal, unless the proposal
-     * asked for more than a session here may have). True once saved and delivered.
+     * asked for more than a session here may have). True once saved and delivered; saved but not yet
+     * delivered, it is sent again.
      */
     suspend fun reject(pairingTopic: String, proposalId: Long, why: WcProtocol.Error = WcProtocol.Error.USER_REJECTED): Boolean {
-        var message: Pair<String, String>? = null
+        val keys = mutableListOf<Long>()
         val saved = store.change(false) { state ->
             val proposal = state.proposals.find { it.pairingTopic == pairingTopic && it.id == proposalId }
                 ?: return@change false to null
             val pairing = state.pairings.find { it.topic == proposal.pairingTopic }
-            if (pairing != null) {
-                val key = checkNotNull(WcEncoding.hexOrNull(pairing.symKey, WC_KEY_BYTES))
-                message = pairing.topic to WcEnvelope.sealType0(key, error(proposal.id, why))
+            val rejection = pairing?.let {
+                val key = checkNotNull(WcEncoding.hexOrNull(it.symKey, WC_KEY_BYTES))
+                Outgoing.Publish(
+                    it.topic,
+                    WcEnvelope.sealType0(key, error(proposal.id, why)),
+                    WcProtocol.SESSION_PROPOSE.ttlSeconds,
+                    WcProtocol.SESSION_PROPOSE_REJECT_TAG,
+                )
             }
-            true to state.copy(proposals = state.proposals - proposal)
+            true to state.copy(proposals = state.proposals - proposal).queuing(listOfNotNull(rejection), nowSeconds(), keys)
         }
         // Nothing goes out for a change that was not saved: the proposal would still be shown.
-        val (topic, envelope) = message?.takeIf { saved } ?: return false
-        return transport.publish(topic, envelope, WcProtocol.SESSION_PROPOSE.ttlSeconds, WcProtocol.SESSION_PROPOSE_REJECT_TAG)
+        if (!saved || keys.isEmpty()) return false
+        return sendQueued(keys)
     }
 
-    /** What [respond] and [respondError] did. */
+    /**
+     * What [respond] and [respondError] did. [NOT_DELIVERED]: saved, and the relay has not taken it
+     * yet; it is sent again on the next connection, never lost.
+     */
     enum class Answer { DELIVERED, NOT_DELIVERED, NO_SUCH_REQUEST, EXPIRED, NOT_SAVED }
 
     /**
@@ -364,6 +424,7 @@ internal class WcWallet(
     private suspend fun answer(topic: String, requestId: Long, payload: () -> ByteArray): Answer {
         val now = nowSeconds()
         var message: Outgoing.Publish? = null
+        val keys = mutableListOf<Long>()
         val outcome = store.change(Answer.NOT_SAVED) { state ->
             val request = state.requests.find { it.topic == topic && it.id == requestId }
                 ?: return@change Answer.NO_SUCH_REQUEST to null
@@ -372,8 +433,7 @@ internal class WcWallet(
             if (session == null) return@change Answer.EXPIRED to kept
             if (request.expirySeconds <= now) {
                 // Past its expiry: the dApp is told so, never handed a late answer.
-                message = expiredAnswer(session, requestId)
-                return@change Answer.EXPIRED to kept
+                return@change Answer.EXPIRED to kept.queuing(listOf(expiredAnswer(session, requestId)), now, keys)
             }
             val key = checkNotNull(WcEncoding.hexOrNull(session.symKey, WC_KEY_BYTES))
             message = Outgoing.Publish(
@@ -382,11 +442,11 @@ internal class WcWallet(
                 WcProtocol.SESSION_REQUEST.ttlSeconds,
                 WcProtocol.SESSION_REQUEST.responseTag,
             )
-            Answer.DELIVERED to kept
+            Answer.DELIVERED to kept.queuing(listOfNotNull(message), now, keys)
         }
         // Nothing goes out for a change that was not saved: the request would still be shown, and answerable again.
-        val publish = message?.takeIf { outcome != Answer.NOT_SAVED } ?: return outcome
-        val sent = transport.publish(publish.topic, publish.message, publish.ttlSeconds, publish.tag)
+        if (outcome == Answer.NOT_SAVED || keys.isEmpty()) return outcome
+        val sent = sendQueued(keys)
         return when {
             outcome == Answer.EXPIRED -> Answer.EXPIRED
             sent -> Answer.DELIVERED
@@ -396,7 +456,7 @@ internal class WcWallet(
 
     /** Ends session [topic], telling the dApp. True when it was a session here and its end was saved. */
     suspend fun disconnect(topic: String): Boolean {
-        var message: String? = null
+        val keys = mutableListOf<Long>()
         val known = store.change(false) { state ->
             val session = state.sessions.find { it.topic == topic } ?: return@change false to null
             val key = checkNotNull(WcEncoding.hexOrNull(session.symKey, WC_KEY_BYTES))
@@ -404,12 +464,18 @@ internal class WcWallet(
                 put("code", WcProtocol.Error.USER_DISCONNECTED.code)
                 put("message", WcProtocol.Error.USER_DISCONNECTED.message)
             }
-            message = WcEnvelope.sealType0(key, request(rpcId(), WcProtocol.SESSION_DELETE.name, params))
-            true to state.forgetting(topic)
+            val delete = Outgoing.Publish(
+                topic,
+                WcEnvelope.sealType0(key, request(rpcId(), WcProtocol.SESSION_DELETE.name, params)),
+                WcProtocol.SESSION_DELETE.ttlSeconds,
+                WcProtocol.SESSION_DELETE.requestTag,
+            )
+            // The delete stays in the outbox, sealed, after the session's key is forgotten.
+            true to state.forgetting(topic).queuing(listOf(delete), nowSeconds(), keys)
         }
         // Not saved: the session is still here and still followed, so the dApp is not told it ended.
-        val envelope = message?.takeIf { known } ?: return false
-        transport.publish(topic, envelope, WcProtocol.SESSION_DELETE.ttlSeconds, WcProtocol.SESSION_DELETE.requestTag)
+        if (!known) return false
+        sendQueued(keys)
         transport.unsubscribe(topic)
         return true
     }
@@ -417,18 +483,21 @@ internal class WcWallet(
     /** Extends session [topic] to [WcProtocol.SESSION_SECONDS] from now. True once delivered. */
     suspend fun extend(topic: String): Boolean {
         val expiry = nowSeconds() + WcProtocol.SESSION_SECONDS
-        var message: String? = null
+        val keys = mutableListOf<Long>()
         val saved = store.change(false) { state ->
             val session = state.sessions.find { it.topic == topic } ?: return@change false to null
             val key = checkNotNull(WcEncoding.hexOrNull(session.symKey, WC_KEY_BYTES))
-            message = WcEnvelope.sealType0(
-                key,
-                request(rpcId(), WcProtocol.SESSION_EXTEND.name, buildJsonObject { put("expiry", expiry) }),
+            val extension = Outgoing.Publish(
+                topic,
+                WcEnvelope.sealType0(key, request(rpcId(), WcProtocol.SESSION_EXTEND.name, buildJsonObject { put("expiry", expiry) })),
+                WcProtocol.SESSION_EXTEND.ttlSeconds,
+                WcProtocol.SESSION_EXTEND.requestTag,
             )
             true to state.copy(sessions = state.sessions.map { if (it.topic == topic) it.copy(expirySeconds = expiry) else it })
+                .queuing(listOf(extension), nowSeconds(), keys)
         }
-        val envelope = message?.takeIf { saved } ?: return false
-        return transport.publish(topic, envelope, WcProtocol.SESSION_EXTEND.ttlSeconds, WcProtocol.SESSION_EXTEND.requestTag)
+        if (!saved) return false
+        return sendQueued(keys)
     }
 
     /**
@@ -437,13 +506,15 @@ internal class WcWallet(
      */
     suspend fun updateAccounts(topic: String, addresses: List<String>): Boolean {
         if (addresses.isEmpty() || addresses.toSet().size != addresses.size || !addresses.all(::isAddress)) return false
-        val messages = mutableListOf<Triple<String, Long, Int>>()
+        val messages = mutableListOf<Outgoing.Publish>()
+        val keys = mutableListOf<Long>()
         val saved = store.change(false) { state ->
             val session = state.sessions.find { it.topic == topic } ?: return@change false to null
             val key = checkNotNull(WcEncoding.hexOrNull(session.symKey, WC_KEY_BYTES))
             val accounts = addresses.map { "${WcProtocol.SEPOLIA}:${it.lowercase()}" }
             val update = buildJsonObject { put("namespaces", namespaces(accounts, session.methods, session.events)) }
-            messages += Triple(
+            messages += Outgoing.Publish(
+                topic,
                 WcEnvelope.sealType0(key, request(rpcId(), WcProtocol.SESSION_UPDATE.name, update)),
                 WcProtocol.SESSION_UPDATE.ttlSeconds,
                 WcProtocol.SESSION_UPDATE.requestTag,
@@ -456,16 +527,18 @@ internal class WcWallet(
                     }
                     put("chainId", WcProtocol.SEPOLIA)
                 }
-                messages += Triple(
+                messages += Outgoing.Publish(
+                    topic,
                     WcEnvelope.sealType0(key, request(rpcId(), WcProtocol.SESSION_EVENT.name, event)),
                     WcProtocol.SESSION_EVENT.ttlSeconds,
                     WcProtocol.SESSION_EVENT.requestTag,
                 )
             }
             true to state.copy(sessions = state.sessions.map { if (it.topic == topic) it.copy(accounts = accounts) else it })
+                .queuing(messages, nowSeconds(), keys)
         }
-        if (!saved || messages.isEmpty()) return false
-        return messages.map { (envelope, ttl, tag) -> transport.publish(topic, envelope, ttl, tag) }.all { it }
+        if (!saved) return false
+        return sendQueued(keys)
     }
 
     // ----- The dApp's side -----
@@ -476,9 +549,14 @@ internal class WcWallet(
      */
     suspend fun onMessage(message: WcRelayMessage) {
         val now = nowSeconds()
-        val outgoing = store.change<List<Outgoing>?>(null) { state -> handle(state, message, now) }
-            ?: error("the WalletConnect state could not be saved")
-        for (item in outgoing) outbox.send(item)
+        val outgoing = store.change<List<Outgoing>?>(null) { state ->
+            val (outgoing, next) = handle(state, message, now)
+            val publishes = outgoing.filterIsInstance<Outgoing.Publish>()
+            // The answers are saved with the request's id, in one write, and sent from the outbox after.
+            outgoing to (if (publishes.isEmpty()) next else (next ?: state).queuing(publishes, now))
+        } ?: error("the WalletConnect state could not be saved")
+        for (item in outgoing) if (item is Outgoing.Unsubscribe) unsubscriptions.send(item.topic)
+        if (outgoing.any { it is Outgoing.Publish }) outboxFilled.trySend(Unit)
     }
 
     private fun handle(state: WcState, message: WcRelayMessage, now: Long): Pair<List<Outgoing>, WcState?> {
