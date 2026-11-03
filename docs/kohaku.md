@@ -68,9 +68,13 @@ becomes the source of the vectors and the pin moves to it.
 - Serotine fits: `Bip39.seed` uses the empty passphrase, and a phrase's
   envelope keeps its seed (owner ruling, 2026-10-15). Create account stores
   its words through the same import.
-- An account whose key was imported alone has no seed. It holds no notes.
-  Its private actions are greyed out and say why (owner ruling, 2026-10-18,
-  #55); Kohaku's own refusal is `UnsupportedAccountError`.
+- An account with no seed here holds no notes: a watched account, which has
+  no signing path at all, and a Safe, which has no seed of its own (it may
+  still shield, *A Safe*). The actions that need notes are greyed out and
+  say why (owner ruling, 2026-10-18, #55); Kohaku's own refusal is
+  `UnsupportedAccountError`. Importing a raw private key is not offered
+  (docs/wallet-ux.md, still the owner's, #11); an account imported that way
+  would be the same case.
 
 ### Railgun keys
 
@@ -415,6 +419,20 @@ needed:
 
 All the owner's. Each is recorded here as decided before its code lands.
 #101's own open questions stand for Railgun; each is named where it belongs.
+
+Where a decision is a rule, it lands in the rule file of its area, as every
+ruling does (`.claude/rules/instructions.md`), with this page updated to
+match:
+
+- the off-chain services and sources, D4 (PPOI, broadcasters, a relayer or
+  bundler), D5 (the IPFS gateway or 0xbow's API) and D6 (seeded histories),
+  in `.claude/rules/data-sources.md`, whose *Open decisions* records each
+  before its code lands; D6 in `.claude/rules/trust.md` as well, beside
+  *Verified, or not available*;
+- that the Railgun proxy and the Privacy Pools contracts are pinned and read
+  as chain data like any other, in the same file, as it says of Uniswap's
+  contracts;
+- D2 in `.claude/rules/trust.md` and docs/keys-and-signing.md.
 
 - **D1. The definition.** Is "Kohaku compliant" what *What "compliant"
   means here* says: Kohaku as the spec at a pinned commit, Railgun's engine
