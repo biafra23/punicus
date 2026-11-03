@@ -7,7 +7,9 @@ import eth.serotine.domain.usecase.PairDapp
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.flow.filterNotNull
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
@@ -37,12 +39,16 @@ class PairDappViewModel(private val pairDapp: PairDapp, incoming: IncomingDappLi
 
     init {
         if (incoming != null) {
-            // Every link that arrives while the screen is open too: the latest fills the field.
+            // Every link that arrives while the screen is open too: the latest fills the field. Not while a
+            // Connect is under way: the link waits, so an answer is never shown under a link it is not for.
             viewModelScope.launch {
-                incoming.pending.filterNotNull().collect {
-                    val link = incoming.take() ?: return@collect
-                    state.update { it.copy(text = link, message = null, paired = false) }
-                }
+                combine(incoming.pending, state) { link, now -> link != null && !now.busy }
+                    .distinctUntilChanged()
+                    .filter { it }
+                    .collect {
+                        val link = incoming.take() ?: return@collect
+                        state.update { it.copy(text = link, message = null, paired = false) }
+                    }
             }
         }
     }

@@ -51,4 +51,27 @@ class IncomingDappLinkTest {
         runCurrent()
         assertEquals(listOf("wc:second@2"), sessions.paired)
     }
+
+    @Test
+    fun aLinkArrivingWhileConnectIsUnderWayWaitsForItsAnswer() = runTest {
+        Dispatchers.setMain(UnconfinedTestDispatcher(testScheduler))
+        val answer = kotlinx.coroutines.CompletableDeferred<eth.serotine.domain.repository.DappPairing>()
+        val sessions = object : eth.serotine.domain.repository.DappSessions by FakeDappSessions() {
+            override suspend fun pair(uri: String) = answer.await()
+        }
+        val inbox = IncomingDappLink()
+        val vm = PairDappViewModel(PairDapp(sessions), inbox)
+        vm.edit("wc:typed@2")
+        vm.connect()
+        inbox.offer("wc:arrived@2")
+        runCurrent()
+        // The Connect under way keeps its link, and the new one waits.
+        assertEquals("wc:typed@2", vm.uiState.value.text)
+        assertEquals("wc:arrived@2", inbox.pending.value)
+        answer.complete(eth.serotine.domain.repository.DappPairing.Expired)
+        runCurrent()
+        assertEquals("wc:arrived@2", vm.uiState.value.text)
+        assertNull(inbox.pending.value)
+    }
 }
+

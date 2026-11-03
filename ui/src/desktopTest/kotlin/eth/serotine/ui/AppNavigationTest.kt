@@ -474,6 +474,19 @@ class AppNavigationTest {
     }
 
     @Test
+    fun aWalletConnectLinkWaitsWhileAnUpdateIsRequired() {
+        showApp()
+        report.value = NetworkUpgrade(NetworkUpgrade.Phase.ACTIVE, activationTime = null, forkId = null, 4)
+        rule.waitUntil { rule.onAllNodesWithTag(UPDATE_REQUIRED_TAG).fetchSemanticsNodes().isNotEmpty() }
+        val link = "wc:" + "a".repeat(64) + "@2?relay-protocol=irn&symKey=" + "b".repeat(64)
+        graph.incomingDappLink.offer(link)
+        rule.waitForIdle()
+        // The update screen stays the only one, and the link waits for it to go.
+        assertEquals(listOf("update-required"), screens())
+        assertEquals(link, graph.incomingDappLink.pending.value)
+    }
+
+    @Test
     fun theFloatingActionButtonAddsAnAccountFromItsSeedPhrase() {
         showApp()
         rule.onNodeWithText("No accounts yet").assertIsDisplayed()

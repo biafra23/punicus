@@ -23,13 +23,15 @@
         <activity
             android:name=".MainActivity"
             android:exported="true"
+            android:launchMode="singleTask"
             android:windowSoftInputMode="adjustResize">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
             <!-- A WalletConnect link a dApp or a browser opens (docs/walletconnect.md, part 1.2a): it
-                 lands on Connect a dApp, filled in, and pairs only on the user's Connect. -->
+                 lands on Connect a dApp, filled in, and pairs only on the user's Connect. singleTask,
+                 so that a link reaches the running app (onNewIntent) rather than a second one. -->
             <intent-filter>
                 <action android:name="android.intent.action.VIEW" />
                 <category android:name="android.intent.category.DEFAULT" />

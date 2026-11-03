@@ -36,14 +36,19 @@ class MainActivity : ComponentActivity() {
         offerDappLink(intent)
     }
 
+
     /**
      * Hands a `wc:` link the activity was opened with to Connect a dApp, which shows it filled in and
      * pairs only on the user's Connect (docs/walletconnect.md, part 1.2a). Nothing else is read.
      */
     private fun offerDappLink(intent: Intent?) {
         if (intent?.action != Intent.ACTION_VIEW) return
+        // Reopened from Recents, Android hands the first link again: an old one, never offered twice.
+        if (intent.flags and Intent.FLAG_ACTIVITY_LAUNCHED_FROM_HISTORY != 0) return
         val link = intent.dataString ?: return
         (application as SerotineApplication).graph.incomingDappLink.offer(link)
+        // The activity keeps no copy of the link, which carries its pairing's key (ruling 8).
+        setIntent(Intent(intent).setData(null))
     }
 
     /**
