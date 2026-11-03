@@ -442,5 +442,19 @@ class WcWalletTest {
         settle()
         assertEquals(listOf(3_000L), running.view().requests.map { it.id })
     }
+
+    @Test
+    fun anExtensionWhileTheRelayCannotBeReachedIsSavedAndSentOnceItIsBack() = runTest {
+        val running = walletConnect()
+        val dapp = dapp()
+        val topic = settled(running, dapp)
+        relay.refusing = true
+        relay.dropConnections()
+        // Saved, so true, although the relay has not taken it yet: it waits in the outbox.
+        assertTrue(running.wallet.extend(topic))
+        relay.refusing = false
+        repeat(30) { settle() }
+        assertEquals("wc_sessionExtend", dapp.received.getValue(topic).last()["method"]?.jsonPrimitive?.content)
+    }
 }
 
