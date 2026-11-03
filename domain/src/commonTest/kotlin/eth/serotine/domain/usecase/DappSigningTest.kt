@@ -303,7 +303,7 @@ class DappSigningTest {
             asking(4, DappAsk.NotAnsweredYet("eth_sendTransaction")),
             asking(5, DappAsk.Malformed("personal_sign")),
         )
-        val answering = backgroundScope.launch { AnswerDappRequestsAtOnce(requests, MemorySentTransfers())() }
+        val answering = backgroundScope.launch { AnswerDappRequestsAtOnce(requests, MemorySentTransfers(), MemoryTransactionHistory())() }
         runCurrent()
         assertEquals<List<Pair<DappRequestId, Any?>>>(
             listOf(
@@ -322,7 +322,7 @@ class DappSigningTest {
     fun anAnswerThatCouldNotBeSavedIsTriedAgainUntilItIs() = runTest {
         requests.answer = DappAnswer.NOT_SAVED
         requests.waiting.value = listOf(request(1).copy(ask = DappAsk.NotAnsweredYet("eth_sendTransaction")))
-        val answering = backgroundScope.launch { AnswerDappRequestsAtOnce(requests, MemorySentTransfers(), retrySeconds = 30)() }
+        val answering = backgroundScope.launch { AnswerDappRequestsAtOnce(requests, MemorySentTransfers(), MemoryTransactionHistory(), retrySeconds = 30)() }
         runCurrent()
         assertTrue(requests.answered.isEmpty())
         requests.answer = DappAnswer.DELIVERED

@@ -23,6 +23,8 @@ import eth.serotine.domain.repository.DappRequests
 import eth.serotine.domain.repository.DappSessionId
 import eth.serotine.domain.repository.GasEstimate
 import eth.serotine.domain.repository.NetworkSettings
+import eth.serotine.domain.repository.SentOutcome
+import eth.serotine.domain.repository.HistoryEntry
 import eth.serotine.domain.repository.ReceiptTracker
 import eth.serotine.domain.repository.SentAction
 import eth.serotine.domain.repository.Signing
@@ -77,6 +79,7 @@ class DappTransactionsTest {
     }
 
     private val requests = FakeRequests()
+    private val history = MemoryTransactionHistory()
 
     private fun request(id: Long, transaction: DappTransactionRequest) = DappRequest(
         DappRequestId(DappSessionId("t"), id),
@@ -90,9 +93,11 @@ class DappTransactionsTest {
     private fun payment(gas: Long? = null, from: Address = held.address, to: Address = recipient) =
         DappTransactionRequest(from, to, UInt256.of(1_000_000_000_000_000), ByteArray(0), gas)
 
-    private fun quote() = QuoteDappTransaction(requests, accounts, networks, ListCatalog(), balances, inputs, sent, clock = { now })
+    private fun quote() =
+        QuoteDappTransaction(requests, accounts, networks, ListCatalog(), balances, inputs, sent, history, clock = { now })
 
-    private fun send() = SendDappTransaction(requests, accounts, networks, signer, broadcaster, sent, receipts, clock = { now })
+    private fun send() =
+        SendDappTransaction(requests, accounts, networks, signer, broadcaster, sent, history, receipts, clock = { now })
 
     @Test
     fun aPaymentIsQuotedAsSendQuotesOneSignedSentAndAnsweredWithItsHash() = runTest {
@@ -120,14 +125,36 @@ class DappTransactionsTest {
         val record = sent.transfers.value.single()
         assertTrue(record.maybeSent)
         // The screen left, the request opened again: it is the record, never a new signature.
-        assertEquals(DappTransactionQuoting.AlreadySigned(record), quote()(quoted.id))
-        assertEquals(DappTransactionSending.AlreadySigned(record), send()(quoted, Unlock.WithBiometrics("x")))
+        val onItsWay = SignedAnswer(record, SignedState.ON_ITS_WAY)
+        assertEquals(DappTransactionQuoting.AlreadySigned(onItsWay), quote()(quoted.id))
+        assertEquals(DappTransactionSending.AlreadySigned(onItsWay), send()(quoted, Unlock.WithBiometrics("x")))
+        // Still, with the review refusing it now (the key gone): it may be on its way, never refused.
+        accounts.setCustody(held.id, AccountCustody.Watched)
+        assertEquals(DappTransactionQuoting.AlreadySigned(onItsWay), quote()(quoted.id))
+        accounts.setCustody(held.id, AccountCustody.InKeyStore)
         assertEquals(1, broadcaster.sent.size)
         // Sent by a retry from its status: the dApp is answered with its hash at once.
-        val answering = backgroundScope.launch { AnswerDappRequestsAtOnce(requests, sent)() }
+        val answering = backgroundScope.launch { AnswerDappRequestsAtOnce(requests, sent, history)() }
         runCurrent()
         assertTrue(requests.hashes.isEmpty())
         sent.transfers.value = listOf(record.copy(maybeSent = false))
+        runCurrent()
+        assertEquals(listOf(quoted.id to record.hash), requests.hashes)
+        answering.cancel()
+    }
+
+    @Test
+    fun oneMaybeSentAndMinedAnywayAnswersItsDappAndStaysSignedOnceAfterItsRecordIsLetGo() = runTest {
+        requests.waiting.value = listOf(request(1, payment()))
+        val quoted = assertIs<DappTransactionQuoting.Quoted>(quote()(request(1, payment()).id)).quote
+        broadcaster.answer = Broadcast.Unavailable("no peer")
+        send()(quoted, Unlock.WithBiometrics("x"))
+        val record = sent.transfers.value.single()
+        // The history has it, mined anyway; the record lets it go once the mined count passes its nonce.
+        history.entries.value = listOf(HistoryEntry(record, SentOutcome.Included(120, succeeded = true)))
+        sent.transfers.value = emptyList()
+        assertEquals(DappTransactionQuoting.AlreadySigned(SignedAnswer(record, SignedState.MINED)), quote()(quoted.id))
+        val answering = backgroundScope.launch { AnswerDappRequestsAtOnce(requests, sent, history)() }
         runCurrent()
         assertEquals(listOf(quoted.id to record.hash), requests.hashes)
         answering.cancel()

@@ -81,6 +81,7 @@ class DappTransactionViewModelTest {
     }
     private val inputs = FakeTransactionInputs()
     private val sent = MemorySentTransfers()
+    private val history = eth.serotine.ui.MemoryTransactionHistory()
     private val broadcaster = FakeBroadcaster()
     private val signer = FakeSigner()
     private val clock = TestTimeSource()
@@ -102,8 +103,8 @@ class DappTransactionViewModelTest {
         val vm = DappTransactionViewModel(
             "t/$id",
             ObserveDappMessages(requests, accounts, networks, catalog, clock = { now }),
-            QuoteDappTransaction(requests, accounts, networks, catalog, balances, inputs, sent, clock = { now }),
-            SendDappTransaction(requests, accounts, networks, signer, broadcaster, sent, FakeReceipts(), clock = { now }),
+            QuoteDappTransaction(requests, accounts, networks, catalog, balances, inputs, sent, history, clock = { now }),
+            SendDappTransaction(requests, accounts, networks, signer, broadcaster, sent, history, FakeReceipts(), clock = { now }),
             RefuseDappRequest(requests, accounts, networks, clock = { now }),
             DescribeKeyStore(FakeKeys()),
             clock = { now },
@@ -225,6 +226,21 @@ class DappTransactionViewModelTest {
         vm.refuse()
         runCurrent()
         assertEquals(listOf(request(1, payment).id to DappRequestError.INVALID_PARAMS), requests.refusals)
+    }
+
+    @Test
+    fun aGasLimitFoundTooLowIsForgottenOnceAQuoteSucceeds() = runTest {
+        inputs.estimate = eth.serotine.domain.repository.GasEstimate.Estimated(30_000)
+        requests.waiting.value = listOf(request(1, DappTransactionRequest(held.address, recipient, UInt256.ZERO, ByteArray(0), 25_000)))
+        val vm = viewModel()
+        assertNotNull(vm.uiState.value.notQuoted)
+        inputs.estimate = eth.serotine.domain.repository.GasEstimate.Estimated(21_000)
+        vm.requote()
+        runCurrent()
+        assertTrue(vm.uiState.value.quote.isNotEmpty())
+        vm.refuse()
+        runCurrent()
+        assertEquals(listOf(request(1, payment).id to DappRequestError.USER_REJECTED), requests.refusals)
     }
 
     @Test

@@ -24,6 +24,8 @@ import eth.serotine.domain.usecase.ObserveDappMessages
 import eth.serotine.domain.usecase.QuoteDappTransaction
 import eth.serotine.domain.usecase.RefuseDappRequest
 import eth.serotine.domain.usecase.SendDappTransaction
+import eth.serotine.domain.usecase.SignedAnswer
+import eth.serotine.domain.usecase.SignedState
 import eth.serotine.domain.usecase.TransferSending
 import eth.serotine.domain.repository.SentTransfer
 import eth.serotine.ui.components.Eip55
@@ -198,7 +200,9 @@ class DappTransactionViewModel(
     fun requote(note: String? = null) {
         val request = id ?: return
         if (local.value.busy || local.value.quoting) return
-        local.update { it.copy(quoting = true, notQuoted = null, unlock = it.unlock.copy(error = note)) }
+        local.update {
+            it.copy(quoting = true, notQuoted = null, gasTooLow = false, unlock = it.unlock.copy(error = note))
+        }
         job = viewModelScope.launch {
             val quoting = try {
                 quoteDappTransaction(request)
@@ -229,7 +233,7 @@ class DappTransactionViewModel(
                     DappTransactionQuoting.Expired -> current.copy(quoting = false, quote = null, notice = EXPIRED)
                     DappTransactionQuoting.Gone -> current.copy(quoting = false, quote = null)
                     is DappTransactionQuoting.AlreadySigned ->
-                        signedEarlier(current.copy(quoting = false, quote = null), quoting.transfer)
+                        signedEarlier(current.copy(quoting = false, quote = null), quoting.answer)
                     null -> current.copy(quoting = false, quote = null, notQuoted = QUOTE_FAILED)
                 }
             }
@@ -351,16 +355,28 @@ class DappTransactionViewModel(
         }
     }
 
-    /** Where [local] goes when [transfer] was signed already as this request's answer: never signed again. */
-    private fun signedEarlier(local: Local, transfer: SentTransfer): Local = if (transfer.maybeSent) {
-        val item = NotSentItem(
-            "Signed earlier, but it may not have reached the network. Try again sends the same signed " +
-                "transaction, never a new one.",
-            canRetry = true,
+    /** Where [local] goes when [answer] was signed already as this request's answer: never signed again. */
+    private fun signedEarlier(local: Local, answer: SignedAnswer): Local = when (answer.state) {
+        SignedState.ON_ITS_WAY -> {
+            val item = NotSentItem(
+                "Signed earlier, but it may not have reached the network. Try again sends the same signed " +
+                    "transaction, never a new one.",
+                canRetry = true,
+            )
+            local.copy(busy = false, notSent = item to answer.transfer)
+        }
+        SignedState.SENT, SignedState.MINED ->
+            local.copy(
+                busy = false,
+                notSent = null,
+                notice = "Sent already as ${answer.transfer.hash}: the dApp is being told.",
+            )
+        SignedState.DROPPED -> local.copy(
+            busy = false,
+            notSent = null,
+            notice = "Signed earlier as ${answer.transfer.hash}, but another transaction of this account took its " +
+                "nonce, so it can never be mined. Refuse answers the dApp; ask it again for a new one.",
         )
-        local.copy(busy = false, notSent = item to transfer)
-    } else {
-        local.copy(busy = false, notice = "Sent already as ${transfer.hash}: the dApp is being told.")
     }
 
     private fun after(local: Local, sending: DappTransactionSending?): Local = when (sending) {
@@ -378,7 +394,7 @@ class DappTransactionViewModel(
             busy = false,
             explaining = TransactionExplanation("Cannot be sent", refusalLine(sending.refusal)),
         )
-        is DappTransactionSending.AlreadySigned -> signedEarlier(local, sending.transfer)
+        is DappTransactionSending.AlreadySigned -> signedEarlier(local, sending.answer)
         is DappTransactionSending.NotSent -> when (val inner = sending.sending) {
             is TransferSending.NotSigned -> local.copy(
                 busy = false,

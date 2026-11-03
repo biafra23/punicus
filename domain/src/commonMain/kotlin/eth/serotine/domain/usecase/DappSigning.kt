@@ -28,7 +28,10 @@ import eth.serotine.domain.repository.NetworkSettings
 import eth.serotine.domain.repository.SentTransfers
 import eth.serotine.domain.repository.SentTransferList
 import eth.serotine.domain.repository.SentTransfer
+import eth.serotine.domain.repository.HistoryEntry
+import eth.serotine.domain.repository.HistoryList
 import eth.serotine.domain.repository.SentAction
+import eth.serotine.domain.repository.TransactionHistory
 import eth.serotine.domain.repository.Signer
 import eth.serotine.domain.repository.Signing
 import eth.serotine.domain.repository.Unlock
@@ -435,28 +438,31 @@ class RefuseDappRequest(
 class AnswerDappRequestsAtOnce(
     private val requests: DappRequests,
     private val sentTransfers: SentTransfers,
+    private val history: TransactionHistory,
     private val retrySeconds: Long = 30,
 ) {
     suspend operator fun invoke() {
-        combine(requests.observe(), sentTransfers.observe()) { waiting, record -> waiting to record }
-            .collectLatest { (waiting, record) ->
-                var current = waiting to record
-                // Each new list starts over. One answered already has left it; answered again from an older
-                // list, it is no longer waiting, and nothing is sent.
-                while (answerAll(current.first, current.second)) {
-                    delay(retrySeconds.seconds)
-                    current = requests.observe().first() to sentTransfers.observe().first()
-                }
+        combine(requests.observe(), sentTransfers.observe(), history.observe()) { waiting, record, entries ->
+            Triple(waiting, record, entries)
+        }.collectLatest { (waiting, record, entries) ->
+            var current = Triple(waiting, record, entries)
+            // Each new list starts over. One answered already has left it; answered again from an older
+            // list, it is no longer waiting, and nothing is sent.
+            while (answerAll(current.first, current.second, current.third)) {
+                delay(retrySeconds.seconds)
+                current = Triple(requests.observe().first(), sentTransfers.observe().first(), history.observe().first())
             }
+        }
     }
 
     /** Answers those of [waiting] that need no decision; true when one of the answers could not be saved. */
-    private suspend fun answerAll(waiting: List<DappRequest>, record: SentTransferList): Boolean {
+    private suspend fun answerAll(waiting: List<DappRequest>, record: SentTransferList, entries: HistoryList): Boolean {
         val sent = (record as? SentTransferList.Loaded)?.transfers.orEmpty()
+        val past = (entries as? HistoryList.Loaded)?.entries.orEmpty()
         var notSaved = false
         for (request in waiting) {
             // Each answer runs to its end, its send included: a new list cancels only what follows it.
-            val answer = withContext(NonCancellable) { answerAtOnce(request, sent) } ?: continue
+            val answer = withContext(NonCancellable) { answerAtOnce(request, sent, past) } ?: continue
             if (answer == DappAnswer.NOT_SAVED) notSaved = true
         }
         return notSaved
@@ -464,10 +470,15 @@ class AnswerDappRequestsAtOnce(
 
     /**
      * The answer [request] needs no one's decision for, given; null for one to sign, which waits for the
-     * user. A transaction signed as its answer and taken by a peer ([sent], not maybe sent) answers it
-     * with its hash, however it was sent: from D6, by a retry there or from its status, or mined anyway.
+     * user. A transaction signed as its answer and taken by a peer ([sent], not maybe sent) or seen in a
+     * verified block ([past], the history) answers it with its hash, however it was sent: from D6, by a
+     * retry there or from its status, or mined anyway.
      */
-    private suspend fun answerAtOnce(request: DappRequest, sent: List<SentTransfer>): DappAnswer? =
+    private suspend fun answerAtOnce(
+        request: DappRequest,
+        sent: List<SentTransfer>,
+        past: List<HistoryEntry>,
+    ): DappAnswer? =
         when (val ask = request.ask) {
             is DappAsk.SwitchChain -> if (ask.chainId == Network.SEPOLIA.chainId) {
                 requests.answerNull(request.id)
@@ -476,9 +487,15 @@ class AnswerDappRequestsAtOnce(
             }
             is DappAsk.NotAnsweredYet -> requests.refuse(request.id, DappRequestError.UNSUPPORTED_METHOD)
             is DappAsk.Malformed -> requests.refuse(request.id, DappRequestError.INVALID_PARAMS)
-            is DappAsk.SendTransaction -> sent
-                .firstOrNull { (it.action as? SentAction.DappCall)?.request == request.id && !it.maybeSent }
-                ?.let { requests.answerTransaction(request.id, it.hash) }
+            is DappAsk.SendTransaction -> {
+                fun answers(transfer: SentTransfer) = (transfer.action as? SentAction.DappCall)?.request == request.id
+                val recorded = sent.firstOrNull(::answers)
+                val entry = past.firstOrNull { answers(it.transfer) }
+                val transfer = recorded ?: entry?.transfer
+                val state = transfer?.let { stateOf(recorded, entry) }
+                transfer?.takeIf { state == SignedState.SENT || state == SignedState.MINED }
+                    ?.let { requests.answerTransaction(request.id, it.hash) }
+            }
             is DappAsk.PersonalSign, is DappAsk.SignTypedData -> null
         }
 }

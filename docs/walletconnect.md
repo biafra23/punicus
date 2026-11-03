@@ -283,11 +283,14 @@ everything on the chain side: the verified `call`, `estimateGasDetailed`,
   - The dApp is answered once a peer took it. One no peer took is kept, its
     signed bytes sent again by Try again, never signed anew, and the dApp is
     answered when that sends it.
-  - The record names the request it answers. So a request is signed once,
-    whatever happens to the screen: opened again, it shows the transaction
-    signed for it, never a new quote. And whenever a peer takes that
-    transaction (from D6, a retry from its status, or mined anyway), the
-    dApp is answered with its hash, by the app while it runs.
+  - The record names the request it answers, and the history keeps it once
+    the record lets it go. So a request is signed once, whatever happens to
+    the screen and whatever is reviewed now: opened again, it shows the
+    transaction signed for it, never a new quote. Whenever a peer takes that
+    transaction, or a verified block includes it (from D6, a retry from its
+    status, or mined anyway), the dApp is answered with its hash, by the app
+    while it runs. One whose nonce another transaction took can never be
+    mined: the request can then only be refused.
   - It is reviewed again just before it is signed: an account removed, a key
     gone or Sepolia turned off since the quote refuses it.
   - While a transaction signed for it may be on its way, Refuse is greyed
