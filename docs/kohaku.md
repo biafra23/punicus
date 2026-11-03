@@ -139,6 +139,17 @@ only if the owner wants Tornado Cash at all (D3):
 Serotine uses the same rules. Another one finds fewer notes, or notes the
 other wallets do not.
 
+**Only over complete coverage.** Discovery and the balance run only once the
+pool's entry is covered from its deployment block to the head the roots are
+read at (*The root checks*). Over partial coverage, "no event carries this
+precommitment" cannot be told from "not indexed yet": with the gap limit at
+zero, discovery would answer "no notes" or stop early, and a note whose
+`Withdrawn` or `Nullified` log is not covered yet would count as unspent. That
+is a wrong balance, not a late one. Until coverage is complete the state is
+"syncing", never "no notes". The port already enforces the reads:
+`LogIndex.logs` answers only a range it covers in full, and `NotCovered`
+otherwise. An implementation never acts on the part of a range it has.
+
 ### The plugin semantics
 
 The port mirrors `packages/plugins/src/base.ts`:
@@ -171,8 +182,13 @@ The port mirrors `packages/plugins/src/base.ts`:
 - **Tornado Cash:** `isKnownRoot(root)`. Kohaku leaves the check off by
   default (`verify = false`). Serotine always runs it: a stricter check
   derives the same notes.
-- Each root is read with a verified `eth_call` at the head the logs were
-  read to.
+- **The head they are read at.** Serotine's verified call
+  (`VerifiedChain.call`) reads at the verified head (`latest`) only. So each
+  root is read at the head, and the pool's logs must be covered up to that
+  same head. Where a leaf landed between the top the logs reach and the
+  head, the check runs again once coverage has caught up; Privacy Pools'
+  64-root window absorbs a few such leaves, and Railgun's open-tree check
+  waits for them.
 
 ## How it fits Serotine's rules
 
