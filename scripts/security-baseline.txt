@@ -1,0 +1,59 @@
+# Accepted violations of scripts/check_security_invariants.py: CHECK-ID<TAB>key<TAB># why.
+# Each is an open finding of the security audit of 2026-11-01, or a decision the owner
+# recorded. Remove a line when its finding is fixed; the script reports a stale line.
+
+WF-SHA-PIN	.github/workflows/android-apk.yml:actions/checkout@v4	# .github/workflows/android-apk.yml:68: `actions/checkout@v4` is pinned by a movable tag, not a commit SHA
+WF-SHA-PIN	.github/workflows/android-apk.yml:actions/setup-java@v4	# .github/workflows/android-apk.yml:81: `actions/setup-java@v4` is pinned by a movable tag, not a commit SHA
+WF-SHA-PIN	.github/workflows/android-apk.yml:gradle/actions/setup-gradle@v4	# .github/workflows/android-apk.yml:87: `gradle/actions/setup-gradle@v4` is pinned by a movable tag, not a commit SHA
+WF-SHA-PIN	.github/workflows/android-apk.yml:actions/upload-artifact@v4	# .github/workflows/android-apk.yml:148: `actions/upload-artifact@v4` is pinned by a movable tag, not a commit SHA
+WF-SHA-PIN	.github/workflows/android-apk.yml:actions/upload-artifact@v4	# .github/workflows/android-apk.yml:202: `actions/upload-artifact@v4` is pinned by a movable tag, not a commit SHA
+WF-SHA-PIN	.github/workflows/android-apk.yml:actions/download-artifact@v4	# .github/workflows/android-apk.yml:319: `actions/download-artifact@v4` is pinned by a movable tag, not a commit SHA
+WF-SHA-PIN	.github/workflows/android-apk.yml:actions/download-artifact@v4	# .github/workflows/android-apk.yml:326: `actions/download-artifact@v4` is pinned by a movable tag, not a commit SHA
+WF-SHA-PIN	.github/workflows/ci.yml:actions/checkout@v4	# .github/workflows/ci.yml:23: `actions/checkout@v4` is pinned by a movable tag, not a commit SHA
+WF-SHA-PIN	.github/workflows/ci.yml:actions/setup-java@v4	# .github/workflows/ci.yml:30: `actions/setup-java@v4` is pinned by a movable tag, not a commit SHA
+WF-SHA-PIN	.github/workflows/ci.yml:gradle/actions/setup-gradle@v4	# .github/workflows/ci.yml:39: `gradle/actions/setup-gradle@v4` is pinned by a movable tag, not a commit SHA
+WF-SHA-PIN	.github/workflows/ci.yml:actions/upload-artifact@v4	# .github/workflows/ci.yml:119: `actions/upload-artifact@v4` is pinned by a movable tag, not a commit SHA
+WF-SHA-PIN	.github/workflows/claude-review.yml:actions/checkout@v4	# .github/workflows/claude-review.yml:151: `actions/checkout@v4` is pinned by a movable tag, not a commit SHA
+WF-SHA-PIN	.github/workflows/claude-review.yml:anthropics/claude-code-action@v1	# .github/workflows/claude-review.yml:237: `anthropics/claude-code-action@v1` is pinned by a movable tag, not a commit SHA
+WF-SHA-PIN	.github/workflows/claude-review.yml:actions/checkout@v4	# .github/workflows/claude-review.yml:389: `actions/checkout@v4` is pinned by a movable tag, not a commit SHA
+WF-SHA-PIN	.github/workflows/claude-review.yml:anthropics/claude-code-action@v1	# .github/workflows/claude-review.yml:412: `anthropics/claude-code-action@v1` is pinned by a movable tag, not a commit SHA
+WF-SHA-PIN	.github/workflows/desktop-dmg.yml:actions/checkout@v4	# .github/workflows/desktop-dmg.yml:78: `actions/checkout@v4` is pinned by a movable tag, not a commit SHA
+WF-SHA-PIN	.github/workflows/desktop-dmg.yml:actions/setup-java@v4	# .github/workflows/desktop-dmg.yml:103: `actions/setup-java@v4` is pinned by a movable tag, not a commit SHA
+WF-SHA-PIN	.github/workflows/desktop-dmg.yml:gradle/actions/setup-gradle@v4	# .github/workflows/desktop-dmg.yml:110: `gradle/actions/setup-gradle@v4` is pinned by a movable tag, not a commit SHA
+WF-SHA-PIN	.github/workflows/desktop-dmg.yml:actions/upload-artifact@v4	# .github/workflows/desktop-dmg.yml:203: `actions/upload-artifact@v4` is pinned by a movable tag, not a commit SHA
+WF-SHA-PIN	.github/workflows/desktop-dmg.yml:actions/download-artifact@v4	# .github/workflows/desktop-dmg.yml:236: `actions/download-artifact@v4` is pinned by a movable tag, not a commit SHA
+WF-SHA-PIN	.github/workflows/desktop-linux-deb.yml:actions/checkout@v4	# .github/workflows/desktop-linux-deb.yml:54: `actions/checkout@v4` is pinned by a movable tag, not a commit SHA
+WF-SHA-PIN	.github/workflows/desktop-linux-deb.yml:actions/setup-java@v4	# .github/workflows/desktop-linux-deb.yml:61: `actions/setup-java@v4` is pinned by a movable tag, not a commit SHA
+WF-SHA-PIN	.github/workflows/desktop-linux-deb.yml:gradle/actions/setup-gradle@v4	# .github/workflows/desktop-linux-deb.yml:67: `gradle/actions/setup-gradle@v4` is pinned by a movable tag, not a commit SHA
+WF-SHA-PIN	.github/workflows/desktop-linux-deb.yml:actions/upload-artifact@v4	# .github/workflows/desktop-linux-deb.yml:139: `actions/upload-artifact@v4` is pinned by a movable tag, not a commit SHA
+WF-SHA-PIN	.github/workflows/desktop-linux-deb.yml:actions/download-artifact@v4	# .github/workflows/desktop-linux-deb.yml:194: `actions/download-artifact@v4` is pinned by a movable tag, not a commit SHA
+WF-SHA-PIN	.github/workflows/desktop-windows-msi.yml:actions/checkout@v4	# .github/workflows/desktop-windows-msi.yml:75: `actions/checkout@v4` is pinned by a movable tag, not a commit SHA
+WF-SHA-PIN	.github/workflows/desktop-windows-msi.yml:actions/setup-java@v4	# .github/workflows/desktop-windows-msi.yml:82: `actions/setup-java@v4` is pinned by a movable tag, not a commit SHA
+WF-SHA-PIN	.github/workflows/desktop-windows-msi.yml:gradle/actions/setup-gradle@v4	# .github/workflows/desktop-windows-msi.yml:110: `gradle/actions/setup-gradle@v4` is pinned by a movable tag, not a commit SHA
+WF-SHA-PIN	.github/workflows/desktop-windows-msi.yml:actions/upload-artifact@v4	# .github/workflows/desktop-windows-msi.yml:278: `actions/upload-artifact@v4` is pinned by a movable tag, not a commit SHA
+WF-SHA-PIN	.github/workflows/desktop-windows-msi.yml:actions/upload-artifact@v4	# .github/workflows/desktop-windows-msi.yml:290: `actions/upload-artifact@v4` is pinned by a movable tag, not a commit SHA
+WF-SHA-PIN	.github/workflows/desktop-windows-msi.yml:actions/download-artifact@v4	# .github/workflows/desktop-windows-msi.yml:320: `actions/download-artifact@v4` is pinned by a movable tag, not a commit SHA
+WF-SHA-PIN	.github/workflows/ios.yml:actions/checkout@v4	# .github/workflows/ios.yml:29: `actions/checkout@v4` is pinned by a movable tag, not a commit SHA
+WF-SHA-PIN	.github/workflows/ios.yml:actions/setup-java@v4	# .github/workflows/ios.yml:35: `actions/setup-java@v4` is pinned by a movable tag, not a commit SHA
+WF-SHA-PIN	.github/workflows/ios.yml:gradle/actions/setup-gradle@v4	# .github/workflows/ios.yml:41: `gradle/actions/setup-gradle@v4` is pinned by a movable tag, not a commit SHA
+WF-SHA-PIN	.github/workflows/ios.yml:actions/checkout@v4	# .github/workflows/ios.yml:79: `actions/checkout@v4` is pinned by a movable tag, not a commit SHA
+WF-SHA-PIN	.github/workflows/ios.yml:actions/setup-java@v4	# .github/workflows/ios.yml:85: `actions/setup-java@v4` is pinned by a movable tag, not a commit SHA
+WF-SHA-PIN	.github/workflows/ios.yml:gradle/actions/setup-gradle@v4	# .github/workflows/ios.yml:91: `gradle/actions/setup-gradle@v4` is pinned by a movable tag, not a commit SHA
+WF-SHA-PIN	.github/workflows/ios.yml:actions/upload-artifact@v4	# .github/workflows/ios.yml:180: `actions/upload-artifact@v4` is pinned by a movable tag, not a commit SHA
+WF-SHA-PIN	.github/workflows/release-version-guard.yml:actions/checkout@v4	# .github/workflows/release-version-guard.yml:62: `actions/checkout@v4` is pinned by a movable tag, not a commit SHA
+WF-SHA-PIN	.github/workflows/release-version-guard.yml:actions/setup-java@v4	# .github/workflows/release-version-guard.yml:65: `actions/setup-java@v4` is pinned by a movable tag, not a commit SHA
+WF-SHA-PIN	.github/workflows/release-version-guard.yml:gradle/actions/setup-gradle@v4	# .github/workflows/release-version-guard.yml:71: `gradle/actions/setup-gradle@v4` is pinned by a movable tag, not a commit SHA
+UI-NO-PUBLISHED-PHRASE	ui/src/commonTest/kotlin/eth/serotine/ui/createaccount/CreateAccountViewModelTest.kt:test test test	# ui/src/commonTest/kotlin/eth/serotine/ui/createaccount/CreateAccountViewModelTest.kt:46: a string of 12 BIP-39 words
+UI-NO-PUBLISHED-PHRASE	ui/src/desktopTest/kotlin/eth/serotine/ui/createaccount/CreateAccountScreenTest.kt:test test test	# ui/src/desktopTest/kotlin/eth/serotine/ui/createaccount/CreateAccountScreenTest.kt:29: a string of 12 BIP-39 words
+GRADLE-ENGINE-IMMUTABLE	https://raw.githubusercontent.com/biafra23/myotis/maven-repo	# settings.gradle.kts: the engine repository `https://raw.githubusercontent.com/biafra23/myotis/maven-repo` names a branch, not a commit
+GRADLE-VERIFICATION	metadata	# gradle/verification-metadata.xml is missing: artifacts are not checksummed
+GRADLE-WRAPPER	sha256	# gradle/wrapper/gradle-wrapper.properties: no distributionSha256Sum
+NET-ENDPOINTS	data/src/commonMain/kotlin/eth/serotine/data/walletconnect/WcRelayClient.kt:rpc	# WalletConnect v2's messages are JSON-RPC 2.0 envelopes (`"jsonrpc": "2.0"`), its own protocol: the relay is the off-chain service of the owner's rulings for dApp connections, and it never supplies chain state (owner rulings, 2026-11-03, #22; docs/walletconnect.md)
+NET-ENDPOINTS	data/src/commonMain/kotlin/eth/serotine/data/walletconnect/WcWallet.kt:rpc	# WalletConnect v2's messages are JSON-RPC 2.0 envelopes (`"jsonrpc": "2.0"`), its own protocol: the relay is the off-chain service of the owner's rulings for dApp connections, and it never supplies chain state (owner rulings, 2026-11-03, #22; docs/walletconnect.md)
+NET-ENDPOINTS	ui/src/commonMain/kotlin/eth/serotine/ui/connections/ConnectionsScreenPreviews.kt:app.uniswap.org	# a dApp's stated URL in a preview's made-up sample data: shown as the dApp's claim, never requested (no dApp icon is fetched, owner rulings, 2026-11-03, #22)
+NET-ENDPOINTS	ui/src/commonMain/kotlin/eth/serotine/ui/connections/ConnectionsScreenPreviews.kt:example.org	# a dApp's stated URL in a preview's made-up sample data: shown as the dApp's claim, never requested (no dApp icon is fetched, owner rulings, 2026-11-03, #22)
+NET-ENDPOINTS	ui/src/commonMain/kotlin/eth/serotine/ui/connections/ConnectionsScreenPreviews.kt:app.safe.global	# a dApp's stated URL in a preview's made-up sample data: shown as the dApp's claim, never requested (no dApp icon is fetched, owner rulings, 2026-11-03, #22)
+NET-ENDPOINTS	ui/src/commonMain/kotlin/eth/serotine/ui/dappproposal/DappProposalScreenPreviews.kt:app.uniswap.org	# a dApp's stated URL in a preview's made-up sample data: shown as the dApp's claim, never requested (no dApp icon is fetched, owner rulings, 2026-11-03, #22)
+NET-ENDPOINTS	ui/src/commonMain/kotlin/eth/serotine/ui/dapprequest/DappRequestScreenPreviews.kt:app.example.org	# a dApp's stated URL in a preview's made-up sample data: shown as the dApp's claim, never requested (no dApp icon is fetched, owner rulings, 2026-11-03, #22)
+NET-ENDPOINTS	ui/src/commonMain/kotlin/eth/serotine/ui/dapptransaction/DappTransactionScreenPreviews.kt:app.example.org	# a dApp's stated URL in a preview's made-up sample data: shown as the dApp's claim, never requested (no dApp icon is fetched, owner rulings, 2026-11-03, #22)
+NET-ENDPOINTS	ui/src/commonMain/kotlin/eth/serotine/ui/pairdapp/PairDappScreenPreviews.kt:example.org	# a dApp's stated URL in a preview's made-up sample data: shown as the dApp's claim, never requested (no dApp icon is fetched, owner rulings, 2026-11-03, #22)
