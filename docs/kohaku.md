@@ -1,12 +1,13 @@
 # Kohaku compliance
 
-How Serotine becomes a Kohaku-compliant wallet: it holds privacy-pool notes
+How Serotine becomes a Kohaku-compliant wallet: it holds the private notes
 that any Kohaku wallet derives from the same recovery phrase, and it finds
-the same deposits on restore. This page is a plan. Nothing of it is built,
-and every decision it names is open until the owner takes it (*Open
-decisions*). Issue #219 tracks it. Where this page and the
-rules under `.claude/` (their short form in CLAUDE.md) disagree, the rules
-win and this page is fixed.
+the same notes on restore. Railgun comes first, then Privacy Pools (*The
+plan*). This page is a plan. Nothing of it is built, and every decision it
+names is open until the owner takes it (*Open decisions*). Issue #219 tracks
+it; issue #101 is Railgun's own design, which this page builds on. Where this
+page and the rules under `.claude/` (their short form in CLAUDE.md) disagree,
+the rules win and this page is fixed.
 
 Read at Kohaku `8c83d64` (2026-11-02), kohaku-rs's `main` of the same week
 and Myotis `5578e75` (2026-11-03). The facts below are from those commits.
@@ -26,7 +27,7 @@ as a runtime**:
 - Serotine follows Kohaku's releases the way it follows Myotis's: a pinned
   commit, and a move of the pin that is reviewed (*Following Kohaku*).
 - Serotine does not run Kohaku's TypeScript. The code is Kotlin in `:data`,
-  or a Rust crate linked the way the Myotis natives are.
+  or Rust linked the way the Myotis natives are (D9).
 
 Why not the runtime:
 
@@ -40,20 +41,56 @@ Why not the runtime:
   the plugin interprets.
 - Its packages are alpha and say that later versions may break them.
 
-## What the Kohaku spec pins
+### For Railgun, Kohaku's keystore and Railgun's engine
+
+Kohaku has no Railgun code today: `@kohaku-eth/railgun` is a placeholder
+("Do not depend on this stub"). What Kohaku does define for Railgun is how
+its keys come from the recovery phrase, in its reference keystore, and it
+defines them as `@railgun-community/engine` does (`key-derivation/bip32.ts`).
+So for Railgun, compliance is:
+
+- the keys exactly as Kohaku's keystore derives them (*Railgun keys*);
+- everything else, the 0zk address, the note encryption, the commitments,
+  the nullifiers and the tree, exactly as Railgun's engine at a pinned
+  version computes it. #101 read engine 9.9.1 and wallet 10.8.6.
+
+The same words then open the same 0zk wallet in Railway, the Terminal Wallet
+and any Kohaku wallet. Once Kohaku brings its Railgun plugin back, its code
+becomes the source of the vectors and the pin moves to it.
+
+## What the spec pins
 
 ### The seed
 
 - Kohaku's reference keystore (`packages/plugins/src/host/mnemonic-keystore.ts`)
-  takes the BIP-39 seed with the empty passphrase and derives BIP-32
-  secp256k1 keys. Under Railgun's coin type 1984 it uses Railgun's own hash
-  chain instead.
+  takes the BIP-39 seed with the empty passphrase. It derives BIP-32
+  secp256k1 keys, except under Railgun's coin type 1984.
 - Serotine fits: `Bip39.seed` uses the empty passphrase, and a phrase's
   envelope keeps its seed (owner ruling, 2026-10-15). Create account stores
   its words through the same import.
 - An account whose key was imported alone has no seed. It holds no notes.
-  Its privacy actions are greyed out and say why (owner ruling, 2026-10-18,
+  Its private actions are greyed out and say why (owner ruling, 2026-10-18,
   #55); Kohaku's own refusal is `UnsupportedAccountError`.
+
+### Railgun keys
+
+- A path whose second index is 1984' takes Railgun's hash chain, not BIP-32
+  secp256k1. The master is `HMAC-SHA512(key = "babyjubjub seed", data =
+  seed)`. Each child is `HMAC-SHA512(chainCode, 0x00 ‖ chainKey ‖
+  ser32(index))`. Only hardened indices exist (`deriveRailgunEngineKey`).
+- The spending key (BabyJubJub) is at `m/44'/1984'/0'/0'/<i>'`, the viewing
+  key (ed25519) at `m/420'/1984'/0'/0'/<i>'` (#101).
+- Only an account with a seed gets a 0zk wallet. A shield to a pasted 0zk
+  address needs no key of the user's at all.
+
+### Railgun notes and the tree
+
+As Railgun's engine computes them, and as #101 sets out: the `0zk1…` address
+(bech32: the master public key and the viewing public key), the shield's
+encrypted note (the ed25519-based shared key, AES-256-GCM and AES-CTR), the
+note public key `npk = poseidon(masterPublicKey, random)`, the commitments,
+and the nullifiers. Scanning reads the proxy's `Shield`, `Transact`,
+`Nullified` and `Unshield` events from its deployment block.
 
 ### Privacy Pools note secrets
 
@@ -92,15 +129,15 @@ only if the owner wants Tornado Cash at all (D3):
 
 ### Discovery on restore
 
-Privacy Pools (`state/thunks/discoverUserSecretsThunk.ts`):
+- **Railgun:** a note is the wallet's when its viewing key decrypts it and
+  it re-hashes to its leaf. Every note of the proxy's history is tried.
+- **Privacy Pools** (`state/thunks/discoverUserSecretsThunk.ts`): try
+  deposit index 0, 1, 2… and stop at the first whose precommitment no
+  `Deposited` event carries; the gap limit is zero. For each deposit, follow
+  its change notes while the newest one's nullifier hash has been spent.
 
-1. Try deposit index 0, 1, 2… Stop at the first whose precommitment no
-   `Deposited` event carries. The gap limit is zero.
-2. For each deposit found, follow its change notes, withdraw index 1, 2…,
-   while the newest one's nullifier hash has been spent.
-
-Serotine uses the same rule. Another one finds fewer notes, or notes Kohaku
-does not.
+Serotine uses the same rules. Another one finds fewer notes, or notes the
+other wallets do not.
 
 ### The plugin semantics
 
@@ -108,6 +145,7 @@ The port mirrors `packages/plugins/src/base.ts`:
 
 - `balance(assets)`, and `prepareShield`, `prepareTransfer`,
   `prepareUnshield` and their multi-asset forms, each behind a feature flag.
+  Railgun has all three, private transfers between 0zk addresses included.
   Privacy Pools has shield, unshield and its own `ragequit`, and no private
   transfer. A feature a protocol lacks is greyed out, never hidden.
 - Kohaku's errors map onto display-ready UiState variants: unsupported
@@ -116,12 +154,23 @@ The port mirrors `packages/plugins/src/base.ts`:
 
 ### The root checks
 
-- Privacy Pools: the rebuilt state root is the pool's `currentRoot()` or one
-  of its 64 most recent roots. The association set's root equals the
+- **Railgun:** the contract records every root a tree has ever had
+  (`rootHistory`), so a tree cut short still has a valid root, and the stock
+  client reports such a tree as complete. Serotine runs the checks Myotis's
+  `docs/seeded-log-histories.md` (*Closing the gap on the client*) and #101
+  list, and fails loudly on each:
+  - a rejected batch, or a commitment it cannot place, is an error, never a
+    place to stop;
+  - the rebuilt root of the open tree equals `merkleRoot()` at the head;
+  - each note held is unspent by `nullifiers(tree, nullifier)`;
+  - each Shield note's `npk` is recomputed from the wallet's own key, and a
+    mismatch drops the note.
+- **Privacy Pools:** the rebuilt state root is the pool's `currentRoot()` or
+  one of its 64 most recent roots. The association set's root equals the
   Entrypoint's `latestRoot()` exactly (`verification/root-verification.ts`).
-- Tornado Cash: `isKnownRoot(root)`. Kohaku leaves the check off by default
-  (`verify = false`). Serotine always runs it: a stricter check derives the
-  same notes.
+- **Tornado Cash:** `isKnownRoot(root)`. Kohaku leaves the check off by
+  default (`verify = false`). Serotine always runs it: a stricter check
+  derives the same notes.
 - Each root is read with a verified `eth_call` at the head the logs were
   read to.
 
@@ -129,81 +178,114 @@ The port mirrors `packages/plugins/src/base.ts`:
 
 ### Key material
 
-- The note signature, the nullifier, the salt and the sender key are spending
-  secrets. They stay inside the key-store adapter.
-- The adapter derives the signing key from the envelope's seed, signs the
-  note message in native code (docs/keys-and-signing.md, rule 7), derives
-  the secrets, and computes the proof's witness and the proof there.
-- What leaves it is public: a precommitment, a commitment, a nullifier hash,
-  a finished proof.
-- This needs no new exception to *Key material*. It does need an amendment
-  to docs/keys-and-signing.md, which is the owner's (D2).
+- Spending secrets stay inside the key-store adapter: Railgun's spending
+  key; Privacy Pools' note signature, nullifier, salt and sender key.
+- The adapter derives them from the envelope's seed, in native code where it
+  signs (docs/keys-and-signing.md, rule 7), and calls the prover with them
+  (D9). What leaves it is public: a commitment, a nullifier, a finished
+  proof, a signature over a transaction.
+- **Railgun's viewing key is the exception to settle.** Scanning decrypts
+  every note of the proxy's history with it. Either the scan runs inside the
+  adapter, or the viewing key leaves it, which would add an entry to the
+  closed list of exceptions (#101's question 4; D2).
+- This needs an amendment to docs/keys-and-signing.md, which is the owner's
+  (D2).
 - None of this hashing is in `:domain`. Keccak-256 there is for transaction
   encoding and hashing alone (owner ruling, 2026-10-18, #50), and Poseidon
-  is no library `:domain` may take. The note scheme and the tree live in
-  `:data`; `:domain` sees the port and public values only.
+  is no library `:domain` may take. The note schemes and the trees live in
+  `:data` or in Rust (D9); `:domain` sees the port and public values only.
 
 ### Chain data
 
-- Everything a note's balance rests on is a verified read: the pool's logs
-  from the log index, the roots from verified calls.
-- The association set's tree is the one thing from outside. It is fetched
-  by the IPFS CID in the Entrypoint's verified `RootUpdated` log, and used
-  only when its root equals `latestRoot()` (D5).
-- A withdrawal goes out through a relayer or an ERC-4337 bundler, off-chain
-  services (D4). Kohaku's withdrawal (`prepareUnshield`) has no direct path.
-  Ragequit is an ordinary transaction and needs neither.
+- Everything a balance rests on is a verified read: the pool's logs from the
+  log index, the roots and nullifiers from verified calls.
+- From outside come:
+  - **Railgun:** the PPOI (Private Proofs of Innocence) aggregator nodes, which
+    decide what can be spent and receive a proof with every spend; the
+    broadcasters, reached over Waku, which pay a spend's gas so that no
+    public account of the user's pays it. Both are #101's question 2 (D4).
+  - **Privacy Pools:** the association set's tree, fetched by the IPFS CID
+    in the Entrypoint's verified `RootUpdated` log and used only when its
+    root equals `latestRoot()` (D5); and a relayer or an ERC-4337 bundler,
+    since Kohaku's withdrawal (`prepareUnshield`) has no direct path (D4).
+    Its ragequit is an ordinary transaction and needs neither.
+- A shield needs nothing from outside on either protocol.
+
+### A Safe
+
+- **Railgun:** a Safe can shield (`shield` has no caller check). Shielded
+  funds are spent with one 0zk spending key: Railgun has no shielded
+  multisig, so the Safe's threshold stops at the shield. The review says so
+  before the owners sign, and a co-owner checks the encrypted recipient
+  instead of trusting it (#101, *Custody stops at the shield*; its
+  question 3).
+- **Privacy Pools:** a note's secrets come from a recovery phrase's
+  signature. A Safe may send the deposit, but the note then belongs to that
+  phrase, not to the Safe's owners together.
 
 ### History
 
-A note's tree needs every pool log since the pool was deployed, whenever the
-user's own deposits were made. The "since added" rule (owner rulings,
-2026-10-20, #85) is about accounts. Pool contracts are walked from their
+A tree needs every log of the pool since its deployment, whenever the
+user's own notes were made. The "since added" rule (owner rulings,
+2026-10-20, #85) is about accounts. Pool contracts are read from their
 deployment (D7).
 
 ### Networks
 
-- Kohaku pins Privacy Pools on Ethereum (Entrypoint
-  `0x6818809EefCe719E480a7526D76bD3e561526b46`, from block 22,153,713) and
+- **Railgun:** the RailgunSmartWallet proxy,
+  `0xfa7093cdd9ee6932b4eb2c9e1cde7ce00b1fa4b9` on Ethereum, deployed at
+  block 14,737,691, and `0xecfcf3b4ec647c4ca6d49108b311b7a7c9543fea` on
+  Sepolia, created at block 5,784,774 (Myotis `docs/railgun-poc.md`, which
+  explains why the numbers in circulation, 14,693,013 and 5,784,866, are
+  wrong as a watch floor). One entry per network covers what the wallet
+  reads.
+- **Privacy Pools:** Kohaku pins the Entrypoint on Ethereum
+  (`0x6818809EefCe719E480a7526D76bD3e561526b46`, from block 22,153,713) and
   Sepolia (`0x34A2068192b1297f2a7f85D7D8CdE66F8F0921cB`, from 8,461,453),
-  `PrivacyPoolsV1_0xBow` in `config.ts`.
-- Gnosis Chain has none: its actions are greyed out there.
-- The pools are found from the Entrypoint's own events. Each pin is proven
-  on chain by the PR that adds it, as for swaps.
+  `PrivacyPoolsV1_0xBow` in `config.ts`. The pools are found from the
+  Entrypoint's own events.
+- Neither is pinned on Gnosis Chain here: the actions are greyed out there.
+- Each pin is proven on chain by the PR that adds it, as for swaps.
 
 ## The log index
 
 ### What it must hold
 
-- For Privacy Pools: an `Emitter` entry (an address entry) for the
-  Entrypoint and for each pool, unrestricted, from the deployment block.
-- The tree is built from the pools' `LeafInserted` events; deposits,
-  withdrawals and ragequits from `Deposited`, `Withdrawn` and `Ragequit`;
-  the association set's updates from the Entrypoint's `RootUpdated`.
+- **Railgun:** one `Emitter` entry (an address entry) for the proxy,
+  unrestricted, from its deployment block. Today's demo seeds hold about
+  438,000 logs over 11.4M blocks on Ethereum (261 MB) and 14,800 over 6M
+  blocks on Sepolia (9 MB).
+- **Privacy Pools:** an `Emitter` entry for the Entrypoint and for each
+  pool, from the deployment block.
 
 ### What Serotine can do today
 
 - **Watch:** yes. `LogIndex.configure(network, listOf(LogWatch(
-  LogWatchKey.Emitter(pool), deployBlock)), emptyList())` is exactly the
+  LogWatchKey.Emitter(contract), deployBlock)), emptyList())` is exactly the
   engine's address entry. `EngineLogIndex.logs` serves it and refuses a range
   below its start (`BeforeStart`).
 - `FollowAccountLogs` unwatches only accounts that left the wallet
-  (`AccountLogs.kt`, `gone`). It leaves pool entries alone.
+  (`AccountLogs.kt`, `gone`). It leaves a pool's entry alone.
 - **Import:** no. Myotis's `ChainHandle.importLogIndexFiles` and
   `exportLogIndex` exist on the JVM API (ABI v24). Serotine's `LogIndexChain`
   wraps only `setLogIndexConfig`, `logIndexStatusJson` and `getLogs`, and the
   `LogIndex` port has no import. On iOS, Myotis's typed `ChainHandle` has no
   import either; only `RustEngine.importLogIndexFiles` does.
 
-### Why walking is not enough on Ethereum
+### Why Railgun needs an import, even on Sepolia
 
-- The Entrypoint's history is about 4 million blocks deep today.
 - Mainnet's `logsBloom` is so full that 85–95 % of blocks look like
   candidates (Myotis `docs/seeded-log-histories.md`). The walk then fetches
-  nearly every block's receipts. Myotis calls such a walk a multi-day
-  download.
-- So Sepolia is walked (part 3). Ethereum waits for an imported seed (part
-  10).
+  nearly every block's receipts, and Myotis calls Railgun's walk a
+  multi-day download.
+- Railgun's history is 6M blocks deep even on Sepolia. Its balance is shown
+  from an imported seed, with Myotis walking and verifying everything above
+  the seed's top (Railgun part 4).
+- An import must not be followed by a push of Serotine's own entry for the
+  proxy from a lower block: the engine keeps the lower block, and the band
+  below the seed would be refused until walked (#101).
+- Privacy Pools' Sepolia history is about 3.6M blocks; whether its walk is
+  bearable is measured by its part 3.
 
 ### What an import must respect
 
@@ -212,125 +294,152 @@ From Myotis's ruling on seeded histories (2026-09-25,
 (`docs/eth-getlogs-design.md`, *Import*):
 
 - A seed is served on the word of the protocol's maintainers, and only to a
-  client that checks its rebuilt root on chain. Privacy Pools' client does.
-  Serotine's trust rules do not carry this exception today (D6).
+  client that checks its rebuilt root on chain. Serotine's trust rules do not
+  carry this exception today (D6; #101's question 1).
+- Today's seeds do not qualify: they are Myotis's own fetch from a node over
+  JSON-RPC, a DEBUG / DEMO artefact. A production seed is published or
+  vouched for by Railgun's maintainers.
 - Myotis does not yet tell seeded coverage from walked coverage. That marker
-  is its own precondition, unmet.
+  is its own precondition, unmet. Until it exists, Serotine labels a seeded
+  span as seeded.
 - A seed must reach within 500,000 blocks of finality (about 69 days), or it
-  imports and never catches up. A published seed needs a refresh inside that.
+  imports and never catches up. Today's seeds are usable to block 26,597,965
+  on Ethereum and 12,324,017 on Sepolia, both about early December 2026. A
+  published seed needs a refresh inside that (#101's question 6).
 - A seed arrives bundled at build time or picked by the user, never fetched
   by the wallet.
 - An import is merged by clamping every entry's coverage to the lowest top
   among the sources. A seed that ends below the head pulls the accounts'
   history coverage down with it until the gap is walked again.
-- No Privacy Pools seed in Myotis's MLIX format exists. Kohaku's own fast
-  sync, saga-sync, is a CDN fetch.
 
 ## Following Kohaku
 
-- **The pin.** The Kohaku commit this page matches, `8c83d64`, is the pin.
-  It moves only in a PR that says so.
-- **Vectors.** A script runs Kohaku's own code at the pinned commit on a
-  mnemonic generated for the purpose and never funded. It writes the
-  signatures, secrets, precommitments, commitments, nullifier hashes, the
-  discovery results on a fixed log set and the roots. The file names the
-  commit it came from. `:data`'s tests check Serotine against it, and that
-  the commit is the pin, so a mismatch fails `./gradlew build`.
-- **A move of the pin** regenerates the vectors. A changed derivation or note
+- **The pins.** The Kohaku commit this page matches, `8c83d64`, and, for
+  Railgun, the engine version the vectors are made with. Each moves only in
+  a PR that says so.
+- **Vectors.** A script runs the pinned code on a mnemonic generated for the
+  purpose and never funded. It writes, per protocol, the keys or note
+  secrets, the addresses, the commitments, the nullifiers, the discovery
+  results on a fixed log set and the roots. The file names the commits and
+  versions it came from. `:data`'s tests check Serotine against it, and that
+  those are the pins, so a mismatch fails `./gradlew build`.
+- **A move of a pin** regenerates the vectors. A changed derivation or note
   format is a breaking change for the user's funds: the PR says so, and the
   owner decides whether Serotine follows.
 
 ## The plan
 
-A multi-PR plan. It lands through `feature/kohaku`, part by part, and
-reaches `main` in one final PR (`.claude/skills/feature-branch/SKILL.md`).
-Each part follows docs/architecture.md's checklist. The parts in order:
+Railgun first, then Privacy Pools (the direction given for this plan,
+2026-11-03, on PR #220). Each is a multi-PR plan of its own, landing part by
+part through its feature branch and reaching `main` in one final PR
+(`.claude/skills/feature-branch/SKILL.md`). Each part follows
+docs/architecture.md's checklist.
 
-1. **The spec, the vectors and the port.** The vectors script and file. The
-   `ShieldedPool` port in `:domain` with Kohaku's semantics, its value
-   objects, fakes and use-case tests. No adapter yet. Needs D1.
-2. **The keychain in the key-store adapter.** The signing key at
+### Railgun, through `feature/railgun`
+
+#101's parts, with the port and the vectors added where they are first
+needed:
+
+1. **Shield from an EOA to a pasted 0zk address.** The `ShieldedPool` port
+   in `:domain` with Kohaku's semantics, its fakes and use-case tests. The
+   `0zk1…` decoding, the encrypted note and the `shield` calldata; ERC-20,
+   and ETH through RelayAdapt. The vectors script and file for what this
+   part computes. No log index, no proof, no key of the user's. Needs D1 and
+   D9.
+2. **Shield from a Safe.** The WETH path, never RelayAdapt, and the recipient
+   check in the signing request; one MultiSendCallOnly batch once #57 lands.
+   The review says the Safe's threshold stops at the shield. Needs #101's
+   question 3.
+3. **The 0zk keys.** The spending and viewing keys in the key-store adapter,
+   on Railgun's hash chain; the account's own 0zk address; shielding to it.
+   Tested against the vectors. docs/keys-and-signing.md amended. Needs D2
+   and D8.
+4. **The private balance.** `LogIndex` gains an import; the JVM and iOS
+   adapters (iOS through `RustEngine.importLogIndexFiles` until Myotis's
+   typed handle has one); the seed bundled or picked. The scan, the tree,
+   the client-side checks of *The root checks*, the balance, labelled as
+   seeded. Sepolia first. Needs D6, D7, and the viewing key's place (D2).
+5. **Spending.** Private transfer and unshield: the prover and Railgun's
+   circuit files pinned by hash, PPOI, gas through a broadcaster. Needs D4
+   and D9, and a Myotis issue if D9 puts the client there.
+
+### Privacy Pools, through `feature/privacy-pools`, after Railgun
+
+1. **The keychain** in the key-store adapter: the signing key at
    `m/28784'/1'/<accountIndex>'`, the note message signed in native code,
-   the determinism check, the secrets derived and kept inside. Tested against
-   the vectors. docs/keys-and-signing.md amended. Needs D2 and D8.
-3. **Pool logs.** A use case that keeps `Emitter` entries for the Entrypoint
-   and its pools, found from the Entrypoint's events, each from its
-   deployment block. The query bridge, with both ends of a range explicit.
-   Coverage shown as syncing. Sepolia only. It measures the walk's time and
-   download. Needs D7.
-4. **Pool state.** Where D9 puts the client: Poseidon over BN254 and the
-   pool's tree, rebuilt from `LeafInserted`. The root checks over verified
-   calls. Discovery on restore. The balance. Tested against the vectors.
-   Needs D3 and D9.
-5. **The prover.** Groth16 witness and proof for the pool's circuits, on
-   Android, the desktop and iOS. The key-store adapter calls it with the
-   secrets, which exist only inside that call, whichever library D9 picks.
-   The circuit files pinned by hash. Kept inside the minSdk 29 budget.
-6. **Deposit.** `Entrypoint.deposit` from an account held here, its review
-   and signature through the existing send path.
-7. **Ragequit.** The public exit of a deposit. It needs no service and no
-   association set.
-8. **The screens.** Where a privacy balance lives (per recovery phrase and
-   network), the greyed-out actions, simple mode and Detailed view, a
-   preview per state. docs/wallet-ux.md amended. Screenshots in the PR.
-9. **Withdrawal.** The association set from IPFS, over Ktor, checked
-   against `latestRoot()`. The relayer or bundler. Needs D4 and D5.
-10. **Ethereum.** `LogIndex` gains an import; the JVM and iOS adapters; the
-    seed bundled or picked. Needs D6, Myotis's provenance marker, and an
-    import on Myotis's typed iOS `ChainHandle`.
+   the determinism check, the secrets derived and kept inside. Its vectors.
+   Needs D3 and D8.
+2. **Pool logs.** `Emitter` entries for the Entrypoint and its pools, found
+   from the Entrypoint's events, each from its deployment block. Walked on
+   Sepolia, its time and download measured. Needs D7.
+3. **Pool state.** Poseidon over BN254 and the tree, rebuilt from
+   `LeafInserted`; the root checks; discovery on restore; the balance.
+4. **The prover**, for the pool's circuits, with the circuit files pinned by
+   hash. Railgun's part 5 chooses the library first.
+5. **Deposit**, from an account held here.
+6. **Ragequit**, the public exit. It needs no service and no association
+   set.
+7. **Withdrawal.** The association set from IPFS, over Ktor, checked
+   against `latestRoot()`; the relayer or bundler. Needs D4 and D5.
+8. **Ethereum**, from an imported seed, as Railgun's part 4 built it. Needs
+   D6.
 
-Later, each a plan of its own:
+### Across both
 
-- **Tornado Cash**, if D3 says yes: kohaku-rs's crate, linked as a native
-  library.
-- **Railgun**: issue #101 is its design (shield from EOAs and Safes, the
-  balance from a seeded index, PPOI, the client's own checks). Kohaku has
-  no code for it today: `@kohaku-eth/railgun` is a placeholder ("Do not
-  depend on this stub"). Its keys follow Kohaku's keystore, which derives
-  under coin type 1984 with Railgun's own hash chain, as #101 sets out. The
-  port and the vectors of parts 1 and 2 apply to it unchanged.
-- **Tor** for the engine's reads and sends: Myotis has it, behind
-  `-PtorEngine`. Serotine does not wire it.
+- **The screens**: where a private balance lives (per recovery phrase and
+  network), the greyed-out actions, simple mode and Detailed view, a preview
+  per state, docs/wallet-ux.md amended, screenshots in each PR that changes
+  them. Each part that shows something brings its own screens.
+- **Later**, each a plan of its own: Tornado Cash if D3 says yes
+  (kohaku-rs's crate, linked as a native library); Tor for the engine's
+  reads and sends (Myotis has it behind `-PtorEngine`; Serotine does not
+  wire it).
 
 ## Open decisions
 
 All the owner's. Each is recorded here as decided before its code lands.
+#101's own open questions stand for Railgun; each is named where it belongs.
 
 - **D1. The definition.** Is "Kohaku compliant" what *What "compliant"
-  means here* says: Kohaku as the spec at a pinned commit, checked by
-  vectors?
-- **D2. Secrets in the key-store adapter.** May the note signature, the
-  secrets derived from it and the proving run inside the key-store adapter,
-  with only public values leaving it, as *Key material* above sets out?
-- **D3. Which protocols.** Privacy Pools first is proposed. Tornado Cash:
-  yes or no, given its sanctions history. Railgun: under #101, whose own
-  open questions stand.
-- **D4. The withdrawal service.** A relayer (it learns the recipient, the
-  amount and the device's IP address), or an ERC-4337 bundler and paymaster
-  (Kohaku's default is Pimlico's public bundler). Which, and on what terms,
-  as for CoW (owner ruling, 2026-10-22).
-- **D5. The association set's tree.** From which IPFS gateway, or 0xbow's
-  API instead. It is used only when its root is the Entrypoint's
-  `latestRoot()`.
+  means here* says: Kohaku as the spec at a pinned commit, Railgun's engine
+  where Kohaku has no code, checked by vectors?
+- **D2. Secrets in the key-store adapter.** May the spending secrets, and
+  the proving with them, stay inside the key-store adapter with only public
+  values leaving it, as *Key material* above sets out? And Railgun's viewing
+  key: does the scan run inside the adapter, or may the key leave it (#101's
+  question 4)? Scanning without an unlock depends on that answer.
+- **D3. Which protocols.** Railgun, then Privacy Pools. Tornado Cash: yes or
+  no, given its sanctions history.
+- **D4. The off-chain services of a spend.** Railgun: the PPOI nodes and the
+  broadcasters, over HTTP with Ktor and over Waku (#101's question 2).
+  Privacy Pools: a relayer (it learns the recipient, the amount and the
+  device's IP address), or an ERC-4337 bundler and paymaster (Kohaku's
+  default is Pimlico's public bundler). Which, and on what terms, as for CoW
+  (owner ruling, 2026-10-22).
+- **D5. The association set's tree** (Privacy Pools). From which IPFS
+  gateway, or 0xbow's API instead. It is used only when its root is the
+  Entrypoint's `latestRoot()`.
 - **D6. Seeded histories.** Does Serotine adopt Myotis's ruling of
-  2026-09-25, for Privacy Pools only, once Myotis meets its preconditions?
-  Bundled at build time, or imported by the user?
-- **D7. Pool contracts from their deployment.** Are they walked from their
-  deployment, outside the "since added" rule? Is the walk a per-network
-  opt-in, given its download?
-- **D8. Which account index.** Kohaku's `accountIndex` belongs to the
-  recovery phrase, not to an address. One privacy account per phrase and
-  network, index 0, is proposed. Which index other Kohaku wallets use is to
-  be checked first.
+  2026-09-25, for clients that run the checks of *The root checks*? #101's
+  question 1 asks the same for Railgun: only once Myotis's preconditions are
+  met, on Sepolia now labelled as seeded (#101's recommendation), or only
+  from the walk. Bundled at build time, or imported by the user?
+- **D7. Pool contracts from their deployment.** Are they read from their
+  deployment, outside the "since added" rule? Is following a pool a
+  per-network opt-in, given its download?
+- **D8. Which account index.** Railgun's index `i` and Kohaku's
+  `accountIndex` belong to the recovery phrase, not to an address. One
+  private account per phrase and network, index 0, is proposed. Which
+  index other wallets use is to be checked first.
 - **D9. Where a pool's client lives.** Kotlin in `:data`, or Rust linked
   as a native library: a kohaku-rs crate, or a client in the Myotis engine
-  beside the index, which #101 recommends for Railgun (its option B).
-  Poseidon, the tree and the prover follow the choice; wherever they are,
-  the secrets reach only the prover the key-store adapter calls (D2).
-  Kotlin is proposed for Privacy Pools, whose client is small and has no
-  Rust crate. #101 proposes Myotis for Railgun.
-- **D10. Merging the parts.** May the parts be merged into `feature/kohaku`
-  by their author (the feature-branch skill, step 3)?
+  beside the index, which #101 recommends for Railgun (its option B; its
+  question 5). Poseidon, the tree and the prover follow the choice;
+  wherever they are, the secrets reach only the prover the key-store adapter
+  calls (D2).
+- **D10. Merging the parts.** May the parts be merged into their feature
+  branch by their author (the feature-branch skill, step 3)? Asked once per
+  plan.
 
 ## Sources
 
@@ -343,5 +452,8 @@ All the owner's. Each is recorded here as decided before its code lands.
 - kohaku-rs: `README.md`, `crates/tornadocash/`.
 - Kohaku's roadmap: <https://notes.ethereum.org/@niard/KohakuRoadmap>.
 - Myotis: `docs/eth-getlogs-design.md`, `docs/seeded-log-histories.md`,
-  `docs/railgun-android.md`, `docs/privacy-and-tor.md`,
+  `docs/railgun-poc.md`, `docs/railgun-android.md`,
+  `docs/privacy-and-tor.md`,
   `myotis-api/src/main/java/io/myotis/api/ChainHandle.java`.
+- Serotine issue #101 (Railgun), which read `Railgun-Privacy/contract` and
+  `@railgun-community/engine` 9.9.1 and `wallet` 10.8.6.
