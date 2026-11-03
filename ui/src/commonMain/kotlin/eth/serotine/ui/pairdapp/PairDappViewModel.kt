@@ -41,8 +41,9 @@ class PairDappViewModel(private val pairDapp: PairDapp, incoming: IncomingDappLi
         if (incoming != null) {
             // Every link that arrives while the screen is open too: the latest fills the field. Not while a
             // Connect is under way: the link waits, so an answer is never shown under a link it is not for.
+            // Nor once paired: the screen leaves for Connected dApps, and the app opens it again for the link.
             viewModelScope.launch {
-                combine(incoming.pending, state) { link, now -> link != null && !now.busy }
+                combine(incoming.pending, state) { link, now -> link != null && !now.busy && !now.paired }
                     .distinctUntilChanged()
                     .filter { it }
                     .collect {

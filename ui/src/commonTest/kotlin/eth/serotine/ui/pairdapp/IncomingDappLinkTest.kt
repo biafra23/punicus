@@ -73,5 +73,25 @@ class IncomingDappLinkTest {
         assertEquals("wc:arrived@2", vm.uiState.value.text)
         assertNull(inbox.pending.value)
     }
+
+    @Test
+    fun aLinkWaitingWhenTheConnectUnderWayPairsLeavesTheExitAloneAndWaitsOn() = runTest {
+        Dispatchers.setMain(UnconfinedTestDispatcher(testScheduler))
+        val answer = kotlinx.coroutines.CompletableDeferred<eth.serotine.domain.repository.DappPairing>()
+        val sessions = object : eth.serotine.domain.repository.DappSessions by FakeDappSessions() {
+            override suspend fun pair(uri: String) = answer.await()
+        }
+        val inbox = IncomingDappLink()
+        val vm = PairDappViewModel(PairDapp(sessions), inbox)
+        vm.edit("wc:typed@2")
+        vm.connect()
+        inbox.offer("wc:arrived@2")
+        answer.complete(eth.serotine.domain.repository.DappPairing.Paired(waitingForRelay = false))
+        runCurrent()
+        // The pairing's exit stands, and the link waits for the app to open Connect a dApp again.
+        assertTrue(vm.uiState.value.paired)
+        assertEquals("wc:typed@2", vm.uiState.value.text)
+        assertEquals("wc:arrived@2", inbox.pending.value)
+    }
 }
 

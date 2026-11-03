@@ -90,6 +90,7 @@ import eth.serotine.ui.update.UpdateRequiredRoute
 import eth.serotine.ui.update.UpdateRequiredUiState
 import eth.serotine.ui.update.UpdateRequiredViewModel
 import eth.serotine.ui.watch.WatchRoute
+import kotlinx.coroutines.flow.combine
 
 /**
  * The whole shared UI, identical on every host. A host renders this inside its own
@@ -254,11 +255,15 @@ private fun Destinations(
     // A `wc:` link the platform opened the app with opens Connect a dApp in the Settings tab, as a tap
     // there would, and the screen takes the link from there. Not while an update is required: that
     // screen replaces every other, and the link waits.
+    // Looked at again whenever the screen shown changes, so a link that waited on Connect a dApp (for
+    // a Connect under way) is opened again once that screen is left, never stranded.
     LaunchedEffect(updateRequired) {
         if (updateRequired) return@LaunchedEffect
-        graph.incomingDappLink.pending.collect { link ->
-            if (link == null || navController.currentDestination?.route == Destination.PAIR_DAPP) return@collect
-            val current = navController.currentBackStackEntry?.destination?.hierarchy?.firstNotNullOfOrNull { route ->
+        combine(graph.incomingDappLink.pending, navController.currentBackStackEntryFlow) { link, entry ->
+            link to entry
+        }.collect { (link, entry) ->
+            if (link == null || entry.destination.route == Destination.PAIR_DAPP) return@collect
+            val current = entry.destination.hierarchy.firstNotNullOfOrNull { route ->
                 Tab.entries.firstOrNull { it.graph == route.route }
             }
             navController.select(Tab.SETTINGS, current)

@@ -474,6 +474,23 @@ class AppNavigationTest {
     }
 
     @Test
+    fun aLinkStillWaitingOpensConnectADappAgainOnceTheUserIsElsewhere() {
+        showApp()
+        val first = "wc:" + "a".repeat(64) + "@2?relay-protocol=irn&symKey=" + "b".repeat(64)
+        graph.incomingDappLink.offer(first)
+        rule.waitForIdle()
+        rule.onNodeWithTag(eth.serotine.ui.pairdapp.PAIR_DAPP_FIELD_TAG).assertIsDisplayed()
+        rule.onNodeWithContentDescription("Back").performClick()
+        rule.waitForIdle()
+        // A link left waiting, as one is while a Connect is under way: the next screen shown opens it.
+        val second = "wc:" + "c".repeat(64) + "@2?relay-protocol=irn&symKey=" + "d".repeat(64)
+        graph.incomingDappLink.offer(second)
+        rule.waitForIdle()
+        rule.onNodeWithText(second).assertExists()
+        kotlin.test.assertNull(graph.incomingDappLink.pending.value)
+    }
+
+    @Test
     fun aWalletConnectLinkWaitsWhileAnUpdateIsRequired() {
         showApp()
         report.value = NetworkUpgrade(NetworkUpgrade.Phase.ACTIVE, activationTime = null, forkId = null, 4)
