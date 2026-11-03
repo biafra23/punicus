@@ -253,8 +253,8 @@ private fun Destinations(
         }
     }
     // A `wc:` link the platform opened the app with opens Connect a dApp in the Settings tab, as a tap
-    // there would, and the screen takes the link from there. Not while an update is required: that
-    // screen replaces every other, and the link waits.
+    // there would, and the screen takes the link from there. Not while an update is required (that
+    // screen replaces every other) nor while a flow covers the tab bar: the link waits.
     // Looked at again whenever the screen shown changes, so a link that waited on Connect a dApp (for
     // a Connect under way) is opened again once that screen is left, never stranded.
     LaunchedEffect(updateRequired) {
@@ -266,6 +266,9 @@ private fun Destinations(
             val current = entry.destination.hierarchy.firstNotNullOfOrNull { route ->
                 Tab.entries.firstOrNull { it.graph == route.route }
             }
+            // A flow outside the tabs covers the bar (a key operation, a review being signed): the link
+            // waits for it to end, as a tap in Settings would have to, and opens once a tab is shown.
+            current ?: return@collect
             navController.select(Tab.SETTINGS, current)
             navController.navigate(Destination.PAIR_DAPP) { launchSingleTop = true }
         }
