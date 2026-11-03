@@ -4,7 +4,7 @@ How Serotine becomes a Kohaku-compliant wallet: it holds privacy-pool notes
 that any Kohaku wallet derives from the same recovery phrase, and it finds
 the same deposits on restore. This page is a plan. Nothing of it is built,
 and every decision it names is open until the owner takes it (*Open
-decisions*). The issue that tracks it links here. Where this page and the
+decisions*). Issue #219 tracks it. Where this page and the
 rules under `.claude/` (their short form in CLAUDE.md) disagree, the rules
 win and this page is fixed.
 
@@ -258,13 +258,14 @@ Each part follows docs/architecture.md's checklist. The parts in order:
    deployment block. The query bridge, with both ends of a range explicit.
    Coverage shown as syncing. Sepolia only. It measures the walk's time and
    download. Needs D7.
-4. **Pool state.** In `:data`: Poseidon over BN254 and the pool's tree,
-   rebuilt from `LeafInserted`. The root checks over verified calls. Discovery on
-   restore. The balance. Tested against the vectors. Needs D3.
-5. **The prover.** Native Groth16 witness and proof for the pool's circuits,
-   inside the key-store adapter, on Android, the desktop and iOS. The circuit
-   files pinned by hash. Kept inside the minSdk 29 budget. The library is
-   chosen in this part.
+4. **Pool state.** Where D9 puts the client: Poseidon over BN254 and the
+   pool's tree, rebuilt from `LeafInserted`. The root checks over verified
+   calls. Discovery on restore. The balance. Tested against the vectors.
+   Needs D3 and D9.
+5. **The prover.** Groth16 witness and proof for the pool's circuits, on
+   Android, the desktop and iOS. The key-store adapter calls it with the
+   secrets, which exist only inside that call, whichever library D9 picks.
+   The circuit files pinned by hash. Kept inside the minSdk 29 budget.
 6. **Deposit.** `Entrypoint.deposit` from an account held here, its review
    and signature through the existing send path.
 7. **Ragequit.** The public exit of a deposit. It needs no service and no
@@ -282,8 +283,12 @@ Later, each a plan of its own:
 
 - **Tornado Cash**, if D3 says yes: kohaku-rs's crate, linked as a native
   library.
-- **Railgun**, once Kohaku has code for it: `@kohaku-eth/railgun` is a
-  placeholder today ("Do not depend on this stub").
+- **Railgun**: issue #101 is its design (shield from EOAs and Safes, the
+  balance from a seeded index, PPOI, the client's own checks). Kohaku has
+  no code for it today: `@kohaku-eth/railgun` is a placeholder ("Do not
+  depend on this stub"). Its keys follow Kohaku's keystore, which derives
+  under coin type 1984 with Railgun's own hash chain, as #101 sets out. The
+  port and the vectors of parts 1 and 2 apply to it unchanged.
 - **Tor** for the engine's reads and sends: Myotis has it, behind
   `-PtorEngine`. Serotine does not wire it.
 
@@ -298,7 +303,8 @@ All the owner's. Each is recorded here as decided before its code lands.
   secrets derived from it and the proving run inside the key-store adapter,
   with only public values leaving it, as *Key material* above sets out?
 - **D3. Which protocols.** Privacy Pools first is proposed. Tornado Cash:
-  yes or no, given its sanctions history. Railgun: when Kohaku has code.
+  yes or no, given its sanctions history. Railgun: under #101, whose own
+  open questions stand.
 - **D4. The withdrawal service.** A relayer (it learns the recipient, the
   amount and the device's IP address), or an ERC-4337 bundler and paymaster
   (Kohaku's default is Pimlico's public bundler). Which, and on what terms,
@@ -316,7 +322,14 @@ All the owner's. Each is recorded here as decided before its code lands.
   recovery phrase, not to an address. One privacy account per phrase and
   network, index 0, is proposed. Which index other Kohaku wallets use is to
   be checked first.
-- **D9. Merging the parts.** May the parts be merged into `feature/kohaku`
+- **D9. Where a pool's client lives.** Kotlin in `:data`, or Rust linked
+  as a native library: a kohaku-rs crate, or a client in the Myotis engine
+  beside the index, which #101 recommends for Railgun (its option B).
+  Poseidon, the tree and the prover follow the choice; wherever they are,
+  the secrets reach only the prover the key-store adapter calls (D2).
+  Kotlin is proposed for Privacy Pools, whose client is small and has no
+  Rust crate. #101 proposes Myotis for Railgun.
+- **D10. Merging the parts.** May the parts be merged into `feature/kohaku`
   by their author (the feature-branch skill, step 3)?
 
 ## Sources
