@@ -59,6 +59,22 @@ private val notDecoded = payment.copy(
     warnings = listOf(DappTransactionViewModel.NOT_DECODED),
 )
 
+private const val SAFE = "0x7a3B9c1E5d2F4a6B8c0D1e2F3a4B5c6D7e8F9a0B"
+private const val OWNER = "0x2B5AD5c4795c026514f8317c7a215E218DcCD6cF"
+
+private val fromSafe = payment.copy(
+    accountName = "Team Safe",
+    accountAddress = SAFE,
+    fromSafe = true,
+    quote = listOf(
+        SignInField("Safe transaction", "Nonce 4, behind 1 queued; 2 of 3 owners sign it"),
+        SignInField("Left in the Safe, at least", "1.25 ETH (testnet)"),
+        SignInField("Verified run", "Runs from the Safe without reverting at block 7,412,903"),
+        SignInField("Signs here as", OWNER),
+        SignInField("Fee", "Paid by the account that executes it, quoted when it is executed"),
+    ),
+)
+
 @Composable
 private fun DappTransactionPreview(state: DappTransactionUiState, darkTheme: Boolean = false) {
     SerotineTheme(darkTheme = darkTheme) {
@@ -124,10 +140,34 @@ private fun DappTransactionNotQuotedPreview() = DappTransactionPreview(
 @Composable
 private fun DappTransactionRefusedPreview() = DappTransactionPreview(
     payment.copy(
-        accountName = "Team Safe",
+        accountName = "Watched",
         quote = emptyList(),
-        refusal = DappTransactionViewModel.refusalLine(DappSignRefusal.SAFE),
+        refusal = DappTransactionViewModel.refusalLine(DappSignRefusal.NO_KEY),
     ),
+)
+
+@Preview
+@Composable
+private fun DappTransactionSafePreview() = DappTransactionPreview(fromSafe)
+
+@Preview
+@Composable
+private fun DappTransactionSafeDarkPreview() = DappTransactionPreview(fromSafe, darkTheme = true)
+
+@Preview
+@Composable
+private fun DappTransactionSafeNoOwnerPreview() = DappTransactionPreview(
+    fromSafe.copy(quote = emptyList(), notQuoted = DappTransactionViewModel.NO_OWNER_HERE),
+)
+
+@Preview
+@Composable
+private fun DappTransactionSafeSigningPreview() = DappTransactionPreview(fromSafe.copy(busy = true))
+
+@Preview
+@Composable
+private fun DappTransactionSafeQueuedPreview() = DappTransactionPreview(
+    fromSafe.copy(quote = emptyList(), queued = "0x8f3c1b2a4d5e6f708192a3b4c5d6e7f8091a2b3c4d5e6f708192a3b4c5d6e7f8"),
 )
 
 @Preview
@@ -180,6 +220,11 @@ internal val dappTransactionScreenPreviews: List<@Composable () -> Unit> = listO
     { DappTransactionQuotingPreview() },
     { DappTransactionNotQuotedPreview() },
     { DappTransactionRefusedPreview() },
+    { DappTransactionSafePreview() },
+    { DappTransactionSafeDarkPreview() },
+    { DappTransactionSafeNoOwnerPreview() },
+    { DappTransactionSafeSigningPreview() },
+    { DappTransactionSafeQueuedPreview() },
     { DappTransactionSendingPreview() },
     { DappTransactionNotSentPreview() },
     { DappTransactionExplainingPreview() },

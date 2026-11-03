@@ -2,6 +2,7 @@ package eth.serotine.ui.dapptransaction
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import eth.serotine.domain.model.AccountKind
 import eth.serotine.domain.model.DappCallMeaning
 import eth.serotine.domain.model.Network
 import eth.serotine.domain.model.Token
@@ -14,6 +15,15 @@ import eth.serotine.domain.repository.DappSessionId
 import eth.serotine.domain.repository.Signing
 import eth.serotine.domain.repository.Unlock
 import eth.serotine.domain.usecase.DappMessageReview
+import eth.serotine.domain.usecase.DappSafeProposal
+import eth.serotine.domain.usecase.DappSafeProposing
+import eth.serotine.domain.usecase.ProposeDappSafeTx
+import eth.serotine.domain.usecase.SafeCallSimulation
+import eth.serotine.domain.usecase.DappSafeSigning
+import eth.serotine.domain.usecase.SafeTxSignCheck
+import eth.serotine.domain.usecase.SignDappSafeTx
+import eth.serotine.domain.repository.ReadUnavailable
+import eth.serotine.domain.usecase.SafeTxRefusal
 import eth.serotine.domain.usecase.DappSignContent
 import eth.serotine.domain.usecase.DappSignRefusal
 import eth.serotine.domain.usecase.DappTransactionQuote
@@ -30,6 +40,8 @@ import eth.serotine.domain.usecase.TransferSending
 import eth.serotine.domain.repository.SentTransfer
 import eth.serotine.ui.components.Eip55
 import eth.serotine.ui.components.NotSentItem
+import eth.serotine.ui.components.CHECK_TOOK_THE_TIME
+import eth.serotine.ui.components.MIN_PROMPT_TIME
 import eth.serotine.ui.components.PROMPT_TIMED_OUT
 import eth.serotine.ui.components.QUOTE_MAX_AGE
 import eth.serotine.ui.components.STALE_QUOTE
@@ -40,16 +52,22 @@ import eth.serotine.ui.components.callRefusalText
 import eth.serotine.ui.components.epochSecondsNow
 import eth.serotine.ui.components.notSentItem
 import eth.serotine.ui.components.notSignedText
+import eth.serotine.ui.components.safeTxRefusalText
 import eth.serotine.ui.components.promptDeadline
 import eth.serotine.ui.dapprequest.DappRequestViewModel
 import eth.serotine.ui.dapprequest.SignInField
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
@@ -68,6 +86,11 @@ data class TransactionExplanation(val title: String, val reason: String)
  * worked out here from verified state: the fee at most, the balance left at least, and the call run as
  * a verified call at the head; or why there is none. The [warnings], the [refusal] when it can only be
  * refused, and the unlock. [gone] once the request is no longer waiting; [done] once answered.
+ *
+ * From a Safe ([fromSafe]) it is proposed as a Safe transaction instead: the quote is the Safe's (its nonce,
+ * what it has left, the call run from it, who signs here), the unlock signs it as an owner held here and
+ * queues it, and once it is queued ([queued]) the Safe transaction screen collects its signatures and
+ * executes it; the dApp is told the hash of that execution.
  */
 data class DappTransactionUiState(
     val loading: Boolean = true,
@@ -105,9 +128,18 @@ data class DappTransactionUiState(
     val notice: String? = null,
     val explaining: TransactionExplanation? = null,
     val done: Boolean = false,
+    /** Sent from a Safe: proposed as a Safe transaction, which its owners sign and an account here executes. */
+    val fromSafe: Boolean = false,
+    /** The Safe transaction queued for it, `0x` and its 64 hex digits: opened from here. */
+    val queued: String? = null,
+    /** Just signed and queued: its Safe transaction screen opens now. */
+    val openQueued: Boolean = false,
 ) {
     /** Send is greyed out, still tappable, while it cannot be done (owner ruling, 2026-10-18, #55). */
     val sendUnavailable: Boolean get() = refusal != null || quote.isEmpty()
+
+    /** What signing is called: a Safe's transaction is signed and queued, an account's sent. */
+    val signLabel: String get() = if (fromSafe) "Sign and queue" else "Send"
 }
 
 /**
@@ -115,7 +147,9 @@ data class DappTransactionUiState(
  * the wallet password or a fingerprint or face, or refuses it. A quote older than a minute, or one made
  * before the screen was last hidden, is made again before anything is signed. The password typed is held
  * while the field is shown, handed to the signer in an [Unlock], and dropped once used and whenever the
- * screen is not shown (CLAUDE.md, *Trust*).
+ * screen is not shown (CLAUDE.md, *Trust*). From a Safe it is proposed instead ([proposeDappSafeTx]),
+ * signed by the first of its owners held here and queued ([signDappSafeTx]), under the same minute: the
+ * Safe is checked first, within what is left of it, and leaving the screen stops that check.
  */
 class DappTransactionViewModel(
     /** The request, as its route names it: `topic/id`. */
@@ -123,6 +157,8 @@ class DappTransactionViewModel(
     observeDappMessages: ObserveDappMessages,
     private val quoteDappTransaction: QuoteDappTransaction,
     private val sendDappTransaction: SendDappTransaction,
+    private val proposeDappSafeTx: ProposeDappSafeTx,
+    private val signDappSafeTx: SignDappSafeTx,
     private val refuseDappRequest: RefuseDappRequest,
     private val describeKeyStore: DescribeKeyStore,
     private val clock: () -> Long = ::epochSecondsNow,
@@ -151,7 +187,18 @@ class DappTransactionViewModel(
         val notice: String? = null,
         val explaining: TransactionExplanation? = null,
         val done: Boolean = false,
+        /** From a Safe: proposed, not quoted. Known once the first quote or proposal is asked for. */
+        val fromSafe: Boolean = false,
+        /** A Safe's proposal, when proposed; made at [quotedAt]. */
+        val proposal: DappSafeProposal? = null,
+        /** The Safe transaction queued for it: `0x` and its hash. */
+        val queued: String? = null,
+        val openQueued: Boolean = false,
+        /** The Safe is being checked before a signature: leaving the screen stops it. */
+        val checking: Boolean = false,
     )
+
+    private var checkJob: Job? = null
 
     private val local = MutableStateFlow(Local())
 
@@ -171,7 +218,7 @@ class DappTransactionViewModel(
             }
         base.copy(
             quoting = local.quoting,
-            quote = local.quote?.let(::quoteLines).orEmpty(),
+            quote = local.quote?.let(::quoteLines) ?: local.proposal?.let(::proposalLines).orEmpty(),
             notQuoted = local.notQuoted,
             waits = DappRequestViewModel.waitsLine(review.request.expiresAtSeconds - clock()),
             unlock = local.unlock,
@@ -181,6 +228,9 @@ class DappTransactionViewModel(
             notice = local.notice,
             explaining = local.explaining,
             done = local.done,
+            fromSafe = base.fromSafe || local.fromSafe,
+            queued = local.queued,
+            openQueued = local.openQueued,
         )
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), DappTransactionUiState())
 
@@ -204,6 +254,13 @@ class DappTransactionViewModel(
             it.copy(quoting = true, notQuoted = null, gasTooLow = false, unlock = it.unlock.copy(error = note))
         }
         viewModelScope.launch {
+            // A Safe's transaction is proposed as a Safe transaction, never quoted as an account's.
+            val fromSafe = try {
+                shownReview.first()?.first?.account?.kind == AccountKind.SAFE
+            } catch (_: Exception) {
+                local.value.fromSafe
+            }
+            if (fromSafe) return@launch propose(request)
             val quoting = try {
                 quoteDappTransaction(request)
             } catch (_: Exception) {
@@ -250,6 +307,7 @@ class DappTransactionViewModel(
         if (explainUnavailable()) return
         val password = local.value.unlock.password
         if (local.value.busy || password.text.isEmpty()) return
+        if (local.value.fromSafe) return signSafe(freshProposal() ?: return, Unlock.WithPassword(password))
         val quote = freshQuote() ?: return
         send(quote, Unlock.WithPassword(password))
     }
@@ -258,6 +316,14 @@ class DappTransactionViewModel(
     fun sendWithBiometrics() {
         if (explainUnavailable()) return
         if (local.value.busy || !local.value.unlock.biometrics) return
+        if (local.value.fromSafe) {
+            val proposal = freshProposal() ?: return
+            val notAfter = local.value.quotedAt?.let(::promptDeadline) ?: return requote(note = STALE_QUOTE)
+            val owner = Eip55.format(proposal.heldOwners.first())
+            val reason = "Sign a dApp's Safe transaction from ${uiState.value.accountAddress} to ${uiState.value.to}, " +
+                "as the owner $owner"
+            return signSafe(proposal, Unlock.WithBiometrics(reason, notAfter))
+        }
         val quote = freshQuote() ?: return
         val notAfter = local.value.quotedAt?.let(::promptDeadline) ?: return requote(note = STALE_QUOTE)
         // What is signed, said in the prompt: nothing the dApp states.
@@ -306,11 +372,23 @@ class DappTransactionViewModel(
     fun dismissExplanation() = local.update { it.copy(explaining = null) }
 
     /** The screen stopped being shown: the password goes, and the quote is made again when it is shown. */
-    fun onHidden() = local.update { it.copy(unlock = it.unlock.copy(password = WalletPassword.EMPTY), hidden = true) }
+    fun onHidden() {
+        // A Safe still being checked before its signature stops: no prompt comes up over another screen.
+        if (local.value.checking) checkJob?.cancel()
+        local.update {
+            it.copy(
+                unlock = it.unlock.copy(password = WalletPassword.EMPTY),
+                hidden = true,
+                busy = it.busy && !it.checking,
+                checking = false,
+            )
+        }
+    }
 
     /** The screen is shown again: a quote made before it was hidden is made again. */
     fun onShown() {
-        if (local.value.hidden && local.value.quote != null && !local.value.busy) requote(note = null)
+        val shown = local.value.quote != null || local.value.proposal != null
+        if (local.value.hidden && shown && !local.value.busy) requote(note = null)
     }
 
     override fun onCleared() {
@@ -329,10 +407,135 @@ class DappTransactionViewModel(
         return quote
     }
 
+    /** The proposal to sign, or null when it is made again first, as [freshQuote]. */
+    private fun freshProposal(): DappSafeProposal? {
+        val current = local.value
+        val proposal = current.proposal ?: return null
+        val age = current.quotedAt?.elapsedNow()
+        if (current.hidden || age == null || age > QUOTE_MAX_AGE) {
+            requote(note = STALE_QUOTE)
+            return null
+        }
+        return proposal
+    }
+
+    /** The Safe transaction for the request: proposed, or the one queued for it already. */
+    private suspend fun propose(request: DappRequestId) {
+        val proposing = try {
+            proposeDappSafeTx(request)
+        } catch (_: Exception) {
+            null // the use case promises not to throw
+        }
+        val mark = timeSource.markNow()
+        local.update { current ->
+            val base = current.copy(quoting = false, fromSafe = true, quote = null, proposal = null)
+            when (proposing) {
+                is DappSafeProposing.Proposed -> base.copy(proposal = proposing.proposal, quotedAt = mark, hidden = false)
+                is DappSafeProposing.AlreadyQueued -> base.copy(queued = "0x" + proposing.request.hash.hex)
+                is DappSafeProposing.SafeRefused ->
+                    base.copy(notQuoted = safeTxRefusalText(proposing.refusal, Network.SEPOLIA))
+                DappSafeProposing.InsufficientFunds -> base.copy(notQuoted = SAFE_SHORT)
+                is DappSafeProposing.Reverts -> base.copy(
+                    notQuoted = "The call reverts when run as a verified call from the Safe" +
+                        (proposing.blockNumber?.let { " at block $it" } ?: "") +
+                        ": it would fail on chain. Ask the dApp again, or refuse.",
+                )
+                DappSafeProposing.NoOwnerHere -> base.copy(notQuoted = NO_OWNER_HERE)
+                is DappSafeProposing.NoLongerQueued -> base.copy(notQuoted = NO_LONGER_QUEUED)
+                // The review says why: a refused request shows its refusal, and only Refuse.
+                is DappSafeProposing.Refused, DappSafeProposing.Gone -> base
+                DappSafeProposing.Expired -> base.copy(notice = EXPIRED)
+                null -> base.copy(notQuoted = QUOTE_FAILED)
+            }
+        }
+    }
+
+    /** Signs [proposal] as the first of the Safe's owners held here, with [unlock], and queues it. */
+    private fun signSafe(proposal: DappSafeProposal, unlock: Unlock) {
+        val proposedAt = local.value.quotedAt ?: return requote(note = STALE_QUOTE)
+        // The password leaves the state now: it is in the unlock, which the signer zeroes after use.
+        local.update {
+            it.copy(
+                busy = true,
+                checking = true,
+                notice = null,
+                unlock = it.unlock.copy(password = WalletPassword.EMPTY, error = null),
+            )
+        }
+        // The check has what is left of the proposal's minute, less the prompt's least time when the
+        // prompt signs: past that the signature could not be made in time anyway.
+        val checkUntil = (unlock as? Unlock.WithBiometrics)?.notAfter?.let { it - MIN_PROMPT_TIME }
+            ?: (proposedAt + QUOTE_MAX_AGE)
+        checkJob = viewModelScope.launch {
+            // The Safe is checked first, which leaving the screen cancels: no key is asked for, and no
+            // prompt shown, until it has passed.
+            val checked = try {
+                signDappSafeTx.check(proposal, budget = -checkUntil.elapsedNow())
+            } catch (e: CancellationException) {
+                throw e
+            } catch (_: Exception) {
+                null // the use case promises not to throw; the backstop
+            }
+            currentCoroutineContext().ensureActive()
+            local.update { it.copy(checking = false) }
+            val unproven = (checked as? SafeTxSignCheck.Refused)?.refusal ==
+                SafeTxRefusal.SafeUnavailable(ReadUnavailable.UNPROVEN)
+            if (checkUntil.hasPassedNow() && (checked is SafeTxSignCheck.Ready || unproven)) {
+                // The check took the time the proposal had left: nothing is signed, it is made again.
+                local.update { it.copy(busy = false) }
+                requote(note = CHECK_TOOK_THE_TIME)
+                return@launch
+            }
+            val signing = when (checked) {
+                // Tied to the request, signed and queued as one step, which leaving cannot cut in half.
+                is SafeTxSignCheck.Ready -> withContext(NonCancellable) {
+                    try {
+                        signDappSafeTx.sign(proposal, checked, unlock)
+                    } catch (_: Exception) {
+                        null // the use case promises not to throw; the backstop
+                    }
+                }
+                is SafeTxSignCheck.Refused -> DappSafeSigning.Refused(checked.refusal)
+                null -> null
+            }
+            local.update { current ->
+                when (signing) {
+                    is DappSafeSigning.Signed -> if (signing.saved) {
+                        current.copy(busy = false, queued = "0x" + signing.request.hash.hex, openQueued = true)
+                    } else {
+                        current.copy(busy = false, unlock = current.unlock.copy(error = NOT_QUEUED))
+                    }
+                    is DappSafeSigning.NotSigned -> current.copy(
+                        busy = false,
+                        unlock = current.unlock.copy(
+                            error = notSignedText(signing.signing, SIGN_FAILED),
+                            biometrics = current.unlock.biometrics && biometricsStillOffered(signing.signing),
+                        ),
+                    )
+                    is DappSafeSigning.Refused -> current.copy(
+                        busy = false,
+                        explaining = TransactionExplanation(
+                            "Cannot be signed",
+                            safeTxRefusalText(signing.refusal, Network.SEPOLIA),
+                        ),
+                    )
+                    DappSafeSigning.NotRecorded -> current.copy(busy = false, unlock = current.unlock.copy(error = NOT_RECORDED))
+                    null -> current.copy(busy = false, unlock = current.unlock.copy(error = SIGN_FAILED))
+                }
+            }
+            if ((signing as? DappSafeSigning.NotSigned)?.signing == Signing.TimedOut) requote(note = PROMPT_TIMED_OUT)
+            if (signing is DappSafeSigning.Refused) requote(note = null)
+        }
+    }
+
+    /** The queued Safe transaction's screen was opened: it is not opened again by itself. */
+    fun onQueuedOpened() = local.update { it.copy(openQueued = false) }
+
     private fun explainUnavailable(): Boolean {
         val state = uiState.value
         val reason = state.refusal ?: if (state.quote.isEmpty()) state.notQuoted ?: NOT_QUOTED_YET else return false
-        local.update { it.copy(explaining = TransactionExplanation("Cannot be sent", reason)) }
+        val title = if (state.fromSafe) "Cannot be signed" else "Cannot be sent"
+        local.update { it.copy(explaining = TransactionExplanation(title, reason)) }
         return true
     }
 
@@ -440,6 +643,28 @@ class DappTransactionViewModel(
                 if (transaction.meaning is DappCallMeaning.TokenApproval) add(APPROVAL_NOTE)
             },
             refusal = review.refusal?.let { refusalLine(it) },
+            fromSafe = review.account?.kind == AccountKind.SAFE,
+        )
+    }
+
+    private fun proposalLines(safe: DappSafeProposal): List<SignInField> {
+        val proposal = safe.proposal
+        val state = proposal.safe.state
+        val nonce = proposal.request.nonce.toString() +
+            if (proposal.queuedAhead > 0) ", behind ${proposal.queuedAhead} queued" else ""
+        return listOfNotNull(
+            SignInField("Safe transaction", "Nonce $nonce; ${state.threshold} of ${state.owners.size} owners sign it"),
+            SignInField("Left in the Safe, at least", ether(proposal.balanceAfter)),
+            when (val run = proposal.simulation) {
+                is SafeCallSimulation.Ran -> SignInField(
+                    "Verified run",
+                    "Runs from the Safe without reverting" + (run.blockNumber?.let { " at block $it" } ?: ""),
+                )
+                SafeCallSimulation.NotRun ->
+                    SignInField("Verified run", "Not run: the light client cannot run calls from a Safe on this build")
+            },
+            SignInField("Signs here as", Eip55.format(safe.heldOwners.first())),
+            SignInField("Fee", "Paid by the account that executes it, quoted when it is executed"),
         )
     }
 
@@ -461,6 +686,21 @@ class DappTransactionViewModel(
         const val SEND_FAILED = "Sending failed. Nothing was sent to the dApp."
         const val QUOTE_FAILED = "The transaction could not be worked out right now. Try again."
         const val NOT_QUOTED_YET = "The transaction is still being worked out from verified state."
+        const val SIGN_FAILED = "Serotine could not finish this signature. Nothing was queued: try again."
+        const val NOT_QUEUED = "Signed, but this device's queue cannot be saved right now, so nothing was queued: " +
+            "sign it again in a moment."
+        const val NOT_RECORDED = "This request could not be tied to its Safe transaction right now, so the signature " +
+            "was dropped and nothing was queued: try again in a moment."
+        const val NO_LONGER_QUEUED = "The Safe transaction proposed for this request is no longer queued here, and it " +
+            "is never replaced by another one. Refuse answers the dApp; ask it again for a new one."
+        const val SAFE_SHORT = "The Safe's verified balance, less what its queued transactions may move, cannot " +
+            "pay this value. Refuse, or ask the dApp again once the Safe has more."
+        const val NO_OWNER_HERE = "No owner of this Safe has its key on this device, so nobody here can sign it. " +
+            "Add an owner's key to Serotine, or refuse."
+        const val SAFE_NOTE = "From a Safe: this proposes a Safe transaction at the Safe's next nonce. Its owners " +
+            "sign it, and an account here executes it from its screen; the dApp is told the hash of that execution."
+        const val QUEUED_NOTE = "Queued as a Safe transaction. Collect the owners' signatures and execute it on its " +
+            "screen: the dApp is told the hash once it is sent. Refuse tells the dApp no, and leaves it queued."
         const val BEING_TOLD = "The transaction signed for this request was sent, and the dApp is being told its " +
             "hash: it is no longer for refusing."
         const val MAYBE_SENT = "A transaction signed for this request may be on its way already. Try again, " +
@@ -480,10 +720,7 @@ class DappTransactionViewModel(
             DappAnswer.OFF -> "This build has dApp connections switched off."
         }
 
-        fun refusalLine(refusal: DappSignRefusal): String = when (refusal) {
-            DappSignRefusal.SAFE -> "A Safe's transactions from a dApp come with a later version."
-            else -> DappRequestViewModel.refusalLine(refusal)
-        }
+        fun refusalLine(refusal: DappSignRefusal): String = DappRequestViewModel.refusalLine(refusal)
 
         private fun amountOf(amount: UInt256, token: Token?, address: String): String = when {
             amount == UInt256.MAX -> "an unlimited amount of ${token?.symbol ?: "the token"}"

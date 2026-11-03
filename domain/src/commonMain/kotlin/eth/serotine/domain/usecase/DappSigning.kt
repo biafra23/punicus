@@ -96,6 +96,19 @@ enum class DappSignRefusal(val error: DappRequestError) {
     /** A transaction to the zero address: nobody holds its key, so what it sends is lost for good. */
     TX_TO_ZERO_ADDRESS(DappRequestError.INVALID_PARAMS),
 
+    /**
+     * A Safe's transaction with a gas limit: a Safe transaction's gas is its executing account's, so the
+     * dApp's limit could not be applied, and is refused rather than ignored (Myotis #314).
+     */
+    SAFE_GAS(DappRequestError.INVALID_PARAMS),
+
+    /**
+     * A Safe's transaction that calls the Safe itself: a change of its owners, threshold, guard, modules or
+     * fallback handler. D6 decodes none of them, so none is signed from a dApp: the Safe's settings change
+     * from the Safe's own screens alone.
+     */
+    SAFE_SELF_CALL(DappRequestError.UNAUTHORIZED),
+
     /** Typed data with more values than D5 shows ([MAX_SHOWN_VALUES]): what would not be shown is not signed. */
     TYPED_TOO_LARGE(DappRequestError.LIMIT_EXCEEDED),
 }
@@ -209,11 +222,16 @@ fun reviewDappMessage(
         else -> return null
     }
     val account = accounts?.firstOrNull { it.network == Network.SEPOLIA && it.address == signer }
-    val refusal = accountRefusal(request, signer, accounts, account, enabled) ?: when (content) {
+    val refusal = accountRefusal(request, signer, accounts, account, enabled, content is DappSignContent.Transaction)
+        ?: when (content) {
         is DappSignContent.Message -> signInRefusal(content.signIn, signer, nowSeconds)
         is DappSignContent.Typed -> typedRefusal(content, signer)
-        is DappSignContent.Transaction ->
-            DappSignRefusal.TX_TO_ZERO_ADDRESS.takeIf { content.transaction.to == Address.ZERO }
+        is DappSignContent.Transaction -> when {
+            content.transaction.to == Address.ZERO -> DappSignRefusal.TX_TO_ZERO_ADDRESS
+            account?.kind == AccountKind.SAFE && content.transaction.to == signer -> DappSignRefusal.SAFE_SELF_CALL
+            account?.kind == AccountKind.SAFE && content.transaction.gas != null -> DappSignRefusal.SAFE_GAS
+            else -> null
+        }
     }
     val warnings = buildSet {
         when (content) {
@@ -241,11 +259,14 @@ private fun accountRefusal(
     accounts: List<Account>?,
     account: Account?,
     enabled: Set<Network>,
+    transaction: Boolean,
 ): DappSignRefusal? = when {
     request.chain != SEPOLIA_CHAIN -> DappSignRefusal.OTHER_CHAIN
     signer !in request.sessionAccounts -> DappSignRefusal.NOT_SESSION_ACCOUNT
     accounts == null -> DappSignRefusal.ACCOUNTS_UNREADABLE
     account == null -> DappSignRefusal.NOT_IN_WALLET
+    // A Safe's transaction is a Safe transaction its owners sign, watched or not; its messages come later.
+    account.kind == AccountKind.SAFE && transaction -> if (Network.SEPOLIA in enabled) null else DappSignRefusal.SEPOLIA_OFF
     account.kind == AccountKind.SAFE -> DappSignRefusal.SAFE
     account.custody == AccountCustody.Watched -> DappSignRefusal.NO_KEY
     Network.SEPOLIA !in enabled -> DappSignRefusal.SEPOLIA_OFF
@@ -491,10 +512,12 @@ class AnswerDappRequestsAtOnce(
                 fun answers(transfer: SentTransfer) = (transfer.action as? SentAction.DappCall)?.request == request.id
                 val recorded = sent.firstOrNull(::answers)
                 val entry = past.firstOrNull { answers(it.transfer) }
-                val transfer = recorded ?: entry?.transfer
-                val state = transfer?.let { stateOf(recorded, entry) }
-                transfer?.takeIf { state == SignedState.SENT || state == SignedState.MINED }
-                    ?.let { requests.answerTransaction(request.id, it.hash) }
+                // An EOA's transaction signed for it, or, from a Safe, the execution of the Safe transaction
+                // recorded for it: answered with the hash of the transaction sent, never the safeTxHash.
+                val answer = (recorded ?: entry?.transfer)?.let { SignedAnswer(it, stateOf(recorded, entry)) }
+                    ?: request.safeTx?.let { executionFor(it, sent, past) }
+                answer?.takeIf { it.state == SignedState.SENT || it.state == SignedState.MINED }
+                    ?.let { requests.answerTransaction(request.id, it.transfer.hash) }
             }
             is DappAsk.PersonalSign, is DappAsk.SignTypedData -> null
         }

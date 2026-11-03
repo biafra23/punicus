@@ -2,6 +2,7 @@ package eth.serotine.domain.repository
 
 import eth.serotine.domain.model.Address
 import eth.serotine.domain.model.DappTransactionRequest
+import eth.serotine.domain.model.Digest
 import eth.serotine.domain.model.EncodedTypedData
 import eth.serotine.domain.model.PersonalMessage
 import eth.serotine.domain.model.Signature
@@ -56,6 +57,12 @@ data class DappRequest(
     val ask: DappAsk,
     /** When the dApp stops waiting for an answer, in unix seconds. */
     val expiresAtSeconds: Long,
+    /**
+     * A Safe's `eth_sendTransaction`: the `safeTxHash` of the Safe transaction it was proposed as, once
+     * one was recorded for it ([DappRequests.recordSafeTx]); null before. It is that Safe transaction from
+     * then on, never another.
+     */
+    val safeTx: Digest? = null,
 )
 
 /** The error a request is answered with, as EIP-1193 names them. */
@@ -122,4 +129,12 @@ interface DappRequests {
 
     /** Answers [request] with the error [why]. */
     suspend fun refuse(request: DappRequestId, why: DappRequestError): DappAnswer
+
+    /**
+     * Records that [request], a Safe's `eth_sendTransaction`, is the Safe transaction [safeTx], before
+     * an owner signs it, kept with the request until it is answered. True once saved, or when [safeTx] is
+     * recorded for it already; false when the request is no longer waiting, another Safe transaction is
+     * recorded for it, or the record cannot be saved. It answers nothing.
+     */
+    suspend fun recordSafeTx(request: DappRequestId, safeTx: Digest): Boolean
 }

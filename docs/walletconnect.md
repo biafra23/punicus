@@ -306,11 +306,47 @@ everything on the chain side: the verified `call`, `estimateGasDetailed`,
   2026-10-18, #57), no gas refund. Its owners sign it: keys on this device,
   co-signers through a QR code or text (owner ruling, 2026-10-16), and, once
   direction 2 lands, an external wallet. A local EOA executes it until then.
+  Part 1.5 builds it:
+  - It is proposed as a Safe transfer is: a plain call of the request's
+    recipient, value and data, no refund, at the Safe's next nonce behind
+    its queued transactions. The Safe is verified as one first, and the
+    value must be in its verified ether, less what its queued transactions
+    may move.
+  - The call is run as a verified call from the Safe at the head. One that
+    reverts, or a token's `transfer` or `approve` that returns false, is
+    shown so and not proposed.
+  - A `gas` field is refused (-32602): a Safe transaction's gas is set by
+    the account that executes it, so the dApp's limit could not be applied.
+  - A call of the Safe itself is refused (4100), whatever it changes: D6
+    decodes no settings change, so none is signed from a dApp. The Safe's
+    owners, threshold, guard, modules and fallback handler change from its
+    own screens alone.
+  - It is signed on D6 by the first of the Safe's owners whose key is on
+    this device, and queued. With none, D6's Sign is greyed out and says
+    why. A proposal over a minute old is made again before it is signed.
+  - Once queued it is an ordinary Safe transaction: its screen opens in D6's
+    place, and there the other owners' signatures are collected (here, or
+    through a QR code or text) and an account here executes it.
+  - A request signed for is that Safe transaction, never another. Once an
+    owner's signature is made, its `safeTxHash` is recorded with the
+    request before it is queued, and nothing is queued unless that record is
+    saved; a signature not made records nothing. Opened again, D6 offers to
+    open it. One no longer queued here is proposed again as itself while its
+    nonce is free; once another transaction takes that nonce, or the Safe's
+    nonce moves on, it is never proposed as another, and the request can only
+    be refused. The same call queued or executed by hand is never taken for
+    it.
+  - Refuse stays offered while it is queued: it tells the dApp no and
+    leaves the Safe transaction queued, for rejecting on its screen.
 - **A dApp is answered only with an Ethereum transaction hash.** For a Safe,
-  that is the hash of the `execTransaction` sent, never the `safeTxHash`. If
-  the threshold cannot be met before the request expires, the dApp gets an
-  error. It is never left hanging, and never given a hash that is not a
-  transaction.
+  that is the hash of the `execTransaction` sent, never the `safeTxHash`. The
+  app answers it while it runs, once a peer takes an execution of the Safe
+  transaction recorded for it, sent from this device on Sepolia, or a
+  verified block includes one. An execution a co-signer sends from another
+  device does not answer it. If the request expires first (the threshold
+  not met in time, or executed elsewhere), the dApp gets an error, and the
+  Safe transaction stays queued. It is never left hanging, and never given
+  a hash that is not a transaction.
 
 ### The session's life
 
@@ -481,7 +517,12 @@ their mockups come with the PR that builds each.
   part 1.4b: who asks, the account and the recipient in full, the value, the
   call decoded (a payment, an ERC-20 `transfer` or `approve`) or its data
   raw and marked not decoded, the fee at most, the balance left at least,
-  the verified run; the unlock, and Refuse.
+  the verified run; the unlock, and Refuse. The Safe's half comes with part
+  1.5: that it is proposed as a Safe transaction; its nonce and the
+  transactions queued ahead, the threshold, what the Safe has left at least,
+  the call run from the Safe, the owner who signs here, and that the
+  executing account pays the fee; Sign and queue, and Refuse. Once queued,
+  its Safe transaction screen shows its signatures so far and who executes.
 - **D7 Connect a wallet** (direction 2): the QR code, "Open in wallet", and
   the wallet's accounts matched against the Safe's owners.
 - **D8 Waiting for a signature** (direction 2): what was asked, of which

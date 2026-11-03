@@ -71,6 +71,8 @@ class DappTransactionsTest {
         override suspend fun answerSignature(request: DappRequestId, signature: Signature) = error("not used")
         override suspend fun answerNull(request: DappRequestId) = error("not used")
         override suspend fun refuse(request: DappRequestId, why: DappRequestError) = error("not used")
+        override suspend fun recordSafeTx(request: DappRequestId, safeTx: eth.serotine.domain.model.Digest) =
+            error("not used")
         override suspend fun answerTransaction(request: DappRequestId, hash: String): DappAnswer {
             hashes += request to hash
             waiting.value = waiting.value.filterNot { it.id == request }
@@ -185,7 +187,8 @@ class DappTransactionsTest {
             request(2, payment(to = Address.ZERO)),
             request(3, payment()),
         )
-        assertEquals(DappTransactionQuoting.Refused(DappSignRefusal.SAFE), quote()(request(1, payment()).id))
+        // A Safe's is a Safe transaction (ProposeDappSafeTx), never quoted as an account's own.
+        assertEquals(DappTransactionQuoting.Gone, quote()(request(1, payment()).id))
         assertEquals(DappTransactionQuoting.Refused(DappSignRefusal.TX_TO_ZERO_ADDRESS), quote()(request(2, payment()).id))
         inputs.simulation = Simulation.Reverted(99)
         assertIs<DappTransactionQuoting.NotQuoted>(quote()(request(3, payment()).id))

@@ -23,6 +23,8 @@ import eth.serotine.domain.usecase.ExtendDappSession
 import eth.serotine.domain.usecase.ObserveDappConnections
 import eth.serotine.domain.usecase.ObserveDappMessages
 import eth.serotine.domain.usecase.PairDapp
+import eth.serotine.domain.usecase.ProposeDappSafeTx
+import eth.serotine.domain.usecase.SignDappSafeTx
 import eth.serotine.domain.usecase.QuoteDappTransaction
 import eth.serotine.domain.usecase.RefuseDappRequest
 import eth.serotine.domain.usecase.SendDappTransaction
@@ -736,6 +738,17 @@ class AppGraph(
             transactionHistory,
             receipts,
         ),
+        ProposeDappSafeTx(
+            dappRequests,
+            accounts,
+            networkSettings,
+            tokenCatalog,
+            observeSafe(),
+            nativeBalances,
+            transactionInputs,
+            safeTxQueue,
+        ),
+        SignDappSafeTx(dappRequests, signSafeTx(Network.SEPOLIA)),
         RefuseDappRequest(dappRequests, accounts, networkSettings),
         DescribeKeyStore(keys),
     )
