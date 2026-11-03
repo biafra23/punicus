@@ -1,6 +1,8 @@
 package eth.serotine.data.walletconnect
 
 import eth.serotine.domain.model.Address
+import eth.serotine.domain.model.Signature
+import eth.serotine.domain.repository.DappAnswer
 import eth.serotine.domain.repository.DappApproval
 import eth.serotine.domain.repository.DappConnections
 import eth.serotine.domain.repository.DappMetadata
@@ -9,6 +11,10 @@ import eth.serotine.domain.repository.DappProposal
 import eth.serotine.domain.repository.DappProposalId
 import eth.serotine.domain.repository.DappRefusal
 import eth.serotine.domain.repository.DappRelayLink
+import eth.serotine.domain.repository.DappRequest
+import eth.serotine.domain.repository.DappRequestError
+import eth.serotine.domain.repository.DappRequestId
+import eth.serotine.domain.repository.DappRequests
 import eth.serotine.domain.repository.DappSession
 import eth.serotine.domain.repository.DappSessionId
 import eth.serotine.domain.repository.DappSessions
@@ -21,11 +27,15 @@ import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.flow.map
+import kotlinx.serialization.json.JsonNull
+import kotlinx.serialization.json.JsonPrimitive
 import kotlin.time.Clock
 import kotlin.time.ExperimentalTime
 
 /**
- * [DappSessions] over WalletConnect v2 (docs/walletconnect.md), its state in the file at [path]. The
+ * [DappSessions], and its sessions' [requests], over WalletConnect v2 (docs/walletconnect.md), its state in the
+ * file at [path]. The
  * host builds one, with this build's project ID for its build type ([projectIdFor]), and calls [run]
  * while dApp messages are to arrive: the relay connection lives as long as that call.
  *
@@ -116,6 +126,54 @@ class WalletConnectDapps internal constructor(
 
     override suspend fun updateAccounts(session: DappSessionId, accounts: List<Address>): Boolean =
         walletConnect?.wallet?.updateAccounts(session.topic, accounts.map { it.hex }) ?: false
+
+    /** The requests dApps send over these sessions, and their answers. */
+    val requests: DappRequests = object : DappRequests {
+
+        /** The requests waiting, decoded strictly ([WcRequests]); none while off. */
+        override fun observe(): Flow<List<DappRequest>> {
+            val on = walletConnect ?: return flowOf(emptyList())
+            return on.wallet.observe().map { view ->
+                val accounts = view.sessions.associate { session ->
+                    session.topic to session.accounts.mapNotNull { Address.parse(it.substringAfterLast(':')) }
+                }
+                view.requests.map { request ->
+                    DappRequest(
+                        id = DappRequestId(DappSessionId(request.topic), request.id),
+                        dapp = metadata(request.dapp),
+                        sessionAccounts = accounts[request.topic].orEmpty(),
+                        chain = request.chainId,
+                        ask = WcRequests.decode(request.method, request.params),
+                        expiresAtSeconds = request.expirySeconds,
+                    )
+                }
+            }.distinctUntilChanged()
+        }
+
+        override suspend fun answerSignature(request: DappRequestId, signature: Signature): DappAnswer {
+            val wallet = walletConnect?.wallet ?: return DappAnswer.OFF
+            val hex = JsonPrimitive(WcRequests.signatureHex(signature))
+            return answer(wallet.respond(request.session.topic, request.id, hex))
+        }
+
+        override suspend fun answerNull(request: DappRequestId): DappAnswer {
+            val wallet = walletConnect?.wallet ?: return DappAnswer.OFF
+            return answer(wallet.respond(request.session.topic, request.id, JsonNull))
+        }
+
+        override suspend fun refuse(request: DappRequestId, why: DappRequestError): DappAnswer {
+            val wallet = walletConnect?.wallet ?: return DappAnswer.OFF
+            return answer(wallet.respondError(request.session.topic, request.id, WcRequests.error(why)))
+        }
+
+        private fun answer(answer: WcWallet.Answer): DappAnswer = when (answer) {
+            WcWallet.Answer.DELIVERED -> DappAnswer.DELIVERED
+            WcWallet.Answer.NOT_DELIVERED -> DappAnswer.NOT_DELIVERED
+            WcWallet.Answer.NO_SUCH_REQUEST -> DappAnswer.NO_SUCH_REQUEST
+            WcWallet.Answer.EXPIRED -> DappAnswer.EXPIRED
+            WcWallet.Answer.NOT_SAVED -> DappAnswer.NOT_SAVED
+        }
+    }
 
     private fun proposal(view: WcProposalView) = DappProposal(
         id = DappProposalId(view.pairingTopic, view.id),

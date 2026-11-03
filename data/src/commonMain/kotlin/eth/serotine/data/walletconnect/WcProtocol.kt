@@ -94,6 +94,15 @@ internal object WcProtocol {
 
         /** EIP-1193: a method outside the closed list (ruling 6), `eth_sign` among them. */
         PROVIDER_UNSUPPORTED_METHOD(4200, "Unsupported method."),
+
+        /** EIP-1193: an account or a chain the session does not give the dApp, or one that cannot sign here. */
+        PROVIDER_UNAUTHORIZED(4100, "Unauthorized."),
+
+        /** EIP-3326: a chain `wallet_switchEthereumChain` cannot switch to. */
+        PROVIDER_UNRECOGNIZED_CHAIN(4902, "Unrecognized chain ID."),
+
+        /** JSON-RPC: parameters that are not the method's. */
+        INVALID_PARAMS(-32602, "Invalid params."),
     }
 
     /**

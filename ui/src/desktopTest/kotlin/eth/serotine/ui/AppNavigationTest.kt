@@ -186,6 +186,14 @@ import org.junit.Rule
 import org.junit.Test
 import org.junit.rules.TestWatcher
 import org.junit.runner.Description
+import eth.serotine.domain.model.PersonalMessage
+import eth.serotine.domain.repository.DappAsk
+import eth.serotine.domain.repository.DappMetadata
+import eth.serotine.domain.repository.DappRequest
+import eth.serotine.domain.repository.DappRequestError
+import eth.serotine.domain.repository.DappRequestId
+import eth.serotine.domain.repository.DappSessionId
+import eth.serotine.ui.dapprequest.DAPP_REQUEST_REFUSE_TAG
 
 /**
  * The shared [App] end to end, over fake ports: the tabs, the account screens and their dialogs,
@@ -282,6 +290,17 @@ class AppNavigationTest {
     private val debugScreen = MemoryDebugScreen()
     // These tests were written for the detailed screens; simple mode's are tested on their own.
     private val interfaceMode = MemoryInterfaceMode(InterfaceMode.DETAILED)
+
+    private val dappRequests = FakeDappRequests()
+
+    private fun signInRequest(id: Long) = DappRequest(
+        DappRequestId(DappSessionId("c".repeat(64)), id),
+        DappMetadata("Example dApp", "https://app.example.org", ""),
+        listOf(Address.of("0x" + "0".repeat(39) + "1")),
+        "eip155:11155111",
+        DappAsk.PersonalSign(Address.of("0x" + "0".repeat(39) + "1"), PersonalMessage.of("Hello".encodeToByteArray())!!),
+        Long.MAX_VALUE / 2,
+    )
 
     private val graph = AppGraph(
         accounts = accountRepository,
@@ -399,6 +418,7 @@ class AppNavigationTest {
         networkDemand = NetworkDemand(),
         networkSettings = MemoryNetworkSettings(),
         dappSessions = OffDappSessions,
+        dappRequests = dappRequests,
         dappConnectionsOff = true,
     )
 
@@ -520,6 +540,49 @@ class AppNavigationTest {
         // The key operation stays in front, and the link waits for it to end.
         rule.onNodeWithTag(MNEMONIC_FIELD_TAG).assertIsDisplayed()
         assertEquals(link, graph.incomingDappLink.pending.value)
+    }
+
+    @Test
+    fun aDappsRequestToSignOpensItsReviewAsItArrivesAndOnlyOnce() {
+        showApp()
+        dappRequests.waiting.value = listOf(signInRequest(1))
+        rule.waitUntil { rule.onAllNodesWithText("Message to sign").fetchSemanticsNodes().isNotEmpty() }
+        rule.onNodeWithText("Example dApp").assertIsDisplayed()
+        // Back leaves it unanswered: it stays in Connected dApps, and is not opened again.
+        rule.onNodeWithContentDescription("Back").performClick()
+        rule.waitForIdle()
+        rule.onNodeWithText("Message to sign").assertDoesNotExist()
+        dappRequests.waiting.value = listOf(signInRequest(1), signInRequest(2))
+        rule.waitUntil { rule.onAllNodesWithText("Message to sign").fetchSemanticsNodes().isNotEmpty() }
+        rule.onNodeWithTag(DAPP_REQUEST_REFUSE_TAG).performScrollTo().performClick()
+        rule.waitUntil { dappRequests.refusals.isNotEmpty() }
+        assertEquals(DappRequestError.UNAUTHORIZED, dappRequests.refusals.single().second)
+        rule.waitUntil { rule.onAllNodesWithText("Message to sign").fetchSemanticsNodes().isEmpty() }
+    }
+
+    @Test
+    fun aDappsRequestToSignOpensOverTheSettingsScreenShownAndBackReturnsToIt() {
+        showApp()
+        rule.onNodeWithText("Settings").performClick()
+        rule.onNodeWithText("Wallet password · Biometric unlock").performClick()
+        rule.onNodeWithText("Biometric unlock").assertIsDisplayed()
+        dappRequests.waiting.value = listOf(signInRequest(1))
+        rule.waitUntil { rule.onAllNodesWithText("Message to sign").fetchSemanticsNodes().isNotEmpty() }
+        rule.onNodeWithContentDescription("Back").performClick()
+        // Security is still there, as the user left it: the request opened over it, not in its place.
+        rule.onNodeWithText("Biometric unlock").assertIsDisplayed()
+    }
+
+    @Test
+    fun aDappsRequestToSignWaitsWhileAFlowCoversTheTabBar() {
+        showApp()
+        rule.onNodeWithContentDescription("Add account").performClick()
+        rule.onNodeWithText("Import recovery phrase").performClick()
+        rule.onNodeWithTag(MNEMONIC_FIELD_TAG).assertIsDisplayed()
+        dappRequests.waiting.value = listOf(signInRequest(1))
+        rule.waitForIdle()
+        rule.onNodeWithTag(MNEMONIC_FIELD_TAG).assertIsDisplayed()
+        rule.onNodeWithText("Message to sign").assertDoesNotExist()
     }
 
     @Test

@@ -29,6 +29,7 @@ import eth.serotine.data.transfers.FileTransactionHistory
 import eth.serotine.data.upgrade.FileKnownUpgradeStore
 import eth.serotine.domain.model.Network
 import eth.serotine.domain.usecase.FollowAccountLogs
+import eth.serotine.domain.usecase.AnswerDappRequestsAtOnce
 import eth.serotine.domain.usecase.FollowDappAccounts
 import eth.serotine.domain.usecase.FollowDebugScreen
 import eth.serotine.domain.usecase.FollowInterfaceMode
@@ -256,6 +257,7 @@ class SerotineWallet {
             networkDemand = networkDemand,
             networkSettings = networkSettings,
             dappSessions = dapps,
+            dappRequests = dapps.requests,
             dappConnectionsOff = dappProjectId.isEmpty(),
         )
     }
@@ -370,6 +372,10 @@ class SerotineWallet {
                 reportingFailure("following the dApp sessions' accounts") {
                     FollowDappAccounts(dapps, accounts, networkSettings)()
                 }
+            },
+            scope.launch {
+                // The requests that need no one's decision, answered at once.
+                reportingFailure("answering the dApps' requests") { AnswerDappRequestsAtOnce(dapps.requests)() }
             },
             scope.launch {
                 // How each transaction sent from here ends is recorded whatever screen is open (issue #85).

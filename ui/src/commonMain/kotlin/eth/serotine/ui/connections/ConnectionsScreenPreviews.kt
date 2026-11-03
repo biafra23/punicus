@@ -12,6 +12,7 @@ private val connected = ConnectionsUiState(
     loading = false,
     link = "Connected to WalletConnect's relay",
     proposals = listOf(ProposalRow("p/1", "Uniswap Interface", "https://app.uniswap.org", "Asks to connect · Review")),
+    requests = listOf(RequestRow("t2/7", "Example dApp", "https://example.org", "Asks you to sign in · Review")),
     sessions = listOf(
         SessionRow("t1", "Safe{Wallet}", "https://app.safe.global", "Sees 1 account · Ends in 6 days"),
         SessionRow("t2", "Example dApp", "https://example.org", "Sees 2 accounts · Ends in 5 hours · Not confirmed by the dApp yet"),
@@ -21,7 +22,15 @@ private val connected = ConnectionsUiState(
 @Composable
 private fun ConnectionsPreview(state: ConnectionsUiState, darkTheme: Boolean = false) {
     SerotineTheme(darkTheme = darkTheme) {
-        ConnectionsScreen(state, onBack = {}, onPair = {}, onProposal = {}, onExtend = {}, onDisconnect = {})
+        ConnectionsScreen(
+            state,
+            onBack = {},
+            onPair = {},
+            onProposal = {},
+            onRequest = {},
+            onExtend = {},
+            onDisconnect = {},
+        )
     }
 }
 

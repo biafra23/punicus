@@ -34,6 +34,9 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 /** Test tag of a proposal's row, followed by its key, for UI tests. */
 const val CONNECTIONS_PROPOSAL_TAG = "connections-proposal-"
 
+/** Test tag of a request's row, followed by its key, for UI tests. */
+const val CONNECTIONS_REQUEST_TAG = "connections-request-"
+
 /** Binds [ConnectionsScreen] to its ViewModel. */
 @Composable
 fun ConnectionsRoute(
@@ -41,6 +44,7 @@ fun ConnectionsRoute(
     onBack: () -> Unit,
     onPair: () -> Unit,
     onProposal: (String) -> Unit,
+    onRequest: (String) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
@@ -49,6 +53,7 @@ fun ConnectionsRoute(
         onBack = onBack,
         onPair = onPair,
         onProposal = onProposal,
+        onRequest = onRequest,
         onExtend = viewModel::extend,
         onDisconnect = viewModel::disconnect,
         modifier = modifier,
@@ -57,7 +62,8 @@ fun ConnectionsRoute(
 
 /**
  * Connected dApps (docs/walletconnect.md, screen D1) as a pure function of [state]: the relay's
- * link, the proposals waiting (each opens its review through [onProposal]), the open sessions with
+ * link, the proposals waiting (each opens its review through [onProposal]), the requests to sign
+ * waiting (each opens its review through [onRequest]), the open sessions with
  * Extend and Disconnect, and Connect a dApp ([onPair], screen D2). A dApp's name and URL are its own
  * claim, and say so. Off in a build without a project ID, and saying so.
  */
@@ -68,6 +74,7 @@ fun ConnectionsScreen(
     onBack: () -> Unit,
     onPair: () -> Unit,
     onProposal: (String) -> Unit,
+    onRequest: (String) -> Unit,
     onExtend: (String) -> Unit,
     onDisconnect: (String) -> Unit,
     modifier: Modifier = Modifier,
@@ -108,8 +115,22 @@ fun ConnectionsScreen(
             state.notice?.let {
                 Text(it, Modifier.padding(horizontal = 16.dp), color = MaterialTheme.colorScheme.error)
             }
-            if (state.proposals.isNotEmpty()) {
+            if (state.proposals.isNotEmpty() || state.requests.isNotEmpty()) {
                 Heading("Waiting for you")
+                state.requests.forEach { request ->
+                    ListItem(
+                        modifier = Modifier
+                            .clickable { onRequest(request.key) }
+                            .testTag(CONNECTIONS_REQUEST_TAG + request.key),
+                        headlineContent = { Text(request.name) },
+                        supportingContent = {
+                            Column {
+                                Text(request.url)
+                                Text(request.line)
+                            }
+                        },
+                    )
+                }
                 state.proposals.forEach { proposal ->
                     ListItem(
                         modifier = Modifier

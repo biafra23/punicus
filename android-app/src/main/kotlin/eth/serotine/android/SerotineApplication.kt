@@ -53,6 +53,7 @@ import eth.serotine.domain.model.PriceId
 import eth.serotine.domain.model.RatePair
 import eth.serotine.domain.repository.AccountList
 import eth.serotine.domain.usecase.FollowAccountLogs
+import eth.serotine.domain.usecase.AnswerDappRequestsAtOnce
 import eth.serotine.domain.usecase.FollowDappAccounts
 import eth.serotine.domain.usecase.FollowDebugScreen
 import eth.serotine.domain.usecase.FollowExchangeRate
@@ -421,6 +422,7 @@ class SerotineApplication : Application() {
             networkDemand = networkDemand,
             networkSettings = networkSettings,
             dappSessions = dapps,
+            dappRequests = dapps.requests,
             dappConnectionsOff = WalletConnectDapps.projectIdFor(debuggable).isEmpty(),
         )
     }
@@ -537,13 +539,17 @@ class SerotineApplication : Application() {
 
     /**
      * Keeps WalletConnect's relay connection (docs/walletconnect.md), and each session's accounts to
-     * those a dApp may still be offered (accountsChanged), until stopped. A failure ends that one alone.
+     * those a dApp may still be offered (accountsChanged), and answers at once the requests that need
+     * no one's decision, until stopped. A failure ends that one alone.
      */
     private suspend fun runDappRelay() = coroutineScope {
         launch {
             reportingFailure("following the dApp sessions' accounts") {
                 FollowDappAccounts(dapps, accounts, networkSettings)()
             }
+        }
+        launch {
+            reportingFailure("answering the dApps' requests") { AnswerDappRequestsAtOnce(dapps.requests)() }
         }
         reportingFailure("the WalletConnect relay connection") { dapps.run() }
     }
