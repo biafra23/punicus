@@ -12,6 +12,7 @@ import eth.serotine.domain.repository.Signing
 import eth.serotine.domain.repository.Unlock
 import eth.serotine.domain.usecase.DappMessageReview
 import eth.serotine.domain.usecase.DappMessageSigning
+import eth.serotine.domain.usecase.DappSignContent
 import eth.serotine.domain.usecase.DappSignRefusal
 import eth.serotine.domain.usecase.DappSignWarning
 import eth.serotine.domain.usecase.DescribeKeyStore
@@ -32,6 +33,8 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
@@ -45,18 +48,19 @@ data class SignInField(val label: String, val value: String)
 data class RequestExplanation(val title: String, val reason: String)
 
 /**
- * A dApp's request to sign a message (docs/walletconnect.md, screen D4) as display-ready values: who
- * asks (the dApp's claim), the account asked to sign, on Sepolia, and the message: field by field
- * when it is a sign-in, else as text, or as hex marked "not text". The [warnings] to read before
- * signing, the [refusal] when it can only be refused, and the unlock. [gone] once the request is no
- * longer waiting; [done] once answered.
+ * A dApp's request to sign (docs/walletconnect.md, screens D4 and D5) as display-ready values: who
+ * asks (the dApp's claim), the account asked to sign, on Sepolia, and what: a message, field by field
+ * when it is a sign-in, else as text, or as hex marked "not text"; or typed data, with what it lets
+ * someone do when this app knows its struct, its domain and every field. The [warnings] to read
+ * before signing, the [refusal] when it can only be refused, and the unlock. [gone] once the request
+ * is no longer waiting; [done] once answered.
  */
 data class DappRequestUiState(
     val loading: Boolean = true,
     val gone: Boolean = false,
     /** No longer waiting, and [notice] says why (it expired as Sign was tapped): Back leaves. */
     val ended: Boolean = false,
-    /** "Sign-in request" for a sign-in, "Message to sign" otherwise. */
+    /** "Sign-in request", "Message to sign", "Approval request", "Swap order to sign" or "Data to sign". */
     val title: String = "",
     val name: String = "",
     val url: String = "",
@@ -70,6 +74,17 @@ data class DappRequestUiState(
     /** The message as hex, when it is not text. */
     val messageHex: String? = null,
     val messageSize: String = "",
+    /** What the system's biometric prompt says is signed ("Sign in to a dApp"): nothing the dApp states. */
+    val promptSubject: String = "",
+    /** Typed data: whether the request is typed data, drawn as screen D5. */
+    val typed: Boolean = false,
+    /** What signing the typed data lets someone do; null when its struct is not one this app knows. */
+    val meaning: String? = null,
+    val meaningFields: List<SignInField> = emptyList(),
+    /** The typed data's domain: who verifies the signature, on which chain. */
+    val domainFields: List<SignInField> = emptyList(),
+    /** Every field of the typed data's message. */
+    val typedRows: List<TypedRow> = emptyList(),
     val warnings: List<String> = emptyList(),
     val refusal: String? = null,
     /** How long the dApp waits for an answer. */
@@ -88,10 +103,10 @@ data class DappRequestUiState(
 }
 
 /**
- * The message request's ViewModel: signs the message with the wallet password or a fingerprint or
- * face, or refuses it. The password typed is held in the state while the field is shown, handed to
- * the signer in an [Unlock], never logged, and dropped once used and whenever the screen is not shown
- * (CLAUDE.md, *Trust*).
+ * The request-to-sign's ViewModel (D4 and D5): signs the message or the typed data with the wallet
+ * password or a fingerprint or face, or refuses it. The password typed is held in the state while the
+ * field is shown, handed to the signer in an [Unlock], never logged, and dropped once used and whenever
+ * the screen is not shown (CLAUDE.md, *Trust*).
  */
 class DappRequestViewModel(
     /** The request, as its route names it: `topic/id`. */
@@ -131,33 +146,20 @@ class DappRequestViewModel(
         }
     }
 
-    val uiState: StateFlow<DappRequestUiState> = combine(observeDappMessages(), local, ticks) { reviews, local, _ ->
-        val review = reviews.find { it.request.id == id }
+    /** The request's review as the screen shows it, worked out once per review, not per keystroke or tick. */
+    private val shownReview = observeDappMessages()
+        .map { reviews -> reviews.find { it.request.id == id }?.let { review -> review to shown(review) } }
+        .distinctUntilChanged()
+
+    val uiState: StateFlow<DappRequestUiState> = combine(shownReview, local, ticks) { shown, local, _ ->
+        val (review, base) = shown
             // No longer waiting: the screen leaves, unless an answer that did not take says why first.
             ?: return@combine if (local.notice != null && !local.done) {
                 DappRequestUiState(loading = false, ended = true, notice = local.notice)
             } else {
                 DappRequestUiState(loading = false, gone = true, done = local.done)
             }
-        shown(review, local)
-    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), DappRequestUiState())
-
-    private fun shown(review: DappMessageReview, local: Local): DappRequestUiState {
-        val signIn = review.signIn
-        val text = review.message.text
-        return DappRequestUiState(
-            loading = false,
-            title = if (signIn != null) "Sign-in request" else "Message to sign",
-            name = review.request.dapp.name,
-            url = review.request.dapp.url,
-            accountName = review.account?.label,
-            accountAddress = Eip55.format(review.address),
-            signIn = signIn?.let(::fields).orEmpty(),
-            messageText = text.takeIf { signIn == null },
-            messageHex = review.message.hex.takeIf { text == null },
-            messageSize = bytesLine(review.message.size),
-            warnings = review.warnings.sorted().map(::warningLine),
-            refusal = review.refusal?.let(::refusalLine),
+        base.copy(
             waits = waitsLine(review.request.expiresAtSeconds - clock()),
             unlock = local.unlock,
             busy = local.busy,
@@ -165,6 +167,44 @@ class DappRequestViewModel(
             explaining = local.explaining,
             done = local.done,
         )
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), DappRequestUiState())
+
+    private fun shown(review: DappMessageReview): DappRequestUiState {
+        val common = DappRequestUiState(
+            loading = false,
+            name = review.request.dapp.name,
+            url = review.request.dapp.url,
+            accountName = review.account?.label,
+            accountAddress = Eip55.format(review.address),
+            warnings = review.warnings.sorted().map(::warningLine),
+            refusal = review.refusal?.let(::refusalLine),
+        )
+        return when (val content = review.content) {
+            is DappSignContent.Message -> {
+                val signIn = content.signIn
+                val text = content.message.text
+                common.copy(
+                    title = if (signIn != null) "Sign-in request" else "Message to sign",
+                    promptSubject = if (signIn != null) "Sign in to a dApp" else "Sign a dApp's message",
+                    signIn = signIn?.let(::fields).orEmpty(),
+                    messageText = text.takeIf { signIn == null },
+                    messageHex = content.message.hex.takeIf { text == null },
+                    messageSize = bytesLine(content.message.size),
+                )
+            }
+            is DappSignContent.Typed -> {
+                val typed = TypedDataText(content, formatTime)
+                common.copy(
+                    title = typed.title,
+                    promptSubject = typed.promptSubject,
+                    typed = true,
+                    meaning = typed.meaning,
+                    meaningFields = typed.meaningFields,
+                    domainFields = typed.domainFields,
+                    typedRows = typed.rows,
+                )
+            }
+        }
     }
 
     private fun fields(signIn: SignInMessage): List<SignInField> = buildList {
@@ -203,8 +243,7 @@ class DappRequestViewModel(
         if (local.value.busy || !local.value.unlock.biometrics) return
         // What is signed, said in the prompt: the last thing read before the key signs. Nothing the dApp
         // states goes in it, since the system's prompt would show the dApp's words as the app's own.
-        val what = if (state.signIn.isNotEmpty()) "Sign in to a dApp" else "Sign a dApp's message"
-        sign(Unlock.WithBiometrics("$what with ${state.accountAddress}"))
+        sign(Unlock.WithBiometrics("${state.promptSubject} with ${state.accountAddress}"))
     }
 
     /** Refuses the request: as declined, or with its refusal's error when it cannot be signed. */
@@ -311,6 +350,12 @@ class DappRequestViewModel(
                 "This sign-in is for another site than the one the dApp named when it connected. It may be a " +
                     "site posing as another. Both names are the dApp's own claim, so Serotine cannot tell which " +
                     "site is asking."
+            DappSignWarning.NO_CHAIN_ID ->
+                "This data names no network, so the signature may be taken on any chain where the same " +
+                    "contract is."
+            DappSignWarning.NOT_DECODED ->
+                "Serotine does not know this kind of data, so it cannot tell what signing it lets someone do: " +
+                    "it is shown field by field. Sign only if you trust this dApp and understand every field."
             DappSignWarning.NOT_A_SIGN_IN ->
                 "This is not a sign-in. Serotine cannot tell what signing it commits you to: sign only if you " +
                     "trust this dApp and understand the message."
@@ -329,6 +374,10 @@ class DappRequestViewModel(
             DappSignRefusal.SIGN_IN_OTHER_CHAIN -> "The sign-in names a network other than Sepolia."
             DappSignRefusal.SIGN_IN_EXPIRED -> "The sign-in has expired."
             DappSignRefusal.SIGN_IN_NOT_YET_VALID -> "The sign-in is not valid yet."
+            DappSignRefusal.TYPED_OTHER_CHAIN -> "The data names a network other than Sepolia."
+            DappSignRefusal.PERMIT_OTHER_OWNER -> "The approval is for another account than the one asked to sign it."
+            DappSignRefusal.TYPED_TOO_LARGE ->
+                "The data has more fields than this screen can show, and Serotine signs nothing it cannot show in full."
         }
     }
 }

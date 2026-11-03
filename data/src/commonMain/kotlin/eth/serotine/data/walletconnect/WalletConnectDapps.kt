@@ -3,6 +3,7 @@ package eth.serotine.data.walletconnect
 import eth.serotine.domain.model.Address
 import eth.serotine.domain.model.Signature
 import eth.serotine.domain.repository.DappAnswer
+import eth.serotine.domain.repository.DappAsk
 import eth.serotine.domain.repository.DappApproval
 import eth.serotine.domain.repository.DappConnections
 import eth.serotine.domain.repository.DappMetadata
@@ -26,6 +27,8 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.emitAll
+import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
 import kotlinx.serialization.json.JsonNull
@@ -130,24 +133,35 @@ class WalletConnectDapps internal constructor(
     /** The requests dApps send over these sessions, and their answers. */
     val requests: DappRequests = object : DappRequests {
 
-        /** The requests waiting, decoded strictly ([WcRequests]); none while off. */
+        /**
+         * The requests waiting, decoded strictly ([WcRequests]); none while off. Each is decoded once per
+         * collection: a request's parameters never change, and typed data is hashed in its decoding.
+         */
         override fun observe(): Flow<List<DappRequest>> {
             val on = walletConnect ?: return flowOf(emptyList())
-            return on.wallet.observe().map { view ->
-                val accounts = view.sessions.associate { session ->
-                    session.topic to session.accounts.mapNotNull { Address.parse(it.substringAfterLast(':')) }
-                }
-                view.requests.map { request ->
-                    DappRequest(
-                        id = DappRequestId(DappSessionId(request.topic), request.id),
-                        dapp = metadata(request.dapp),
-                        sessionAccounts = accounts[request.topic].orEmpty(),
-                        chain = request.chainId,
-                        ask = WcRequests.decode(request.method, request.params),
-                        expiresAtSeconds = request.expirySeconds,
-                    )
-                }
+            return flow {
+                val decoded = HashMap<Pair<String, Long>, DappAsk>()
+                emitAll(on.wallet.observe().map { view -> requestsOf(view, decoded) })
             }.distinctUntilChanged()
+        }
+
+        private fun requestsOf(view: WcView, decoded: MutableMap<Pair<String, Long>, DappAsk>): List<DappRequest> {
+            val accounts = view.sessions.associate { session ->
+                session.topic to session.accounts.mapNotNull { Address.parse(it.substringAfterLast(':')) }
+            }
+            decoded.keys.retainAll(view.requests.map { it.topic to it.id }.toSet())
+            return view.requests.map { request ->
+                DappRequest(
+                    id = DappRequestId(DappSessionId(request.topic), request.id),
+                    dapp = metadata(request.dapp),
+                    sessionAccounts = accounts[request.topic].orEmpty(),
+                    chain = request.chainId,
+                    ask = decoded.getOrPut(request.topic to request.id) {
+                        WcRequests.decode(request.method, request.params)
+                    },
+                    expiresAtSeconds = request.expirySeconds,
+                )
+            }
         }
 
         override suspend fun answerSignature(request: DappRequestId, signature: Signature): DappAnswer {

@@ -575,11 +575,7 @@ internal class WcWallet(
         // Type 1 is for a peer without the topic's key, which no message to this wallet is.
         val parsed = WcEnvelope.parse(message.message) as? WcEnvelope.Parsed.Type0 ?: return nothing
         val plaintext = WcEnvelope.open(key, parsed) ?: return nothing
-        val payload = try {
-            Json.parseToJsonElement(plaintext.decodeToString()) as? JsonObject
-        } catch (e: IllegalArgumentException) {
-            null
-        } ?: return nothing
+        val payload = WcJson.parse(plaintext.decodeToString()) as? JsonObject ?: return nothing
         val id = (payload["id"] as? JsonPrimitive)?.takeUnless { it.isString }?.longOrNull ?: return nothing
         val method = (payload["method"] as? JsonPrimitive)?.takeIf { it.isString }?.contentOrNull
         if (method == null) {
@@ -650,6 +646,11 @@ internal class WcWallet(
                 val request = fields["request"] as? JsonObject ?: return listOf(reply(invalidParams(id))) to state
                 val chainId = fields.string("chainId") ?: return listOf(reply(invalidParams(id))) to state
                 val name = request.string("method") ?: return listOf(reply(invalidParams(id))) to state
+                // Kept and written out as JSON, which recurses: a tree nested deeper than any method takes is refused.
+                val params = request["params"] ?: JsonNull
+                if (WcRequests.depthOf(params) > WcRequests.MAX_PARAMS_DEPTH) {
+                    return listOf(reply(invalidParams(id))) to state
+                }
                 if (chainId != WcProtocol.SEPOLIA) {
                     return listOf(reply(error(id, WcProtocol.Error.UNSUPPORTED_CHAINS))) to state
                 }
@@ -666,7 +667,7 @@ internal class WcWallet(
                     return listOf(reply(error(id, WcProtocol.Error.LIMIT_EXCEEDED))) to state
                 }
                 val expiry = (stated ?: (now + WcProtocol.REQUEST_SECONDS)).coerceAtMost(now + WcProtocol.MAX_REQUEST_SECONDS)
-                val stored = WcStoredRequest(id, session.topic, chainId, name, request["params"] ?: JsonNull, expiry)
+                val stored = WcStoredRequest(id, session.topic, chainId, name, params, expiry)
                 emptyList<Outgoing>() to state.copy(requests = state.requests + stored)
             }
             WcProtocol.SESSION_PING.name -> listOf(reply(result(id, JsonPrimitive(true)))) to state

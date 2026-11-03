@@ -15,7 +15,6 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
-import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.JsonObject
@@ -234,11 +233,8 @@ internal class WcRelayClient(
     private suspend fun read(connection: WcRelaySocket) {
         while (true) {
             val text = connection.receive() ?: return
-            val payload = try {
-                Json.parseToJsonElement(text).jsonObject
-            } catch (e: IllegalArgumentException) {
-                continue // not JSON-RPC: nothing the relay should send
-            }
+            // Not JSON-RPC, or nested deeper than any of it: nothing the relay should send.
+            val payload = WcJson.parse(text) as? JsonObject ?: continue
             val method = (payload["method"] as? JsonPrimitive)?.contentOrNull
             if (method == "irn_subscription") {
                 val message = subscriptionMessage(payload["params"]) ?: continue

@@ -42,6 +42,57 @@ private val message = signIn.copy(
     warnings = listOf(DappRequestViewModel.warningLine(DappSignWarning.NOT_A_SIGN_IN)),
 )
 
+private const val SPENDER = "0x3fC91A3afd70395Cd496C647d5a6CC9D4B2b7FAD"
+private const val USDC = "0x1c7D4B196Cb0C7B01d743Fbc6116a902379C7238"
+
+private val approval = signIn.copy(
+    title = "Approval request",
+    signIn = emptyList(),
+    typed = true,
+    meaning = "Lets 0x3fC9…7FAD take up to 250 USDC from this account, until Nov 3, 2026, 11:00 AM. " +
+        TypedDataText.APPROVAL_NOTE,
+    meaningFields = listOf(
+        SignInField("Token", "USDC · $USDC"),
+        SignInField("Spender", SPENDER),
+        SignInField("Amount", "250 USDC"),
+        SignInField("Until", "Nov 3, 2026, 11:00 AM"),
+    ),
+    domainFields = listOf(
+        SignInField("Name", "USDC"),
+        SignInField("Version", "2"),
+        SignInField("Network", "Sepolia (11155111)"),
+        SignInField("Contract", USDC),
+    ),
+    typedRows = listOf(
+        TypedRow(0, "owner", ACCOUNT),
+        TypedRow(0, "spender", SPENDER),
+        TypedRow(0, "value", "250000000"),
+        TypedRow(0, "nonce", "0"),
+        TypedRow(0, "deadline", "1793703600"),
+    ),
+)
+
+private val notDecoded = approval.copy(
+    title = "Data to sign",
+    meaning = null,
+    meaningFields = emptyList(),
+    domainFields = listOf(
+        SignInField("Name", "Example dApp"),
+        SignInField("Version", "1"),
+        SignInField("Network", "Sepolia (11155111)"),
+        SignInField("Contract", "0xCcCCccccCCCCcCCCCCCcCcCccCcCCCcCcccccccC"),
+    ),
+    typedRows = listOf(
+        TypedRow(0, "from", null),
+        TypedRow(1, "name", "Cow"),
+        TypedRow(1, "wallets", "2 items"),
+        TypedRow(2, "[0]", "0xCD2a3d9F938E13CD947Ec05AbC7FE734Df8DD826"),
+        TypedRow(2, "[1]", "0xDeaDbeefdEAdbeefdEadbEEFdeadbeEFdEaDbeeF"),
+        TypedRow(0, "contents", "Hello, Bob!"),
+    ),
+    warnings = listOf(DappRequestViewModel.warningLine(DappSignWarning.NOT_DECODED)),
+)
+
 @Composable
 private fun DappRequestPreview(state: DappRequestUiState, darkTheme: Boolean = false) {
     SerotineTheme(darkTheme = darkTheme) {
@@ -124,6 +175,62 @@ private fun DappRequestEndedPreview() = DappRequestPreview(
 @Composable
 private fun DappRequestLoadingPreview() = DappRequestPreview(DappRequestUiState())
 
+@Preview
+@Composable
+private fun DappRequestApprovalPreview() = DappRequestPreview(approval)
+
+@Preview
+@Composable
+private fun DappRequestApprovalDarkPreview() = DappRequestPreview(approval, darkTheme = true)
+
+@Preview
+@Composable
+private fun DappRequestUnlimitedPreview() = DappRequestPreview(
+    approval.copy(
+        meaning = "Lets 0x3fC9…7FAD take up to an unlimited amount of USDC from this account through Permit2, " +
+            "until Dec 3, 2026, 11:00 AM. " + TypedDataText.APPROVAL_NOTE,
+        meaningFields = listOf(
+            SignInField("Token", "USDC · $USDC"),
+            SignInField("Spender", SPENDER),
+            SignInField("Amount", "an unlimited amount of USDC"),
+            SignInField("Allowance", "until Dec 3, 2026, 11:00 AM"),
+            SignInField("Signature good until", "Nov 3, 2026, 11:30 AM"),
+        ),
+    ),
+)
+
+@Preview
+@Composable
+private fun DappRequestSwapOrderPreview() = DappRequestPreview(
+    approval.copy(
+        title = "Swap order to sign",
+        meaning = "An order on CoW Protocol to sell 1 WETH for at least 2,500 USDC, until Nov 3, 2026, 11:00 AM. " +
+            TypedDataText.ORDER_NOTE,
+        meaningFields = listOf(
+            SignInField("Sell", "1 WETH (WETH · 0xfFf9976782d46CC05630D1f6eBAb18b2324d6B14)"),
+            SignInField("Buy", "2500 USDC (USDC · $USDC)"),
+            SignInField("Paid to", "This account"),
+            SignInField("Valid until", "Nov 3, 2026, 11:00 AM"),
+            SignInField("Partly filled", "No: all at once or not"),
+        ),
+    ),
+)
+
+@Preview
+@Composable
+private fun DappRequestNotDecodedPreview() = DappRequestPreview(notDecoded)
+
+@Preview
+@Composable
+private fun DappRequestOtherNetworkPreview() = DappRequestPreview(
+    notDecoded.copy(
+        domainFields = notDecoded.domainFields.map {
+            if (it.label == "Network") it.copy(value = "Ethereum (1)") else it
+        },
+        refusal = DappRequestViewModel.refusalLine(DappSignRefusal.TYPED_OTHER_CHAIN),
+    ),
+)
+
 /** Every preview above, which DappRequestScreenPreviewsTest renders: a new preview goes in here too. */
 internal val dappRequestScreenPreviews: List<@Composable () -> Unit> = listOf(
     { DappRequestSignInPreview() },
@@ -138,4 +245,10 @@ internal val dappRequestScreenPreviews: List<@Composable () -> Unit> = listOf(
     { DappRequestExplainingPreview() },
     { DappRequestEndedPreview() },
     { DappRequestLoadingPreview() },
+    { DappRequestApprovalPreview() },
+    { DappRequestApprovalDarkPreview() },
+    { DappRequestUnlimitedPreview() },
+    { DappRequestSwapOrderPreview() },
+    { DappRequestNotDecodedPreview() },
+    { DappRequestOtherNetworkPreview() },
 )

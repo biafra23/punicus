@@ -71,6 +71,7 @@ class ConnectionsViewModel(
                             line = when {
                                 review.refusal != null -> "Asks for a signature that cannot be given · Review"
                                 review.signIn != null -> "Asks you to sign in · Review"
+                                review.message == null -> "Asks you to sign data · Review"
                                 else -> "Asks you to sign a message · Review"
                             },
                         )

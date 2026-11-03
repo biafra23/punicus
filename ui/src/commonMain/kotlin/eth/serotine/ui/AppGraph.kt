@@ -696,7 +696,7 @@ class AppGraph(
 
     private fun observeDappConnections() = ObserveDappConnections(dappSessions, accounts, networkSettings)
 
-    private fun observeDappMessages() = ObserveDappMessages(dappRequests, accounts, networkSettings)
+    private fun observeDappMessages() = ObserveDappMessages(dappRequests, accounts, networkSettings, tokenCatalog)
 
     fun connectionsViewModel(): ConnectionsViewModel = ConnectionsViewModel(
         observeDappConnections(),

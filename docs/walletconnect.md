@@ -152,7 +152,11 @@ everything on the chain side: the verified `call`, `estimateGasDetailed`,
   Sepolia (EIP-3326); -32602 for parameters that are not the method's.
 - **What needs no one's decision is answered at once**, by the app while it
   runs: `wallet_switchEthereumChain`, and parameters out of shape. Until part
-  1.4, `eth_signTypedData_v4` and `eth_sendTransaction` are too, with 4200.
+  1.4b, `eth_sendTransaction` is too, with 4200.
+- JSON from outside the device (the relay's frames, a dApp's messages, typed
+  data) is read only when it nests at most 64 deep, measured without
+  recursion: a deeper document would overflow the reader's stack. A
+  request's parameters are kept only when they nest at most 32 deep.
 - Parameters are read strictly: `personal_sign` takes exactly
   `[message, address]`. The message is the bytes its `0x` hex spells, or, when
   it is not `0x` and hex, the text's UTF-8 bytes, as wallets read it. Either
@@ -204,6 +208,16 @@ everything on the chain side: the verified `call`, `estimateGasDetailed`,
 
 - The JSON is parsed strictly, with size limits. The EIP-712 encoding and
   hash are computed here, never taken from the dApp.
+  - `[address, typedData]`, exactly two; the typed data a JSON string (or an
+    object), at most 64 KiB, exactly `{types, primaryType, domain, message}`,
+    each type's member exactly `{name, type}`, every number an integer.
+  - Every member of a struct present and nothing else: a value the type does
+    not have would be shown and not signed. Each value inside its type's
+    range; arrays at most 1,024 items, nesting at most 16 deep.
+  - The domain's members are EIP-712's own, each of its own type: `string
+    name`, `string version`, `uint256 chainId`, `address
+    verifyingContract`, `bytes32 salt`.
+  - Anything else is answered as invalid at once (-32602), never shown.
 - The domain's `chainId`, where it has one, must be the account's network.
   A domain without one is shown with a warning.
 - Structs this app knows are decoded and shown for what they let someone do:
@@ -211,7 +225,23 @@ everything on the chain side: the verified `call`, `estimateGasDetailed`,
   for the amount and until the deadline; a GPv2 order as a swap order. An
   approval moves no funds itself but lets the spender take them, and the
   screen says so.
-- Any other struct is shown field by field and marked as not decoded.
+  - A struct is known only when its type is exactly the standard's, member
+    by member. Permit2's (`PermitSingle`, `PermitTransferFrom`) and GPv2's
+    `Order` also need the domain to name the contract that verifies them,
+    the same address on every chain: Permit2 at
+    `0x000000000022D473030F116dDEE9F6B43aC78BA3`, CoW's settlement at
+    `0x9008D19f58AAbD9eD0D60971565AA8510560ab41`. The same struct for another
+    contract can mean anything, so it is not decoded.
+  - A permit's `owner` must be the account asked to sign it; otherwise the
+    request is refused.
+  - A token is named by the built-in list (its pinned symbol and decimals);
+    any other is shown by its address, its amount in raw units.
+- Any other struct is shown field by field and marked as not decoded, with a
+  warning that the app cannot say what signing it lets someone do.
+- The domain is shown too, and every field of the message, decoded or not.
+  Data with more than 200 values is refused (EIP-1474's -32005), never shown
+  cut. A string that holds a character drawing nothing, or a line break, has
+  it spelled out (`⟨U+202E⟩`, `⟨LF⟩`).
 
 ### Transactions (`eth_sendTransaction`)
 
@@ -324,11 +354,12 @@ everything on the chain side: the verified `call`, `estimateGasDetailed`,
   2026-10-18, #50, widened 2026-11-03 on #218; docs/architecture.md), so the
   digest the user approves is computed where the use case can show what it
   is the hash of.
-- **The typed data's JSON is read behind a port**, `TypedDataCodec`,
-  implemented in `:data`, since `:domain` reaches JSON only through one. It
-  parses strictly, with size limits, into `:domain`'s typed-data model: the
-  types, the primary type, the domain and the message. Anything that is not
-  exactly EIP-712 JSON is refused, never repaired.
+- **The typed data's JSON is read in `:data`**, by the adapter that decodes
+  the request, since `:domain` reaches JSON only through a port. It parses
+  strictly, with size limits, into `:domain`'s typed-data model: the types,
+  the primary type, the domain and the message. Anything that is not exactly
+  EIP-712 JSON is refused, never repaired. Direction 2, which writes typed
+  data for an external wallet, adds the other way when it needs it.
 - **No key reaches the WalletConnect layer.** A local signature goes through
   the signer port. Nothing is imported from an external wallet, and nothing
   about it is kept but its address and its session.
@@ -407,7 +438,8 @@ their mockups come with the PR that builds each.
   how long the dApp waits; the unlock, and Refuse. D1 lists the requests
   waiting, each opening D4.
 - **D5 Typed-data request**: the decoded struct or its fields; the domain;
-  the unlock.
+  the unlock. Drawn by D4's screen, which shows typed data in place of the
+  message.
 - **D6 Transaction request**: the decoded call, the simulation, the fee; for
   a Safe, its signatures so far and who executes.
 - **D7 Connect a wallet** (direction 2): the QR code, "Open in wallet", and
@@ -435,8 +467,8 @@ merge part PRs into the feature branch itself.
       D1 to D3. Opening a `wc:` link on Android, which arrives at D2 with the
       link filled in, follows in a part of its own (1.2a).
    3. Signing in for an EOA: `personal_sign` and EIP-4361. Screen D4.
-   4. The other EOA requests: `eth_signTypedData_v4` (D5) and
-      `eth_sendTransaction` (D6).
+   4. The other EOA requests, in two PRs: `eth_signTypedData_v4` (D5, 4a),
+      then `eth_sendTransaction` (D6, 4b).
    5. Requests on a Safe: `eth_sendTransaction` as a `SafeTx`, signed by
       local owner keys and co-signers, executed by a local EOA.
 2. **`feature/walletconnect-signer`, direction 2**, after the first branch

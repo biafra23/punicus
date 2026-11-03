@@ -7,7 +7,14 @@ import eth.serotine.domain.model.Address
 import eth.serotine.domain.model.Digest
 import eth.serotine.domain.model.Network
 import eth.serotine.domain.model.PersonalMessage
+import eth.serotine.domain.model.Eip712
 import eth.serotine.domain.model.Signature
+import eth.serotine.domain.model.Token
+import eth.serotine.domain.model.TypedData
+import eth.serotine.domain.model.TypedDataMeaning
+import eth.serotine.domain.model.TypedField
+import eth.serotine.domain.model.TypedValue
+import eth.serotine.domain.model.UInt256
 import eth.serotine.domain.repository.DappAnswer
 import eth.serotine.domain.repository.DappAsk
 import eth.serotine.domain.repository.DappMetadata
@@ -110,13 +117,8 @@ class DappSigningTest {
         now + 300,
     )
 
-    private fun review(request: DappRequest, nowSeconds: Long = now) = reviewDappMessage(
-        request,
-        request.ask as DappAsk.PersonalSign,
-        listOf(held, watched, safe),
-        enabled.value,
-        nowSeconds,
-    )
+    private fun review(request: DappRequest, nowSeconds: Long = now) =
+        reviewDappMessage(request, listOf(held, watched, safe), enabled.value, nowSeconds)!!
 
     @Test
     fun aSignInForTheAccountOnSepoliaFromTheDappsOwnSiteMayBeSigned() {
@@ -147,7 +149,7 @@ class DappSigningTest {
         assertNull(review(later, nowSeconds = 1_793_700_600).refusal)
         enabled.value = emptySet()
         assertEquals(DappSignRefusal.SEPOLIA_OFF, review(request(1)).refusal)
-        assertEquals(DappSignRefusal.ACCOUNTS_UNREADABLE, reviewDappMessage(request(1), request(1).ask as DappAsk.PersonalSign, null, enabled.value, now).refusal)
+        assertEquals(DappSignRefusal.ACCOUNTS_UNREADABLE, reviewDappMessage(request(1), null, enabled.value, now)!!.refusal)
     }
 
     @Test
@@ -171,6 +173,85 @@ class DappSigningTest {
         assertTrue(!sameSite(message("app.example.org", null), "app.example.org"))
     }
 
+    private fun permit(owner: Address = held.address, chainId: TypedValue? = TypedValue.Number("11155111")): DappRequest {
+        val domainFields = listOfNotNull(
+            TypedField("name", "string"),
+            TypedField("chainId", "uint256").takeIf { chainId != null },
+            TypedField("verifyingContract", "address"),
+        )
+        val data = TypedData(
+            types = mapOf(
+                "EIP712Domain" to domainFields,
+                "Permit" to listOf(
+                    TypedField("owner", "address"),
+                    TypedField("spender", "address"),
+                    TypedField("value", "uint256"),
+                    TypedField("nonce", "uint256"),
+                    TypedField("deadline", "uint256"),
+                ),
+            ),
+            primaryType = "Permit",
+            domain = buildMap {
+                put("name", TypedValue.Text("Token"))
+                chainId?.let { put("chainId", it) }
+                put("verifyingContract", TypedValue.Text(token.address.hex))
+            },
+            message = mapOf(
+                "owner" to TypedValue.Text(owner.hex),
+                "spender" to TypedValue.Text(spender.hex),
+                "value" to TypedValue.Number("1000"),
+                "nonce" to TypedValue.Number("0"),
+                "deadline" to TypedValue.Number("1793703600"),
+            ),
+        )
+        return request(7).copy(ask = DappAsk.SignTypedData(held.address, Eip712.encode(data)!!))
+    }
+
+    private val token = Token(Address.of("0x" + "0".repeat(38) + "aa"), "TKN", "Token", 6, null)
+    private val spender = Address.of("0x" + "0".repeat(38) + "bb")
+
+    @Test
+    fun typedDataOfAKnownStructIsDecodedWithItsTokenAndSignedOverItsEip712Digest() = runTest {
+        val review = reviewDappMessage(permit(), listOf(held, watched, safe), enabled.value, now, listOf(token))!!
+        assertNull(review.refusal)
+        assertTrue(review.warnings.isEmpty())
+        val content = review.content as DappSignContent.Typed
+        assertEquals(TypedDataMeaning.Permit(token.address, held.address, spender, UInt256.of(1000), UInt256.of(1_793_703_600)), content.meaning)
+        assertEquals(mapOf(token.address to token), content.tokens)
+        assertEquals(content.typed.digest, review.digest)
+        requests.waiting.value = listOf(permit())
+        val sign = SignDappMessage(requests, accounts, networks, signer, clock = { now })
+        assertEquals(DappMessageSigning.Signed(delivered = true), sign(permit().id, Unlock.WithBiometrics("x")))
+        assertEquals(listOf(held.address to content.typed.digest), signer.asked)
+    }
+
+    @Test
+    fun typedDataForAnotherChainOrOwnerIsRefusedAndWithoutAChainOrAKnownStructWarnedAbout() {
+        fun review(request: DappRequest) = reviewDappMessage(request, listOf(held, watched, safe), enabled.value, now)!!
+        assertEquals(DappSignRefusal.TYPED_OTHER_CHAIN, review(permit(chainId = TypedValue.Number("1"))).refusal)
+        assertEquals(DappSignRefusal.PERMIT_OTHER_OWNER, review(permit(owner = watched.address)).refusal)
+        assertEquals(setOf(DappSignWarning.NO_CHAIN_ID), review(permit(chainId = null)).warnings)
+        assertNull(review(permit(chainId = null)).refusal)
+        val unknown = (permit().ask as DappAsk.SignTypedData).typed.data.let { data ->
+            data.copy(
+                types = data.types - "Permit" + ("Note" to listOf(TypedField("text", "string"))),
+                primaryType = "Note",
+                message = mapOf("text" to TypedValue.Text("hello")),
+            )
+        }
+        val note = review(permit().copy(ask = DappAsk.SignTypedData(held.address, Eip712.encode(unknown)!!)))
+        assertEquals(setOf(DappSignWarning.NOT_DECODED), note.warnings)
+        assertNull((note.content as DappSignContent.Typed).meaning)
+        // More values than the screen shows: refused, never cut.
+        val large = unknown.copy(
+            types = unknown.types + ("Note" to listOf(TypedField("text", "string[]"))),
+            message = mapOf("text" to TypedValue.Items(List(MAX_SHOWN_VALUES) { TypedValue.Text("x") })),
+        )
+        val tooLarge = review(permit().copy(ask = DappAsk.SignTypedData(held.address, Eip712.encode(large)!!)))
+        assertEquals(DappSignRefusal.TYPED_TOO_LARGE, tooLarge.refusal)
+        assertEquals(DappRequestError.LIMIT_EXCEEDED, tooLarge.refusal!!.error)
+    }
+
     @Test
     fun signingSignsTheEip191DigestAndAnswersWithTheSignature() = runTest {
         val first = request(1)
@@ -179,6 +260,7 @@ class DappSigningTest {
         assertEquals(DappMessageSigning.Signed(delivered = true), sign(first.id, Unlock.WithBiometrics("Sign in")))
         val ask = first.ask as DappAsk.PersonalSign
         assertEquals(listOf(held.address to ask.message.digest()), signer.asked)
+        assertEquals(ask.message.digest(), review(first).digest)
         assertEquals(first.id, requests.answered.single().first)
         assertTrue(requests.answered.single().second is Signature)
         assertEquals(DappMessageSigning.Gone, sign(first.id, Unlock.WithBiometrics("Sign in")))
