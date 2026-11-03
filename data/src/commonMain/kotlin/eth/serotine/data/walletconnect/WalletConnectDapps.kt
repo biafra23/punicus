@@ -1,0 +1,172 @@
+package eth.serotine.data.walletconnect
+
+import eth.serotine.domain.model.Address
+import eth.serotine.domain.repository.DappApproval
+import eth.serotine.domain.repository.DappConnections
+import eth.serotine.domain.repository.DappMetadata
+import eth.serotine.domain.repository.DappPairing
+import eth.serotine.domain.repository.DappProposal
+import eth.serotine.domain.repository.DappProposalId
+import eth.serotine.domain.repository.DappRefusal
+import eth.serotine.domain.repository.DappRelayLink
+import eth.serotine.domain.repository.DappSession
+import eth.serotine.domain.repository.DappSessionId
+import eth.serotine.domain.repository.DappSessions
+import kotlinx.coroutines.CoroutineDispatcher
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.IO
+import kotlinx.coroutines.awaitCancellation
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.flowOf
+import kotlin.time.Clock
+import kotlin.time.ExperimentalTime
+
+/**
+ * [DappSessions] over WalletConnect v2 (docs/walletconnect.md), its state in the file at [path]. The
+ * host builds one, with this build's project ID for its build type ([projectIdFor]), and calls [run]
+ * while dApp messages are to arrive: the relay connection lives as long as that call.
+ *
+ * Without a project ID it is switched off: [observe] says [DappConnections.Off], every action answers
+ * that it is off, and [run] connects to nothing (ruling 2).
+ */
+class WalletConnectDapps internal constructor(
+    path: String,
+    projectId: String,
+    connector: WcRelayConnector,
+    dispatcher: CoroutineDispatcher,
+    nowMillis: () -> Long,
+) : DappSessions {
+
+    /** dApp sessions in the file at [path], over the platform's WebSocket client, with [projectId] (none: off). */
+    constructor(path: String, projectId: String) :
+        this(path, projectId, KtorRelayConnector(walletConnectHttpEngine()), Dispatchers.IO, ::epochMillisNow)
+
+    private val walletConnect: WalletConnect? = projectId.takeIf(::isProjectId)?.let {
+        WalletConnect(
+            store = WcStore(path, dispatcher),
+            connector = connector,
+            projectId = it,
+            metadata = SEROTINE,
+            nowMillis = nowMillis,
+        )
+    }
+
+    /** Keeps the relay connection until cancelled; returns only by cancellation, connecting to nothing when off. */
+    suspend fun run(): Nothing = walletConnect?.run() ?: awaitCancellation()
+
+    override fun observe(): Flow<DappConnections> {
+        val on = walletConnect ?: return flowOf(DappConnections.Off)
+        return combine(on.wallet.observe(), on.state) { view, state ->
+            DappConnections.On(
+                link = when (state) {
+                    WcRelayClient.State.CONNECTED -> DappRelayLink.CONNECTED
+                    WcRelayClient.State.CONNECTING -> DappRelayLink.CONNECTING
+                    WcRelayClient.State.DISCONNECTED -> DappRelayLink.DISCONNECTED
+                },
+                proposals = view.proposals.map(::proposal),
+                sessions = view.sessions.map(::session),
+            )
+        }.distinctUntilChanged()
+    }
+
+    override suspend fun pair(uri: String): DappPairing {
+        val wallet = walletConnect?.wallet ?: return DappPairing.Off
+        return when (val pairing = wallet.pair(uri)) {
+            is WcWallet.Pairing.Paired -> DappPairing.Paired(waitingForRelay = !pairing.subscribed)
+            is WcWallet.Pairing.Unreadable -> when (val why = pairing.why) {
+                is WcPairingUri.Parse.UnsupportedVersion -> DappPairing.UnsupportedVersion
+                is WcPairingUri.Parse.UnsupportedParameter -> DappPairing.UnsupportedParameter(why.parameter)
+                else -> DappPairing.Unreadable
+            }
+            WcWallet.Pairing.Expired -> DappPairing.Expired
+            WcWallet.Pairing.NoProposal -> DappPairing.NoProposal
+            WcWallet.Pairing.TopicInUse -> DappPairing.TopicInUse
+            WcWallet.Pairing.NotSaved -> DappPairing.NotSaved
+        }
+    }
+
+    override suspend fun approve(proposal: DappProposalId, accounts: List<Address>): DappApproval {
+        val wallet = walletConnect?.wallet ?: return DappApproval.Off
+        return when (val approval = wallet.approve(proposal.pairing, proposal.id, accounts.map { it.hex })) {
+            is WcWallet.Approval.Approved -> DappApproval.Approved(DappSessionId(approval.topic), approval.delivered)
+            WcWallet.Approval.NoSuchProposal -> DappApproval.NoSuchProposal
+            WcWallet.Approval.Expired -> DappApproval.Expired
+            is WcWallet.Approval.Refused -> DappApproval.Refused(refusal(approval.why))
+            WcWallet.Approval.InvalidAccounts -> DappApproval.InvalidAccounts
+            WcWallet.Approval.NotSaved -> DappApproval.NotSaved
+        }
+    }
+
+    override suspend fun reject(proposal: DappProposalId): Boolean {
+        val wallet = walletConnect?.wallet ?: return false
+        // A proposal that asks for too much is told why, else that the user declined.
+        val why = wallet.observe().first().proposals
+            .find { it.pairingTopic == proposal.pairing && it.id == proposal.id }?.refusal
+            ?: WcProtocol.Error.USER_REJECTED
+        return wallet.reject(proposal.pairing, proposal.id, why)
+    }
+
+    override suspend fun disconnect(session: DappSessionId): Boolean = walletConnect?.wallet?.disconnect(session.topic) ?: false
+
+    override suspend fun extend(session: DappSessionId): Boolean = walletConnect?.wallet?.extend(session.topic) ?: false
+
+    private fun proposal(view: WcProposalView) = DappProposal(
+        id = DappProposalId(view.pairingTopic, view.id),
+        dapp = metadata(view.dapp),
+        requiredChains = view.requiredChains,
+        optionalChains = view.optionalChains,
+        methods = view.methods,
+        refusal = view.refusal?.let { why ->
+            // One error code for both: a chain other than Sepolia required, or Sepolia not asked for at all.
+            if (why == WcProtocol.Error.UNSUPPORTED_CHAINS && view.requiredChains.all { it == WcProtocol.SEPOLIA }) {
+                DappRefusal.NO_SEPOLIA
+            } else {
+                refusal(why)
+            }
+        },
+        expiresAtSeconds = view.expirySeconds,
+    )
+
+    private fun session(view: WcSessionView) = DappSession(
+        id = DappSessionId(view.topic),
+        dapp = metadata(view.dapp),
+        accounts = view.accounts.mapNotNull { Address.parse(it.substringAfterLast(':')) },
+        methods = view.methods,
+        expiresAtSeconds = view.expirySeconds,
+        acknowledged = view.acknowledged,
+    )
+
+    companion object {
+        /**
+         * The project ID this build carries for [debug] builds or release builds (ruling 2: separate
+         * IDs), or empty when it has none. The host knows which it is.
+         */
+        fun projectIdFor(debug: Boolean): String =
+            if (debug) WALLETCONNECT_PROJECT_ID_DEBUG else WALLETCONNECT_PROJECT_ID_RELEASE
+
+        /** How Serotine names itself to a dApp: no icon, so a dApp fetches nothing of ours. */
+        internal val SEROTINE = WcMetadata(
+            name = "Serotine",
+            description = "A wallet that verifies what it shows with an embedded light client.",
+            url = "https://github.com/biafra23/serotine",
+        )
+
+        internal fun isProjectId(text: String): Boolean =
+            text.isNotEmpty() && text.all { it in 'a'..'z' || it in 'A'..'Z' || it in '0'..'9' }
+
+        private fun metadata(stated: WcMetadata) = DappMetadata(stated.name, stated.url, stated.description)
+
+        private fun refusal(why: WcProtocol.Error): DappRefusal = when (why) {
+            WcProtocol.Error.UNSUPPORTED_METHODS -> DappRefusal.METHOD
+            WcProtocol.Error.UNSUPPORTED_EVENTS -> DappRefusal.EVENT
+            WcProtocol.Error.UNSUPPORTED_NAMESPACE_KEY -> DappRefusal.NAMESPACE
+            else -> DappRefusal.OTHER_CHAIN
+        }
+    }
+}
+
+@OptIn(ExperimentalTime::class)
+private fun epochMillisNow(): Long = Clock.System.now().toEpochMilliseconds()
