@@ -57,6 +57,7 @@ target is what resolves the engine's AAR. One package per area,
 | `safe` | The pinned Safe deployments, the queue of Safe transactions and the signing-request codec. |
 | `swaps` | The pinned Uniswap v3 and CoW Protocol deployments, and the swaps whose next step waits for the user. |
 | `cow` | CoW's order API, over Ktor, and the record of the CoW orders signed here. |
+| `walletconnect` | WalletConnect v2 (docs/walletconnect.md): its crypto over libsodium, the relay client over Ktor's WebSocket client, the wallet role of the Sign protocol, and its state, the sessions' keys among it, in a file of its own. |
 | `transfers` | The record of sent transactions and the history of them, kept for good. |
 | `history` | Where each account's history starts. |
 | `rates` | The exchange rate last verified, for the home-screen widget. |

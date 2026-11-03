@@ -57,12 +57,12 @@ internal data class WcRelayMessage(val topic: String, val message: String, val p
  */
 internal class WcRelayClient(
     private val connector: WcRelayConnector,
-    private val connectionUrl: () -> String,
+    private val connectionUrl: suspend () -> String,
     private val onMessage: suspend (WcRelayMessage) -> Unit,
     private val nowMillis: () -> Long,
     private val requestTimeout: Duration = 20.seconds,
     private val backoff: (attempt: Int) -> Duration = ::defaultBackoff,
-) {
+) : WcTransport {
     /** Whether a connection is open. */
     enum class State { DISCONNECTED, CONNECTING, CONNECTED }
 
@@ -130,13 +130,13 @@ internal class WcRelayClient(
      * relay acknowledged it; false when it did not within [requestTimeout] (the topic is still
      * subscribed to on the next connection).
      */
-    suspend fun subscribe(topic: String): Boolean {
+    override suspend fun subscribe(topic: String): Boolean {
         lock.withLock { if (topic !in topics) topics[topic] = null }
         return subscribeNow(topic)
     }
 
     /** Stops following [topic]: no longer subscribed to on a reconnection, and unsubscribed now where the relay gave an id. */
-    suspend fun unsubscribe(topic: String) {
+    override suspend fun unsubscribe(topic: String) {
         val id = lock.withLock { if (topic in topics) topics.remove(topic) else return }
         if (id == null || socket.value == null) return
         call(
@@ -152,7 +152,7 @@ internal class WcRelayClient(
      * Publishes the envelope [message] on [topic], for the relay to hold [ttlSeconds] for its
      * subscribers, under the Sign protocol's [tag]. True once the relay acknowledged it.
      */
-    suspend fun publish(topic: String, message: String, ttlSeconds: Long, tag: Int): Boolean {
+    override suspend fun publish(topic: String, message: String, ttlSeconds: Long, tag: Int): Boolean {
         val answer = call(
             "irn_publish",
             buildJsonObject {
