@@ -100,8 +100,14 @@ fun ConnectionsScreen(
                 )
                 return@Column
             }
-            Text(state.link, Modifier.padding(horizontal = 16.dp, vertical = 8.dp), style = MaterialTheme.typography.bodyMedium)
-            state.notice?.let { Text(it, Modifier.padding(horizontal = 16.dp), color = MaterialTheme.colorScheme.error) }
+            Text(
+                state.link,
+                Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+                style = MaterialTheme.typography.bodyMedium,
+            )
+            state.notice?.let {
+                Text(it, Modifier.padding(horizontal = 16.dp), color = MaterialTheme.colorScheme.error)
+            }
             if (state.proposals.isNotEmpty()) {
                 Heading("Waiting for you")
                 state.proposals.forEach { proposal ->

@@ -65,6 +65,8 @@ class DappViewModelsTest {
         proposalId, dapp, emptySet(), setOf("eip155:11155111"), setOf("personal_sign"), refusal, 1_700_000_300,
     )
 
+    private fun key(account: Account) = DappProposalViewModel.accountKey(account.network.chainId, account.address.hex)
+
     private fun TestScope.observe() = ObserveDappConnections(sessions, accounts, networks)
 
     private fun TestScope.main() = Dispatchers.setMain(UnconfinedTestDispatcher(testScheduler))
@@ -139,12 +141,12 @@ class DappViewModelsTest {
         runCurrent()
         val state = vm.uiState.value
         assertEquals("Test dApp", state.name)
-        assertNull(state.accounts.first { it.key == held.address.hex }.unavailable)
-        assertNotNull(state.accounts.first { it.key == watched.address.hex }.unavailable)
+        assertNull(state.accounts.first { it.key == key(held) }.unavailable)
+        assertNotNull(state.accounts.first { it.key == key(watched) }.unavailable)
         assertTrue(state.approveUnavailable)
 
         // A greyed-out account says why, and is not chosen.
-        vm.toggle(watched.address.hex)
+        vm.toggle(key(watched))
         assertEquals("Not offered to dApps", vm.uiState.value.explaining?.title)
         vm.dismissExplanation()
         // Approve with nothing chosen says what is missing.
@@ -152,7 +154,7 @@ class DappViewModelsTest {
         assertEquals(DappProposalViewModel.CHOOSE_ACCOUNT, vm.uiState.value.explaining?.reason)
         vm.dismissExplanation()
 
-        vm.toggle(held.address.hex)
+        vm.toggle(key(held))
         assertFalse(vm.uiState.value.approveUnavailable)
         vm.approve()
         runCurrent()
@@ -173,7 +175,7 @@ class DappViewModelsTest {
         backgroundScope.launch { vm.uiState.collect {} }
         runCurrent()
         assertEquals(DappProposalViewModel.refusalLine(DappRefusal.OTHER_CHAIN), vm.uiState.value.refusal)
-        vm.toggle(held.address.hex)
+        vm.toggle(key(held))
         vm.approve()
         assertEquals("Cannot be approved", vm.uiState.value.explaining?.title)
         assertTrue(sessions.approved.isEmpty())
@@ -192,4 +194,36 @@ class DappViewModelsTest {
         runCurrent()
         assertTrue(vm.uiState.value.gone)
     }
+
+    @Test
+    fun aRequestThatExpiresAsApproveIsTappedSaysSoInsteadOfLeaving() = runTest {
+        main()
+        sessions.connections.value = DappConnections.On(DappRelayLink.CONNECTED, listOf(proposal()), emptyList())
+        sessions.approval = { _, _ ->
+            sessions.connections.value = DappConnections.On(DappRelayLink.CONNECTED, emptyList(), emptyList())
+            eth.serotine.domain.repository.DappApproval.Expired
+        }
+        val vm = DappProposalViewModel(
+            "${proposalId.pairing}/7",
+            observe(),
+            ApproveDappProposal(sessions, accounts, networks),
+            RejectDappProposal(sessions),
+        )
+        backgroundScope.launch { vm.uiState.collect {} }
+        runCurrent()
+        vm.toggle(key(held))
+        vm.approve()
+        runCurrent()
+        val state = vm.uiState.value
+        assertTrue(state.ended)
+        assertFalse(state.gone)
+        assertEquals("This request has expired. Connect again from the dApp.", state.notice)
+    }
+
+    @Test
+    fun aSessionPastItsEndSaysItEnded() {
+        assertEquals("Ended", ConnectionsViewModel.endsIn(-5))
+        assertEquals("Ends in a few minutes", ConnectionsViewModel.endsIn(120))
+    }
 }
+

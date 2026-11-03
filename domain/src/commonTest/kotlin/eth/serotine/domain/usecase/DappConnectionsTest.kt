@@ -121,13 +121,36 @@ class DappConnectionsTest {
             emptyList(),
             listOf(session("both", held, watchedSafe), session("only", held), session("other", watchedSafe)),
         )
-        val following = backgroundScope.launch { FollowDappAccounts(sessions, accounts)() }
+        val following = backgroundScope.launch { FollowDappAccounts(sessions, accounts, networks)() }
         runCurrent()
         assertTrue(sessions.updated.isEmpty() && sessions.disconnected.isEmpty())
         accounts.remove(held.id)
         runCurrent()
         assertEquals(listOf(DappSessionId("both") to listOf(watchedSafe.address)), sessions.updated)
         assertEquals(listOf(DappSessionId("only")), sessions.disconnected)
+        following.cancel()
+    }
+
+    @Test
+    fun anAccountWhoseKeyWasRemovedOrWhoseNetworkWasTurnedOffLeavesItsSessions() = runTest {
+        val metadata = eth.serotine.domain.repository.DappMetadata("dApp", "https://dapp.test", "")
+        sessions.connections.value = DappConnections.On(
+            DappRelayLink.CONNECTED,
+            emptyList(),
+            listOf(
+                eth.serotine.domain.repository.DappSession(
+                    DappSessionId("s"), metadata, listOf(held.address, watchedSafe.address), listOf("personal_sign"), 0, true,
+                ),
+            ),
+        )
+        val following = backgroundScope.launch { FollowDappAccounts(sessions, accounts, networks)() }
+        runCurrent()
+        accounts.setCustody(held.id, AccountCustody.Watched)
+        runCurrent()
+        assertEquals(listOf(DappSessionId("s") to listOf(watchedSafe.address)), sessions.updated)
+        enabled.value = setOf(Network.ETHEREUM)
+        runCurrent()
+        assertEquals(listOf(DappSessionId("s")), sessions.disconnected)
         following.cancel()
     }
 

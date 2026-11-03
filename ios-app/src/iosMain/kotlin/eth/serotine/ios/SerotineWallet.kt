@@ -367,7 +367,9 @@ class SerotineWallet {
             },
             scope.launch {
                 // Each session's accounts kept to those still in the wallet (accountsChanged).
-                reportingFailure("following the dApp sessions' accounts") { FollowDappAccounts(dapps, accounts)() }
+                reportingFailure("following the dApp sessions' accounts") {
+                    FollowDappAccounts(dapps, accounts, networkSettings)()
+                }
             },
             scope.launch {
                 // How each transaction sent from here ends is recorded whatever screen is open (issue #85).

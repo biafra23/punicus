@@ -25,6 +25,7 @@ import kotlinx.coroutines.flow.first
  * (owner ruling, 2026-10-18, #55).
  */
 enum class DappOffer {
+    /** A Sepolia account that can sign here, or a Safe: it may be offered. */
     OFFERED,
 
     /** An account on Ethereum or Gnosis Chain: dApp sessions are on Sepolia alone for now (ruling 9). */
@@ -109,20 +110,30 @@ class DisconnectDapp(private val sessions: DappSessions) {
 }
 
 /**
- * Keeps each session's accounts to those still in the wallet, while it runs: one removed from the
- * wallet is taken out of every session that sees it, the dApp told (`accountsChanged`), and a session
- * left with none is ended. The host runs it beside the relay connection.
+ * Keeps each session's accounts to those a dApp may still be offered ([dappOffer]), while it runs: one
+ * removed from the wallet, whose key was removed, or whose network was turned off is taken out of
+ * every session that sees it, the dApp told (`accountsChanged`), and a session left with none is
+ * ended. The host runs it beside the relay connection.
  */
-class FollowDappAccounts(private val sessions: DappSessions, private val accounts: AccountRepository) {
+class FollowDappAccounts(
+    private val sessions: DappSessions,
+    private val accounts: AccountRepository,
+    private val networks: NetworkSettings,
+) {
     suspend operator fun invoke() {
-        combine(sessions.observe(), accounts.observeAccounts()) { connections, list -> connections to list }
-            .collect { (connections, list) ->
+        combine(sessions.observe(), accounts.observeAccounts(), networks.observe()) { connections, list, enabled ->
+            Triple(connections, list, enabled)
+        }
+            .collect { (connections, list, enabled) ->
                 val on = connections as? DappConnections.On ?: return@collect
                 // An unreadable list is no news of a removal: nothing is changed on its word.
                 val loaded = list as? AccountList.Loaded ?: return@collect
                 // Nor is a damaged list set aside, which reads as one without its accounts.
                 if (loaded.damagedListSetAside) return@collect
-                val held = loaded.accounts.filter { it.network == Network.SEPOLIA }.map { it.address }.toSet()
+                val held = loaded.accounts
+                    .filter { dappOffer(it, enabled) == DappOffer.OFFERED }
+                    .map { it.address }
+                    .toSet()
                 for (session in on.sessions) {
                     val kept = session.accounts.filter { it in held }
                     when {

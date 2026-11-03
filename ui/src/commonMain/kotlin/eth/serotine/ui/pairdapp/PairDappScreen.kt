@@ -45,7 +45,13 @@ fun PairDappRoute(
     LaunchedEffect(state.paired) {
         if (state.paired) paired()
     }
-    PairDappScreen(state, onEdit = viewModel::edit, onConnect = viewModel::connect, onBack = onBack, modifier = modifier)
+    PairDappScreen(
+        state,
+        onEdit = viewModel::edit,
+        onConnect = viewModel::connect,
+        onBack = onBack,
+        modifier = modifier,
+    )
 }
 
 /**

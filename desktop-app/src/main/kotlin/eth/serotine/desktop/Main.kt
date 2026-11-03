@@ -64,8 +64,6 @@ import javax.swing.SwingUtilities
 import kotlin.concurrent.thread
 import kotlin.coroutines.cancellation.CancellationException
 import kotlin.system.exitProcess
-import kotlinx.coroutines.coroutineScope
-import kotlinx.coroutines.launch
 
 /**
  * The desktop composition root: starts the process's one Myotis engine
@@ -197,15 +195,22 @@ private fun openWallet(dataDir: File) {
             // The relay connection while the app runs: dApp messages arrive while it is open. A failure
             // ends it alone.
             try {
-                coroutineScope {
-                    // Each session's accounts kept to those still in the wallet (accountsChanged).
-                    launch { FollowDappAccounts(dapps, accounts)() }
-                    dapps.run()
-                }
+                dapps.run()
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
                 System.err.println("Serotine: the WalletConnect relay connection stopped: ${e::class.simpleName}")
+            }
+        }
+        LaunchedEffect(Unit) {
+            // Each session's accounts kept to those a dApp may still be offered (accountsChanged). A
+            // failure ends it alone, never the relay connection.
+            try {
+                FollowDappAccounts(dapps, accounts, networkSettings)()
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                System.err.println("Serotine: following the dApp sessions' accounts stopped: ${e::class.simpleName}")
             }
         }
         LaunchedEffect(Unit) {

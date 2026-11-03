@@ -102,6 +102,7 @@ sealed interface DappPairing {
     /** Its topic is an open session's: refused, the session kept. */
     data object TopicInUse : DappPairing
 
+    /** The state could not be saved: nothing was paired. */
     data object NotSaved : DappPairing
 
     /** dApp connections are switched off in this build. */
@@ -113,7 +114,10 @@ sealed interface DappApproval {
     /** Approved; [delivered] false while the relay has not taken it yet: it is sent again, never lost. */
     data class Approved(val session: DappSessionId, val delivered: Boolean) : DappApproval
 
+    /** No such proposal is waiting (answered, or gone). */
     data object NoSuchProposal : DappApproval
+
+    /** The dApp has stopped waiting for an answer. */
     data object Expired : DappApproval
 
     /** The proposal asks for what no session here may have. */
@@ -121,7 +125,11 @@ sealed interface DappApproval {
 
     /** No account, or one a dApp may not be offered. */
     data object InvalidAccounts : DappApproval
+
+    /** The state could not be saved: nothing was approved. */
     data object NotSaved : DappApproval
+
+    /** dApp connections are switched off in this build. */
     data object Off : DappApproval
 }
 

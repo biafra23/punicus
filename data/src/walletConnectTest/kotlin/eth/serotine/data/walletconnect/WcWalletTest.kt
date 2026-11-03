@@ -428,5 +428,19 @@ class WcWalletTest {
         assertEquals("${1_000L + WcProtocol.PENDING_REQUESTS_PER_SESSION}", refused["id"]?.jsonPrimitive?.content)
         assertEquals(-32005, refused.getValue("error").jsonObject.getValue("code").jsonPrimitive.int)
     }
+
+    @Test
+    fun requestsPastTheirExpiryDoNotCountTowardsTheCap() = runTest {
+        val running = walletConnect()
+        val dapp = dapp()
+        settled(running, dapp)
+        val soon = now() / 1000 + 5
+        repeat(WcProtocol.PENDING_REQUESTS_PER_SESSION) { dapp.sendOnSession(personalSign(2_000L + it, expiry = soon)) }
+        settle()
+        repeat(10) { settle() } // past their expiry, before the minute's sweep
+        dapp.sendOnSession(personalSign(3_000))
+        settle()
+        assertEquals(listOf(3_000L), running.view().requests.map { it.id })
+    }
 }
 

@@ -653,7 +653,9 @@ internal class WcWallet(
                 if (stated != null && stated <= now) {
                     return listOf(reply(error(id, WcProtocol.Error.REQUEST_EXPIRED))) to state
                 }
-                if (state.requests.count { it.topic == session.topic } >= WcProtocol.PENDING_REQUESTS_PER_SESSION) {
+                // Only those still live: expired ones wait for the minute's sweep, and count for nothing.
+                val waiting = state.requests.count { it.topic == session.topic && it.expirySeconds > now }
+                if (waiting >= WcProtocol.PENDING_REQUESTS_PER_SESSION) {
                     return listOf(reply(error(id, WcProtocol.Error.LIMIT_EXCEEDED))) to state
                 }
                 val expiry = (stated ?: (now + WcProtocol.REQUEST_SECONDS)).coerceAtMost(now + WcProtocol.MAX_REQUEST_SECONDS)

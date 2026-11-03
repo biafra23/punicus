@@ -261,7 +261,10 @@ class SerotineApplication : Application() {
      * transfers (data_extraction_rules.xml), as ruling 8 asks.
      */
     private val dapps by lazy {
-        WalletConnectDapps(filesDir.resolve("walletconnect/state.json").path, WalletConnectDapps.projectIdFor(debuggable))
+        WalletConnectDapps(
+            filesDir.resolve("walletconnect/state.json").path,
+            WalletConnectDapps.projectIdFor(debuggable),
+        )
     }
 
     /**
@@ -532,18 +535,27 @@ class SerotineApplication : Application() {
         if (dappRelay?.isActive != true) dappRelay = scope.launch { runDappRelay() }
     }
 
-    /** Keeps WalletConnect's relay connection (docs/walletconnect.md) until stopped; a failure ends it alone. */
-    private suspend fun runDappRelay() {
-        try {
-            coroutineScope {
-                // Each session's accounts kept to those still in the wallet (accountsChanged).
-                launch { FollowDappAccounts(dapps, accounts)() }
-                dapps.run()
+    /**
+     * Keeps WalletConnect's relay connection (docs/walletconnect.md), and each session's accounts to
+     * those a dApp may still be offered (accountsChanged), until stopped. A failure ends that one alone.
+     */
+    private suspend fun runDappRelay() = coroutineScope {
+        launch {
+            reportingFailure("following the dApp sessions' accounts") {
+                FollowDappAccounts(dapps, accounts, networkSettings)()
             }
+        }
+        reportingFailure("the WalletConnect relay connection") { dapps.run() }
+    }
+
+    /** Runs [work]; a failure ends it, said with its kind only, never the wallet. */
+    private suspend fun reportingFailure(what: String, work: suspend () -> Unit) {
+        try {
+            work()
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
-            System.err.println("Serotine: the WalletConnect relay connection stopped: ${e::class.simpleName}")
+            System.err.println("Serotine: $what stopped: ${e::class.simpleName}")
         }
     }
 

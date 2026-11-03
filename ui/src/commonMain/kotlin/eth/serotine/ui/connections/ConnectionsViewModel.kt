@@ -10,10 +10,13 @@ import eth.serotine.domain.usecase.DisconnectDapp
 import eth.serotine.domain.usecase.ExtendDappSession
 import eth.serotine.domain.usecase.ObserveDappConnections
 import eth.serotine.ui.components.epochSecondsNow
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 
@@ -26,11 +29,17 @@ class ConnectionsViewModel(
     private val disconnectDapp: DisconnectDapp,
     private val extendDappSession: ExtendDappSession,
     private val clock: () -> Long = ::epochSecondsNow,
+    /** When the sessions' ends are said again: every minute, so "Ends in …" stays true while the screen is open. */
+    ticks: Flow<Unit> = everyMinute(),
 ) : ViewModel() {
 
     private val notice = MutableStateFlow<String?>(null)
 
-    val uiState: StateFlow<ConnectionsUiState> = combine(observeDappConnections(), notice) { overview, notice ->
+    val uiState: StateFlow<ConnectionsUiState> = combine(
+        observeDappConnections(),
+        notice,
+        ticks,
+    ) { overview, notice, _ ->
         when (val connections = overview.connections) {
             DappConnections.Off -> ConnectionsUiState(loading = false, off = true)
             is DappConnections.On -> {
@@ -43,11 +52,16 @@ class ConnectionsViewModel(
                             key = proposalKey(proposal.id),
                             name = proposal.dapp.name,
                             url = proposal.dapp.url,
-                            line = if (proposal.refusal != null) "Asks for more than Serotine offers · Review" else "Asks to connect · Review",
+                            line = if (proposal.refusal != null) {
+                                "Asks for more than Serotine offers · Review"
+                            } else {
+                                "Asks to connect · Review"
+                            },
                         )
                     },
                     sessions = connections.sessions.map { session ->
-                        val accounts = if (session.accounts.size == 1) "1 account" else "${session.accounts.size} accounts"
+                        val count = session.accounts.size
+                        val accounts = if (count == 1) "1 account" else "$count accounts"
                         val confirmed = if (session.acknowledged) "" else " · Not confirmed by the dApp yet"
                         SessionRow(
                             key = session.id.topic,
@@ -88,8 +102,17 @@ class ConnectionsViewModel(
             DappRelayLink.DISCONNECTED -> "WalletConnect's relay can't be reached right now"
         }
 
-        /** "Ends in 6 days", "Ends in 5 hours", "Ends in a few minutes". */
+        /** A tick now and every minute after. */
+        fun everyMinute(): Flow<Unit> = flow {
+            while (true) {
+                emit(Unit)
+                delay(60_000)
+            }
+        }
+
+        /** "Ends in 6 days", "Ends in 5 hours", "Ends in a few minutes", "Ended". */
         fun endsIn(seconds: Long): String = when {
+            seconds <= 0 -> "Ended"
             seconds >= 2 * 86_400 -> "Ends in ${seconds / 86_400} days"
             seconds >= 86_400 -> "Ends in 1 day"
             seconds >= 2 * 3_600 -> "Ends in ${seconds / 3_600} hours"

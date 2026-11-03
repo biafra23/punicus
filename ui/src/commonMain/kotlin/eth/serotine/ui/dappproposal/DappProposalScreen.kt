@@ -44,7 +44,10 @@ import eth.serotine.ui.components.unavailable
 /** Test tag of an account's row, followed by its address, for UI tests. */
 const val DAPP_PROPOSAL_ACCOUNT_TAG = "dapp-proposal-account-"
 
-/** Binds [DappProposalScreen] to its ViewModel; an answer, or a proposal no longer waiting, ends it through [onDone]. */
+/**
+ * Binds [DappProposalScreen] to its ViewModel; an answer, or a proposal no longer waiting, ends it
+ * through [onDone].
+ */
 @Composable
 fun DappProposalRoute(
     viewModel: DappProposalViewModel,
@@ -105,6 +108,14 @@ fun DappProposalScreen(
             }
             return@Scaffold
         }
+        if (state.ended) {
+            Text(
+                state.notice.orEmpty(),
+                Modifier.padding(padding).padding(16.dp),
+                color = MaterialTheme.colorScheme.error,
+            )
+            return@Scaffold
+        }
         Column(Modifier.padding(padding).fillMaxSize().verticalScroll(rememberScrollState())) {
             Column(Modifier.padding(16.dp)) {
                 Text(state.name, style = MaterialTheme.typography.headlineSmall)
@@ -132,10 +143,16 @@ fun DappProposalScreen(
                 val color = if (unavailable) Unavailable.contentColor() else MaterialTheme.colorScheme.onSurface
                 ListItem(
                     modifier = Modifier
-                        .toggleable(value = account.chosen, role = Role.Checkbox, onValueChange = { onToggle(account.key) })
+                        .toggleable(
+                            value = account.chosen,
+                            role = Role.Checkbox,
+                            onValueChange = { onToggle(account.key) },
+                        )
                         .unavailable(unavailable)
                         .testTag(DAPP_PROPOSAL_ACCOUNT_TAG + account.key),
-                    leadingContent = { Checkbox(checked = account.chosen, onCheckedChange = null, enabled = !unavailable) },
+                    leadingContent = {
+                        Checkbox(checked = account.chosen, onCheckedChange = null, enabled = !unavailable)
+                    },
                     headlineContent = { Text(account.name, color = color) },
                     supportingContent = { Text(account.unavailable ?: account.address, color = color) },
                     colors = ListItemDefaults.colors(),
@@ -143,12 +160,18 @@ fun DappProposalScreen(
             }
             state.notice?.let { Text(it, Modifier.padding(16.dp), color = MaterialTheme.colorScheme.error) }
             Row(Modifier.padding(16.dp).fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                OutlinedButton(onClick = onReject, enabled = !state.busy, modifier = Modifier.weight(1f)) { Text("Reject") }
+                OutlinedButton(onClick = onReject, enabled = !state.busy, modifier = Modifier.weight(1f)) {
+                    Text("Reject")
+                }
                 // Greyed out while it cannot be done, and still tappable: the tap says why.
                 Button(
                     onClick = onApprove,
                     enabled = !state.busy,
-                    colors = if (state.approveUnavailable) Unavailable.buttonColors() else ButtonDefaults.buttonColors(),
+                    colors = if (state.approveUnavailable) {
+                        Unavailable.buttonColors()
+                    } else {
+                        ButtonDefaults.buttonColors()
+                    },
                     modifier = Modifier.weight(1f).unavailable(state.approveUnavailable),
                 ) { Text("Approve") }
             }

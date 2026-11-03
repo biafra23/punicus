@@ -29,6 +29,8 @@ import kotlinx.coroutines.launch
 data class DappProposalUiState(
     val loading: Boolean = true,
     val gone: Boolean = false,
+    /** No longer waiting, and [notice] says why (it expired as Approve was tapped): Back leaves. */
+    val ended: Boolean = false,
     val name: String = "",
     val url: String = "",
     val description: String = "",
@@ -82,7 +84,12 @@ class DappProposalViewModel(
 
     val uiState: StateFlow<DappProposalUiState> = combine(observeDappConnections(), local) { overview, local ->
         val proposal = (overview.connections as? DappConnections.On)?.proposals?.find { it.id == id }
-            ?: return@combine DappProposalUiState(loading = false, gone = true, done = local.done)
+            // No longer waiting: the screen leaves, unless an answer that did not take says why first.
+            ?: return@combine if (local.notice != null && !local.done) {
+                DappProposalUiState(loading = false, ended = true, notice = local.notice)
+            } else {
+                DappProposalUiState(loading = false, gone = true, done = local.done)
+            }
         DappProposalUiState(
             loading = false,
             name = proposal.dapp.name,
@@ -92,10 +99,11 @@ class DappProposalViewModel(
             refusal = proposal.refusal?.let(::refusalLine),
             accounts = overview.accounts.map { choice ->
                 AccountOption(
-                    key = choice.account.address.hex,
+                    key = accountKey(choice.account.network.chainId, choice.account.address.hex),
                     name = choice.account.label,
                     address = shortAddress(choice.account.address.hex),
-                    chosen = choice.offer == DappOffer.OFFERED && choice.account.address.hex in local.chosen,
+                    chosen = choice.offer == DappOffer.OFFERED &&
+                        accountKey(choice.account.network.chainId, choice.account.address.hex) in local.chosen,
                     unavailable = offerLine(choice.offer),
                 )
             },
@@ -126,7 +134,7 @@ class DappProposalViewModel(
             local.update { it.copy(explaining = Explanation("Cannot be approved", reason)) }
             return
         }
-        val chosen = state.accounts.filter { it.chosen }.mapNotNull { Address.parse(it.key) }
+        val chosen = state.accounts.filter { it.chosen }.mapNotNull { Address.parse(it.key.substringAfter(':')) }
         if (chosen.isEmpty()) {
             local.update { it.copy(explaining = Explanation("Choose an account", CHOOSE_ACCOUNT)) }
             return
@@ -134,7 +142,9 @@ class DappProposalViewModel(
         local.update { it.copy(busy = true, notice = null) }
         viewModelScope.launch {
             val approval = approveDappProposal(proposal, chosen)
-            local.update { it.copy(busy = false, done = approval is DappApproval.Approved, notice = approvalLine(approval)) }
+            local.update {
+                it.copy(busy = false, done = approval is DappApproval.Approved, notice = approvalLine(approval))
+            }
         }
     }
 
@@ -150,10 +160,18 @@ class DappProposalViewModel(
 
     companion object {
         const val NOT_SAVED = "That could not be saved. Nothing was changed."
+
+        /**
+         * An account as its row names it: its chain id and its address. The same address is an account
+         * on each network it is held on, so the address alone would name two rows.
+         */
+        fun accountKey(chainId: Long, address: String): String = "$chainId:$address"
+
         const val CHOOSE_ACCOUNT = "Choose at least one account for the dApp to see."
         const val ACCOUNTS_UNREADABLE = "Your accounts cannot be read right now, so none can be offered."
 
-        private val METHOD_ORDER = listOf("personal_sign", "eth_signTypedData_v4", "eth_sendTransaction", "wallet_switchEthereumChain")
+        private val METHOD_ORDER =
+            listOf("personal_sign", "eth_signTypedData_v4", "eth_sendTransaction", "wallet_switchEthereumChain")
 
         fun methodLine(method: String): String = when (method) {
             "personal_sign" -> "Ask you to sign messages, such as signing in"
@@ -164,14 +182,15 @@ class DappProposalViewModel(
         }
 
         fun refusalLine(refusal: DappRefusal): String = when (refusal) {
-            DappRefusal.OTHER_CHAIN -> "This dApp requires a network other than Sepolia. dApp connections are on Sepolia " +
-                "only for now, so it can only be rejected."
-            DappRefusal.NO_SEPOLIA -> "This dApp does not ask for Sepolia. dApp connections are on Sepolia only for now, " +
-                "so it can only be rejected."
-            DappRefusal.METHOD -> "This dApp requires a way of signing Serotine does not offer, such as eth_sign, so it " +
-                "can only be rejected."
+            DappRefusal.OTHER_CHAIN -> "This dApp requires a network other than Sepolia. dApp connections are " +
+                "on Sepolia only for now, so it can only be rejected."
+            DappRefusal.NO_SEPOLIA -> "This dApp does not ask for Sepolia. dApp connections are on Sepolia only " +
+                "for now, so it can only be rejected."
+            DappRefusal.METHOD -> "This dApp requires a way of signing Serotine does not offer, such as " +
+                "eth_sign, so it can only be rejected."
             DappRefusal.EVENT -> "This dApp requires notices Serotine does not send, so it can only be rejected."
-            DappRefusal.NAMESPACE -> "This dApp requires a chain that is not an Ethereum one, so it can only be rejected."
+            DappRefusal.NAMESPACE ->
+                "This dApp requires a chain that is not an Ethereum one, so it can only be rejected."
         }
 
         fun offerLine(offer: DappOffer): String? = when (offer) {
@@ -183,7 +202,8 @@ class DappProposalViewModel(
 
         fun approvalLine(approval: DappApproval): String? = when (approval) {
             is DappApproval.Approved -> null
-            DappApproval.NoSuchProposal, DappApproval.Expired -> "This request has expired. Connect again from the dApp."
+            DappApproval.NoSuchProposal, DappApproval.Expired ->
+                "This request has expired. Connect again from the dApp."
             is DappApproval.Refused -> refusalLine(approval.why)
             DappApproval.InvalidAccounts -> "One of the accounts chosen cannot be offered to a dApp. Choose again."
             DappApproval.NotSaved -> NOT_SAVED

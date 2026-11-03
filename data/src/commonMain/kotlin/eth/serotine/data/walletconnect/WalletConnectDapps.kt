@@ -109,7 +109,8 @@ class WalletConnectDapps internal constructor(
         return wallet.reject(proposal.pairing, proposal.id, why)
     }
 
-    override suspend fun disconnect(session: DappSessionId): Boolean = walletConnect?.wallet?.disconnect(session.topic) ?: false
+    override suspend fun disconnect(session: DappSessionId): Boolean =
+        walletConnect?.wallet?.disconnect(session.topic) ?: false
 
     override suspend fun extend(session: DappSessionId): Boolean = walletConnect?.wallet?.extend(session.topic) ?: false
 

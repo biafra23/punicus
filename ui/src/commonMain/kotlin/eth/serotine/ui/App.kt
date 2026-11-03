@@ -394,7 +394,9 @@ private fun Destinations(
                     viewModel { graph.connectionsViewModel() },
                     onBack = { navController.leave(Destination.CONNECTIONS) },
                     onPair = { navController.navigate(Destination.PAIR_DAPP) { launchSingleTop = true } },
-                    onProposal = { key -> navController.navigate("${Destination.DAPP_PROPOSAL}/$key") { launchSingleTop = true } },
+                    onProposal = { key ->
+                        navController.navigate("${Destination.DAPP_PROPOSAL}/$key") { launchSingleTop = true }
+                    },
                 )
             }
             composable(Destination.PAIR_DAPP) {

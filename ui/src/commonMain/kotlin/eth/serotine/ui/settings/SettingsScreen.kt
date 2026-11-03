@@ -53,7 +53,10 @@ const val SETTINGS_DETAILED_VIEW_TAG = "settings-detailed-view"
 /** Test tag of the Debug tab's row, for UI tests. */
 const val SETTINGS_DEBUG_SCREEN_TAG = "settings-debug-screen"
 
-/** What a tap on Connected dApps says in a build without a WalletConnect project ID (docs/walletconnect.md, ruling 2). */
+/**
+ * What a tap on Connected dApps says in a build without a WalletConnect project ID
+ * (docs/walletconnect.md, ruling 2).
+ */
 internal const val CONNECTIONS_OFF =
     "This build has dApp connections switched off: it was built without a WalletConnect project ID."
 
@@ -141,7 +144,10 @@ fun SettingsScreen(
     var asking by remember { mutableStateOf<StaleAnchorWarning?>(null) }
     var explainingConnections by remember { mutableStateOf(false) }
     if (explainingConnections) {
-        UnavailableDialog(UnavailableNotice("Connected dApps", CONNECTIONS_OFF), onDismiss = { explainingConnections = false })
+        UnavailableDialog(
+            UnavailableNotice("Connected dApps", CONNECTIONS_OFF),
+            onDismiss = { explainingConnections = false },
+        )
     }
     asking?.let { warning ->
         StaleAnchorDialog(
@@ -193,7 +199,10 @@ fun SettingsScreen(
                     .clickable(onClick = { if (connectionsOff) explainingConnections = true else onConnections() })
                     .unavailable(connectionsOff),
                 headlineContent = {
-                    Text("Connected dApps", color = if (connectionsOff) Unavailable.contentColor() else Color.Unspecified)
+                    Text(
+                        "Connected dApps",
+                        color = if (connectionsOff) Unavailable.contentColor() else Color.Unspecified,
+                    )
                 },
                 supportingContent = {
                     Text(

@@ -54,15 +54,18 @@ class PairDappViewModel(private val pairDapp: PairDapp) : ViewModel() {
 
         fun message(pairing: DappPairing): String? = when (pairing) {
             is DappPairing.Paired -> null
-            DappPairing.Unreadable -> "That is not a WalletConnect link. Copy the link the dApp shows under WalletConnect."
-            DappPairing.UnsupportedVersion -> "That link is for an older version of WalletConnect, which Serotine does not use."
+            DappPairing.Unreadable ->
+                "That is not a WalletConnect link. Copy the link the dApp shows under WalletConnect."
+            DappPairing.UnsupportedVersion ->
+                "That link is for an older version of WalletConnect, which Serotine does not use."
             is DappPairing.UnsupportedParameter ->
                 "That link asks for something Serotine does not do (${pairing.parameter}), so it is not used."
             DappPairing.Expired -> "That link has expired. Ask the dApp for a new one."
             DappPairing.NoProposal -> "That link does not ask for a connection. Ask the dApp for a new one."
             DappPairing.TopicInUse -> "That link names a connection that is already open, so it is not used."
             DappPairing.NotSaved -> "That could not be saved. Nothing was changed."
-            DappPairing.Off -> "This build has dApp connections switched off: it was built without a WalletConnect project ID."
+            DappPairing.Off ->
+                "This build has dApp connections switched off: it was built without a WalletConnect project ID."
         }
     }
 }
