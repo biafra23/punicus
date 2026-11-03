@@ -364,10 +364,11 @@ everything on the chain side: the verified `call`, `estimateGasDetailed`,
   changes which accounts a session sees, the dApp gets `accountsChanged`.
 - An account removed from the wallet, whose key was removed, or whose
   network was turned off leaves every session that sees it, and a session
-  left with none ends. A network counts as turned off only once it was read
-  as on while the app runs. A network setting that cannot be read is
-  answered with the build's defaults, and a release build's has Sepolia off,
-  so that alone ends no session. Its requests are refused all the same.
+  left with none ends. A network counts as turned off only once the setting
+  has answered it as on while the app runs, a default included. A network
+  setting that cannot be read is answered with the build's defaults, and a
+  release build's has Sepolia off, so that alone ends no session. Its
+  requests are refused all the same.
 - Sessions survive a restart (ruling 8). A request that arrived while the
   app was closed is answered once it opens, while it has not expired.
 

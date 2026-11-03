@@ -446,6 +446,25 @@ class WcWalletTest {
     }
 
     @Test
+    fun proposalsPastTheirExpiryDoNotCountTowardsTheCap() = runTest {
+        val running = walletConnect()
+        val dapp = dapp()
+        dapp.subscribePairing()
+        assertIs<WcWallet.Pairing.Paired>(running.wallet.pair(dapp.uri()))
+        val soon = now() / 1000 + 5
+        repeat(WcProtocol.PENDING_PROPOSALS_PER_PAIRING) {
+            dapp.propose(200L + it, JsonObject(emptyMap()), buildJsonObject { put("eip155", sepoliaAsk) }) {
+                JsonObject(this + ("expiryTimestamp" to JsonPrimitive(soon)))
+            }
+        }
+        settle()
+        repeat(10) { settle() } // past their expiry, before the minute's sweep
+        dapp.propose(300, JsonObject(emptyMap()), buildJsonObject { put("eip155", sepoliaAsk) })
+        settle()
+        assertEquals(listOf(300L), running.view().proposals.map { it.id })
+    }
+
+    @Test
     fun anOptionalNamespaceOfAnotherChainAddsNothingToTheSepoliaSession() = runTest {
         val running = walletConnect()
         val dapp = dapp()

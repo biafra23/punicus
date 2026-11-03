@@ -113,10 +113,12 @@ class DisconnectDapp(private val sessions: DappSessions) {
  * Keeps each session's accounts to those a dApp may still be offered ([dappOffer]), while it runs: one
  * removed from the wallet, whose key was removed, or whose network was turned off is taken out of
  * every session that sees it, the dApp told (`accountsChanged`), and a session left with none is
- * ended. A network counts as turned off only once it has been read as on while this runs: a setting
- * that cannot be read is answered with the build's defaults ([NetworkSettings.observe]), and a release
- * build's default has Sepolia off, so a network off from the start ends no session on that word. Its
- * requests are refused all the same. The host runs it beside the relay connection.
+ * ended. A network counts as turned off only once the setting has answered it as on while this runs: a
+ * setting that cannot be read is answered with the build's defaults ([NetworkSettings.observe]), and a
+ * release build's default has Sepolia off, so a network off from the start ends no session on that word.
+ * A defaults answer of "on" counts as one (a debug build's Sepolia, say), so a later read of "off" ends
+ * the sessions then, which is the stored setting. Its requests are refused all the same. The host runs it
+ * beside the relay connection.
  */
 class FollowDappAccounts(
     private val sessions: DappSessions,

@@ -658,7 +658,8 @@ internal class WcWallet(
                 val proposal = proposal(id, pairing.topic, params as? JsonObject, now)
                     ?: return listOf(reply(invalidParams(id), WcProtocol.SESSION_PROPOSE)) to state
                 if (proposal.expirySeconds <= now) return emptyList<Outgoing>() to state
-                val waiting = state.proposals.count { it.pairingTopic == pairing.topic }
+                // Expired ones wait for the minute's sweep, and count for nothing, as for requests.
+                val waiting = state.proposals.count { it.pairingTopic == pairing.topic && it.expirySeconds > now }
                 if (waiting >= WcProtocol.PENDING_PROPOSALS_PER_PAIRING) {
                     return listOf(
                         reply(error(id, WcProtocol.Error.LIMIT_EXCEEDED), WcProtocol.SESSION_PROPOSE),
