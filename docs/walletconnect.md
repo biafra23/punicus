@@ -277,8 +277,15 @@ everything on the chain side: the verified `call`, `estimateGasDetailed`,
   - `ExternalWallets` (direction 2): start a pairing, which returns its `wc:`
     URI; observe the connected wallets and their accounts; ask one to sign a
     `SafeTx`; disconnect.
-- **In `:domain`'s model, pure Kotlin:** the EIP-191 message digest, an
-  EIP-4361 parser, and the EIP-712 encoder for arbitrary typed data.
+- **The EIP-4361 parser is in `:domain`'s model**, pure Kotlin: it parses
+  text and hashes nothing.
+- **The message digests are behind a port, `MessageDigests`, implemented in
+  `:data`:** the EIP-191 digest of a message, and the EIP-712 encoding and
+  hash of arbitrary typed data, its JSON parsed there. `:domain` may use
+  Keccak-256 only for the closed list of the owner's ruling (2026-10-18,
+  #50; docs/architecture.md), and reaches JSON only through a port; neither
+  digest is on that list. Whether to extend the list with them instead is
+  the owner's decision, open (*Open decisions*, below).
 - **No key reaches the WalletConnect layer.** A local signature goes through
   the signer port. Nothing is imported from an external wallet, and nothing
   about it is kept but its address and its session.
@@ -350,6 +357,16 @@ merge part PRs into the feature branch itself.
    Safe; Safe messages (EIP-1271), which `personal_sign` and typed data on a
    Safe wait for; the Verify API; and dApp sessions on Ethereum and Gnosis
    Chain. Each needs the owner's ruling where it touches one.
+
+## Open decisions
+
+The owner's, each recorded here and in the rules before its code lands:
+
+- dApp sessions on Ethereum and Gnosis Chain (ruling 9).
+- Each optional WalletConnect service (ruling 7).
+- Whether the EIP-191 digest and arbitrary EIP-712 hashing join the closed
+  list of Keccak-256 uses in `:domain` (owner ruling, 2026-10-18, #50).
+  Until then they sit behind the `MessageDigests` port (*Architecture*).
 
 ## Risks to check early
 
