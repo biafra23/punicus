@@ -24,7 +24,12 @@ private val connected = ConnectionsUiState(
     ),
     sessions = listOf(
         SessionRow("t1", "Safe{Wallet}", "https://app.safe.global", "Sees 1 account · Ends in 6 days"),
-        SessionRow("t2", "Example dApp", "https://example.org", "Sees 2 accounts · Ends in 5 hours · Not confirmed by the dApp yet"),
+        SessionRow(
+            "t2",
+            "Example dApp",
+            "https://example.org",
+            "Sees 2 accounts · Ends in 5 hours · Not confirmed by the dApp yet",
+        ),
     ),
 )
 

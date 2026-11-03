@@ -184,10 +184,17 @@ internal suspend fun signedFor(
     sentTransfers: SentTransfers,
     history: TransactionHistory,
     id: DappRequestId,
-): SignedAnswer? {
+): SignedAnswer? = signedFor(
+    (sentTransfers.observe().first() as? SentTransferList.Loaded)?.transfers.orEmpty(),
+    (history.observe().first() as? HistoryList.Loaded)?.entries.orEmpty(),
+    id,
+)
+
+/** [signedFor], from the sent record's [sent] transfers and the history's [past] entries, read already. */
+internal fun signedFor(sent: List<SentTransfer>, past: List<HistoryEntry>, id: DappRequestId): SignedAnswer? {
     fun answers(transfer: SentTransfer) = (transfer.action as? SentAction.DappCall)?.request == id
-    val recorded = (sentTransfers.observe().first() as? SentTransferList.Loaded)?.transfers?.firstOrNull(::answers)
-    val entry = (history.observe().first() as? HistoryList.Loaded)?.entries?.firstOrNull { answers(it.transfer) }
+    val recorded = sent.firstOrNull(::answers)
+    val entry = past.firstOrNull { answers(it.transfer) }
     val transfer = recorded ?: entry?.transfer ?: return null
     return SignedAnswer(transfer, stateOf(recorded, entry))
 }

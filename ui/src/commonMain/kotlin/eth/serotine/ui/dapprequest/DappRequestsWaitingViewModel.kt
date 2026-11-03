@@ -17,8 +17,8 @@ data class DappWaiting(val key: String, val transaction: Boolean)
 /**
  * The requests waiting, oldest first, by their keys (`topic/id`) and kinds: what the app opens their
  * screen for as each arrives (D6 for a transaction, D4 otherwise), and which it has opened in this
- * run, so that one left unanswered is not opened again (it stays in Connected dApps). Scoped to the host, as the navigation
- * it drives is; a configuration change keeps it.
+ * run, so that one left unanswered is not opened again (it stays in Connected dApps). Scoped to the host, as the
+ * navigation it drives is; a configuration change keeps it.
  */
 class DappRequestsWaitingViewModel(observeDappMessages: ObserveDappMessages) : ViewModel() {
 

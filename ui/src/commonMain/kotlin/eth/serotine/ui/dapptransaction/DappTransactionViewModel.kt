@@ -320,8 +320,8 @@ class DappTransactionViewModel(
             val proposal = freshProposal() ?: return
             val notAfter = local.value.quotedAt?.let(::promptDeadline) ?: return requote(note = STALE_QUOTE)
             val owner = Eip55.format(proposal.heldOwners.first())
-            val reason = "Sign a dApp's Safe transaction from ${uiState.value.accountAddress} to ${uiState.value.to}, " +
-                "as the owner $owner"
+            val reason = "Sign a dApp's Safe transaction from ${uiState.value.accountAddress} " +
+                "to ${uiState.value.to}, as the owner $owner"
             return signSafe(proposal, Unlock.WithBiometrics(reason, notAfter))
         }
         val quote = freshQuote() ?: return
@@ -430,7 +430,8 @@ class DappTransactionViewModel(
         local.update { current ->
             val base = current.copy(quoting = false, fromSafe = true, quote = null, proposal = null)
             when (proposing) {
-                is DappSafeProposing.Proposed -> base.copy(proposal = proposing.proposal, quotedAt = mark, hidden = false)
+                is DappSafeProposing.Proposed ->
+                    base.copy(proposal = proposing.proposal, quotedAt = mark, hidden = false)
                 is DappSafeProposing.AlreadyQueued -> base.copy(queued = "0x" + proposing.request.hash.hex)
                 is DappSafeProposing.SafeRefused ->
                     base.copy(notQuoted = safeTxRefusalText(proposing.refusal, Network.SEPOLIA))
@@ -519,7 +520,8 @@ class DappTransactionViewModel(
                             safeTxRefusalText(signing.refusal, Network.SEPOLIA),
                         ),
                     )
-                    DappSafeSigning.NotRecorded -> current.copy(busy = false, unlock = current.unlock.copy(error = NOT_RECORDED))
+                    DappSafeSigning.NotRecorded ->
+                        current.copy(busy = false, unlock = current.unlock.copy(error = NOT_RECORDED))
                     null -> current.copy(busy = false, unlock = current.unlock.copy(error = SIGN_FAILED))
                 }
             }
@@ -691,8 +693,8 @@ class DappTransactionViewModel(
             "sign it again in a moment."
         const val NOT_RECORDED = "This request could not be tied to its Safe transaction right now, so the signature " +
             "was dropped and nothing was queued: try again in a moment."
-        const val NO_LONGER_QUEUED = "The Safe transaction proposed for this request is no longer queued here, and it " +
-            "is never replaced by another one. Refuse answers the dApp; ask it again for a new one."
+        const val NO_LONGER_QUEUED = "The Safe transaction proposed for this request is no longer queued here, " +
+            "and it is never replaced by another one. Refuse answers the dApp; ask it again for a new one."
         const val SAFE_SHORT = "The Safe's verified balance, less what its queued transactions may move, cannot " +
             "pay this value. Refuse, or ask the dApp again once the Safe has more."
         const val NO_OWNER_HERE = "No owner of this Safe has its key on this device, so nobody here can sign it. " +

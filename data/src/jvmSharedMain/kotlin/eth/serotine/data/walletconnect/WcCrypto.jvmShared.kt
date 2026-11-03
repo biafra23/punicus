@@ -50,7 +50,12 @@ internal actual object WcCrypto {
         }
     }
 
-    actual fun chacha20Poly1305Open(key: ByteArray, nonce: ByteArray, ciphertext: ByteArray, aad: ByteArray): ByteArray? {
+    actual fun chacha20Poly1305Open(
+        key: ByteArray,
+        nonce: ByteArray,
+        ciphertext: ByteArray,
+        aad: ByteArray,
+    ): ByteArray? {
         requireAead(key, nonce)
         if (ciphertext.size < WC_TAG_BYTES) return null
         val length = ciphertext.size - WC_TAG_BYTES

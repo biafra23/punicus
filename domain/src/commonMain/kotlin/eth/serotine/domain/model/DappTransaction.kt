@@ -30,14 +30,15 @@ class DappTransactionRequest(
     /** How many bytes of call data it has. */
     val dataSize: Int get() = callData.size
 
-    /** What its call does, for the calls this app knows. */
-    val meaning: DappCallMeaning
-        get() = when {
+    /** What its call does, for the calls this app knows: decoded once, its data being immutable. */
+    val meaning: DappCallMeaning by lazy {
+        when {
             callData.isEmpty() -> DappCallMeaning.Payment
             else -> Erc20.transferOf(callData)?.let { DappCallMeaning.TokenTransfer(to, it.to, it.amount) }
                 ?: Erc20.approveOf(callData)?.let { DappCallMeaning.TokenApproval(to, it.spender, it.amount) }
                 ?: DappCallMeaning.NotDecoded(callData.copyOf(4).toHex().takeIf { callData.size >= 4 })
         }
+    }
 
     override fun equals(other: Any?): Boolean = other is DappTransactionRequest && from == other.from &&
         to == other.to && value == other.value && callData.contentEquals(other.callData) && gas == other.gas

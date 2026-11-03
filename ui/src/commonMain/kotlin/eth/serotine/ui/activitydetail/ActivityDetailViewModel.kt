@@ -332,7 +332,10 @@ class ActivityDetailViewModel(
         }
         val moved = when (transfer) {
             is TokenTransfer.Fungible ->
-                DetailField("Amount", rows.figure(transfer.amount, known.token.decimals, displaySymbol(known.token.symbol)))
+                DetailField(
+                    "Amount",
+                    rows.figure(transfer.amount, known.token.decimals, displaySymbol(known.token.symbol)),
+                )
             is TokenTransfer.Nft -> DetailField("Token id", transfer.tokenId.toDecimal())
         }
         val sides = listOf(addressOf("From", transfer.from, names), addressOf("To", transfer.to, names))

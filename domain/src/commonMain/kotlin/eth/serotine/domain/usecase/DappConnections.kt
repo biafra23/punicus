@@ -113,7 +113,10 @@ class DisconnectDapp(private val sessions: DappSessions) {
  * Keeps each session's accounts to those a dApp may still be offered ([dappOffer]), while it runs: one
  * removed from the wallet, whose key was removed, or whose network was turned off is taken out of
  * every session that sees it, the dApp told (`accountsChanged`), and a session left with none is
- * ended. The host runs it beside the relay connection.
+ * ended. A network counts as turned off only once it has been read as on while this runs: a setting
+ * that cannot be read is answered with the build's defaults ([NetworkSettings.observe]), and a release
+ * build's default has Sepolia off, so a network off from the start ends no session on that word. Its
+ * requests are refused all the same. The host runs it beside the relay connection.
  */
 class FollowDappAccounts(
     private val sessions: DappSessions,
@@ -121,6 +124,7 @@ class FollowDappAccounts(
     private val networks: NetworkSettings,
 ) {
     suspend operator fun invoke() {
+        val seenOn = mutableSetOf<Network>()
         combine(sessions.observe(), accounts.observeAccounts(), networks.observe()) { connections, list, enabled ->
             Triple(connections, list, enabled)
         }
@@ -130,8 +134,11 @@ class FollowDappAccounts(
                 val loaded = list as? AccountList.Loaded ?: return@collect
                 // Nor is a damaged list set aside, which reads as one without its accounts.
                 if (loaded.damagedListSetAside) return@collect
+                seenOn += enabled
+                // A network never read as on is not known to be off: it may be an unreadable setting.
+                val judged = enabled + (Network.entries - seenOn)
                 val held = loaded.accounts
-                    .filter { dappOffer(it, enabled) == DappOffer.OFFERED }
+                    .filter { dappOffer(it, judged) == DappOffer.OFFERED }
                     .map { it.address }
                     .toSet()
                 for (session in on.sessions) {

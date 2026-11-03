@@ -45,7 +45,8 @@ private val tokenTransfer = payment.copy(
         SignInField("Recipient", RECIPIENT),
         SignInField("Amount", "25 USDC"),
     ),
-    dataHex = "a9059cbb000000000000000000000000fb6916095ca1df60bb79ce92ce3ea74c37c5d3590000000000000000000000000000000000000000000000000000000001312d00",
+    dataHex = "a9059cbb000000000000000000000000fb6916095ca1df60bb79ce92ce3ea74c37c5d359" +
+        "0000000000000000000000000000000000000000000000000000000001312d00",
     dataSize = "68 bytes",
 )
 
@@ -54,7 +55,8 @@ private val notDecoded = payment.copy(
     value = "0.01 ETH (testnet)",
     meaning = null,
     meaningFields = listOf(SignInField("Function", "0x3593564c")),
-    dataHex = "3593564c00000000000000000000000000000000000000000000000000000000000000600000000000000000000000000000000000000000000000000000000000000a0",
+    dataHex = "3593564c0000000000000000000000000000000000000000000000000000000000000060" +
+        "0000000000000000000000000000000000000000000000000000000000000a0",
     dataSize = "100 bytes",
     warnings = listOf(DappTransactionViewModel.NOT_DECODED),
 )
@@ -179,7 +181,8 @@ private fun DappTransactionSendingPreview() = DappTransactionPreview(payment.cop
 private fun DappTransactionNotSentPreview() = DappTransactionPreview(
     payment.copy(
         notSent = NotSentItem(
-            "Signed, but not sent: no peer took it right now. Try again sends the same signed transaction, not a new one.",
+            "Signed, but not sent: no peer took it right now. Try again sends the same signed transaction, " +
+                "not a new one.",
             canRetry = true,
         ),
         // No peer answered: it may be on its way, so Refuse is greyed out.

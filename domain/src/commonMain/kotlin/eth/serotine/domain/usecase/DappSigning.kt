@@ -266,7 +266,8 @@ private fun accountRefusal(
     accounts == null -> DappSignRefusal.ACCOUNTS_UNREADABLE
     account == null -> DappSignRefusal.NOT_IN_WALLET
     // A Safe's transaction is a Safe transaction its owners sign, watched or not; its messages come later.
-    account.kind == AccountKind.SAFE && transaction -> if (Network.SEPOLIA in enabled) null else DappSignRefusal.SEPOLIA_OFF
+    account.kind == AccountKind.SAFE && transaction ->
+        if (Network.SEPOLIA in enabled) null else DappSignRefusal.SEPOLIA_OFF
     account.kind == AccountKind.SAFE -> DappSignRefusal.SAFE
     account.custody == AccountCustody.Watched -> DappSignRefusal.NO_KEY
     Network.SEPOLIA !in enabled -> DappSignRefusal.SEPOLIA_OFF
@@ -509,13 +510,9 @@ class AnswerDappRequestsAtOnce(
             is DappAsk.NotAnsweredYet -> requests.refuse(request.id, DappRequestError.UNSUPPORTED_METHOD)
             is DappAsk.Malformed -> requests.refuse(request.id, DappRequestError.INVALID_PARAMS)
             is DappAsk.SendTransaction -> {
-                fun answers(transfer: SentTransfer) = (transfer.action as? SentAction.DappCall)?.request == request.id
-                val recorded = sent.firstOrNull(::answers)
-                val entry = past.firstOrNull { answers(it.transfer) }
                 // An EOA's transaction signed for it, or, from a Safe, the execution of the Safe transaction
                 // recorded for it: answered with the hash of the transaction sent, never the safeTxHash.
-                val answer = (recorded ?: entry?.transfer)?.let { SignedAnswer(it, stateOf(recorded, entry)) }
-                    ?: request.safeTx?.let { executionFor(it, sent, past) }
+                val answer = signedFor(sent, past, request.id) ?: request.safeTx?.let { executionFor(it, sent, past) }
                 answer?.takeIf { it.state == SignedState.SENT || it.state == SignedState.MINED }
                     ?.let { requests.answerTransaction(request.id, it.transfer.hash) }
             }

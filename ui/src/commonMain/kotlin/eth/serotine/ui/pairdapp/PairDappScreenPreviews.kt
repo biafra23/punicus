@@ -8,7 +8,8 @@ import org.jetbrains.compose.ui.tooling.preview.Preview
 // Connect a dApp in Android Studio's preview pane, one preview per state it draws differently.
 // PairDappScreenPreviewsTest renders each one in pairDappScreenPreviews, at the end.
 
-private const val LINK = "wc:7f6e504bfad60b485450578e05678ed3e8e8c4751d3c6160be17160d63ec90f9@2?relay-protocol=irn&symKey=…"
+private const val LINK = "wc:7f6e504bfad60b485450578e05678ed3e8e8c4751d3c6160be17160d63ec90f9" +
+    "@2?relay-protocol=irn&symKey=…"
 
 @Composable
 private fun PairDappPreview(state: PairDappUiState, darkTheme: Boolean = false) {

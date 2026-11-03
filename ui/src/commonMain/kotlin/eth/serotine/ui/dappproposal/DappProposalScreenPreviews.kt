@@ -12,8 +12,20 @@ import org.jetbrains.compose.ui.tooling.preview.Preview
 private val accounts = listOf(
     AccountOption("11155111:0x1", "Main", "0x52b4…91e0", chosen = true, unavailable = null),
     AccountOption("11155111:0x2", "Team Safe", "0x8a3f…2c17", chosen = false, unavailable = null),
-    AccountOption("11155111:0x3", "Watched", "0x0f1c…9a44", chosen = false, unavailable = DappProposalViewModel.offerLine(DappOffer.NO_KEY)),
-    AccountOption("1:0x1", "Savings", "0x52b4…91e0", chosen = false, unavailable = DappProposalViewModel.offerLine(DappOffer.NOT_SEPOLIA)),
+    AccountOption(
+        "11155111:0x3",
+        "Watched",
+        "0x0f1c…9a44",
+        chosen = false,
+        unavailable = DappProposalViewModel.offerLine(DappOffer.NO_KEY),
+    ),
+    AccountOption(
+        "1:0x1",
+        "Savings",
+        "0x52b4…91e0",
+        chosen = false,
+        unavailable = DappProposalViewModel.offerLine(DappOffer.NOT_SEPOLIA),
+    ),
 )
 
 private val request = DappProposalUiState(
@@ -48,7 +60,10 @@ private fun DappProposalNoneChosenPreview() =
 @Preview
 @Composable
 private fun DappProposalRefusedPreview() = DappProposalPreview(
-    request.copy(refusal = DappProposalViewModel.refusalLine(DappRefusal.OTHER_CHAIN), accounts = accounts.map { it.copy(chosen = false) }),
+    request.copy(
+        refusal = DappProposalViewModel.refusalLine(DappRefusal.OTHER_CHAIN),
+        accounts = accounts.map { it.copy(chosen = false) },
+    ),
 )
 
 @Preview
@@ -64,7 +79,11 @@ private fun DappProposalNotSavedPreview() = DappProposalPreview(request.copy(not
 @Preview
 @Composable
 private fun DappProposalEndedPreview() = DappProposalPreview(
-    DappProposalUiState(loading = false, ended = true, notice = "This request has expired. Connect again from the dApp."),
+    DappProposalUiState(
+        loading = false,
+        ended = true,
+        notice = "This request has expired. Connect again from the dApp.",
+    ),
 )
 
 @Preview
