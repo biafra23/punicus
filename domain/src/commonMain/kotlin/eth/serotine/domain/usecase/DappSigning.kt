@@ -1,7 +1,6 @@
 package eth.serotine.domain.usecase
 
 import eth.serotine.domain.model.Account
-import kotlinx.coroutines.flow.flowOf
 import eth.serotine.domain.repository.TokenCatalog
 import eth.serotine.domain.model.Eip712
 import eth.serotine.domain.model.UInt256
@@ -289,8 +288,8 @@ class ObserveDappMessages(
     private val requests: DappRequests,
     private val accounts: AccountRepository,
     private val networks: NetworkSettings,
-    /** The built-in tokens, which name the tokens typed data refers to; none named without it. */
-    private val tokens: TokenCatalog? = null,
+    /** The built-in tokens, which name the tokens typed data refers to. */
+    private val tokens: TokenCatalog,
     private val clock: () -> Long = ::epochSecondsNow,
     private val tickSeconds: Long = 15,
 ) {
@@ -302,7 +301,7 @@ class ObserveDappMessages(
             }
         }
         val accountLists = accounts.observeAccounts()
-        val known = tokens?.observeTokens(Network.SEPOLIA) ?: flowOf(emptyList())
+        val known = tokens.observeTokens(Network.SEPOLIA)
         val enabled = networks.observe()
         return combine(requests.observe(), accountLists, enabled, known, ticks) { waiting, list, on, pinned, _ ->
             val loaded = (list as? AccountList.Loaded)?.accounts

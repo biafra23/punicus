@@ -72,6 +72,9 @@ class TypedDataTest {
         refused(mail.copy(domain = mail.domain + ("chainId" to TypedValue.Bool(true))))
         refused(mail.copy(domain = mail.domain + ("verifyingContract" to text("0xCcCC"))))
         refused(mail.copy(message = mail.message + ("contents" to TypedValue.Number("1"))))
+        // A lone surrogate has no UTF-8: refused, never hashed as a replacement.
+        refused(mail.copy(message = mail.message + ("contents" to text("Hello, \uD800Bob!"))))
+        assertNotNull(Eip712.encode(mail.copy(message = mail.message + ("contents" to text("Hello \uD83D\uDC4B")))))
         // Types that are not EIP-712's.
         refused(mail.copy(types = mail.types - "EIP712Domain"))
         refused(mail.copy(primaryType = "EIP712Domain"))

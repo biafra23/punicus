@@ -342,7 +342,7 @@ class DappSigningTest {
             request(1, signIn(extra = "\nExpiration Time: 2026-11-03T10:10:00Z")),
             request(2).copy(ask = DappAsk.SwitchChain(1)),
         )
-        val observe = ObserveDappMessages(requests, accounts, networks, clock = { clock }, tickSeconds = 15)
+        val observe = ObserveDappMessages(requests, accounts, networks, ListCatalog(), clock = { clock }, tickSeconds = 15)
         var latest: List<DappMessageReview> = emptyList()
         backgroundScope.launch { observe().collect { latest = it } }
         runCurrent()

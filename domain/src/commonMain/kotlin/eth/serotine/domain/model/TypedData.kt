@@ -64,7 +64,8 @@ data class EncodedTypedData internal constructor(
  * - Values: every member of a struct present and nothing else, so nothing is shown that is not signed.
  *   An address is `0x` and 40 hex digits; a `bool` a JSON boolean; an integer a JSON integer, or a
  *   string of decimal digits or of `0x` hex, inside its type's range; `bytesN` exactly N bytes of hex
- *   and `bytes` any number; a string any JSON string; a fixed-size array exactly its length.
+ *   and `bytes` any number; a string any JSON string but one holding a lone surrogate, which has no
+ *   UTF-8; a fixed-size array exactly its length.
  * - Within limits: [MAX_TYPES] types, [MAX_FIELDS] members each, names of at most [MAX_NAME] characters,
  *   [MAX_ITEMS] items in an array, nesting [MAX_DEPTH] deep, and at most [MAX_VALUES] values in all.
  */
@@ -237,6 +238,8 @@ object Eip712 {
             }
             type == "string" -> {
                 val text = (value as? TypedValue.Text)?.text ?: throw IllegalArgumentException("not a string")
+                // A lone surrogate (JSON's "\uD800") has no UTF-8: encoding it would hash a replacement, not the text.
+                require(!hasLoneSurrogate(text))
                 keccak256(text.encodeToByteArray())
             }
             type == "bytes" -> keccak256(hexBytes(value))
@@ -249,6 +252,19 @@ object Eip712 {
             type.startsWith("int") -> signed(value, bitsOf(type.removePrefix("int"))!!).toBytes32()
             else -> throw IllegalArgumentException("unknown type")
         }
+    }
+
+    private fun hasLoneSurrogate(text: String): Boolean {
+        var at = 0
+        while (at < text.length) {
+            val char = text[at]
+            when {
+                char.isHighSurrogate() && text.getOrNull(at + 1)?.isLowSurrogate() == true -> at += 2
+                char.isSurrogate() -> return true
+                else -> at++
+            }
+        }
+        return false
     }
 
     private fun hexBytes(value: TypedValue): ByteArray {

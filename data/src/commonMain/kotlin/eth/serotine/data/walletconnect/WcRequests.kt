@@ -58,7 +58,8 @@ internal object WcRequests {
         val account = address.takeIf(WcWallet::isAddress)?.let(Address::parse) ?: return null
         val second = array[1]
         val json = when {
-            second is JsonObject -> second
+            // Its nesting is bounded already, by the envelope's reading (WcJson): measuring it recurses safely.
+            second is JsonObject -> second.takeIf { it.toString().length <= MAX_TYPED_DATA_CHARS } ?: return null
             second is JsonPrimitive && second.isString -> {
                 val text = second.content.takeIf { it.length <= MAX_TYPED_DATA_CHARS } ?: return null
                 WcJson.parse(text) as? JsonObject ?: return null

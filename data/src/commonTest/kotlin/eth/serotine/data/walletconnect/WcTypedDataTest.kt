@@ -62,6 +62,8 @@ class WcTypedDataTest {
         // Only GPv2's own kinds and ERC-20 balances: another, or a Balancer vault balance, is not decoded.
         assertNull(meaning(cow.replace("\"kind\": \"sell\"", "\"kind\": \"SELL\"")))
         assertNull(meaning(cow.replace("\"sellTokenBalance\": \"erc20\"", "\"sellTokenBalance\": \"internal\"")))
+        // A fee on top of the sell amount: this app's own orders carry none, and one that does is not decoded.
+        assertNull(meaning(cow.replace("\"feeAmount\": \"0\"", "\"feeAmount\": \"5\"")))
         // The same struct for another verifying contract is not Permit2's, nor CoW's.
         assertNull(meaning(permit2.replace("0x000000000022D473030F116dDEE9F6B43aC78BA3", "0x000000000022D473030F116dDEE9F6B43aC78BA4")))
         assertNull(meaning(cow.replace("0x9008D19f58AAbD9eD0D60971565AA8510560ab41", "0x9008D19f58AAbD9eD0D60971565AA8510560ab42")))
@@ -80,6 +82,8 @@ class WcTypedDataTest {
         assertEquals(malformed, decode(permit.replace("\"deadline\": 1793703600", "\"deadline\": 1793703600, \"memo\": \"x\"")))
         val padded = json(permit).toString().dropLast(1) + "," + "\"pad\":\"" + "x".repeat(WcRequests.MAX_TYPED_DATA_CHARS) + "\"}"
         assertEquals(malformed, decode(padded))
+        // The same bound for the typed data sent as an object.
+        assertEquals(malformed, decode(padded, asString = false))
         // Nested deeper than EIP-712 allows: refused before anything walks it, with no stack overflow.
         val deep = "[".repeat(20_000) + "]".repeat(20_000)
         assertEquals(malformed, decode(permit.replace("\"nonce\": 0", "\"nonce\": $deep")))

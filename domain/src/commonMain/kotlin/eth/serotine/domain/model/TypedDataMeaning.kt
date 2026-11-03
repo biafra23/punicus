@@ -115,6 +115,9 @@ sealed interface TypedDataMeaning {
                     val balances = listOf("sellTokenBalance", "buyTokenBalance")
                         .map { (message.getValue(it) as TypedValue.Text).text }
                     if (balances.any { it != "erc20" }) return null
+                    // A fee is taken on top of the sell amount: this app's own orders carry none, and one that
+                    // does is not decoded, so the headline never understates what is signed away.
+                    if (!uint(message.getValue("feeAmount")).isZero) return null
                     CowOrder(
                         sellToken = address(message.getValue("sellToken")),
                         buyToken = address(message.getValue("buyToken")),

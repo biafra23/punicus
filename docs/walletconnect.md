@@ -232,6 +232,9 @@ everything on the chain side: the verified `call`, `estimateGasDetailed`,
     `0x000000000022D473030F116dDEE9F6B43aC78BA3`, CoW's settlement at
     `0x9008D19f58AAbD9eD0D60971565AA8510560ab41`. The same struct for another
     contract can mean anything, so it is not decoded.
+  - A GPv2 order is known only with `kind` sell or buy, ERC-20 balances and
+    no `feeAmount`: a fee is taken on top of the sell amount, and this app's
+    own orders carry none.
   - A permit's `owner` must be the account asked to sign it; otherwise the
     request is refused.
   - A token is named by the built-in list (its pinned symbol and decimals);
