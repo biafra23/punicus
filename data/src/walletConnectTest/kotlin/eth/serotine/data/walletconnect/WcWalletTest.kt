@@ -415,5 +415,18 @@ class WcWalletTest {
         settle()
         assertEquals("true", dapp.received.getValue(topic).last()["result"]?.jsonPrimitive?.content)
     }
+
+    @Test
+    fun aSessionMayHaveOnlySoManyRequestsWaiting() = runTest {
+        val running = walletConnect()
+        val dapp = dapp()
+        val topic = settled(running, dapp)
+        repeat(WcProtocol.PENDING_REQUESTS_PER_SESSION + 1) { dapp.sendOnSession(personalSign(1_000L + it)) }
+        settle()
+        assertEquals(WcProtocol.PENDING_REQUESTS_PER_SESSION, running.view().requests.size)
+        val refused = dapp.received.getValue(topic).last()
+        assertEquals("${1_000L + WcProtocol.PENDING_REQUESTS_PER_SESSION}", refused["id"]?.jsonPrimitive?.content)
+        assertEquals(-32005, refused.getValue("error").jsonObject.getValue("code").jsonPrimitive.int)
+    }
 }
 
