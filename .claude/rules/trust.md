@@ -1,5 +1,5 @@
 ---
-description: "Trust. Everything about the chain is verified by the embedded Myotis engine or shown as not available; the Safe refusals; network-upgrade warnings; a parameter is applied or refused; key material and how keys are held."
+description: "Trust. Everything about the chain is verified by the embedded Myotis engine or shown as not available; the Safe refusals; network-upgrade warnings; a parameter is applied or refused; what a dApp sends; key material and how keys are held."
 paths:
   - "domain/**/*"
   - "data/**/*"
@@ -111,6 +111,34 @@ than what the caller asked for cannot be told from a correct one. Every
 port's KDoc says what each argument does. An adapter that cannot honour one
 fails the call.
 
+## What a dApp sends is untrusted input
+
+(Owner rulings, 2026-11-03, #22; docs/walletconnect.md.)
+
+- **A closed list of methods:** `eth_sendTransaction`, `personal_sign`,
+  `eth_signTypedData_v4`, and `wallet_switchEthereumChain` to Sepolia only.
+  Every other method gets an unsupported-method error.
+- **`eth_sign` is refused in every case.** It signs a raw digest the dApp
+  chose, which is what phishing asks for. A digest Serotine signs for a dApp
+  is one it computed itself: EIP-191 for `personal_sign`, EIP-712 for typed
+  data.
+- A request is parsed strictly, with size limits. One that names another
+  chain, or a `from` or an address that is not one of the session's accounts,
+  is refused, never ignored.
+- **The review shows only what Serotine works out itself:** the calldata
+  decoded for the ABIs it knows, anything else raw and marked as not
+  decoded, and a simulation through the verified `call` and gas estimate.
+- **A dApp's `eth_sendTransaction` is answered only with an Ethereum
+  transaction hash.** For a Safe, the hash of the `execTransaction` sent,
+  never the `safeTxHash`. A request that cannot be met before it expires gets
+  an error.
+- A dApp's Safe transaction keeps every Safe refusal above.
+- **No key reaches the WalletConnect layer.** A local signature goes through
+  the signer port.
+- **Session secrets are not key material**, since they cannot move funds:
+  an app-private file, out of backups and device transfers, never logged,
+  and not under the wallet password.
+
 ## Key material
 
 An EOA's private key, a seed, a Safe owner key: it lives in the key-store
@@ -200,7 +228,13 @@ This is the summary a reviewer holds a diff against.
 - **Deleting an account's key needs no wallet password** (owner ruling,
   2026-10-18, #17): removing the account deletes its envelope, and the app
   asks the user to confirm the removal first (`RemoveAccountDialog`).
+- **A Safe owner's key may live in an external wallet** (owner ruling,
+  2026-11-03, #22), reached over WalletConnect. Its backup and its unlock
+  are that wallet's; Serotine keeps only the address and the session. Safe
+  owners only; an EOA's key in another wallet comes later or never. It is
+  asked for `eth_signTypedData_v4` of the `SafeTx` alone, never a bare hash
+  to sign blind, and its signature is kept only when it recovers, locally,
+  to the session's account and that account is a current owner.
 - **Open, the owner decides**, recorded here when made: the synced-passkey
-  owner tier, external signers, threshold signing with Myotis, and the dApp
-  connection protocol (WalletConnect is the candidate; its relay is a data
-  source, `.claude/rules/data-sources.md`).
+  owner tier, hardware external signers (#42), and threshold signing with
+  Myotis.

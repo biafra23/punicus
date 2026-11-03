@@ -40,6 +40,7 @@ it is not a basis for a cross-platform wallet. Two consequences follow:
 | **Hardware-bound Safe owner** | P-256 in the Secure Enclave / StrongBox | none: it is a device credential | the OS's own gate, bound to the key and chosen at creation: current biometrics only, or biometrics or device credential. This tier has no password factor | decided (2026-10-15); the key's policy is under *A Safe owned by a hardware P-256 key*, and it needs a recovery owner, see *Backup and recovery* |
 | **Mnemonic key** | secp256k1 from a BIP-39 seed, in the envelope | the mnemonic, written down once at creation | password; biometrics if the user enables them | decided (2026-10-15); every EOA, and a Safe owner the user wants to be able to restore |
 | **Synced-passkey Safe owner** | P-256 passkey through the platform WebAuthn API | synced end-to-end encrypted by iCloud Keychain / Google Password Manager | biometrics | recommended as an option; owner's decision open |
+| **Owner key in an external wallet** | secp256k1 in another wallet (MetaMask, say), reached over WalletConnect; Serotine keeps only its address and the session | the other wallet's | the other wallet's | decided (2026-11-03, #22); Safe owners only, an EOA later or never. It is asked for `eth_signTypedData_v4` of the `SafeTx` alone, and its signature is checked here (docs/walletconnect.md, *Direction 2*) |
 
 Which tier an account uses is the user's decision. The app explains the
 trade when the account is created and never downgrades a tier on its own.
@@ -758,10 +759,12 @@ value:
 3. **A smaller chance of the defect.** The signing path is one small,
    separately reviewed module with no feature flags or remote configuration
    on it. No dApp browser runs in the signing process; requests arrive
-   through a connection protocol that runs outside it. WalletConnect is the
-   candidate, and its relay is an off-chain service that goes under *Data
-   sources* in CLAUDE.md before it is wired in; what arrives through it is
-   untrusted input. Reproducible builds let others verify the binary. Calldata
+   through a connection protocol that runs outside it. That protocol is
+   WalletConnect v2 (owner rulings, 2026-11-03, #22; docs/walletconnect.md).
+   Its relay is an off-chain service under *Data sources* in CLAUDE.md, what
+   arrives through it is untrusted input, a dApp may call a closed list of
+   methods, and `eth_sign`, which would sign a digest the dApp chose, is
+   refused in every case. Reproducible builds let others verify the binary. Calldata
    decoding and transaction simulation protect against malicious dApps, which
    is the common case, but not against the app itself.
 
@@ -774,7 +777,9 @@ deception path, and nothing on a phone closes it completely.
 - **External signers** (Ledger over Bluetooth, Keystone over QR, Keycard and
   Tangem over NFC) keep the secp256k1 key off the phone entirely and bring a
   trusted screen. For a Safe wallet this is the natural top tier, and a
-  natural co-owner in the shapes above. Deferred: the owner decides when.
+  natural co-owner in the shapes above. Deferred: the owner decides when
+  (#42). A software wallet that holds an owner key, reached over
+  WalletConnect, is a tier of its own (*The account tiers*).
 - **Two-party threshold ECDSA with Myotis**, where neither the device share
   nor the server share can sign alone. Real protocol complexity, an
   availability dependency, and the device share still needs the envelope.

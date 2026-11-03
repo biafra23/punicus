@@ -20,7 +20,8 @@ design side.
   screens (N1 to N20), with `docs/networks-screens.html` and `.png`.
 - docs/simple-ui.md has simple mode, the default view, with its mockups H1
   to T1 (`docs/simple-ui-screens.html` and `.png`).
-- docs/swaps.md has the swap screens. docs/keys-and-signing.md says what the
+- docs/swaps.md has the swap screens, and docs/walletconnect.md the dApp
+  connection screens (D1 to D8). docs/keys-and-signing.md says what the
   user chooses between for keys, and what a screen may show of them.
 - docs/wallet-ux.md and docs/swaps.md say it themselves: where the page and
   the rules under `.claude/` disagree, the rules win and the page is fixed. A

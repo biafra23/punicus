@@ -1242,12 +1242,14 @@ Still the owner's decisions (CLAUDE.md, docs/keys-and-signing.md and issue
 #11):
 
 - importing a raw private key (an EOA comes from a recovery phrase);
-- the synced-passkey owner tier and external signers;
+- the synced-passkey owner tier and hardware external signers (#42);
 - which recovery modules come (none is pinned, so none is offered when a
   Safe is created, screen 14), and how: still open (issues #54, #72);
-- the dApp connection protocol;
 - any network beyond Ethereum, Gnosis Chain and Sepolia (owner ruling,
   2026-10-22; docs/networks.md).
 
 Swapping tokens has a page of its own, docs/swaps.md (issue #69). The swap
 screens there are numbered from 22.
+
+dApp connections have a page of their own too, docs/walletconnect.md (issue
+#22; owner rulings, 2026-11-03). Their screens there are numbered D1 to D8.

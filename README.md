@@ -121,7 +121,8 @@ user chooses between, and what a hardware key can and cannot guarantee:
 goes through (review, PR, CI, release): [CLAUDE.md](CLAUDE.md), the short
 form, with the full text under [`.claude/`](.claude/). The screens
 and the rules they follow: [docs/wallet-ux.md](docs/wallet-ux.md); swaps:
-[docs/swaps.md](docs/swaps.md); the light client inside the app:
+[docs/swaps.md](docs/swaps.md); dApp connections:
+[docs/walletconnect.md](docs/walletconnect.md); the light client inside the app:
 [docs/embedding-myotis.md](docs/embedding-myotis.md).
 
 ## Releases

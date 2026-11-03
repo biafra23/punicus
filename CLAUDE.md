@@ -32,8 +32,8 @@ or edited. A skill (`.claude/skills/<name>/SKILL.md`) loads on demand:
 | `platform.md` | every `.kt` and `.kts` file, `gradle/` | Kotlin conventions; Platform & language direction; the minSdk 29 JDK-API budget |
 | `ui.md` | `ui/`, the screen docs | the greyed-out rule, previews, how a screen is laid out |
 | `hosts.md` | `android-app/`, `desktop-app/`, `ios-app/` | composition roots, the two Android apps, signing |
-| `trust.md` | `domain/`, `data/`, `ui/`, the hosts, the root build files, `docs/` | Trust: verification, the Safe refusals, key material, how keys are held |
-| `data-sources.md` | `domain/`, `data/`, `ui/`, the hosts, the root build files, `docs/` | Data sources: networks, prices, tokens, Safe co-signing, history, swaps, CoW |
+| `trust.md` | `domain/`, `data/`, `ui/`, the hosts, the root build files, `docs/` | Trust: verification, the Safe refusals, dApp requests, key material, how keys are held |
+| `data-sources.md` | `domain/`, `data/`, `ui/`, the hosts, the root build files, `docs/` | Data sources: networks, prices, tokens, Safe co-signing, history, swaps, CoW, WalletConnect |
 | `github-workflows.md` | `.github/`, `scripts/` | the invariants of the workflows; how fork PRs are reviewed |
 | `instructions.md` | this file, `.claude/`, `docs/` | how to change these instructions |
 
@@ -216,6 +216,8 @@ Full text: `.claude/rules/trust.md`. These rules bind every change.
   2026-10-17).
 - A parameter that can change the answer is APPLIED or REFUSED, never
   accepted and silently ignored (Myotis #314).
+- What a dApp sends is untrusted input, held to a closed method list;
+  `eth_sign` is refused in every case (owner rulings, 2026-11-03, #22).
 - **Key material** lives in the key-store adapter and nowhere else. The
   exceptions are a closed list of owner rulings; today only the mnemonic
   screens (owner ruling, 2026-10-15): the words travel as the dedicated
@@ -249,4 +251,6 @@ rulings to the screens.
 - Where no Chainlink feed is pinned, a Uniswap pool's 30-minute average
   prices a token, labelled and counted in totals; a stale feed never falls
   back to it (owner ruling, 2026-10-29, #205).
-- Open, recorded here before its code lands: the dApp connection protocol.
+- dApps connect over WalletConnect v2, whose relay never supplies chain
+  state; a dApp session names Sepolia alone for now; the project ID is never
+  committed (owner rulings, 2026-11-03, #22; docs/walletconnect.md).

@@ -5,6 +5,7 @@ paths:
   - "docs/wallet-ux.md"
   - "docs/networks.md"
   - "docs/swaps.md"
+  - "docs/walletconnect.md"
 ---
 
 # UI rules
