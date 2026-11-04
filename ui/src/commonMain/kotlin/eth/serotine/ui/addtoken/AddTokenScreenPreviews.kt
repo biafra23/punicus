@@ -5,6 +5,7 @@ import eth.serotine.ui.components.LightClientItem
 import eth.serotine.ui.components.NetworkChip
 import eth.serotine.ui.components.NetworkLabel
 import eth.serotine.ui.components.verifiedStripSample
+import eth.serotine.ui.ScreenPreview
 import eth.serotine.ui.theme.SerotineTheme
 import org.jetbrains.compose.ui.tooling.preview.Preview
 
@@ -120,16 +121,16 @@ private fun AddTokenNetworksPreview() = AddTokenPreview(
 )
 
 /** Every preview above, which AddTokenScreenPreviewsTest renders: a new preview goes in here too. */
-internal val addTokenScreenPreviews: List<@Composable () -> Unit> = listOf(
-    { AddTokenEmptyPreview() },
-    { AddTokenReadingPreview() },
-    { AddTokenClaimPreview() },
-    { AddTokenClaimDarkPreview() },
-    { AddTokenImpostorPreview() },
-    { AddTokenKnownPreview() },
-    { AddTokenNotATokenPreview() },
-    { AddTokenInvalidAddressPreview() },
-    { AddTokenAddingPreview() },
-    { AddTokenNotSavedPreview() },
-    { AddTokenNetworksPreview() },
+internal val addTokenScreenPreviews: List<ScreenPreview> = listOf(
+    ScreenPreview("empty") { AddTokenEmptyPreview() },
+    ScreenPreview("reading") { AddTokenReadingPreview() },
+    ScreenPreview("claim") { AddTokenClaimPreview() },
+    ScreenPreview("claim-dark") { AddTokenClaimDarkPreview() },
+    ScreenPreview("impostor") { AddTokenImpostorPreview() },
+    ScreenPreview("known") { AddTokenKnownPreview() },
+    ScreenPreview("not-a-token") { AddTokenNotATokenPreview() },
+    ScreenPreview("invalid-address") { AddTokenInvalidAddressPreview() },
+    ScreenPreview("adding") { AddTokenAddingPreview() },
+    ScreenPreview("not-saved") { AddTokenNotSavedPreview() },
+    ScreenPreview("networks") { AddTokenNetworksPreview() },
 )

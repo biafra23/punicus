@@ -5,6 +5,7 @@ import eth.serotine.ui.components.Control
 import eth.serotine.ui.components.LightClientHealth
 import eth.serotine.ui.components.LightClientItem
 import eth.serotine.ui.components.NetworkLabel
+import eth.serotine.ui.ScreenPreview
 import eth.serotine.ui.theme.SerotineTheme
 import org.jetbrains.compose.ui.tooling.preview.Preview
 
@@ -168,14 +169,14 @@ private fun SimpleWatchSyncingPreview() = SimpleWatchPreview(syncing, syncLine =
 private fun SimpleWatchSyncingDarkPreview() = SimpleWatchPreview(syncing, darkTheme = true, syncLine = catchingUp)
 
 /** Every preview above, which SimpleWatchScreenPreviewsTest renders: a new preview goes in here too. */
-internal val simpleWatchScreenPreviews: List<@Composable () -> Unit> = listOf(
-    { SimpleWatchAccountPreview() },
-    { SimpleWatchAccountDarkPreview() },
-    { SimpleWatchSafePreview() },
-    { SimpleWatchNameResolvedPreview() },
-    { SimpleWatchNameOnOneRegistryPreview() },
-    { SimpleWatchNameUnverifiedOnOneRegistryPreview() },
-    { SimpleWatchEveryNetworkPreview() },
-    { SimpleWatchSyncingPreview() },
-    { SimpleWatchSyncingDarkPreview() },
+internal val simpleWatchScreenPreviews: List<ScreenPreview> = listOf(
+    ScreenPreview("account") { SimpleWatchAccountPreview() },
+    ScreenPreview("account-dark") { SimpleWatchAccountDarkPreview() },
+    ScreenPreview("safe") { SimpleWatchSafePreview() },
+    ScreenPreview("name-resolved") { SimpleWatchNameResolvedPreview() },
+    ScreenPreview("name-on-one-registry") { SimpleWatchNameOnOneRegistryPreview() },
+    ScreenPreview("name-unverified-on-one-registry") { SimpleWatchNameUnverifiedOnOneRegistryPreview() },
+    ScreenPreview("every-network") { SimpleWatchEveryNetworkPreview() },
+    ScreenPreview("syncing") { SimpleWatchSyncingPreview() },
+    ScreenPreview("syncing-dark") { SimpleWatchSyncingDarkPreview() },
 )

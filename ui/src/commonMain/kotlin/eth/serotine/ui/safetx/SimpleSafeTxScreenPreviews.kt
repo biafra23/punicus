@@ -7,6 +7,7 @@ import eth.serotine.ui.components.BalanceChange
 import eth.serotine.ui.components.SafeSwapItem
 import eth.serotine.ui.components.SafeTxActionItem
 import eth.serotine.ui.components.UnlockStep
+import eth.serotine.ui.ScreenPreview
 import eth.serotine.ui.theme.SerotineTheme
 import org.jetbrains.compose.ui.tooling.preview.Preview
 
@@ -168,12 +169,12 @@ private fun SimpleSafeTxApprovalPreview() = SimpleSafeTxPreview(
 )
 
 /** Every preview above, which SimpleSafeTxScreenPreviewsTest renders: a new preview goes in here too. */
-internal val simpleSafeTxScreenPreviews: List<@Composable () -> Unit> = listOf(
-    { SimpleSafeTxOverviewPreview() },
-    { SimpleSafeTxOverviewDarkPreview() },
-    { SimpleSafeTxReviewPreview() },
-    { SimpleSafeTxSwapPreview() },
-    { SimpleSafeTxRefusedPreview() },
-    { SimpleSafeTxSigningPreview() },
-    { SimpleSafeTxApprovalPreview() },
+internal val simpleSafeTxScreenPreviews: List<ScreenPreview> = listOf(
+    ScreenPreview("overview") { SimpleSafeTxOverviewPreview() },
+    ScreenPreview("overview-dark") { SimpleSafeTxOverviewDarkPreview() },
+    ScreenPreview("review") { SimpleSafeTxReviewPreview() },
+    ScreenPreview("swap") { SimpleSafeTxSwapPreview() },
+    ScreenPreview("refused") { SimpleSafeTxRefusedPreview() },
+    ScreenPreview("signing") { SimpleSafeTxSigningPreview() },
+    ScreenPreview("approval") { SimpleSafeTxApprovalPreview() },
 )

@@ -3,6 +3,7 @@ package eth.serotine.ui.activitydetail
 import androidx.compose.runtime.Composable
 import eth.serotine.ui.activity.ActivityState
 import eth.serotine.ui.components.AMOUNT_MASK
+import eth.serotine.ui.ScreenPreview
 import eth.serotine.ui.theme.SerotineTheme
 import org.jetbrains.compose.ui.tooling.preview.Preview
 
@@ -67,9 +68,9 @@ private fun SimpleActivityDetailHiddenPreview() = SimpleActivityDetailPreview(se
 private fun SimpleActivityDetailHiddenDarkPreview() = SimpleActivityDetailPreview(sentHidden, darkTheme = true)
 
 /** Every preview above, which SimpleActivityDetailScreenPreviewsTest renders: a new preview goes in here too. */
-internal val simpleActivityDetailScreenPreviews: List<@Composable () -> Unit> = listOf(
-    { SimpleActivityDetailSentPreview() },
-    { SimpleActivityDetailSentDarkPreview() },
-    { SimpleActivityDetailHiddenPreview() },
-    { SimpleActivityDetailHiddenDarkPreview() },
+internal val simpleActivityDetailScreenPreviews: List<ScreenPreview> = listOf(
+    ScreenPreview("sent") { SimpleActivityDetailSentPreview() },
+    ScreenPreview("sent-dark") { SimpleActivityDetailSentDarkPreview() },
+    ScreenPreview("hidden") { SimpleActivityDetailHiddenPreview() },
+    ScreenPreview("hidden-dark") { SimpleActivityDetailHiddenDarkPreview() },
 )

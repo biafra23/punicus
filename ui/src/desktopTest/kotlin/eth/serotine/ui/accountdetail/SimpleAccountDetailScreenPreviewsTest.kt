@@ -1,11 +1,12 @@
 package eth.serotine.ui.accountdetail
 
 import eth.serotine.ui.renderEach
+import eth.serotine.ui.Screens
 import kotlin.test.Test
 
 /** Renders every preview in SimpleAccountDetailScreenPreviews.kt. */
 class SimpleAccountDetailScreenPreviewsTest {
 
     @Test
-    fun everyPreviewRenders() = renderEach("simpleAccountDetailScreen", simpleAccountDetailScreenPreviews)
+    fun everyPreviewRenders() = renderEach(Screens.simpleAccountDetail)
 }

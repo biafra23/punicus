@@ -11,6 +11,7 @@ import eth.serotine.ui.components.SendFrom
 import eth.serotine.ui.components.SpenderItem
 import eth.serotine.ui.components.SwapForm
 import eth.serotine.ui.components.UnlockStep
+import eth.serotine.ui.ScreenPreview
 import eth.serotine.ui.theme.SerotineTheme
 import org.jetbrains.compose.ui.tooling.preview.Preview
 
@@ -247,15 +248,15 @@ private fun SimpleSwapNotSentPreview() = SimpleSwapPreview(
 )
 
 /** Every preview above, which SimpleSwapScreenPreviewsTest renders: a new preview goes in here too. */
-internal val simpleSwapScreenPreviews: List<@Composable () -> Unit> = listOf(
-    { SimpleSwapComposePreview() },
-    { SimpleSwapApprovalPreview() },
-    { SimpleSwapApprovalDarkPreview() },
-    { SimpleSwapPendingPreview() },
-    { SimpleSwapStepTwoPreview() },
-    { SimpleSwapCowPreview() },
-    { SimpleSwapResetFirstPreview() },
-    { SimpleSwapEarlierFailedPreview() },
-    { SimpleSwapOneStepPreview() },
-    { SimpleSwapNotSentPreview() },
+internal val simpleSwapScreenPreviews: List<ScreenPreview> = listOf(
+    ScreenPreview("compose") { SimpleSwapComposePreview() },
+    ScreenPreview("approval") { SimpleSwapApprovalPreview() },
+    ScreenPreview("approval-dark") { SimpleSwapApprovalDarkPreview() },
+    ScreenPreview("pending") { SimpleSwapPendingPreview() },
+    ScreenPreview("step-two") { SimpleSwapStepTwoPreview() },
+    ScreenPreview("cow") { SimpleSwapCowPreview() },
+    ScreenPreview("reset-first") { SimpleSwapResetFirstPreview() },
+    ScreenPreview("earlier-failed") { SimpleSwapEarlierFailedPreview() },
+    ScreenPreview("one-step") { SimpleSwapOneStepPreview() },
+    ScreenPreview("not-sent") { SimpleSwapNotSentPreview() },
 )

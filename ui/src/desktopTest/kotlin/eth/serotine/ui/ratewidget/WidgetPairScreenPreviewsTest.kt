@@ -1,11 +1,12 @@
 package eth.serotine.ui.ratewidget
 
 import eth.serotine.ui.renderEach
+import eth.serotine.ui.Screens
 import kotlin.test.Test
 
 /** Renders every preview in WidgetPairScreenPreviews.kt. */
 class WidgetPairScreenPreviewsTest {
 
     @Test
-    fun everyPreviewRenders() = renderEach("widgetPairScreen", widgetPairScreenPreviews)
+    fun everyPreviewRenders() = renderEach(Screens.widgetPair)
 }

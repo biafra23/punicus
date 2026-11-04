@@ -10,6 +10,7 @@ import eth.serotine.ui.components.SafeTxActionItem
 import eth.serotine.ui.components.SendFrom
 import eth.serotine.ui.components.TransferForm
 import eth.serotine.ui.components.UnlockStep
+import eth.serotine.ui.ScreenPreview
 import eth.serotine.ui.theme.SerotineTheme
 import org.jetbrains.compose.ui.tooling.preview.Preview
 
@@ -98,9 +99,9 @@ private fun SimpleSafeProposeRefusedPreview() = SimpleSafeProposePreview(
 )
 
 /** Every preview above, which SimpleSafeProposeScreenPreviewsTest renders: a new preview goes in here too. */
-internal val simpleSafeProposeScreenPreviews: List<@Composable () -> Unit> = listOf(
-    { SimpleSafeProposeComposePreview() },
-    { SimpleSafeProposeRefusedPreview() },
-    { SimpleSafeProposeReviewPreview() },
-    { SimpleSafeProposeReviewDarkPreview() },
+internal val simpleSafeProposeScreenPreviews: List<ScreenPreview> = listOf(
+    ScreenPreview("compose") { SimpleSafeProposeComposePreview() },
+    ScreenPreview("refused") { SimpleSafeProposeRefusedPreview() },
+    ScreenPreview("review") { SimpleSafeProposeReviewPreview() },
+    ScreenPreview("review-dark") { SimpleSafeProposeReviewDarkPreview() },
 )
