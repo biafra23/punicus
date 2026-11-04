@@ -211,7 +211,13 @@ class EngineLogIndex internal constructor(
         }
     }
 
-    /** One served log, or null when it is not one. */
+    /**
+     * One served log, or null when it is not one. Its block's time (`blockTimestamp`, which an
+     * engine reports from the walk that verified the block's header: a quantity, as the JSON-RPC
+     * shape has it, or a plain number, as the engine's other shapes carry it) is taken when it is
+     * there and well formed, and left null otherwise: an engine without it dates the log by its
+     * block alone, and a time it cannot say is no time, never a guess.
+     */
     private fun indexedLogOf(element: JsonElement): IndexedLog? {
         val log = element as? JsonObject ?: return null
         fun text(name: String) = (log[name] as? JsonPrimitive)?.takeIf { it.isString }?.content?.lowercase()
@@ -222,12 +228,16 @@ class EngineLogIndex internal constructor(
             word?.takeIf(WORD::matches) ?: return null
         } ?: return null
         val data = text("data")?.takeIf(DATA::matches) ?: return null
+        val timestamp = (log["blockTimestamp"] as? JsonPrimitive)?.let { time ->
+            if (time.isString) quantityOf(time.content.lowercase()) else time.longOrNull
+        }
         return IndexedLog(
             log = ReceiptLog(address, topics, data),
             blockNumber = text("blockNumber")?.let(::quantityOf) ?: return null,
             blockHash = text("blockHash")?.takeIf(WORD::matches) ?: return null,
             transactionHash = text("transactionHash")?.takeIf(WORD::matches) ?: return null,
             logIndex = text("logIndex")?.let(::quantityOf)?.takeIf { it <= Int.MAX_VALUE }?.toInt() ?: return null,
+            blockTimestamp = timestamp?.takeIf { it >= 0 },
         )
     }
 

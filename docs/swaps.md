@@ -926,11 +926,11 @@ the plan asks again (CLAUDE.md, *Multi-PR plans*, step 3).
    - Once it is proven not to have swapped (not filled, or cancelled),
      "Swap on Uniswap" opens Swap with the same swap filled in, on Uniswap,
      still the user's to review.
-   - The orders in the account's Activity (25), among its transactions: a
-     live one on top, as a transaction waiting for its block; a filled or
-     cancelled one at the block of its fill or cancellation; one never
-     filled where it was signed (the block that proved it can come days
-     later). A tap opens the order's status. A fill's own transfer of what
+   - The orders in the account's Activity (25), among its transactions by
+     date: a live one by when it was signed, as a transaction waiting for
+     its block goes by when a peer took it; a filled or cancelled one by
+     the block of its fill or cancellation; one never filled by when it was
+     signed (the block that proved it can come days later). A tap opens the order's status. A fill's own transfer of what
      it sold is not listed again.
    - Previews and tests.
 

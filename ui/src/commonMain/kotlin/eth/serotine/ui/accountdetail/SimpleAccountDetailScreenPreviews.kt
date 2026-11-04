@@ -173,15 +173,27 @@ private fun SimpleAccountActivityPreview() = SimpleAccountDetailPreview(
                     opens = ActivityKey("0x" + "a1".repeat(32)),
                     simpleStatus = "Confirmed",
                 ),
+                // Dated by its block's verified header, which the engine reported with it.
                 ActivityRow(
                     key = "0x" + "b2".repeat(32) + ":4",
                     title = "Received 0.5 ETH",
                     detail = "From Family Safe · 0xdbF0…C6FB",
                     about = FAMILY_SAFE,
-                    time = "Block 23,598,301",
+                    time = "Oct 25, 2026, 9:15 AM",
                     status = "On chain",
                     state = ActivityState.DONE,
                     opens = ActivityKey("0x" + "b2".repeat(32), 4),
+                ),
+                // Dated by its block alone: in simple mode, with no time.
+                ActivityRow(
+                    key = "0x" + "c3".repeat(32) + ":0",
+                    title = "Received 100 USDC",
+                    detail = "From 0x5aAe…eAed",
+                    about = "0x5aAeb6053F3E94C9b9A09f33669435E7Ef1BeAed",
+                    time = "Block 23,590,120",
+                    status = "On chain",
+                    state = ActivityState.DONE,
+                    opens = ActivityKey("0x" + "c3".repeat(32), 0),
                     simpleTime = null,
                 ),
             ),

@@ -82,6 +82,8 @@ private val unfamiliarSender = ActivityDetailUiState.Shown(
         DetailField("Amount", "0.01 USDC"),
         DetailField("Token contract", USDC, DetailKind.ADDRESS, "USDC"),
         DetailField("Transaction hash", "0x" + "f".repeat(64), DetailKind.HASH),
+        // When its block was produced, as the engine reported it from the block's verified header.
+        DetailField("Time", "Oct 19, 2026, 6:48 PM"),
         DetailField("Block", "9,418,200", DetailKind.BLOCK),
     ),
     note = "You have not sent to the sender's address from this device, and it is not one of your accounts. " +
@@ -99,6 +101,7 @@ private val safeEvent = ActivityDetailUiState.Shown(
         DetailField("Module", BOB, DetailKind.ADDRESS, "Bob"),
         DetailField("Safe", TREASURY, DetailKind.ADDRESS, "Treasury"),
         DetailField("Transaction hash", "0x" + "a".repeat(64), DetailKind.HASH),
+        DetailField("Time", "Oct 19, 2026, 5:42 PM"),
         DetailField("Block", "9,415,302", DetailKind.BLOCK),
     ),
 )

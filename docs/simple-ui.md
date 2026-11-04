@@ -203,10 +203,12 @@ change what it trusts.
   verified receipt that it succeeded; otherwise the card says the approval
   is on its way, failed in its block, or that Continue checks where it
   stands. Dismiss beside Continue lets it go. The card shows in Detailed
-  view too: it names no block. Then the rows, newest first: what happened, when
-  it was sent or signed here (an event on chain is dated only by its block,
-  so its row has no time), and how it ended in words ("Confirmed", "Final",
-  "Failed", "Filled"), never a block number. Above them "Activity since you
+  view too: it names no block. Then the rows, by date, newest first unless
+  the top bar's menu turned them round ("Oldest first"): what happened,
+  when it was sent or signed here, or when its block was produced for an
+  event on chain (one the engine dated by its block alone has no time
+  here), and how it ended in words ("Confirmed", "Final", "Failed",
+  "Filled"), never a block number. Above them "Activity since you
   added it" (or since it was deployed from this device), and "older
   activity is still being checked" while it is. The mockup's day headings
   and amounts' values are not built yet.

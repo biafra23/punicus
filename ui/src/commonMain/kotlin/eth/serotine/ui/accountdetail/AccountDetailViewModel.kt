@@ -42,7 +42,9 @@ import eth.serotine.domain.usecase.UpgradeWarning
 import eth.serotine.domain.usecase.Valuation
 import eth.serotine.ui.accounts.UnreachableNetwork
 import eth.serotine.ui.activity.AccountActivity
+import eth.serotine.ui.activity.ActivityOrder
 import eth.serotine.ui.activity.ActivityUiState
+import eth.serotine.ui.activity.ordered
 import eth.serotine.ui.components.AMOUNTS_NOT_SAVED
 import eth.serotine.ui.components.Control
 import eth.serotine.ui.components.DecodingToken
@@ -94,7 +96,8 @@ import kotlinx.coroutines.withContext
  * owners ([ObserveSafe]) and the transactions queued for them on this device
  * ([ObserveSafeTxQueue], decoded here, a token transfer's amount in the units of a token the
  * wallet knows: [ObserveKnownTokens]); and its Activity ([AccountActivity]), read only while its
- * tab is shown. Its intents are the order of the rows ([sortBy]), the segment shown ([show]) and hiding a token
+ * tab is shown. Its intents are the order of the rows ([sortBy], and [orderActivity] for the Activity's), the
+ * segment shown ([show]) and hiding a token
  * ([hideToken], said through [messageShown]); what else the user does from the screen is
  * navigation (Send, Receive, Rename, Remove, a row of its Activity, a queued transaction, Import a
  * request) or the
@@ -193,6 +196,7 @@ class AccountDetailViewModel(
     /** What the user chose to see, and what the last Hide token did until the screen has said it. */
     private data class View(
         val sort: AssetSort = AssetSort.VALUE,
+        val activityOrder: ActivityOrder = ActivityOrder.NEWEST_FIRST,
         val segment: DetailSegment = DetailSegment.ASSETS,
         val message: String? = null,
     )
@@ -317,7 +321,12 @@ class AccountDetailViewModel(
                     queue = queueOf(queue, safe),
                     nameNote = ensNameNote(lookup.account, ensName),
                     // Not the last one read while another tab is shown: that tab's state says Loading.
-                    activity = if (view.segment == DetailSegment.ACTIVITY) activity else ActivityUiState.Loading,
+                    activity = if (view.segment == DetailSegment.ACTIVITY) {
+                        activity.ordered(view.activityOrder)
+                    } else {
+                        ActivityUiState.Loading
+                    },
+                    activityOrder = view.activityOrder,
                     networkOn = networkOn,
                     networkBlocked = networkBlocked,
                     swapVenue = swapVenue,
@@ -363,6 +372,11 @@ class AccountDetailViewModel(
     /** Orders the rows by [order]. */
     fun sortBy(order: AssetSort) {
         view.update { it.copy(sort = order) }
+    }
+
+    /** Runs the Activity's rows the way [order] says: newest first, or the oldest on top. */
+    fun orderActivity(order: ActivityOrder) {
+        view.update { it.copy(activityOrder = order) }
     }
 
     /** Shows the account's [segment]: its Assets or Activity, or a Safe's Owners or Queue. */

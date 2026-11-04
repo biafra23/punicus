@@ -75,22 +75,24 @@ internal data class DecodingToken(val token: Token, val sharesBuiltInSymbol: Boo
  * [action], a transaction of a Safe at [nonce], as screens show it: a transfer's amount in the
  * token's units where the wallet knows the token ([tokens], the known ones by address), marked when
  * the token only takes a built-in token's symbol; its smallest units where it does not; and every
- * address it names in full.
+ * address it names in full. With [hideAmounts] every amount reads [AMOUNT_MASK] beside its unit
+ * (docs/wallet-ux.md, *Hiding amounts*); what is not an amount (a nonce, a threshold) stays.
  */
 internal fun safeTxActionItem(
     action: SafeTxAction,
     nonce: Long,
     tokens: List<DecodingToken>,
     network: Network,
+    hideAmounts: Boolean = false,
 ): SafeTxActionItem = when (action) {
     is SafeTxAction.NativeTransfer -> SafeTxActionItem(
-        title = "Send ${action.amount.formatUnits(NATIVE_DECIMALS)} ${network.nativeSymbol}",
+        title = "Send ${nativeAmount(action.amount, network, hideAmounts).text}",
         addresses = listOf(ActionAddress("To", Eip55.format(action.to))),
         icon = network.nativeIcon,
         symbol = network.nativeSymbol,
     )
     is SafeTxAction.TokenTransfer -> {
-        val amount = tokenAmount(action.token, action.amount, tokens)
+        val amount = tokenAmount(action.token, action.amount, tokens, hideAmounts)
         SafeTxActionItem(
             title = "Send ${amount.text}",
             addresses = listOf(
@@ -104,7 +106,7 @@ internal fun safeTxActionItem(
         )
     }
     is SafeTxAction.TokenApproval -> {
-        val amount = tokenAmount(action.token, action.amount, tokens)
+        val amount = tokenAmount(action.token, action.amount, tokens, hideAmounts)
         SafeTxActionItem(
             title = "Allow a contract to take ${amount.text}",
             addresses = listOf(
@@ -122,10 +124,10 @@ internal fun safeTxActionItem(
     }
     is SafeTxAction.Swap -> {
         val swap = action.swap
-        val sold = if (swap.sellsEther) nativeAmount(swap.amountIn, network) else
-            tokenAmount(swap.route.tokenIn, swap.amountIn, tokens)
-        val bought = if (swap.buysEther) nativeAmount(swap.minimumOut, network) else
-            tokenAmount(swap.route.tokenOut, swap.minimumOut, tokens)
+        val sold = if (swap.sellsEther) nativeAmount(swap.amountIn, network, hideAmounts) else
+            tokenAmount(swap.route.tokenIn, swap.amountIn, tokens, hideAmounts)
+        val bought = if (swap.buysEther) nativeAmount(swap.minimumOut, network, hideAmounts) else
+            tokenAmount(swap.route.tokenOut, swap.minimumOut, tokens, hideAmounts)
         SafeTxActionItem(
             title = "Swap ${sold.text} for at least ${bought.text}",
             addresses = listOfNotNull(
@@ -369,22 +371,29 @@ private class AmountText(
     val unknownNote: String? = null,
 )
 
-private fun nativeAmount(amount: UInt256, network: Network) = AmountText(
-    "${amount.formatUnits(NATIVE_DECIMALS)} ${network.nativeSymbol}",
+/** [amount] of the network's currency, or [AMOUNT_MASK] of it while amounts are [hidden]. */
+private fun nativeAmount(amount: UInt256, network: Network, hidden: Boolean = false) = AmountText(
+    "${if (hidden) AMOUNT_MASK else amount.formatUnits(NATIVE_DECIMALS)} ${network.nativeSymbol}",
     network.nativeIcon,
     network.nativeSymbol,
 )
 
-private fun tokenAmount(address: Address, amount: UInt256, tokens: List<DecodingToken>): AmountText {
+/** [amount] of the token at [address] in its units, or [AMOUNT_MASK] of it while amounts are [hidden]. */
+private fun tokenAmount(
+    address: Address,
+    amount: UInt256,
+    tokens: List<DecodingToken>,
+    hidden: Boolean = false,
+): AmountText {
     val known = tokens.firstOrNull { it.token.address == address }
         ?: return AmountText(
-            "${grouped(amount)} units of a token",
+            "${if (hidden) AMOUNT_MASK else grouped(amount)} units of a token",
             unknownNote = "Serotine does not know the token at this contract: the amount is in its smallest " +
                 "units, and how many decimals it has is not known here.",
         )
     val symbol = displaySymbol(known.token.symbol)
     return AmountText(
-        "${amount.formatUnits(known.token.decimals)} $symbol",
+        "${if (hidden) AMOUNT_MASK else amount.formatUnits(known.token.decimals)} $symbol",
         known.token.icon,
         symbol,
         warning = if (known.sharesBuiltInSymbol) "Not the built-in $symbol: another contract" else null,

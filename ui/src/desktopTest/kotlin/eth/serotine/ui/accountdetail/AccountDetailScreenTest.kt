@@ -39,6 +39,7 @@ import androidx.compose.ui.unit.height
 import eth.serotine.domain.model.AccountKind
 import eth.serotine.ui.activity.ACTIVITY_ROW_TAG
 import eth.serotine.ui.activity.ActivityKey
+import eth.serotine.ui.activity.ActivityOrder
 import eth.serotine.ui.activity.ActivityRow
 import eth.serotine.ui.activity.ActivityState
 import eth.serotine.ui.activity.ActivityUiState
@@ -210,12 +211,45 @@ class AccountDetailScreenTest {
     }
 
     @Test
-    fun theActivityOffersNoSort() {
-        show(ready.copy(segment = DetailSegment.ACTIVITY))
+    fun theActivityOffersTheOtherOrderInPlaceOfTheSort() {
+        var state by mutableStateOf(ready.copy(segment = DetailSegment.ACTIVITY))
+        rule.setContent {
+            SerotineTheme {
+                AccountDetailScreen(
+                    state,
+                    chrome = AccountChrome.Strip(verifiedStripSample),
+                    onBack = {},
+                    onSend = {},
+                    onSwap = {},
+                    onReceive = {},
+                    onCopy = {},
+                    onRename = {},
+                    onRemove = {},
+                    onHideToken = { _, _ -> },
+                    onMessageShown = {},
+                    onSort = { events += "sort $it" },
+                    onSegment = {},
+                    onOpenSafeTx = {},
+                    onImportRequest = {},
+                    onOpenActivity = {},
+                    onOrderActivity = { order ->
+                        events += "order $order"
+                        state = state.copy(activityOrder = order)
+                    },
+                )
+            }
+        }
 
         rule.onNodeWithContentDescription("More actions").performClick()
         rule.onNodeWithText("Rename").assertIsDisplayed()
         rule.onNodeWithText("Sort by name").assertDoesNotExist()
+        rule.onNodeWithText("Newest first").assertDoesNotExist()
+        rule.onNodeWithText("Oldest first").performClick()
+        rule.onNodeWithContentDescription("More actions").performClick()
+        rule.onNodeWithText("Oldest first").assertDoesNotExist()
+        rule.onNodeWithText("Newest first").performClick()
+
+        assertEquals(listOf("order OLDEST_FIRST", "order NEWEST_FIRST"), events)
     }
 
     @Test
