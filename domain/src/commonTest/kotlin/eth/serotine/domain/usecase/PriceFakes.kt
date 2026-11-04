@@ -2,6 +2,7 @@ package eth.serotine.domain.usecase
 
 import eth.serotine.domain.model.Address
 import eth.serotine.domain.model.DisplayCurrency
+import eth.serotine.domain.model.Network
 import eth.serotine.domain.model.PriceId
 import eth.serotine.domain.repository.BalanceReading
 import eth.serotine.domain.repository.CurrencyChoice
@@ -17,18 +18,31 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.flowOf
 
 /** [PriceFeeds] with the feeds of [quotes], each answering what a test sets; Syncing until then. */
-internal class FakeFeeds(override val quotes: Map<PriceId, PriceId>) : PriceFeeds {
+internal class FakeFeeds(
+    val quotesTable: Map<PriceId, PriceId>,
+    /** A network's own table where it has one; [quotesTable] for every other. */
+    private val byNetwork: Map<Network, Map<PriceId, PriceId>> = emptyMap(),
+) : PriceFeeds {
+    override fun quotes(network: Network): Map<PriceId, PriceId> = byNetwork[network] ?: quotesTable
+
     private val readings = mutableMapOf<PriceId, MutableStateFlow<FeedReading>>()
 
     fun of(id: PriceId) = readings.getOrPut(id) { MutableStateFlow(FeedReading.Syncing) }
 
-    /** Sets the feed of [id] to a fresh [price], updated at [updatedAt], [ageSeconds] old. */
-    fun answer(id: PriceId, price: Double, updatedAt: Long = 1_000, ageSeconds: Long = 60, stale: Boolean = false) {
-        of(id).value = FeedReading.Verified(price, updatedAt, ageSeconds, stale)
+    /** Sets the feed of [id] to a fresh [price], [ageSeconds] old; a pool's average if [pool]. */
+    fun answer(
+        id: PriceId,
+        price: Double,
+        updatedAt: Long = 1_000,
+        ageSeconds: Long = 60,
+        stale: Boolean = false,
+        pool: Boolean = false,
+    ) {
+        of(id).value = FeedReading.Verified(price, updatedAt, ageSeconds, stale, poolAverage = pool)
     }
 
-    override fun observe(priceId: PriceId): Flow<FeedReading> =
-        if (priceId in quotes) of(priceId) else flowOf(FeedReading.NoPrice(NoPriceReason.NO_FEED))
+    override fun observe(network: Network, priceId: PriceId): Flow<FeedReading> =
+        if (priceId in quotesTable) of(priceId) else flowOf(FeedReading.NoPrice(NoPriceReason.NO_FEED))
 }
 
 /** A [DisplayCurrencySetting] in memory; [failSaves] makes a choice fail. */
@@ -51,7 +65,7 @@ internal class FakeNativeBalances : NativeBalances {
 
     fun of(address: Address) = readings.getOrPut(address) { MutableStateFlow(BalanceReading.Syncing) }
 
-    override fun observeBalance(address: Address): Flow<BalanceReading> = of(address)
+    override fun observeBalance(network: Network, address: Address): Flow<BalanceReading> = of(address)
 }
 
 /** [TokenBalances] answering what a test sets, per holder and token; Syncing until then. */
@@ -61,7 +75,10 @@ internal class FakeTokenBalances : TokenBalances {
     fun of(holder: Address, token: Address) =
         readings.getOrPut(holder to token) { MutableStateFlow(TokenBalanceReading.Syncing) }
 
-    override fun observeBalance(holder: Address, token: Address): Flow<TokenBalanceReading> = of(holder, token)
+    override fun observeBalance(network: Network, holder: Address, token: Address): Flow<TokenBalanceReading> = of(
+        holder,
+        token,
+    )
 }
 
 internal val ETH = PriceId("ETH")

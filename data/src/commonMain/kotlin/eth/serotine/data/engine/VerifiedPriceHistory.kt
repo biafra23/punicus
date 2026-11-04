@@ -2,18 +2,19 @@ package eth.serotine.data.engine
 
 import eth.serotine.data.engine.Abi.RoundId
 import eth.serotine.data.prices.PinnedFeed
+import eth.serotine.domain.model.Network
 import eth.serotine.domain.model.PriceId
 import eth.serotine.domain.repository.NoPriceReason
 import eth.serotine.domain.repository.PastReading
 import eth.serotine.domain.repository.PriceHistory
 import eth.serotine.domain.repository.ReadUnavailable
+import kotlin.math.pow
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
-import kotlin.math.pow
 
 /**
  * [PriceHistory] over a verified light client: a [PinnedFeed]'s round of some time ago, found in
@@ -34,6 +35,7 @@ import kotlin.math.pow
  * is [ReadUnavailable.UNPROVEN], as is a search that runs out of calls.
  */
 class VerifiedPriceHistory internal constructor(
+    private val served: Network,
     private val chain: VerifiedChain?,
     private val dispatcher: CoroutineDispatcher,
     feeds: List<PinnedFeed>,
@@ -45,7 +47,8 @@ class VerifiedPriceHistory internal constructor(
     private val kept = mutableMapOf<PriceId, LinkedHashMap<RoundId, Abi.Round>>()
     private val lock = Mutex()
 
-    override suspend fun before(priceId: PriceId, secondsBefore: Long): PastReading {
+    override suspend fun before(network: Network, priceId: PriceId, secondsBefore: Long): PastReading {
+        if (network != served) return PastReading.Unavailable(ReadUnavailable.NO_ENGINE)
         val feed = pinned[priceId] ?: return PastReading.NoPrice(NoPriceReason.NO_FEED)
         val chain = chain ?: return PastReading.Unavailable(ReadUnavailable.NO_ENGINE)
         return withContext(dispatcher) {
@@ -62,8 +65,15 @@ class VerifiedPriceHistory internal constructor(
 
     private suspend fun search(chain: VerifiedChain, feed: PinnedFeed, secondsBefore: Long): PastReading {
         val snapshot = chain.snapshot()
-        if (snapshot == EngineSnapshot.Down) return PastReading.Unavailable(ReadUnavailable.NO_ENGINE)
-        if (snapshot !is EngineSnapshot.Running) return PastReading.Syncing
+        // No engine, a failed start or a network that is off say so; one still starting is checking.
+        if (snapshot !is EngineSnapshot.Running) {
+            val why = whyUnreadable(snapshot)
+            return if (why == null || why == ReadUnavailable.UNPROVEN || why == ReadUnavailable.SYNCING) {
+                PastReading.Syncing
+            } else {
+                PastReading.Unavailable(why)
+            }
+        }
         if (snapshot.phase == EngineSnapshot.Phase.STALE_ANCHOR) {
             return PastReading.Unavailable(ReadUnavailable.STALE_ANCHOR)
         }

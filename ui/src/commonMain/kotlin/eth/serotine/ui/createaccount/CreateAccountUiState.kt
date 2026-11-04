@@ -2,6 +2,8 @@ package eth.serotine.ui.createaccount
 
 import eth.serotine.domain.model.Mnemonic
 import eth.serotine.domain.model.WalletPassword
+import eth.serotine.ui.components.NO_NETWORK_TICKED
+import eth.serotine.ui.components.NetworkChoice
 import eth.serotine.ui.components.PasswordStep
 
 /**
@@ -39,7 +41,8 @@ sealed interface CreateAccountUiState {
 
     /**
      * The wallet password for the account's key: set and repeated on the first key ([step]
-     * [PasswordStep.New]), the wallet's own on a later one. [creating] while the key is
+     * [PasswordStep.New]), the wallet's own on a later one; and the [networks] to add the account
+     * to, none ticked until the user ticks one (docs/networks.md, N8). [creating] while the key is
      * stored; [error] and [passwordError] why the last attempt was refused.
      */
     data class Securing(
@@ -50,6 +53,7 @@ sealed interface CreateAccountUiState {
         val creating: Boolean = false,
         val error: String? = null,
         val passwordError: String? = null,
+        val networks: List<NetworkChoice> = emptyList(),
     ) : CreateAccountUiState {
 
         /** What is wrong with the password, display-ready, or null. */
@@ -63,12 +67,23 @@ sealed interface CreateAccountUiState {
             }
 
         /** A usable password, while no attempt runs. */
-        val canCreate: Boolean
+        val passwordReady: Boolean
             get() = !creating && when (step) {
                 PasswordStep.Checking, PasswordStep.Unavailable -> false
                 is PasswordStep.New -> password.isLongEnough && repeat.text == password.text
                 is PasswordStep.Existing -> password.text.isNotEmpty()
             }
+
+        /**
+         * Why Create cannot be done yet with a usable password: no network ticked, which Create,
+         * greyed out, says on a tap (owner ruling, 2026-10-18, #55); null when one is.
+         */
+        val networkReason: String?
+            get() = NO_NETWORK_TICKED.takeIf { networks.none { it.chosen && it.on } }
+
+        /** A usable password and a network ticked, while no attempt runs. */
+        val canCreate: Boolean
+            get() = passwordReady && networkReason == null
     }
 
     /** The screen was left while the key was being stored: that finishes, without the words or the password. */

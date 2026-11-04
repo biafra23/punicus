@@ -26,17 +26,17 @@ import eth.serotine.domain.repository.CowOrderRecord
 import eth.serotine.domain.repository.CowPlacement
 import eth.serotine.domain.repository.CowQuoteReading
 import eth.serotine.domain.repository.CowRefusal
-import eth.serotine.domain.repository.CowVenueReading
 import eth.serotine.domain.repository.CowUnavailable
+import eth.serotine.domain.repository.CowVenueReading
 import eth.serotine.domain.repository.FeeLevel
 import eth.serotine.domain.repository.FeeQuote
 import eth.serotine.domain.repository.FeeReading
 import eth.serotine.domain.repository.FinalizedBlock
 import eth.serotine.domain.repository.GasEstimate
 import eth.serotine.domain.repository.HistoryStart
-import eth.serotine.domain.repository.LightClientStatus
 import eth.serotine.domain.repository.HistoryStartList
 import eth.serotine.domain.repository.HistoryStarts
+import eth.serotine.domain.repository.LightClientStatus
 import eth.serotine.domain.repository.NonceReading
 import eth.serotine.domain.repository.ReadUnavailable
 import eth.serotine.domain.repository.SentAction
@@ -48,12 +48,12 @@ import eth.serotine.domain.repository.TransactionInputs
 import eth.serotine.domain.repository.UniswapV3Chain
 import eth.serotine.domain.repository.Unlock
 import eth.serotine.domain.repository.VenueReading
-import kotlinx.coroutines.flow.flowOf
-import kotlinx.coroutines.test.runTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertIs
 import kotlin.test.assertTrue
+import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.test.runTest
 
 class CowSwapsTest {
     private val account = Address.of("0x" + "ac".repeat(20))
@@ -245,6 +245,7 @@ class CowSwapsTest {
     fun whatTheAccountsOwnSendsStillMoveIsNotTheOrders() = runTest {
         sent.transfers.value = listOf(
             SentTransfer(
+                network = Network.SEPOLIA,
                 account = account,
                 nonce = 7,
                 signed = SignedTransfer(byteArrayOf(2, 7)),
@@ -294,6 +295,7 @@ class CowSwapsTest {
     }
 
     private fun maybeSent() = SentTransfer(
+        network = Network.SEPOLIA,
         account = account,
         nonce = 7,
         signed = SignedTransfer(byteArrayOf(2, 9)),
@@ -330,6 +332,7 @@ class CowSwapsTest {
     @Test
     fun anApprovalOfTheVaultRelayerOnItsWayIsWaitedFor() = runTest {
         val approval = SentTransfer(
+            network = Network.SEPOLIA,
             account = account,
             nonce = 7,
             signed = SignedTransfer(byteArrayOf(2, 8)),
@@ -523,7 +526,7 @@ class CowSwapsTest {
 
         override suspend fun venue(network: Network): VenueReading = venue
 
-        override suspend fun call(to: Address, data: ByteArray): Simulation {
+        override suspend fun call(network: Network, to: Address, data: ByteArray): Simulation {
             if (unavailable) return Simulation.Unavailable(ReadUnavailable.UNPROVEN)
             answers[to to data.toHex()]?.let { return Simulation.Succeeded(it, 120) }
             if (to == uniswap.factory) return Simulation.Succeeded("00".repeat(32), 120)
@@ -535,9 +538,9 @@ class CowSwapsTest {
     private inner class Inputs : TransactionInputs {
         val runs = mutableMapOf<Pair<Address, String>, String>()
 
-        override suspend fun nonce(account: Address): NonceReading = NonceReading.Read(7)
-        override suspend fun minedNonce(account: Address): NonceReading = NonceReading.Read(7)
-        override suspend fun fees(): FeeReading = FeeReading.Quoted(
+        override suspend fun nonce(network: Network, account: Address): NonceReading = NonceReading.Read(7)
+        override suspend fun minedNonce(network: Network, account: Address): NonceReading = NonceReading.Read(7)
+        override suspend fun fees(network: Network): FeeReading = FeeReading.Quoted(
             FeeQuote(
                 nextBaseFee = UInt256.of(10_000_000_000L),
                 tips = FeeLevel.entries.associateWith { UInt256.of(1_000_000_000L) },
@@ -545,10 +548,21 @@ class CowSwapsTest {
             ),
         )
 
-        override suspend fun estimateGas(from: Address, to: Address, value: UInt256, data: ByteArray): GasEstimate =
-            GasEstimate.Estimated(80_000)
+        override suspend fun estimateGas(
+            network: Network,
+            from: Address,
+            to: Address,
+            value: UInt256,
+            data: ByteArray,
+        ): GasEstimate = GasEstimate.Estimated(80_000)
 
-        override suspend fun simulate(from: Address, to: Address, value: UInt256, data: ByteArray): Simulation =
+        override suspend fun simulate(
+            network: Network,
+            from: Address,
+            to: Address,
+            value: UInt256,
+            data: ByteArray,
+        ): Simulation =
             Simulation.Succeeded(runs[to to data.toHex()] ?: ("00".repeat(31) + "01"), 120)
     }
 }

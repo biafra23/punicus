@@ -12,16 +12,24 @@ A Compose Multiplatform wallet for Ethereum accounts (EOAs) and
 [Myotis](https://github.com/biafra23/myotis) engine: every chain read is
 verified against Ethereum's sync committee by a light client running inside
 the app, with no RPC provider in the loop. Android, desktop (Linux, macOS,
-Windows) and iOS (a development build for now). For now the app works on the
-Sepolia testnet only.
+Windows) and iOS (a development build for now). It works on Ethereum and
+Gnosis Chain, with real funds, and on the Sepolia testnet; each account lives
+on one chain. A release build starts with Ethereum and Gnosis Chain on and
+Sepolia off, a debug build with Sepolia alone, and each network can be turned
+on or off in Settings.
 
 ## Status
 
-Early, with no release tagged yet (the version is `0.1.0-SNAPSHOT`).
+Early, with pre-releases only (the version is `0.2.0-SNAPSHOT`; every `v*` tag
+publishes a pre-release).
 What the app does today:
 
+- **Simple mode** is the default view in both builds; Settings → Advanced →
+  *Detailed view* shows the screens that say how the wallet checks the chain
+  (docs/simple-ui.md).
 - **Accounts.** Create an account from a new recovery phrase, import one from
-  a phrase, or watch any address, which is told apart from verified code and
+  a phrase, add further accounts from a phrase already held, or watch any
+  address, which is told apart from verified code and
   storage as an EOA (delegated or not), a Safe or another contract. Accounts
   are kept across restarts and can be renamed and removed.
 - **Keys.** An imported or created seed is held in an envelope that opens only
@@ -35,7 +43,10 @@ What the app does today:
   proven at; while no fresh verified head exists, the last proven balance stays
   on screen, dated and marked as possibly changed. A built-in token list with
   bundled icons, tokens added by address, and a display currency priced by
-  Chainlink feeds read on chain ("testnet prices").
+  Chainlink feeds read on chain; where no feed is pinned, a pinned Uniswap
+  pool's 30-minute average, labelled as such. Sepolia's prices are labelled
+  "testnet prices", and its balances never count in a total with real funds. An Android
+  home-screen widget shows one verified exchange rate.
 - **Send and receive.** ETH and ERC-20 transfers with a verified nonce, fee and
   gas estimate, a review step, and a status screen that follows the verified
   receipt to finalization; a recipient may be an ENS name, resolved with a
@@ -53,20 +64,37 @@ What the app does today:
 - **Swaps on Uniswap v3** from an account or a Safe: verified quotes from the
   pinned contracts, an exact-amount approval, a slippage tolerance (0.5 % by
   default) and the price impact, with the amount received read from the
-  verified receipt (docs/swaps.md).
+  verified receipt. Or through **CoW Protocol**, when the user chooses it: its
+  order API is used only for an order sent to CoW (docs/swaps.md).
 - **Activity.** Every transaction this device sent, kept for good with how it
-  ended as the device saw it.
+  ended as the device saw it, and, from the engine's verified log index, an
+  account's token transfers and a Safe's own events on chain, CoW orders
+  among them.
 - **Network upgrades.** When peers announce a network upgrade this version
   does not support, the app warns ahead of it, notifies (on Android also while
   it is closed), and once the upgrade has cut it off shows nothing but the way
   to the update.
+- **dApp connections**, on Sepolia, over WalletConnect v2. A dApp connects
+  with a pasted `wc:` URI (or a `wc:` link on Android), and sees only the
+  accounts the user chooses. It can ask to sign in, to sign typed data, and
+  to send a transaction: from an account held here, or proposed from a Safe
+  as a Safe transaction. Each is reviewed from verified state before
+  anything is signed, and `eth_sign` is refused.
 
-Not built yet: swaps through CoW Protocol (waiting on the owner's ruling on
-its order API), transactions received or sent from elsewhere in Activity,
-a Safe owned by a device's hardware P-256 key, recovery modules, dApp
-connections, an iOS build for the App Store, and any network other than
-Sepolia.
+Not built yet: ETH an EOA received and transactions sent from it elsewhere
+in Activity, a Safe owned by a device's hardware P-256 key, recovery modules,
+an external wallet as a Safe owner's signer, and an iOS build for the App
+Store.
 docs/wallet-ux.md describes every screen, with what is built and what is not.
+
+**What leaves the device.** The wallet never takes chain data from a server:
+no RPC provider, no indexer. Two optional features use a third-party
+service. A swap the user sends to CoW Protocol goes to CoW's order API
+(docs/swaps.md). dApp connections go through WalletConnect's relay: today a
+centralised service, run by Reown and a selected group of operators. It
+carries end-to-end encrypted messages only. It sees the device's IP address
+and when it is connected, never what is signed, and it cannot sign anything
+(docs/walletconnect.md). The embedded Myotis engine itself uses neither.
 
 ## Build & run
 
@@ -106,22 +134,27 @@ The dependency rule, the MVVM contract and how to add a feature:
 [docs/architecture.md](docs/architecture.md). How keys are held, what the
 user chooses between, and what a hardware key can and cannot guarantee:
 [docs/keys-and-signing.md](docs/keys-and-signing.md). The rules every change
-goes through (review, PR, CI, release): [CLAUDE.md](CLAUDE.md). The screens
+goes through (review, PR, CI, release): [CLAUDE.md](CLAUDE.md), the short
+form, with the full text under [`.claude/`](.claude/). The screens
 and the rules they follow: [docs/wallet-ux.md](docs/wallet-ux.md); swaps:
-[docs/swaps.md](docs/swaps.md); the light client inside the app:
+[docs/swaps.md](docs/swaps.md); dApp connections:
+[docs/walletconnect.md](docs/walletconnect.md); the light client inside the app:
 [docs/embedding-myotis.md](docs/embedding-myotis.md).
 
 ## Releases
 
-Every `v*` tag publishes a pre-release with the signed Android APK (once its
-release key is set up, docs/android-release-signing.md), the debug APK, the
+Every `v*` tag publishes a pre-release with the Android APK signed with
+Serotine's release key, the debug APK, the
 macOS dmgs (arm64 + x64) and the Linux debs (x64, and arm64 while the
 repository is public). The Windows msi joins them once Myotis ships a Windows
 engine library; until then it is built on `main` but not published. The
 tag's version must match the `version` in `build.gradle.kts`
 (release-version-guard.yml refuses otherwise), and the Android release key
 lives only in the `android-release` environment
-([docs/android-release-signing.md](docs/android-release-signing.md)).
+([docs/android-release-signing.md](docs/android-release-signing.md)). Its
+certificate's SHA-256 is pinned in `android-app/release-signing-cert.sha256`;
+`apksigner verify --print-certs` on a downloaded `Serotine-<tag>-android.apk`
+must print the same digest.
 
 ## License
 

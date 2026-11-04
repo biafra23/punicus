@@ -1,5 +1,6 @@
 package eth.serotine.data.transfers
 
+import eth.serotine.domain.model.AccountId
 import eth.serotine.domain.model.Address
 import eth.serotine.domain.model.CowOrderUid
 import eth.serotine.domain.model.Network
@@ -15,6 +16,11 @@ import eth.serotine.domain.repository.SafeListing
 import eth.serotine.domain.repository.SentAction
 import eth.serotine.domain.repository.SentTransfer
 import eth.serotine.domain.repository.SentTransferList
+import kotlin.random.Random
+import kotlin.test.AfterTest
+import kotlin.test.Test
+import kotlin.test.assertEquals
+import kotlin.test.assertTrue
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.StandardTestDispatcher
@@ -26,11 +32,6 @@ import kotlinx.io.files.SystemFileSystem
 import kotlinx.io.files.SystemTemporaryDirectory
 import kotlinx.io.readString
 import kotlinx.io.writeString
-import kotlin.random.Random
-import kotlin.test.AfterTest
-import kotlin.test.Test
-import kotlin.test.assertEquals
-import kotlin.test.assertTrue
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class FileSentTransfersTest {
@@ -45,6 +46,7 @@ class FileSentTransfersTest {
 
     private fun transfer(nonce: Long, asset: TransferAsset = TransferAsset.Native, account: Address = alice) =
         SentTransfer(
+            network = Network.SEPOLIA,
             account = account,
             nonce = nonce,
             signed = SignedTransfer(byteArrayOf(2, nonce.toByte(), -1)),
@@ -92,7 +94,7 @@ class FileSentTransfersTest {
 
         // However old one not mined is, it stays: past its lifetime it holds nothing, and its
         // status is still found.
-        assertTrue(store.prune(alice, minedCount = 8, unlistedBefore = 0))
+        assertTrue(store.prune(AccountId(Network.SEPOLIA, alice), minedCount = 8, unlistedBefore = 0))
 
         assertEquals(listOf(transfer(8), transfer(9), transfer(3, account = bob)), stored())
     }
@@ -123,11 +125,11 @@ class FileSentTransfersTest {
         store.record(listed)
 
         // Both mined and old: the listed one goes; the unlisted one stays, its owners and name with it.
-        assertTrue(store.prune(alice, minedCount = 8, unlistedBefore = 1_800_000_006))
+        assertTrue(store.prune(AccountId(Network.SEPOLIA, alice), minedCount = 8, unlistedBefore = 1_800_000_006))
         assertEquals(listOf(unlisted), stored())
 
         // Past its own bound, it goes too.
-        assertTrue(store.prune(alice, minedCount = 8, unlistedBefore = 1_800_000_007))
+        assertTrue(store.prune(AccountId(Network.SEPOLIA, alice), minedCount = 8, unlistedBefore = 1_800_000_007))
         assertEquals(emptyList(), stored())
     }
 
@@ -215,7 +217,7 @@ class FileSentTransfersTest {
 
         assertEquals(listOf(wrap, unwrap), stored())
         val text = SystemFileSystem.source(file).buffered().use { it.readString() }
-        assertTrue(text.startsWith("""{"version":7,"""), "written as format 7: $text")
+        assertTrue(text.startsWith("""{"version":9,"""), "written as format 9: $text")
     }
 
     @Test
@@ -224,7 +226,7 @@ class FileSentTransfersTest {
         val weth = """{"address":"${bob.hex}","symbol":"WETH","name":"Wrapped Ether","decimals":18}"""
         val wrap = """{"account":"${alice.hex}","nonce":8,"raw":"0208ff",""" +
             """"wrap":{"kind":"rewrap","weth":$weth,"amount":"1"},"maxCost":"1","sentAt":1800000008}"""
-        SystemFileSystem.sink(file).buffered().use { it.writeString("""{"version":7,"transfers":[$wrap]}""") }
+        SystemFileSystem.sink(file).buffered().use { it.writeString("""{"version":9,"transfers":[$wrap]}""") }
 
         assertEquals(emptyList(), stored())
     }
@@ -239,7 +241,23 @@ class FileSentTransfersTest {
 
         assertEquals(listOf(cancellation), stored())
         val text = SystemFileSystem.source(file).buffered().use { it.readString() }
-        assertTrue(text.startsWith("""{"version":7,"""), "written as format 7: $text")
+        assertTrue(text.startsWith("""{"version":9,"""), "written as format 9: $text")
+    }
+
+    @Test
+    fun aDappsTransactionIsRecordedWithItsRecipientValueAndDapp() = runTest {
+        val call = transfer(7).copy(action = SentAction.DappCall(
+                bob,
+                UInt256.of(1_000),
+                "Example dApp",
+                eth.serotine.domain.repository.DappRequestId(eth.serotine.domain.repository.DappSessionId("ab".repeat(32)), 42),
+            ),)
+
+        record().record(call)
+
+        assertEquals(listOf(call), stored())
+        val text = SystemFileSystem.source(file).buffered().use { it.readString() }
+        assertTrue(text.startsWith("""{"version":9,"""), "written as format 9: $text")
     }
 
     @Test
@@ -253,6 +271,32 @@ class FileSentTransfersTest {
         SystemFileSystem.sink(file).buffered().use { it.writeString("""{"version":6,"transfers":[$both]}""") }
 
         assertEquals(emptyList(), stored())
+    }
+
+    @Test
+    fun aSixthFormatRecordOfEitherBuildReadsAsItWasWritten() = runTest {
+        SystemFileSystem.createDirectories(directory)
+        val settlement = Address.of("0x9008d19f58aabd9ed0d60971565aa8510560ab41")
+        val uid = "0x" + "ab".repeat(32) + alice.hex.removePrefix("0x") + "6ad9e7f4"
+        // Two builds took format 6 apart: main's for a CoW cancellation, with no chain (Sepolia, the
+        // only network there was), and feature/networks's for each record's chain.
+        val cancellation = """{"account":"${alice.hex}","nonce":7,"raw":"0207ff",""" +
+            """"cancellation":{"settlement":"${settlement.hex}","uid":"$uid"},"maxCost":"1","sentAt":1800000007}"""
+        val onChain = """{"account":"${alice.hex}","nonce":8,"raw":"0208ff","to":"${bob.hex}","amount":"1",""" +
+            """"maxCost":"1","sentAt":1800000008,"chain":11155111}"""
+        SystemFileSystem.sink(file).buffered().use {
+            it.writeString("""{"version":6,"transfers":[$cancellation,$onChain]}""")
+        }
+
+        val read = stored()
+        assertEquals(listOf(Network.SEPOLIA, Network.SEPOLIA), read.map { it.network })
+        assertEquals(
+            listOf(
+                SentAction.CowCancellation(settlement, CowOrderUid.of(uid)),
+                SentAction.Transfer(bob, TransferAsset.Native, UInt256.ONE),
+            ),
+            read.map { it.action },
+        )
     }
 
     @Test

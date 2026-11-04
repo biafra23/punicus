@@ -99,13 +99,14 @@ class FindUniswapRoute(
         val tokenOut = buy.tokenOn(deployment)
         return coroutineScope {
             // The fees do not depend on the pools: read beside them, not after.
-            val fees = if (ranking == RouteRanking.NET_OF_FEES) async { inputs.fees() } else null
-            find(deployment, tokenIn, tokenOut, amountIn, ranking, withFee) { fees?.await() }
+            val fees = if (ranking == RouteRanking.NET_OF_FEES) async { inputs.fees(network) } else null
+            find(network, deployment, tokenIn, tokenOut, amountIn, ranking, withFee) { fees?.await() }
                 .also { fees?.cancel() }
         }
     }
 
     private suspend fun find(
+        network: Network,
         deployment: UniswapV3Deployment,
         tokenIn: Address,
         tokenOut: Address,
@@ -115,7 +116,7 @@ class FindUniswapRoute(
         fees: suspend () -> FeeReading?,
     ): RouteFinding {
         val toRead = SwapRoutes.poolsToRead(tokenIn, tokenOut, deployment.weth9)
-        val pools = when (val read = readPools(deployment, toRead)) {
+        val pools = when (val read = readPools(network, deployment, toRead)) {
             is PoolsRead.Read -> read.pools
             is PoolsRead.Unavailable -> return RouteFinding.Unavailable(read.reason)
         }
@@ -126,9 +127,9 @@ class FindUniswapRoute(
         // The candidates' pools' spot prices, read beside the quotes: the price impact's measure.
         val (quoted, prices) = coroutineScope {
             val spot = candidates.flatMap { it.poolKeys }.distinct().associateWith { key ->
-                async { slot0(pools.getValue(key).address) }
+                async { slot0(network, pools.getValue(key).address) }
             }
-            val quotes = candidates.map { async { quote(deployment, it, amountIn) } }.awaitAll()
+            val quotes = candidates.map { async { quote(network, deployment, it, amountIn) } }.awaitAll()
             quotes to spot.mapValues { it.value.await() }
         }
         quoted.firstNotNullOfOrNull { (it as? Quoted.Unavailable)?.reason }
@@ -137,7 +138,7 @@ class FindUniswapRoute(
         if (quotes.isEmpty()) return RouteFinding.NoRoute
 
         val costs = if (ranking == RouteRanking.NET_OF_FEES && (quotes.size > 1 || withFee)) {
-            costs(deployment, quotes.map { it.quote }, tokenOut, liquidity, fees())
+            costs(network, deployment, quotes.map { it.quote }, tokenOut, liquidity, fees())
         } else {
             null
         }
@@ -157,8 +158,8 @@ class FindUniswapRoute(
     }
 
     /** A pool's `slot0`, with the block it was read at; null when it could not be read. */
-    private suspend fun slot0(pool: Address): Pair<PoolSlot0, Long>? {
-        val answer = chain.call(pool, UniswapV3Pool.slot0()) as? Simulation.Succeeded ?: return null
+    private suspend fun slot0(network: Network, pool: Address): Pair<PoolSlot0, Long>? {
+        val answer = chain.call(network, pool, UniswapV3Pool.slot0()) as? Simulation.Succeeded ?: return null
         val block = answer.blockNumber ?: return null
         return UniswapV3Pool.slot0Of(answer.returnHex)?.let { it to block }
     }
@@ -180,28 +181,37 @@ class FindUniswapRoute(
     }
 
     /** Each of [keys] the factory lists, with its address and its liquidity in range. */
-    private suspend fun readPools(deployment: UniswapV3Deployment, keys: List<PoolKey>): PoolsRead = coroutineScope {
-        val read = keys.map { key -> async { key to readPool(deployment, key) } }.awaitAll()
+    private suspend fun readPools(
+        network: Network,
+        deployment: UniswapV3Deployment,
+        keys: List<PoolKey>,
+    ): PoolsRead = coroutineScope {
+        val read = keys.map { key -> async { key to readPool(network, deployment, key) } }.awaitAll()
         read.firstNotNullOfOrNull { (_, pool) -> (pool as? PoolRead.Unavailable)?.reason }
             ?.let { return@coroutineScope PoolsRead.Unavailable(it) }
         PoolsRead.Read(read.mapNotNull { (key, pool) -> (pool as? PoolRead.Listed)?.let { key to it.pool } }.toMap())
     }
 
-    private suspend fun readPool(deployment: UniswapV3Deployment, key: PoolKey): PoolRead {
-        val listed = when (val answer = chain.call(deployment.factory, UniswapV3Factory.getPool(key))) {
+    private suspend fun readPool(network: Network, deployment: UniswapV3Deployment, key: PoolKey): PoolRead {
+        val listed = when (val answer = chain.call(network, deployment.factory, UniswapV3Factory.getPool(key))) {
             is Simulation.Succeeded -> UniswapV3Factory.poolOf(answer.returnHex) ?: return UNPROVEN_POOL
             else -> return PoolRead.Unavailable(answer.unavailable())
         }
         if (listed == Address.ZERO) return PoolRead.NotListed
-        val liquidity = when (val answer = chain.call(listed, UniswapV3Pool.liquidity())) {
+        val liquidity = when (val answer = chain.call(network, listed, UniswapV3Pool.liquidity())) {
             is Simulation.Succeeded -> UniswapV3Pool.liquidityOf(answer.returnHex) ?: return UNPROVEN_POOL
             else -> return PoolRead.Unavailable(answer.unavailable())
         }
         return PoolRead.Listed(Pool(listed, liquidity))
     }
 
-    private suspend fun quote(deployment: UniswapV3Deployment, route: SwapRoute, amountIn: UInt256): Quoted =
-        when (val answer = chain.call(deployment.quoterV2, QuoterV2.quote(route, amountIn))) {
+    private suspend fun quote(
+        network: Network,
+        deployment: UniswapV3Deployment,
+        route: SwapRoute,
+        amountIn: UInt256,
+    ): Quoted =
+        when (val answer = chain.call(network, deployment.quoterV2, QuoterV2.quote(route, amountIn))) {
             is Simulation.Succeeded -> QuoterV2.quoteOf(route, answer.returnHex)
                 ?.let { Quoted.Read(it, answer.blockNumber) }
                 ?: Quoted.Unavailable(ReadUnavailable.UNPROVEN)
@@ -216,6 +226,7 @@ class FindUniswapRoute(
      * not answer.
      */
     private suspend fun costs(
+        network: Network,
         deployment: UniswapV3Deployment,
         quotes: List<RouteQuote>,
         tokenOut: Address,
@@ -232,7 +243,7 @@ class FindUniswapRoute(
         } else {
             val tier = SwapRoutes.deepestTier(deployment.weth9, tokenOut, liquidity) ?: return null
             val conversion = SwapRoute.direct(deployment.weth9, tokenOut, tier)
-            (quote(deployment, conversion, mostWei) as? Quoted.Read)?.quote?.amountOut ?: return null
+            (quote(network, deployment, conversion, mostWei) as? Quoted.Read)?.quote?.amountOut ?: return null
         }
         return quotes.associateWith { quote ->
             // mostOut × gas / mostGas, rounded down: a fee in proportion to the route's gas.

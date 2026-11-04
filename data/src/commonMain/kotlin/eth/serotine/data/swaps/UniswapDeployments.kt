@@ -35,13 +35,36 @@ internal class PinnedUniswapV3(val deployment: UniswapV3Deployment, val codeHash
  * own, and a quote touches 9 to 16 storage slots of 3 to 6 contracts (`eth_createAccessList` of
  * QuoterV2's calls), each a proof the engine fetches, read the same day. Every built-in token
  * added since has at least one WETH pool with liquidity (docs/swaps.md, *The cost*).
+ *
+ * Ethereum's are the canonical deployment of the same table (*Ethereum Deployments*, Mainnet):
+ * the v3 factory, QuoterV2, SwapRouter02 and WETH9. Their code hashes were read on 2026-10-23
+ * at mainnet block 26,256,227 (`eth_getProof`'s code hash; WETH9's as the hash of its code)
+ * through two public nodes, which agreed, a debugging source only, as above: what is expected,
+ * which the light client proves before any quote (`MyotisHostEthereumTest` does so on the real
+ * chain). None of the four is a proxy.
+ *
+ * Gnosis Chain has none pinned: Swap is greyed out there until a venue is (owner ruling,
+ * 2026-10-22; docs/networks.md, open question 7).
  */
 internal object UniswapDeployments {
 
     /** The deployment pinned on [network], or null when none is. */
     fun of(network: Network): PinnedUniswapV3? = when (network) {
+        Network.ETHEREUM -> ETHEREUM
+        Network.GNOSIS -> null
         Network.SEPOLIA -> SEPOLIA
     }
+
+    private val ETHEREUM = pinned(
+        factory = "0x1f98431c8ad98523631ae4a59f267346ea31f984" to
+            "4d7b8525cd5d14343fa67a732fba5b24cddba11620ca88392f4ec6c52f91fd69",
+        quoterV2 = "0x61ffe014ba17989e743c5f6cb21bf9697530b21e" to
+            "06148f47d0f41a68d3bc970030a7150e5d608cfbc28d372440a2e41ce543d92b",
+        swapRouter02 = "0x68b3465833fb72a70ecdf485e0e4c7bd8665fc45" to
+            "6ec798e80f3a19de650826338677604e54d6664f44a33b53a20b22b1939f402e",
+        weth9 = "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2" to
+            "d0a06b12ac47863b5c7be4185c2deaad1c61557033f56c7d4ea74429cbb25e23",
+    )
 
     private val SEPOLIA = pinned(
         factory = "0x0227628f3f023bb0b980b67d528571c95c6dac1c" to

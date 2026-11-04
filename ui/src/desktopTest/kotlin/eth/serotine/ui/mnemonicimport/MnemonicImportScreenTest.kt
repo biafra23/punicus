@@ -11,11 +11,13 @@ import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performTextInput
 import eth.serotine.domain.model.Mnemonic
 import eth.serotine.domain.model.WalletPassword
+import eth.serotine.ui.components.NO_NETWORK_TICKED
+import eth.serotine.ui.components.NetworkChoice
 import eth.serotine.ui.components.PasswordStep
 import eth.serotine.ui.theme.SerotineTheme
+import kotlin.test.assertEquals
 import org.junit.Rule
 import org.junit.Test
-import kotlin.test.assertEquals
 
 /** Renders the stateless [MnemonicImportScreen] headless for each state. */
 class MnemonicImportScreenTest {
@@ -61,6 +63,7 @@ class MnemonicImportScreenTest {
                 Mnemonic(twelveWords),
                 password = WalletPassword("correct horse"),
                 step = PasswordStep.Existing(protection = "Kept in hardware."),
+                networks = listOf(sepolia.copy(chosen = true)),
             ),
         )
 
@@ -68,6 +71,25 @@ class MnemonicImportScreenTest {
         rule.onNodeWithTag(MNEMONIC_IMPORT_BUTTON_TAG).assertIsEnabled().performClick()
         assertEquals(1, imports)
     }
+
+    @Test
+    fun withNoNetworkTickedTheButtonSaysWhyAndImportsNothing() {
+        show(
+            MnemonicImportUiState.Entering(
+                Mnemonic(twelveWords),
+                password = WalletPassword("correct horse"),
+                step = PasswordStep.Existing(protection = "Kept in hardware."),
+                networks = listOf(sepolia),
+            ),
+        )
+
+        rule.onNodeWithText("Add to which networks?").assertExists()
+        rule.onNodeWithTag(MNEMONIC_IMPORT_BUTTON_TAG).performClick()
+        rule.onNodeWithText(NO_NETWORK_TICKED).assertExists()
+        assertEquals(0, imports)
+    }
+
+    private val sepolia = NetworkChoice(11_155_111, "Sepolia", testnet = true, on = true, line = "Testnet: test ether only")
 
     @Test
     fun typingReportsTheFieldsText() {

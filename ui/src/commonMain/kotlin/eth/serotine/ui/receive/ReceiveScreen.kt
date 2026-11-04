@@ -42,6 +42,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import eth.serotine.ui.components.Blockie
+import eth.serotine.ui.components.NetworkMark
 import eth.serotine.ui.components.QrCode
 import eth.serotine.ui.components.SerotineIcons
 import eth.serotine.ui.platform.rememberCopyText
@@ -129,6 +130,8 @@ private fun Address(state: ReceiveUiState.Ready, onCopy: () -> Unit, onShare: ((
             Blockie(state.address, size = 28.dp)
             Text(state.label, style = MaterialTheme.typography.titleMedium)
         }
+        // The network it receives on (docs/networks.md, N13): the same address elsewhere is another account.
+        NetworkMark(state.network, style = MaterialTheme.typography.labelLarge)
         QrCode(
             state.address,
             description = "QR code of the address",
@@ -148,6 +151,14 @@ private fun Address(state: ReceiveUiState.Ready, onCopy: () -> Unit, onShare: ((
                 state.notice,
                 Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
                 style = MaterialTheme.typography.labelLarge,
+            )
+        }
+        listOfNotNull(state.note, state.networkOff).forEach {
+            Text(
+                it,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                textAlign = TextAlign.Center,
             )
         }
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {

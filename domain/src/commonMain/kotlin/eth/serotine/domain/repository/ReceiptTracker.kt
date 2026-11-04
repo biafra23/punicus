@@ -1,6 +1,7 @@
 package eth.serotine.domain.repository
 
 import eth.serotine.domain.model.Address
+import eth.serotine.domain.model.Network
 import kotlinx.coroutines.flow.Flow
 
 /**
@@ -10,10 +11,11 @@ import kotlinx.coroutines.flow.Flow
  */
 interface ReceiptTracker {
     /**
-     * Where the transaction [hash] (`0x` + 64 hex) stands, re-emitted as the verified head
-     * moves until it is finalized; consecutive equal readings are not repeated.
+     * Where the transaction [hash] (`0x` + 64 hex) on [network] stands, re-emitted as the
+     * verified head moves until it is finalized; consecutive equal readings are not repeated.
+     * A [network] no adapter serves here is refused ([ReadUnavailable.NO_ENGINE]).
      */
-    fun observe(hash: String): Flow<TransactionProgress>
+    fun observe(network: Network, hash: String): Flow<TransactionProgress>
 }
 
 /** One answer of [ReceiptTracker.observe]. */

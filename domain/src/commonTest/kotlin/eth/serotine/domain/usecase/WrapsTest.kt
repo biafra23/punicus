@@ -185,6 +185,7 @@ class WrapsTest {
     }
 
     private fun record(nonce: Long, action: SentAction) = SentTransfer(
+        network = Network.SEPOLIA,
         account = account,
         nonce = nonce,
         signed = SignedTransfer(byteArrayOf(2, nonce.toByte())),
@@ -216,6 +217,7 @@ class WrapsTest {
 
         override suspend fun venue(network: Network): VenueReading = reading
 
-        override suspend fun call(to: Address, data: ByteArray): Simulation = Simulation.Reverted(120)
+        override suspend fun call(network: Network, to: Address, data: ByteArray): Simulation =
+            Simulation.Reverted(120)
     }
 }

@@ -1,6 +1,7 @@
 package eth.serotine.domain.usecase
 
 import eth.serotine.domain.model.Address
+import eth.serotine.domain.model.AccountId
 import eth.serotine.domain.model.Network
 import eth.serotine.domain.model.SafeCalls
 import eth.serotine.domain.model.SafeSignature
@@ -67,7 +68,7 @@ class ReadSafeTxOwners(
         if (request.network != network) {
             return@coroutineScope SafeTxOwnersReading.Refused(SafeTxRefusal.WrongChain(request.network.chainId))
         }
-        val safe = when (val check = observeSafe.check(request.safe)) {
+        val safe = when (val check = observeSafe.check(AccountId(request.network, request.safe))) {
             is SafeCheck.Verified -> check.reading
             is SafeCheck.Refused -> return@coroutineScope SafeTxOwnersReading.Refused(check.refusal)
         }
@@ -78,7 +79,7 @@ class ReadSafeTxOwners(
                 val confirmation = if (owner in signed) {
                     OwnerConfirmation.Signed
                 } else {
-                    when (val approval = approvals.approval(request.safe, owner, request.hash)) {
+                    when (val approval = approvals.approval(request.network, request.safe, owner, request.hash)) {
                         is ApprovalReading.Read -> if (approval.approved) {
                             OwnerConfirmation.ApprovedOnChain(approval.blockNumber)
                         } else {
@@ -95,7 +96,7 @@ class ReadSafeTxOwners(
             safe.state.threshold,
             safe.state.nonce,
             safe.blockNumber,
-            refusal = request.withoutRecovery(safe.state),
+            refusal = safe.state.tooOldToSign() ?: request.withoutRecovery(safe.state),
         )
     }
 }
@@ -185,19 +186,20 @@ class QuoteSafeApproval(
         request.unsignable()?.let { return refused(it) }
         // An earlier transaction of the owner's maybe still on its way: refused before the Safe is read.
         quoter.heldBack(owner)?.let { return refused(SafeTxRefusal.NotQuoted(it)) }
-        val state = when (val check = observeSafe.check(request.safe)) {
+        val state = when (val check = observeSafe.check(AccountId(request.network, request.safe))) {
             is SafeCheck.Verified -> check.reading.state
             is SafeCheck.Refused -> return refused(check.refusal)
         }
         safeChecked()
+        state.tooOldToSign()?.let { return refused(it) }
         if (request.nonce < state.nonce) return refused(SafeTxRefusal.NonceUsed(state.nonce))
         if (owner !in state.owners) return refused(SafeTxRefusal.NotAnOwner(owner))
         request.withoutRecovery(state)?.let { return refused(it) }
-        when (val approval = approvals.approval(request.safe, owner, request.hash)) {
+        when (val approval = approvals.approval(request.network, request.safe, owner, request.hash)) {
             is ApprovalReading.Read -> if (approval.approved) return refused(SafeTxRefusal.AlreadyApproved)
             is ApprovalReading.Unavailable -> return refused(SafeTxRefusal.Unavailable(approval.reason))
         }
-        val native = when (val read = NativeRead.of(nativeBalances.observeBalance(owner).first())) {
+        val native = when (val read = NativeRead.of(nativeBalances.observeBalance(request.network, owner).first())) {
             is NativeRead.Before -> read
             is NativeRead.NotRead -> return refused(SafeTxRefusal.NotQuoted(read.refusal))
         }
@@ -240,6 +242,7 @@ class ApproveSafeTxOnChain(
         signer,
         broadcaster,
         sentTransfers,
+        quote.request.network,
         quote.call,
         SentAction.SafeApproval(quote.request),
         clock,
@@ -314,11 +317,12 @@ class QuoteSafeExecution(
         request.unsignable()?.let { return refused(it) }
         // An earlier transaction of the executor's maybe still on its way: refused before the Safe is read.
         quoter.heldBack(executor)?.let { return refused(SafeTxRefusal.NotQuoted(it)) }
-        val state = when (val check = observeSafe.check(request.safe)) {
+        val state = when (val check = observeSafe.check(AccountId(request.network, request.safe))) {
             is SafeCheck.Verified -> check.reading.state
             is SafeCheck.Refused -> return refused(check.refusal)
         }
         safeChecked()
+        state.tooOldToSign()?.let { return refused(it) }
         if (request.nonce < state.nonce) return refused(SafeTxRefusal.NonceUsed(state.nonce))
         if (request.nonce > state.nonce) return refused(SafeTxRefusal.NotNext(state.nonce))
         request.withoutRecovery(state)?.let { return refused(it) }
@@ -328,7 +332,7 @@ class QuoteSafeExecution(
             is Confirmed.Enough -> confirmed.signatures
             is Confirmed.Refused -> return refused(confirmed.refusal)
         }
-        val native = when (val read = NativeRead.of(nativeBalances.observeBalance(executor).first())) {
+        val native = when (val read = NativeRead.of(nativeBalances.observeBalance(request.network, executor).first())) {
             is NativeRead.Before -> read
             is NativeRead.NotRead -> return refused(SafeTxRefusal.NotQuoted(read.refusal))
         }
@@ -352,9 +356,9 @@ class QuoteSafeExecution(
     private suspend fun sentAndUnmined(request: SigningRequest): SafeTxRefusal? {
         val since = clock() - RECORD_LIFETIME_SECONDS
         val sent = (sentTransfers.observe().first() as? SentTransferList.Loaded)?.transfers.orEmpty()
-            .filter { it.sentAt >= since && it.executes(request) }
+            .filter { it.network == request.network && it.sentAt >= since && it.executes(request) }
         for (execution in sent) {
-            when (val mined = inputs.minedNonce(execution.account)) {
+            when (val mined = inputs.minedNonce(request.network, execution.account)) {
                 is NonceReading.Read -> if (execution.nonce >= mined.nonce) return SafeTxRefusal.AlreadySent
                 is NonceReading.Unavailable -> return SafeTxRefusal.Unavailable(mined.reason)
             }
@@ -374,7 +378,8 @@ class QuoteSafeExecution(
             if (confirmed.size >= threshold) return@coroutineScope Confirmed.Enough(confirmed.take(threshold))
             val others = state.owners.filter { owner -> confirmed.none { it.owner == owner } }
             val readings = others
-                .map { owner -> async { owner to approvals.approval(request.safe, owner, request.hash) } }
+                .map {
+                    owner -> async { owner to approvals.approval(request.network, request.safe, owner, request.hash) } }
                 .awaitAll()
             val approved = readings.filter { (_, reading) -> (reading as? ApprovalReading.Read)?.approved == true }
                 .map { (owner, _) -> SafeSignature.ApprovedHash(owner) }
@@ -434,6 +439,7 @@ class ExecuteSafeTx(
         signer,
         broadcaster,
         sentTransfers,
+        quote.request.network,
         quote.call,
         SentAction.SafeExecution(quote.request),
         clock,

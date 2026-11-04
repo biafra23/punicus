@@ -50,7 +50,9 @@ consumer developed against an unreleased engine, Myotis's
   ports (`io.myotis.engine.ports`, `Myotis.defaultPorts`) are part of its
   public surface and may be used.
 - **The composition roots own the engine's lifecycle.** One engine per process,
-  hosting Sepolia and no other network for now (CLAUDE.md, *Data sources*),
+  hosting a light client per network that is on and has accounts or a
+  screen asking for it (Ethereum, Gnosis Chain, Sepolia; CLAUDE.md, *Data
+  sources*; docs/networks.md, *The engine host*),
   created where the `AppGraph` is built, with the engine's state directory
   under the app's private files (Android: `filesDir/myotis`; desktop: the
   app's data directory). Each host supplies its platform's ports (on Android,
@@ -78,36 +80,55 @@ consumer developed against an unreleased engine, Myotis's
   (`eth.myotis:myotis-engine-ios`, at the engine's version): its typed API
   carries `io.myotis.api`'s names and meanings, and each target's cinterop
   klib carries the engine's static library. `:data`'s iosMain has the iOS
-  `MyotisNode`, the JVM one's twin over that API, wired to the same
-  `TransactingChain` seam and the same common adapters. The engine there asks
+  `MyotisHost`, the JVM one's twin over that API: one engine, a `ChainNode` per
+  network wired to the same `TransactingChain` seam and the same common
+  adapters, routed by `NetworkRoutedPorts`. The engine there asks
   for no ports (its peer caches and snapshot live under its data directory)
   and answers a read on a paused or starting handle at once as unavailable.
   The log index (*History*) is twinned too, from Myotis 0.1.18 (its #687).
   The iOS module reads no block by number in 0.1.18 (its block reads are
-  internal), so the iOS node gives the finalized block no timestamp, and no
+  internal), so the iOS host gives the finalized block no timestamp, and no
   CoW order is offered on iOS until it does (docs/swaps.md, *Proving an
   order's end*).
 - **The engine's own log** is not printed by the engine: its tracing lines go
   into a ring in the library (4096 lines, the oldest dropped when full), which
-  a host drains with `Myotis.drainLogs`. A debug build's `MyotisNode` drains
+  a host drains with `Myotis.drainLogs`. A debug build's `MyotisHost` (on each platform) drains
   it every second while the engine runs (`EngineLogPump`) into the same
   `debugLog` the adapters write to, each line marked `Myotis:` (logcat in the
   debug app, stderr in `:desktop-app:run`, NSLog in the iOS debug build, so a
-  device's log has it without Xcode attached; the iOS node's own reports,
+  device's log has it without Xcode attached; the iOS host's own reports,
   why there is no light client among them, go there too, in every build). A
   release build leaves it undrained; a failed start still reports its last
   40 lines.
 
 ## What exists today
 
-- **`MyotisNode`** (`eth.serotine.data.engine`, in `:data`'s `jvmSharedMain`)
-  is the process's one engine on Sepolia. Each composition root creates it with
-  `MyotisNode.start(network, dataDir, dnsServers)`. Loading the native library,
-  creating the engine and starting it all run on a background thread, so
-  nothing blocks a main thread. The desktop stops it after its window closes.
-  Android pauses its networking 30 s after nothing holds it any more (a
-  visible activity, the daily network-upgrade check) and resumes it with the
-  next hold; `AndroidDnsServers` supplies the active network's resolvers.
+- **`MyotisHost`** (`eth.serotine.data.engine`, in `:data`'s `jvmSharedMain`)
+  is the process's one engine, hosting one light client per network
+  (docs/networks.md, *The engine host*): a `ChainNode` per `Network`, created
+  in the engine (`MyotisEngine.create`) when it is to run and unregistered
+  (`MyotisEngine.stop`) when it is not. Each composition root creates it with
+  `MyotisHost.start(dataDir, dnsServers)` and runs `FollowNetworks` beside it,
+  which starts a network's light client while the network is on and an
+  account or a screen needs it, and stops it 30 s after nothing does, or at
+  once when it is turned off (`LightClientControl`). Its ports route each call
+  to the light client of the network it names (`NetworkRoutedPorts`), and a
+  stopped network's reads say so (`ReadUnavailable.NETWORK_OFF`, its last
+  verified balance offered as `LastKnown`). Loading the native library,
+  creating the engine and starting a chain all run on one control thread, in
+  the order asked, so nothing blocks a main thread. The desktop stops it after
+  its window closes. Android pauses every running light client's networking
+  30 s after nothing holds the engine any more (a visible activity, the daily
+  network-upgrade check) and resumes them with the next hold;
+  `AndroidDnsServers` supplies the active network's resolvers. After the last
+  visible activity it waits 60 s instead, so a quick switch to another app
+  (to copy an address, say) comes back to synced light clients: an expedited
+  job (`GracePeriodJob`, Android 12 and later) holds the engine for that
+  minute, since Android 14 and later freeze a cached process about 10 s in,
+  and its end pauses at once. The iOS `MyotisHost` follows networks on and
+  off the same way (`FollowNetworks`); the iOS host pauses every running light
+  client 25 s after the app goes to the background, within the background
+  task iOS limits to about 30 s, and resumes them when it comes back.
 - **Readiness, as Myotis reads it.** The adapters read `ChainHandle.status()`,
   a snapshot that never blocks, the way Myotis's own readiness ladder does:
   `SYNCING` is the checkpoint bootstrap; `CATCHING_UP` walks sync-committee
@@ -117,7 +138,13 @@ consumer developed against an unreleased engine, Myotis's
   balance through `ChainHandle.requestAccount` whenever the verified head has
   moved. It is accepted only with no `failReason` and a `verifyMethod`, and is
   labelled with the block the proof anchors to: `VerifiedReads.getBalance`
-  answers a block number from the current head, so it cannot be labelled. While
+  answers a block number from the current head, so it cannot be labelled. From
+  Myotis 0.1.20 a watched account on a chain with block access lists may be
+  answered with no proof fetched (`verifyMethod` `blockAccessList`: an earlier
+  proof carried forward by verified BALs, Myotis's docs/address-activity.md),
+  labelled with the block it answers at, up to 2 below the head; its
+  `matchedBeaconSlot` attests that block's state root, so a code read anchors
+  to it as to a `stateRootMatch` (`accountProofAnchor`). While
   reads cannot be verified, the row shows why ("Syncing…", "Sync refused", "Not
   verified", "No light client"), with one exception: while there is no head
   to read at (not synced, asleep, a stale head, no proof peer), a balance
@@ -128,7 +155,7 @@ consumer developed against an unreleased engine, Myotis's
   every adapter but the two balance ones reads it as syncing. The balance
   adapters also keep it across restarts in `LastBalancesFile`
   (`last-balances.json` beside the account list, a path the host passes to
-  `MyotisNode.start`): at most 256 entries, rewritten when an amount changes
+  `MyotisHost.start`): at most 256 entries, rewritten when an amount changes
   or its stored proof is 50 blocks old, so the time a row shows after a
   restart can be up to ten minutes earlier than the last proof of that same
   amount. Why a node is
@@ -168,6 +195,23 @@ consumer developed against an unreleased engine, Myotis's
   is stale, and one dated more than two minutes after the head is no feed's
   answer. (`ChainHandle.getBlockVerified`, which would give a block's
   timestamp, is not available on the Rust engine.)
+- **Verified pool averages** (owner ruling, 2026-10-29, #205). Where no feed
+  is pinned for a price id, `VerifiedPoolPrices` reads a pinned Uniswap v3
+  pool (`UniswapPools`, per network; Ethereum's COW and SAFE today) through
+  `ProvenReads`, again every five heads, quoted in ETH, and `FeedsThenPools`
+  routes each price id, now and a day back, to its feed or, only where none
+  is, its pool. Once per adapter, the factory's proven code is checked
+  against its pin and its `getPool` against the pool's address. Then fewer
+  than two observations or an oldest one younger than the 30-minute window
+  (`slot0`, `observations`), an in-range depth (`liquidity()` at `slot0`'s
+  price, as the WETH it stands for) below the pool's floor, and an average
+  (`observe`) more than 500 ticks from the tick now are each no price, with
+  their own reason. `slot0`, `liquidity()` and `observe` must answer at one
+  block of one hash, or the read is unproven. A reading is dated by the head
+  and never stale on its own; ETH/USD and the display currency's feed carry
+  theirs. The day back is the same pool's `observe` over the window ending a
+  day before the head, at the head, and is "no round that old" past its
+  observations.
 - **One fetch per key and head.** `ProvenReads` keeps the last proof per key,
   and a subscriber that arrives while that key's proof for its head is being
   fetched waits for that fetch rather than making the same blocking calls:
@@ -227,7 +271,7 @@ consumer developed against an unreleased engine, Myotis's
   under them; the root fix is the engine's, several slots in one proof at one
   block (biafra23/myotis#662), and once it lands a Safe is proven in one
   request. Until then the debug builds log which proof failed or straddled
-  and how many reads a Safe took (`MyotisNode.start`'s `debugLog`: logcat in
+  and how many reads a Safe took (`MyotisHost.start`'s `debugLog`: logcat in
   the debug app, stderr in `:desktop-app:run`, NSLog in the iOS debug build;
   public chain data only). A
   one-shot check of a Safe (an import, the checks before Sign, Approve,
@@ -287,7 +331,7 @@ consumer developed against an unreleased engine, Myotis's
   `./gradlew :desktop-app:run -PmyotisLibraryDir=<dir>` runs a locally built
   `libmyotis_engine.{dylib,so}` instead (Myotis: `./gradlew cargoBuildHost`,
   then `rust/target/release`). The same property runs
-  `MyotisNodeSepoliaTest`, a real-network test that is skipped otherwise.
+  `MyotisHostSepoliaTest`, a real-network test that is skipped otherwise.
 - **Android 10 and INTERNET.** An install that gains INTERNET on an update,
   rather than having it from the first install, can keep getting `EPERM` from
   netd's eBPF socket filter until it is reinstalled or the device reboots. The
@@ -493,6 +537,16 @@ answered with an empty list.
   - Logs are taken only when every one is what the query selects, inside its
     range; anything else is no answer. A query names both ends of its range:
     the answer does not say which range it read.
+  - A log's `blockTimestamp` (unix seconds: a quantity as the JSON-RPC log
+    shape has it, or a number as the engine's other verified-read shapes
+    carry theirs), when the engine reports it from the walk that verified
+    the block's header, dates the event (`IndexedLog.blockTimestamp`); the
+    Activity dates and orders its rows by it. From an engine that does not
+    report it (none did as of Myotis 0.1.20) the event is dated by its block
+    alone, never by a time counted back from the head: a block's time is
+    verified or not shown. Reading a block's header for it instead is no
+    answer: `getBlockByNumber` serves one header window anchored at the
+    head (512 blocks), and a history reaches further back.
   - The engine takes an entry's `fromBlock` as saying nothing of it comes
     before that block, and answers a range reaching below it from there on.
     For an account not created here that is not so, so the adapter reads the
@@ -623,6 +677,16 @@ user to update — before it, and, after it, nothing else.
   shows that state (`CATCHING_UP`, `STALE_ANCHOR`, an unproven read) instead
   of filling in from anywhere else. There is no RPC-provider fallback, in
   any build type.
+- **A stale anchor is passed only on the user's word** (CLAUDE.md, *Trust*,
+  owner's request of 2026-10-24). A light client parked in `STALE_ANCHOR`
+  (its newest anchor, the embedded checkpoint or the persisted snapshot,
+  older than the weak-subjectivity bound) stays parked until the user
+  confirms Accounts' "Catch up anyway…" for that network:
+  `SyncPastStaleAnchor` checks it is still parked, and the host calls the
+  chain's `acceptStaleAnchor()` on its control lane. The consent lasts for
+  the run (the engine never persists it), so a restart that still finds the
+  anchor stale asks again. The bound (`setWsBoundPeriods`) keeps the
+  engine's default.
 - **A parameter that can change the answer is applied or refused**, never
   accepted and ignored — the Myotis rule, and the reason a port's contract
   spells out what each argument does.
@@ -632,5 +696,8 @@ user to update — before it, and, after it, nothing else.
   sources* before the code lands. Prices, the token list and Safe
   co-signing are decided there (2026-10-16), each without an off-chain
   service. CoW Protocol's order API is the first off-chain service allowed
-  (2026-10-22), for the swaps the user sends to CoW (docs/swaps.md). The dApp
-  connection protocol is still open.
+  (2026-10-22), for the swaps the user sends to CoW (docs/swaps.md).
+  WalletConnect's relay is the second (2026-11-03, #22), for dApp
+  connections (docs/walletconnect.md). It carries requests and answers and
+  never chain state: what a dApp asks about the chain is read through the
+  engine.

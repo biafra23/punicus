@@ -3,6 +3,7 @@ package eth.serotine.ui.tokens
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import eth.serotine.domain.model.Address
+import eth.serotine.domain.model.Network
 import eth.serotine.domain.repository.ReadUnavailable
 import eth.serotine.domain.repository.TokenChange
 import eth.serotine.domain.usecase.BuiltInCheck
@@ -12,6 +13,7 @@ import eth.serotine.domain.usecase.RemoveToken
 import eth.serotine.domain.usecase.SetTokenHidden
 import eth.serotine.domain.usecase.TokenOrigin
 import eth.serotine.ui.components.Eip55
+import eth.serotine.ui.components.NetworkLabel
 import eth.serotine.ui.components.displayName
 import eth.serotine.ui.components.displaySymbol
 import eth.serotine.ui.components.grouped
@@ -19,10 +21,15 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 
-/** The Tokens settings' ViewModel: every known token, each hidden, shown again or (if added) removed. */
+/**
+ * The Tokens settings' ViewModel: every known token, grouped by network (docs/networks.md,
+ * *Values*: a token's symbol is never the same token on another network), each hidden, shown
+ * again or (if added) removed on its own network.
+ */
 class TokensViewModel(
     observeKnownTokens: ObserveKnownTokens,
     private val setTokenHidden: SetTokenHidden,
@@ -31,29 +38,38 @@ class TokensViewModel(
 
     private val lastChange = MutableStateFlow<String?>(null)
 
-    val uiState: StateFlow<TokensUiState> = combine(observeKnownTokens(), lastChange) { known, change ->
+    private val known = combine(Network.entries.map { network -> observeKnownTokens(network).map { network to it } }) {
+        it.toList()
+    }
+
+    val uiState: StateFlow<TokensUiState> = combine(known, lastChange) { known, change ->
+        val unavailable = known.any { (_, tokens) -> tokens.settingsUnavailable }
         TokensUiState(
-            items = known.tokens.map(::item),
+            sections = known.filter { (_, tokens) -> tokens.tokens.isNotEmpty() }
+                .map { (network, tokens) -> TokenSection(NetworkLabel.of(network), tokens.tokens.map(::item)) },
             notice = when {
-                known.settingsUnavailable -> SETTINGS_UNAVAILABLE
+                unavailable -> SETTINGS_UNAVAILABLE
                 change != null -> change
-                known.settingsSetAside -> SETTINGS_SET_ASIDE
+                known.any { (_, tokens) -> tokens.settingsSetAside } -> SETTINGS_SET_ASIDE
                 else -> null
             },
-            canChange = !known.settingsUnavailable,
+            canChange = !unavailable,
         )
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), TokensUiState())
 
-    /** Hides the token at [address] from every account, or shows it again. */
-    fun setHidden(address: String, hidden: Boolean) = change(address) { setTokenHidden(it, hidden) }
+    /** Hides the token at [address] on the network of [chainId] from every account there, or shows it again. */
+    fun setHidden(chainId: Long, address: String, hidden: Boolean) =
+        change(chainId, address) { network, token -> setTokenHidden(network, token, hidden) }
 
-    /** Removes the added token at [address]. */
-    fun remove(address: String) = change(address) { removeToken(it) }
+    /** Removes the added token at [address] on the network of [chainId]. */
+    fun remove(chainId: Long, address: String) =
+        change(chainId, address) { network, token -> removeToken(network, token) }
 
-    private fun change(address: String, action: suspend (Address) -> TokenChange) {
+    private fun change(chainId: Long, address: String, action: suspend (Network, Address) -> TokenChange) {
+        val network = Network.ofChainId(chainId) ?: return
         val token = Address.parse(address) ?: return
         viewModelScope.launch {
-            lastChange.value = when (action(token)) {
+            lastChange.value = when (action(network, token)) {
                 TokenChange.NotSaved -> "The change could not be saved. Nothing has changed."
                 else -> null
             }
@@ -67,6 +83,8 @@ class TokensViewModel(
         icon = known.token.icon,
         builtIn = known.origin == TokenOrigin.BUILT_IN,
         status = status(known),
+        simpleStatus = (known.check as? BuiltInCheck.Agrees)?.blockNumber
+            ?.let { "Built in · checked against its contract" },
         problem = known.check is BuiltInCheck.Disagrees,
         hidden = known.hidden,
         warning = if (known.sharesBuiltInSymbol) {

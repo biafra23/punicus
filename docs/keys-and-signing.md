@@ -40,6 +40,7 @@ it is not a basis for a cross-platform wallet. Two consequences follow:
 | **Hardware-bound Safe owner** | P-256 in the Secure Enclave / StrongBox | none: it is a device credential | the OS's own gate, bound to the key and chosen at creation: current biometrics only, or biometrics or device credential. This tier has no password factor | decided (2026-10-15); the key's policy is under *A Safe owned by a hardware P-256 key*, and it needs a recovery owner, see *Backup and recovery* |
 | **Mnemonic key** | secp256k1 from a BIP-39 seed, in the envelope | the mnemonic, written down once at creation | password; biometrics if the user enables them | decided (2026-10-15); every EOA, and a Safe owner the user wants to be able to restore |
 | **Synced-passkey Safe owner** | P-256 passkey through the platform WebAuthn API | synced end-to-end encrypted by iCloud Keychain / Google Password Manager | biometrics | recommended as an option; owner's decision open |
+| **Owner key in an external wallet** | secp256k1 in another wallet (MetaMask, say), reached over WalletConnect; Serotine keeps only its address and the session | the other wallet's | the other wallet's | decided (2026-11-03, #22); Safe owners only, an EOA later or never. It is asked for `eth_signTypedData_v4` of the `SafeTx` alone, and its signature is checked here (docs/walletconnect.md, *Direction 2*) |
 
 Which tier an account uses is the user's decision. The app explains the
 trade when the account is created and never downgrades a tier on its own.
@@ -195,8 +196,9 @@ its KDoc and returns it as a result the UI shows as state.
 - **Sign.** `sign(account, digest, unlock)` opens the account's envelope
   (`<address>.seed`), with the password and the hardware secret
   (`Unlock.WithPassword`) or with the DEK the biometric path unwraps
-  (`Unlock.WithBiometrics`, below), derives the first account's key and refuses
-  a key that does not derive the account it is filed under. It signs the
+  (`Unlock.WithBiometrics`, below), derives the key of the account the envelope
+  names (its index on the BIP-44 path, the first for an imported phrase) and
+  refuses a key that does not derive the account it is filed under. It signs the
   32-byte digest as given, never hashed again, with libsecp256k1 (a low s, RFC
   6979's nonce) and finds the recovery id by recovering the public key. The seed, the key and the password's bytes are
   zeroed before it returns (rule 7); a wrong password, a missing key and an
@@ -327,6 +329,26 @@ its KDoc and returns it as a result the UI shows as state.
   derives the first account, `m/44'/60'/0'/0/0` with the empty passphrase, on
   libsecp256k1 (ACINQ's secp256k1-kmp). The use case stores the key and then
   adds the account as one step that a cancelled caller cannot cut in half.
+- **Further accounts of a phrase.** `deriveAccount(from, password, held)` adds
+  a further account of the phrase an account held here comes from, without the
+  words: the envelope holds the BIP-39 seed for this (owner ruling,
+  2026-10-15). It opens `from`'s envelope with the wallet password, checks
+  that its seed derives `from`, and takes `m/44'/60'/0'/0/i`, `i` the lowest
+  index whose address is not in `held`: the use case passes the addresses held
+  on the network the account is added on, so a phrase's accounts there are the
+  ones other wallets list for it, in their order, and one removed comes back
+  first. The seed is sealed again in an envelope of its own, under that
+  account's address, as an import seals one (the device's cost, stepping down
+  when the memory is short, joining the biometric path while it is on). An
+  envelope already stored under that address (its account never reached the
+  list) is kept when it opens under the password, and sealed again otherwise.
+  Each envelope names its index (`index`, left out for the first, so envelopes
+  stored before are unchanged). The index is not bound as additional data:
+  signing derives the key at that index and refuses one that is not the
+  account the envelope is filed under, so an index edited on disk signs
+  nothing. The use case (`DeriveAccount`) adds the account on the network of
+  the one it comes from, as one step under the app's `WalletChanges`; Add on
+  another network adds it elsewhere.
 - **Storage.** The BIP-39 seed goes into the envelope above, one file per
   account (`<address>.seed`, JSON) in a directory of the app's own.
   - Writes go through a temporary file readable by this user alone, an
@@ -737,10 +759,12 @@ value:
 3. **A smaller chance of the defect.** The signing path is one small,
    separately reviewed module with no feature flags or remote configuration
    on it. No dApp browser runs in the signing process; requests arrive
-   through a connection protocol that runs outside it. WalletConnect is the
-   candidate, and its relay is an off-chain service that goes under *Data
-   sources* in CLAUDE.md before it is wired in; what arrives through it is
-   untrusted input. Reproducible builds let others verify the binary. Calldata
+   through a connection protocol that runs outside it. That protocol is
+   WalletConnect v2 (owner rulings, 2026-11-03, #22; docs/walletconnect.md).
+   Its relay is an off-chain service under *Data sources* in CLAUDE.md, what
+   arrives through it is untrusted input, a dApp may call a closed list of
+   methods, and `eth_sign`, which would sign a digest the dApp chose, is
+   refused in every case. Reproducible builds let others verify the binary. Calldata
    decoding and transaction simulation protect against malicious dApps, which
    is the common case, but not against the app itself.
 
@@ -753,7 +777,9 @@ deception path, and nothing on a phone closes it completely.
 - **External signers** (Ledger over Bluetooth, Keystone over QR, Keycard and
   Tangem over NFC) keep the secp256k1 key off the phone entirely and bring a
   trusted screen. For a Safe wallet this is the natural top tier, and a
-  natural co-owner in the shapes above. Deferred: the owner decides when.
+  natural co-owner in the shapes above. Deferred: the owner decides when
+  (#42). A software wallet that holds an owner key, reached over
+  WalletConnect, is a tier of its own (*The account tiers*).
 - **Two-party threshold ECDSA with Myotis**, where neither the device share
   nor the server share can sign alone. Real protocol complexity, an
   availability dependency, and the device share still needs the envelope.

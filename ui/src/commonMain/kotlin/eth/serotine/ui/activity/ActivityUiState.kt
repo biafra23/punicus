@@ -3,7 +3,7 @@ package eth.serotine.ui.activity
 /**
  * Everything an account's Activity renders, the Activity tab of its detail (docs/wallet-ux.md,
  * screen 25; issue #85): the transactions this device sent for it and, for a Safe, its own events
- * on chain, newest first. Display-ready.
+ * on chain, by date, newest first unless the user turned the order round ([ordered]). Display-ready.
  */
 sealed interface ActivityUiState {
 
@@ -11,13 +11,18 @@ sealed interface ActivityUiState {
     data object Loading : ActivityUiState
 
     /**
-     * The [rows], newest first (none: nothing listed yet, which [empty] says), and [coverage],
-     * what the list covers and what it leaves out.
+     * The [rows], by date, newest first as built (none: nothing listed yet, which [empty] says),
+     * and [coverage], what the list covers and what it leaves out; [simpleCoverage], the same in
+     * simple mode's words, with no block number (docs/simple-ui.md, H5: "Activity since you added
+     * this account"). Above them, the swaps whose next step [waiting] for the user, each with
+     * Continue, in the same place whichever way the rows run.
      */
     data class Shown(
         val rows: List<ActivityRow>,
         val coverage: String,
         val empty: String = "Nothing sent from this device yet.",
+        val simpleCoverage: String = coverage,
+        val waiting: List<WaitingStep> = emptyList(),
     ) : ActivityUiState
 
     /** The history cannot be read right now, for the reason [message] gives. */
@@ -28,9 +33,15 @@ sealed interface ActivityUiState {
  * One transaction sent from this device, or one event of a Safe on chain: its [key] in the list,
  * what it did ([title]: "Sent 0.5 ETH", "Received 0.1 ETH"), who or what else it concerns
  * ([detail]: "To Bob · 0x12…5678", "Treasury · Safe nonce 4"), the EIP-55 address its blockie is of
- * ([about]), when a peer took it or the block it is in ([time]), and how it ended as this device saw
- * it ([status], "In block 9,412,118", and its [state]). [opens] is what a tap opens the detail of
- * (docs/wallet-ux.md, screen 26): the transaction, and for an event its log.
+ * ([about]), when it happened ([time]: when a peer took a sent transaction, or when an event's block
+ * was produced as its verified header says, and the block alone, "Block 9,415,302", from an engine
+ * that does not report the time), and how it ended as this device saw it ([status], "In block
+ * 9,412,118", and its [state]). [opens] is what a tap opens the detail of (docs/wallet-ux.md,
+ * screen 26): the transaction, and for an event its log. Simple mode says no block number
+ * (docs/simple-ui.md, H5): [simpleTime] is when, where that is known (null for an event dated by its
+ * block alone), and [simpleStatus] how it ended in words ("Confirmed", "Final", "Failed"), null where
+ * that is [status] itself: so a copy that changes [status] (a caution, a warning) never leaves an
+ * older simple status behind.
  */
 data class ActivityRow(
     val key: String,
@@ -41,6 +52,8 @@ data class ActivityRow(
     val status: String,
     val state: ActivityState,
     val opens: ActivityKey,
+    val simpleTime: String? = time,
+    val simpleStatus: String? = null,
 )
 
 /**
@@ -50,6 +63,15 @@ data class ActivityRow(
  * and a tap opens the order's status instead.
  */
 data class ActivityKey(val hash: String, val logIndex: Int? = null, val cowOrder: Boolean = false)
+
+/**
+ * A swap whose next step waits for the user (docs/simple-ui.md, H5): what it swaps ([title], "Swap 40
+ * USDC → ETH"), where it stands ([message], "Step 1 done. Step 2 is waiting for you.", said from the
+ * approval's verified receipt and never claimed without one), and the token it sells ([sell], its
+ * address), which Continue opens Swap with and Dismiss lets go of. In words, with no block number, in
+ * both views.
+ */
+data class WaitingStep(val title: String, val message: String, val sell: String)
 
 /** How a sent transaction ended, as an [ActivityRow] marks it. */
 enum class ActivityState {
@@ -76,4 +98,38 @@ enum class ActivityState {
      * accounts: it may be a look-alike, planted for them to copy.
      */
     CAUTION,
+}
+
+/**
+ * Which way an Activity's rows run (docs/wallet-ux.md, screen 25): the top bar's menu offers the
+ * other one while the tab is shown.
+ */
+enum class ActivityOrder {
+    /** The newest row on top: the default. */
+    NEWEST_FIRST,
+
+    /** The oldest row on top. */
+    OLDEST_FIRST,
+}
+
+/**
+ * This Activity with its rows running the way [order] says: as built for [ActivityOrder.NEWEST_FIRST],
+ * turned round for [ActivityOrder.OLDEST_FIRST]. The cards of the swaps waiting for a step stay on top.
+ */
+fun ActivityUiState.ordered(order: ActivityOrder): ActivityUiState = when {
+    order == ActivityOrder.NEWEST_FIRST || this !is ActivityUiState.Shown -> this
+    else -> copy(rows = rows.asReversed())
+}
+
+/**
+ * This Activity in simple mode's words (docs/simple-ui.md, H5): each row's [ActivityRow.simpleTime]
+ * (none for an event dated only by its block) and [ActivityRow.simpleStatus] in place of its time
+ * and status, and [ActivityUiState.Shown.simpleCoverage] in place of the coverage.
+ */
+internal fun ActivityUiState.simple(): ActivityUiState = when (this) {
+    is ActivityUiState.Shown -> copy(
+        rows = rows.map { it.copy(time = it.simpleTime.orEmpty(), status = it.simpleStatus ?: it.status) },
+        coverage = simpleCoverage,
+    )
+    else -> this
 }

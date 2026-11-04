@@ -40,6 +40,8 @@ sealed interface CowOrderUiState {
      *   cancellation sent, or one that may still be on its way), with its status;
      *   [uniswapAgain]: proven not to have swapped, the same swap on Uniswap, which Swap opens with.
      * - [error]: why the last cancellation could not be quoted; [quoting] while one is.
+     * - Simple mode says no block (docs/simple-ui.md): [simpleEnd] and [simpleError] are [end] and
+     *   [error] in its words, null where they are the same.
      */
     data class Shown(
         override val network: String,
@@ -64,12 +66,15 @@ sealed interface CowOrderUiState {
         val uniswapAgain: SwapAgain? = null,
         val error: String? = null,
         val quoting: Boolean = false,
+        val simpleEnd: String? = null,
+        val simpleError: String? = null,
     ) : CowOrderUiState
 
     /**
      * The cancellation on chain, under review: `invalidateOrder` of the order's [uid] on the
      * [settlement] contract, sent from [from]; the most the fee can be and what it is made of, the
-     * verified [balance] before → after, and the verified run ([simulation]).
+     * verified [balance] before → after, and the verified run ([simulation]); [simpleSimulation] that
+     * run with no block, for simple mode, which keeps the fee's make-up and the blocks behind *Details*.
      */
     data class CancelReview(
         override val network: String,
@@ -84,6 +89,7 @@ sealed interface CowOrderUiState {
         val refreshing: Boolean = false,
         val signing: Boolean = false,
         val notSent: NotSentItem? = null,
+        val simpleSimulation: String = simulation,
     ) : CowOrderUiState {
         /** Neither a refresh nor a signature runs, and nothing was signed yet. */
         val idle: Boolean

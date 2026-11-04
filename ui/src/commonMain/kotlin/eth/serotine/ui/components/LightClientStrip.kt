@@ -74,5 +74,41 @@ fun UnderLightClientStrip(
     }
 }
 
+/**
+ * [content] under the light client's strip where there is one ([item], Detailed view's), and on its
+ * own where there is none: simple mode, which says how fresh its values are in its own words
+ * (docs/simple-ui.md), under its [SyncLine] of [syncLine] while that has something to say.
+ */
+@Composable
+fun UnderLightClientStripIfAny(
+    item: LightClientItem?,
+    modifier: Modifier = Modifier,
+    syncLine: LightClientItem? = null,
+    content: @Composable BoxScope.() -> Unit,
+) {
+    when {
+        item != null -> UnderLightClientStrip(item, modifier, content)
+        syncLine?.simpleText != null -> Column(modifier.fillMaxSize()) {
+            SyncLine(syncLine)
+            Box(Modifier.weight(1f).fillMaxWidth(), content = content)
+        }
+        else -> Box(modifier.fillMaxSize(), content = content)
+    }
+}
+
+/** Simple mode's sync line, on every screen that draws one. */
+const val SYNC_LINE_TAG = "sync-line"
+
+/**
+ * Simple mode's sync line (docs/simple-ui.md, *The sync line*; owner's requests, 2026-10-29): what
+ * keeps [item]'s network from verified reads, in plain words and the strip's colour, with its
+ * progress where there is a fraction. Nothing while [LightClientItem.simpleText] is null.
+ */
+@Composable
+fun SyncLine(item: LightClientItem, modifier: Modifier = Modifier) {
+    val text = item.simpleText ?: return
+    LightClientStrip(item.copy(text = text), modifier.testTag(SYNC_LINE_TAG))
+}
+
 /** How strongly a progress bar's track shows its colour under the part done. */
 private const val TRACK_ALPHA = 0.4f

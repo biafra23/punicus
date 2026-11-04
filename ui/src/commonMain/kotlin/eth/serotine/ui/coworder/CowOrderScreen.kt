@@ -45,9 +45,11 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LifecycleEventEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import eth.serotine.domain.model.InterfaceMode
 import eth.serotine.ui.components.AmountLine
 import eth.serotine.ui.components.FromLine
 import eth.serotine.ui.components.Heading
+import eth.serotine.ui.components.HiddenDetails
 import eth.serotine.ui.components.LightClientItem
 import eth.serotine.ui.components.NotSentFields
 import eth.serotine.ui.components.Note
@@ -55,10 +57,11 @@ import eth.serotine.ui.components.Spender
 import eth.serotine.ui.components.Unavailable
 import eth.serotine.ui.components.UnavailableDialog
 import eth.serotine.ui.components.UnavailableNotice
-import eth.serotine.ui.components.UnderLightClientStrip
+import eth.serotine.ui.components.UnderLightClientStripIfAny
 import eth.serotine.ui.components.UnlockFields
 import eth.serotine.ui.components.unavailable
-import eth.serotine.ui.lightclient.LightClientViewModel
+import eth.serotine.ui.mode.LocalInterfaceMode
+import kotlinx.coroutines.flow.StateFlow
 
 /** Test tag of the button that cancels the order on chain, for UI tests. */
 const val COW_ORDER_CANCEL_TAG = "cow-order-cancel"
@@ -75,6 +78,9 @@ const val COW_ORDER_PASSWORD_TAG = "cow-order-password"
 /** Test tag of the button that signs the cancellation, for UI tests. */
 const val COW_ORDER_SIGN_TAG = "cow-order-sign"
 
+/** Test tag of the cancellation's *Details* in simple mode, for UI tests. */
+const val COW_ORDER_DETAILS_TAG = "cow-order-details"
+
 /**
  * Binds [CowOrderScreen] to its ViewModel. A cancellation broadcast ends the screen through
  * [onCancelSent] with its hash; [onOpenTransfer] opens the status of a cancellation already on its
@@ -85,7 +91,7 @@ const val COW_ORDER_SIGN_TAG = "cow-order-sign"
 @Composable
 fun CowOrderRoute(
     viewModel: CowOrderViewModel,
-    lightClient: LightClientViewModel,
+    lightClient: StateFlow<LightClientItem>,
     onBack: () -> Unit,
     onCancelSent: (hash: String) -> Unit,
     onOpenTransfer: (hash: String) -> Unit,
@@ -93,7 +99,6 @@ fun CowOrderRoute(
     modifier: Modifier = Modifier,
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
-    val strip by lightClient.item.collectAsStateWithLifecycle()
     LifecycleEventEffect(Lifecycle.Event.ON_STOP) { viewModel.onHidden() }
     LifecycleEventEffect(Lifecycle.Event.ON_START) { viewModel.onShown() }
     val sent = (state as? CowOrderUiState.CancelSent)?.hash
@@ -101,21 +106,40 @@ fun CowOrderRoute(
     LaunchedEffect(sent) {
         if (sent != null) currentOnSent(sent)
     }
-    CowOrderScreen(
-        state = state,
-        lightClient = strip,
-        onCancel = viewModel::cancel,
-        onEdit = viewModel::edit,
-        onRefresh = viewModel::refresh,
-        onPasswordChange = viewModel::onPasswordChange,
-        onSign = viewModel::sign,
-        onSignWithBiometrics = viewModel::signWithBiometrics,
-        onRetry = viewModel::retry,
-        onOpenTransfer = onOpenTransfer,
-        onSwapAgain = onSwapAgain,
-        onBack = onBack,
-        modifier = modifier,
-    )
+    // The same state in the view the user chose (docs/simple-ui.md).
+    when (LocalInterfaceMode.current) {
+        InterfaceMode.SIMPLE -> SimpleCowOrderScreen(
+            state = state,
+            onCancel = viewModel::cancel,
+            onEdit = viewModel::edit,
+            onRefresh = viewModel::refresh,
+            onPasswordChange = viewModel::onPasswordChange,
+            onSign = viewModel::sign,
+            onSignWithBiometrics = viewModel::signWithBiometrics,
+            onRetry = viewModel::retry,
+            onOpenTransfer = onOpenTransfer,
+            onSwapAgain = onSwapAgain,
+            onBack = onBack,
+            modifier = modifier,
+            syncLine = lightClient.collectAsStateWithLifecycle().value,
+        )
+        // The strip in Detailed view; in simple mode the same item, drawn as the sync line while it says something.
+        InterfaceMode.DETAILED -> CowOrderScreen(
+            state = state,
+            lightClient = lightClient.collectAsStateWithLifecycle().value,
+            onCancel = viewModel::cancel,
+            onEdit = viewModel::edit,
+            onRefresh = viewModel::refresh,
+            onPasswordChange = viewModel::onPasswordChange,
+            onSign = viewModel::sign,
+            onSignWithBiometrics = viewModel::signWithBiometrics,
+            onRetry = viewModel::retry,
+            onOpenTransfer = onOpenTransfer,
+            onSwapAgain = onSwapAgain,
+            onBack = onBack,
+            modifier = modifier,
+        )
+    }
 }
 
 /**
@@ -123,13 +147,15 @@ fun CowOrderRoute(
  * function of [state]: what the order sells and buys, its end as the chain proves it, CoW's own
  * word labelled as CoW's, until when it may fill, and "Cancel on chain" while it may; then the
  * cancellation's review with the unlock that signs it. Once it is proven not to have swapped, the
- * same swap on Uniswap.
+ * same swap on Uniswap. [lightClient] is the strip above it, Detailed view's; simple mode
+ * ([SimpleCowOrderScreen]) has none, and keeps the blocks, the order's and its cancellation's, and the
+ * fee's make-up behind *Details* ([details]).
  */
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalComposeUiApi::class)
 @Composable
 fun CowOrderScreen(
     state: CowOrderUiState,
-    lightClient: LightClientItem,
+    lightClient: LightClientItem?,
     onCancel: () -> Unit,
     onEdit: () -> Unit,
     onRefresh: () -> Unit,
@@ -141,6 +167,8 @@ fun CowOrderScreen(
     onSwapAgain: (SwapAgain) -> Unit,
     onBack: () -> Unit,
     modifier: Modifier = Modifier,
+    details: List<String> = emptyList(),
+    syncLine: LightClientItem? = null,
 ) {
     val review = state as? CowOrderUiState.CancelReview
     // Back from the review is to the order, until bytes may be out there, and waits while a signature runs.
@@ -173,7 +201,7 @@ fun CowOrderScreen(
             )
         },
     ) { padding ->
-        UnderLightClientStrip(lightClient, Modifier.padding(padding)) {
+        UnderLightClientStripIfAny(lightClient, Modifier.padding(padding), syncLine) {
             when (state) {
                 is CowOrderUiState.Loading -> CircularProgressIndicator(Modifier.align(Alignment.Center))
                 is CowOrderUiState.CancelSent -> Column(
@@ -188,9 +216,13 @@ fun CowOrderScreen(
                     Modifier.align(Alignment.Center).padding(24.dp),
                     textAlign = TextAlign.Center,
                 )
-                is CowOrderUiState.Shown -> Content { OrderContent(state, onCancel, onOpenTransfer, onSwapAgain) }
+                is CowOrderUiState.Shown -> Content {
+                    OrderContent(state, onCancel, onOpenTransfer, onSwapAgain)
+                    if (details.isNotEmpty()) HiddenDetails(COW_ORDER_DETAILS_TAG) { details.forEach { Note(it) } }
+                }
                 is CowOrderUiState.CancelReview -> Content {
                     CancelContent(state)
+                    if (details.isNotEmpty()) HiddenDetails(COW_ORDER_DETAILS_TAG) { details.forEach { Note(it) } }
                     CancelFooter(state, onRefresh, onPasswordChange, onSign, onSignWithBiometrics, onRetry)
                 }
             }
@@ -302,12 +334,13 @@ private fun CancelContent(state: CowOrderUiState.CancelReview) {
     FromLine(state.from)
     Heading("Network fee")
     Text("At most ${state.maxFee}")
-    Note(state.feeDetail)
+    // Empty in simple mode, which keeps it behind Details.
+    state.feeDetail.takeIf { it.isNotEmpty() }?.let { Note(it) }
     Heading("Verified simulation")
     Column {
         Text(state.balance.what, style = MaterialTheme.typography.labelLarge)
         Text("${state.balance.before} → ${state.balance.after}")
-        Note(state.balance.verifiedAt)
+        state.balance.verifiedAt.takeIf { it.isNotEmpty() }?.let { Note(it) }
     }
     Text(state.simulation, style = MaterialTheme.typography.bodyMedium)
 }

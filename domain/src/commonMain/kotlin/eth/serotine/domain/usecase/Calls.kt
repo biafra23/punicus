@@ -1,5 +1,6 @@
 package eth.serotine.domain.usecase
 
+import eth.serotine.domain.model.AccountId
 import eth.serotine.domain.model.Address
 import eth.serotine.domain.model.Eip1559Transaction
 import eth.serotine.domain.model.Network
@@ -189,9 +190,9 @@ internal class CallQuoter(
     suspend fun heldBack(from: Address): CallRefusal? {
         val since = clock() - RECORD_LIFETIME_SECONDS
         val maybe = (sentTransfers.observe().first() as? SentTransferList.Loaded)?.transfers.orEmpty()
-            .filter { it.account == from && it.maybeSent && it.sentAt >= since }
+            .filter { it.network == network && it.account == from && it.maybeSent && it.sentAt >= since }
         if (maybe.isEmpty()) return null
-        val count = when (val mined = inputs.minedNonce(from)) {
+        val count = when (val mined = inputs.minedNonce(network, from)) {
             is NonceReading.Read -> mined.nonce
             is NonceReading.Unavailable -> return CallRefusal.Unavailable(mined.reason, QuoteFigure.NONCE)
         }
@@ -220,15 +221,15 @@ internal class CallQuoter(
         heldBack(from)?.let { return@cancellingReads refused(it) }
 
         // The nonces, the record and the fee history, alongside the estimate and then the run.
-        val nonce = async { inputs.nonce(from) }
-        val mined = async { inputs.minedNonce(from) }
+        val nonce = async { inputs.nonce(network, from) }
+        val mined = async { inputs.minedNonce(network, from) }
         val recorded = async { sentTransfers.observe().first() }
-        val fees = async { inputs.fees() }
-        val estimated = async { inputs.estimateGas(from, to, value, data) }
+        val fees = async { inputs.fees(network) }
+        val estimated = async { inputs.estimateGas(network, from, to, value, data) }
 
         val expiredBefore = clock() - RECORD_LIFETIME_SECONDS
         val records = (recorded.await() as? SentTransferList.Loaded)?.transfers.orEmpty()
-            .filter { it.account == from && it.sentAt >= expiredBefore }
+            .filter { it.network == network && it.account == from && it.sentAt >= expiredBefore }
 
         val gas = when (val estimate = estimated.await()) {
             // The engine's, priced under the fork the chain runs: on Sepolia's Amsterdam a plain
@@ -247,7 +248,7 @@ internal class CallQuoter(
             is GasEstimate.Unavailable ->
                 return@cancellingReads refused(CallRefusal.Unavailable(estimate.reason, QuoteFigure.GAS))
         }
-        val simulationBlock = when (val simulation = inputs.simulate(from, to, value, data)) {
+        val simulationBlock = when (val simulation = inputs.simulate(network, from, to, value, data)) {
             is Simulation.Succeeded -> if (accepts(simulation.returnHex)) {
                 simulation.blockNumber
             } else {
@@ -278,7 +279,7 @@ internal class CallQuoter(
         val unmined = records.filter { it.nonce >= minedCount && !it.maybeSent }
         // Never below the mined count either: the two counts may come from two heads.
         val next = maxOf(pendingNonce, minedCount, (unmined.maxOfOrNull { it.nonce } ?: -1) + 1)
-        sentTransfers.prune(from, minedCount, clock() - DEPLOYMENT_LIFETIME_SECONDS)
+        sentTransfers.prune(AccountId(network, from), minedCount, clock() - DEPLOYMENT_LIFETIME_SECONDS)
         val insufficient = refused(CallRefusal.InsufficientFunds)
         val pendingCost = unmined.map { it.maxCost }.sumOrNull() ?: return@cancellingReads insufficient
         val available = native.wei.minusOrNull(pendingCost) ?: return@cancellingReads insufficient
@@ -370,6 +371,7 @@ internal suspend fun signAndSend(
     signer: Signer,
     broadcaster: Broadcaster,
     sentTransfers: SentTransfers,
+    network: Network,
     quote: CallQuote,
     action: SentAction,
     clock: () -> Long,
@@ -381,6 +383,7 @@ internal suspend fun signAndSend(
         else -> return TransferSending.NotSigned(signed)
     }
     val transfer = SentTransfer(
+        network = network,
         account = quote.from,
         nonce = transaction.nonce,
         signed = SignedTransfer(transaction.encodeSigned(signature)),
@@ -389,7 +392,7 @@ internal suspend fun signAndSend(
         sentAt = clock(), // restamped once a peer took it
     )
     return withContext(NonCancellable) {
-        when (val broadcast = broadcaster.send(transfer.signed.raw)) {
+        when (val broadcast = broadcaster.send(network, transfer.signed.raw)) {
             is Broadcast.Sent -> sent(sentTransfers, transfer, clock)
             is Broadcast.Unavailable -> maybeSent(sentTransfers, broadcast, transfer, clock)
             else -> TransferSending.NotSent(broadcast, transfer)

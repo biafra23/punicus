@@ -103,6 +103,25 @@ class SafeTxOnChainTest {
     }
 
     @Test
+    fun aSafeStillOnAPreOneThreeZeroSingletonIsNeitherApprovedNorExecutedThoughItsOwnersStand() = runTest {
+        world.state = world.state.copy(version = "1.1.1")
+        val request = world.request(payment, world.alice.address)
+
+        val reading = assertIs<SafeTxOwnersReading.Read>(readOwners(request))
+        assertEquals(SafeTxRefusal.TooOldToSign("1.1.1"), reading.refusal, "shown, with why it may not be acted on")
+        assertEquals(1, reading.confirmations, "the owners still stand as the chain says")
+
+        assertEquals(
+            SafeApprovalQuoting.Refused(SafeTxRefusal.TooOldToSign("1.1.1")),
+            quoteApproval(request, world.alice.address, FeeLevel.NORMAL),
+        )
+        assertEquals(
+            SafeExecutionQuoting.Refused(SafeTxRefusal.TooOldToSign("1.1.1")),
+            quoteExecution(request, world.alice.address, FeeLevel.NORMAL),
+        )
+    }
+
+    @Test
     fun approvalAndExecutionQuotesSayWhenTheSafeWasCheckedBeforeTheirFiguresAreRead() = runTest {
         world.kind.value = KindReading.Unavailable(ReadUnavailable.UNPROVEN)
         launch {
@@ -255,8 +274,16 @@ class SafeTxOnChainTest {
         val passed = SafeTx.call(payment.to, payment.value, ByteArray(0), nonce = 3)
         assertEquals(SafeTxRefusal.NonceUsed(4), refusal(world.request(passed, world.alice.address, world.carol)))
         val delegate = SafeTx(
-            payment.to, UInt256.ZERO, ByteArray(0), SafeOperation.DELEGATECALL,
-            UInt256.ZERO, UInt256.ZERO, UInt256.ZERO, Address.ZERO, Address.ZERO, nonce = 4,
+            payment.to,
+            UInt256.ZERO,
+            ByteArray(0),
+            SafeOperation.DELEGATECALL,
+            UInt256.ZERO,
+            UInt256.ZERO,
+            UInt256.ZERO,
+            Address.ZERO,
+            Address.ZERO,
+            nonce = 4,
         )
         assertEquals(SafeTxRefusal.DelegateCall, refusal(world.request(delegate, world.alice.address, world.carol)))
         assertEquals(emptyList(), world.inputs.simulated, "nothing quoted")
@@ -418,8 +445,16 @@ class SafeTxOnChainTest {
         world.inputs.simulation = Simulation.Succeeded(executed, 100)
         fun withTerms(safeTxGas: Long = 0, baseGas: Long = 0, gasPrice: Long = 0, gasToken: Address = Address.ZERO) =
             SafeTx(
-                payment.to, payment.value, ByteArray(0), SafeOperation.CALL, UInt256.of(safeTxGas),
-                UInt256.of(baseGas), UInt256.of(gasPrice), gasToken, Address.ZERO, nonce = 4,
+                payment.to,
+                payment.value,
+                ByteArray(0),
+                SafeOperation.CALL,
+                UInt256.of(safeTxGas),
+                UInt256.of(baseGas),
+                UInt256.of(gasPrice),
+                gasToken,
+                Address.ZERO,
+                nonce = 4,
             )
         val sign = SignSafeTx(world.signer, world.observeSafe, world.recovery, world.queue, Network.SEPOLIA)
 
@@ -505,8 +540,14 @@ class SafeTxOnChainTest {
     fun anEarlierTransactionMaybeSentRefusesAnApprovalOrAnExecutionBeforeTheSafeIsRead() = runTest {
         world.inputs.simulation = Simulation.Succeeded(executed, 100)
         val maybe = SentTransfer(
-            world.alice.address, 7, SignedTransfer(byteArrayOf(2, 7)), SentAction.SafeApproval(world.request(payment)),
-            UInt256.ONE, sentAt = 1_800_000_000, maybeSent = true,
+            Network.SEPOLIA,
+            world.alice.address,
+            7,
+            SignedTransfer(byteArrayOf(2, 7)),
+            SentAction.SafeApproval(world.request(payment)),
+            UInt256.ONE,
+            sentAt = 1_800_000_000,
+            maybeSent = true,
         )
         world.sent.transfers.value = listOf(maybe)
         val request = world.request(payment, world.carol)

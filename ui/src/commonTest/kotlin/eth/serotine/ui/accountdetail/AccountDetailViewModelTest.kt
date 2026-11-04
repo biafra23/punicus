@@ -2,17 +2,21 @@ package eth.serotine.ui.accountdetail
 
 import eth.serotine.domain.model.Account
 import eth.serotine.domain.model.AccountCustody
+import eth.serotine.domain.model.AccountId
 import eth.serotine.domain.model.AccountKind
 import eth.serotine.domain.model.Address
 import eth.serotine.domain.model.DisplayCurrency
 import eth.serotine.domain.model.Erc20
 import eth.serotine.domain.model.Network
+import eth.serotine.domain.model.NetworkUpgrade
 import eth.serotine.domain.model.PinnedFallbackHandlers
 import eth.serotine.domain.model.PriceId
 import eth.serotine.domain.model.SafeOperation
 import eth.serotine.domain.model.SafeSignature
 import eth.serotine.domain.model.SafeTx
 import eth.serotine.domain.model.SigningRequest
+import eth.serotine.domain.model.SlippageTolerance
+import eth.serotine.domain.model.SwapVenue
 import eth.serotine.domain.model.Token
 import eth.serotine.domain.model.TokenUnits
 import eth.serotine.domain.model.UInt256
@@ -21,19 +25,31 @@ import eth.serotine.domain.repository.AddressKind
 import eth.serotine.domain.repository.AddressKinds
 import eth.serotine.domain.repository.BalanceReading
 import eth.serotine.domain.repository.KindReading
+import eth.serotine.domain.repository.LightClient
+import eth.serotine.domain.repository.LightClientStatus
 import eth.serotine.domain.repository.NameResolution
 import eth.serotine.domain.repository.ReadUnavailable
 import eth.serotine.domain.repository.SafeState
+import eth.serotine.domain.repository.Simulation
 import eth.serotine.domain.repository.TokenBalanceReading
+import eth.serotine.domain.repository.UniswapV3Chain
+import eth.serotine.domain.repository.VenueReading
+import eth.serotine.domain.repository.WaitingSwap
+import eth.serotine.domain.usecase.DropWaitingSwap
+import eth.serotine.domain.usecase.HasSwapVenue
 import eth.serotine.domain.usecase.ObserveAccount
 import eth.serotine.domain.usecase.ObserveAccountCowOrders
 import eth.serotine.domain.usecase.ObserveAccountHistory
 import eth.serotine.domain.usecase.ObserveAccountValue
 import eth.serotine.domain.usecase.ObserveAccounts
+import eth.serotine.domain.usecase.ObserveAmountsHidden
 import eth.serotine.domain.usecase.ObserveDisplayCurrencies
+import eth.serotine.domain.usecase.ObserveEnabledNetworks
 import eth.serotine.domain.usecase.ObserveEnsNames
 import eth.serotine.domain.usecase.ObserveKnownTokens
+import eth.serotine.domain.usecase.ObserveLightClient
 import eth.serotine.domain.usecase.ObserveNativeBalance
+import eth.serotine.domain.usecase.ObserveNetworkLive
 import eth.serotine.domain.usecase.ObserveSafe
 import eth.serotine.domain.usecase.ObserveSafeHistory
 import eth.serotine.domain.usecase.ObserveSafeTxQueue
@@ -41,27 +57,48 @@ import eth.serotine.domain.usecase.ObserveSentToAddresses
 import eth.serotine.domain.usecase.ObserveTokenHoldings
 import eth.serotine.domain.usecase.ObserveTokenTransfers
 import eth.serotine.domain.usecase.ObserveUsdPrice
+import eth.serotine.domain.usecase.ObserveWaitingSwaps
+import eth.serotine.domain.usecase.RefreshNetworkData
+import eth.serotine.domain.usecase.SetNetworkEnabled
 import eth.serotine.domain.usecase.SetTokenHidden
+import eth.serotine.domain.usecase.ToggleAmountsHidden
 import eth.serotine.ui.FakeAccounts
 import eth.serotine.ui.FakeBalances
 import eth.serotine.ui.FakeFeeds
+import eth.serotine.ui.FakeFreshness
 import eth.serotine.ui.FakeLogIndex
 import eth.serotine.ui.FakeMetadata
 import eth.serotine.ui.FakeNames
 import eth.serotine.ui.FakeRecovery
 import eth.serotine.ui.FakeTokenBalances
 import eth.serotine.ui.FakeTokenCatalog
+import eth.serotine.ui.FakeUpgradeReports
+import eth.serotine.ui.MemoryAmountsHidden
 import eth.serotine.ui.MemoryCowOrders
 import eth.serotine.ui.MemoryCurrencySetting
 import eth.serotine.ui.MemoryHistoryStarts
+import eth.serotine.ui.MemoryNetworkSettings
 import eth.serotine.ui.MemorySafeTxQueue
 import eth.serotine.ui.MemoryTransactionHistory
 import eth.serotine.ui.MemoryUserTokens
+import eth.serotine.ui.MemoryWaitingSwaps
 import eth.serotine.ui.activity.AccountActivity
+import eth.serotine.ui.activity.ActivityOrder
 import eth.serotine.ui.activity.ActivityUiState
+import eth.serotine.ui.components.AMOUNT_MASK
 import eth.serotine.ui.components.Control
 import eth.serotine.ui.components.Eip55
+import eth.serotine.ui.components.NetworkLabel
 import eth.serotine.ui.components.shortAddress
+import eth.serotine.ui.upgradeWarnings
+import kotlin.test.AfterTest
+import kotlin.test.Test
+import kotlin.test.assertEquals
+import kotlin.test.assertFalse
+import kotlin.test.assertIs
+import kotlin.test.assertNotNull
+import kotlin.test.assertNull
+import kotlin.test.assertTrue
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.awaitCancellation
@@ -75,17 +112,12 @@ import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.test.setMain
-import kotlin.test.AfterTest
-import kotlin.test.Test
-import kotlin.test.assertEquals
-import kotlin.test.assertFalse
-import kotlin.test.assertIs
-import kotlin.test.assertTrue
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class AccountDetailViewModelTest {
 
     private val daily = Account(
+        Network.SEPOLIA,
         Address.of("0x8f3a2c71e5b9d04a6f1e3c2ba7d90e5f4c6b91c2"),
         AccountKind.EOA,
         "Daily",
@@ -94,6 +126,7 @@ class AccountDetailViewModelTest {
     private val accounts = FakeAccounts(daily)
     private val history = MemoryTransactionHistory()
     private val cowOrders = MemoryCowOrders()
+    private val waitingSwaps = MemoryWaitingSwaps()
     private val logIndex = FakeLogIndex()
     private val historyStarts = MemoryHistoryStarts()
     private val names = FakeNames()
@@ -105,6 +138,8 @@ class AccountDetailViewModelTest {
     private val uni = Token(Address.of("0x1f9840a85d5af5bf1d1762f925bdaddc4201f984"), "UNI", "Uniswap", 18, "uni")
     private val catalog = FakeTokenCatalog(usdc, link, uni)
     private val userTokens = MemoryUserTokens()
+
+    private val amountsHidden = MemoryAmountsHidden()
     private val metadata = FakeMetadata()
     private val tokenBalances = FakeTokenBalances()
     private val feeds = FakeFeeds()
@@ -113,28 +148,63 @@ class AccountDetailViewModelTest {
     private val recovery = FakeRecovery()
     private val kind = MutableStateFlow<KindReading>(KindReading.Syncing)
     private val kinds = object : AddressKinds {
-        override fun observeKind(address: Address): Flow<KindReading> = kind
+        override fun observeKind(network: Network, address: Address): Flow<KindReading> = kind
     }
 
+    /** Uniswap as the account's network pins it: a venue unproven here, or none pinned ([venuePinned] false). */
+    private var venuePinned = true
+    private val uniswap = object : UniswapV3Chain {
+        override suspend fun venue(network: Network): VenueReading =
+            if (venuePinned) VenueReading.Unavailable(ReadUnavailable.NO_ENGINE) else VenueReading.NotPinned
+
+        override suspend fun call(network: Network, to: Address, data: ByteArray): Simulation =
+            error("not used by these tests")
+    }
+
+    private val freshness = FakeFreshness()
+
     private fun viewModel(address: Address = daily.address) = AccountDetailViewModel(
-        address,
+        AccountId(Network.SEPOLIA, address),
         ObserveAccount(accounts),
         ObserveAccountValue(
             ObserveNativeBalance(balances),
             ObserveTokenHoldings(ObserveKnownTokens(catalog, userTokens, metadata), tokenBalances),
             ObserveUsdPrice(feeds),
-            ObserveDisplayCurrencies(feeds, currency),
-            Network.SEPOLIA,
+            ObserveDisplayCurrencies(feeds, currency, accounts),
         ),
         ObserveSafe(kinds, accounts),
         ObserveSafeTxQueue(queue, ObserveSafe(kinds, accounts), recovery, Network.SEPOLIA),
         ObserveKnownTokens(catalog, userTokens, metadata),
         SetTokenHidden(userTokens),
-        Network.SEPOLIA,
         ObserveEnsNames(accounts, names),
         activity(),
+        ObserveEnabledNetworks(networks),
+        SetNetworkEnabled(networks),
+        upgradeWarnings(networks, accounts, upgradeReports, upgradeStatus),
+        HasSwapVenue(uniswap),
+        RefreshNetworkData(freshness),
+        ObserveNetworkLive(freshness),
+        ObserveLightClient(lightClient),
+        DropWaitingSwap(waitingSwaps),
+        ObserveAmountsHidden(amountsHidden),
+        ToggleAmountsHidden(amountsHidden),
         formatTime = { "<$it>" },
+        clock = { NOW },
     )
+
+    private val upgradeReports = FakeUpgradeReports()
+    private val upgradeStatus =
+        MutableStateFlow<LightClientStatus>(LightClientStatus.Synced(9, null, finalized = null))
+
+    /** The account's network's light client, which simple mode's "can't check" banner reads. */
+    private val clientStatus =
+        MutableStateFlow<LightClientStatus>(LightClientStatus.Synced(9, null, finalized = null))
+    private val lightClient = object : LightClient {
+        override val datesFinalizedBlocks = true
+        override fun observeStatus(network: Network): Flow<LightClientStatus> = clientStatus
+    }
+
+    private val networks = MemoryNetworkSettings()
 
     private fun activity() = AccountActivity(
         ObserveAccountHistory(history),
@@ -143,12 +213,119 @@ class AccountDetailViewModelTest {
         ObserveTokenTransfers(logIndex, historyStarts),
         ObserveKnownTokens(catalog, userTokens, metadata),
         ObserveSentToAddresses(history),
-        ObserveAccountCowOrders(cowOrders, Network.SEPOLIA),
-        Network.SEPOLIA,
+        ObserveAccountCowOrders(cowOrders),
+        ObserveWaitingSwaps(waitingSwaps),
     ) { "at $it" }
 
     @AfterTest
     fun resetMainDispatcher() = Dispatchers.resetMain()
+
+    @Test
+    fun dismissLetsTheSwapWaitingInTheActivityGo() = runTest {
+        Dispatchers.setMain(UnconfinedTestDispatcher(testScheduler))
+        val token = Address.of("0x" + "aa".repeat(20))
+        val kept = WaitingSwap(
+            account = AccountId(Network.SEPOLIA, daily.address),
+            sell = token,
+            buy = null,
+            amount = UInt256.of(40_000_000),
+            tolerance = SlippageTolerance.DEFAULT,
+            venue = SwapVenue.UNISWAP,
+            approval = "0x" + "a1".repeat(32),
+            step = 2,
+            steps = 2,
+        )
+        val other = kept.copy(sell = Address.of("0x" + "bb".repeat(20)))
+        waitingSwaps.swaps.value = listOf(kept, other)
+        val viewModel = viewModel()
+
+        viewModel.dismissWaiting(token.hex)
+        runCurrent()
+        assertEquals(listOf(other), waitingSwaps.swaps.value)
+    }
+
+    @Test
+    fun onANetworkThatIsOffSendAndSwapWaitForItAndALastBalanceSaysSo() = runTest {
+        Dispatchers.setMain(UnconfinedTestDispatcher(testScheduler))
+        networks.on.value = emptySet()
+        val viewModel = viewModel()
+        backgroundScope.launch { viewModel.uiState.collect {} }
+        balances.of(daily.address).value =
+            BalanceReading.LastKnown(Wei.of("1500000000000000000"), 9_412_118, asOf = 1_792_100_000)
+        runCurrent()
+
+        val ready = viewModel.uiState.value as AccountDetailUiState.Ready
+        assertEquals(false, ready.networkOn)
+        assertEquals("Last verified <1792100000> · Sepolia is off", ready.assets.first().lastKnown)
+        assertEquals(
+            "Sepolia is off in this wallet, so its balances are not checked and nothing can be sent from Daily. " +
+                "Turned on, it checks them again first.",
+            ready.sendReason,
+        )
+        assertEquals(false, ready.canSwap)
+
+        networks.failSaves = true
+        viewModel.turnOnNetwork()
+        runCurrent()
+        assertEquals(
+            "Sepolia could not be turned on: the setting cannot be saved right now. Try again, or in " +
+                "Settings → Networks.",
+            (viewModel.uiState.value as AccountDetailUiState.Ready).message,
+        )
+
+        networks.failSaves = false
+        viewModel.turnOnNetwork()
+        runCurrent()
+        assertEquals(setOf(Network.SEPOLIA), networks.on.value)
+        val on = viewModel.uiState.value as AccountDetailUiState.Ready
+        assertEquals(true, on.networkOn)
+        assertEquals(null, on.sendReason)
+    }
+
+    @Test
+    fun whereNoSwapVenueIsPinnedSwapIsGreyedOutAndSendIsNot() = runTest {
+        Dispatchers.setMain(UnconfinedTestDispatcher(testScheduler))
+        venuePinned = false
+        val viewModel = viewModel()
+        backgroundScope.launch { viewModel.uiState.collect {} }
+        runCurrent()
+
+        val ready = viewModel.uiState.value as AccountDetailUiState.Ready
+        assertEquals(false, ready.canSwap)
+        assertEquals(
+            "No swap venue is pinned on Sepolia yet, so nothing can be swapped from this account. Send works as " +
+                "before.",
+            ready.swapReason,
+        )
+        assertEquals(true, ready.canSend)
+    }
+
+    @Test
+    fun onANetworkThisVersionCanNoLongerFollowSendAndSwapAreGreyedOut() = runTest {
+        Dispatchers.setMain(UnconfinedTestDispatcher(testScheduler))
+        // Ethereum still followed, so no update screen: Sepolia's accounts say it themselves.
+        networks.on.value = setOf(Network.ETHEREUM, Network.SEPOLIA)
+        accounts.accounts.value += daily.copy(network = Network.ETHEREUM)
+        val viewModel = viewModel()
+        backgroundScope.launch { viewModel.uiState.collect {} }
+        upgradeReports.reports.getValue(Network.SEPOLIA).value =
+            NetworkUpgrade(NetworkUpgrade.Phase.ACTIVE, 1_791_294_816, "0x6c1d9423", 5)
+        upgradeStatus.value = LightClientStatus.CatchingUp(1, 3)
+        runCurrent()
+
+        val ready = viewModel.uiState.value as AccountDetailUiState.Ready
+        assertEquals(true, ready.networkBlocked)
+        assertEquals(
+            "This version of Serotine can no longer follow Sepolia: nothing can be sent from its accounts until " +
+                "you update the app.",
+            ready.sendReason,
+        )
+        assertEquals(
+            "This version of Serotine can no longer follow Sepolia: nothing can be swapped from its accounts until " +
+                "you update the app.",
+            ready.swapReason,
+        )
+    }
 
     @Test
     fun showsTheAccountWithItsVerifiedBalanceAndTheBlockItWasVerifiedAt() = runTest {
@@ -161,6 +338,7 @@ class AccountDetailViewModelTest {
             AccountDetailUiState.Ready(
                 label = "Daily",
                 address = "0x8f3A2C71E5B9d04A6f1e3C2BA7D90E5F4c6B91c2",
+                network = NetworkLabel.of(Network.SEPOLIA),
                 kind = AccountKind.EOA,
                 control = Control.FULL_CONTROL,
                 total = "Checking…",
@@ -211,6 +389,42 @@ class AccountDetailViewModelTest {
         runCurrent()
         val byName = viewModel.uiState.value as AccountDetailUiState.Ready
         assertEquals(listOf("ETH", "UNI", "USDC"), byName.assets.map { it.symbol })
+    }
+
+    @Test
+    fun hiddenAmountsMaskTheTotalAndEachAssetUntilTheEyeOpensAgain() = runTest {
+        Dispatchers.setMain(UnconfinedTestDispatcher(testScheduler))
+        amountsHidden.hidden.value = true
+        val viewModel = viewModel()
+        backgroundScope.launch { viewModel.uiState.collect {} }
+        balances.of(daily.address).value = BalanceReading.Verified(Wei.of("1500000000000000000"), 9)
+        tokenBalances.of(daily.address, usdc.address).value =
+            TokenBalanceReading.Verified(TokenUnits.of("2500000000"), 9)
+        tokenBalances.of(daily.address, link.address).value = TokenBalanceReading.Verified(TokenUnits.of("0"), 9)
+        tokenBalances.of(daily.address, uni.address).value =
+            TokenBalanceReading.Verified(TokenUnits.of("2000000000000000000"), 9)
+        feeds.answer("ETH", 2_000.0)
+        feeds.answer("USDC", 1.0)
+        runCurrent()
+
+        val hidden = viewModel.uiState.value as AccountDetailUiState.Ready
+        assertTrue(hidden.amountsHidden)
+        assertEquals("$$AMOUNT_MASK", hidden.total)
+        // Still in value order, which says nothing a viewer could not already see in the list.
+        assertEquals(listOf("ETH", "USDC", "UNI"), hidden.assets.map { it.symbol })
+        assertEquals(listOf("$AMOUNT_MASK ETH", "$AMOUNT_MASK USDC", "$AMOUNT_MASK UNI"), hidden.assets.map { it.amount })
+        assertEquals(
+            listOf("$$AMOUNT_MASK · testnet prices", "$$AMOUNT_MASK · testnet prices", "No price"),
+            hidden.assets.map { it.value },
+        )
+
+        viewModel.toggleAmounts()
+        runCurrent()
+        assertFalse(amountsHidden.hidden.value)
+        val shown = viewModel.uiState.value as AccountDetailUiState.Ready
+        assertFalse(shown.amountsHidden)
+        assertEquals("$5,500.00", shown.total)
+        assertEquals("1.5 ETH", shown.assets.first().amount)
     }
 
     @Test
@@ -358,6 +572,7 @@ class AccountDetailViewModelTest {
                     "eth",
                     verified = false,
                     lastKnown = "Last verified <1792100000> · may have changed since",
+                    ageNote = "60 min ago · may have changed",
                 ),
                 AssetRow(
                     "USDC",
@@ -367,6 +582,7 @@ class AccountDetailViewModelTest {
                     verified = false,
                     contract = "0x1c7D4B196Cb0C7B01d743Fbc6116a902379C7238",
                     lastKnown = "Last verified at block 12 · may have changed since",
+                    ageNote = "may have changed",
                 ),
             ),
             ready.assets,
@@ -468,7 +684,13 @@ class AccountDetailViewModelTest {
     @Test
     fun aSafeShowsItsVerifiedOwnersAndTheControlTheKeysHeldHereGive() = runTest {
         Dispatchers.setMain(UnconfinedTestDispatcher(testScheduler))
-        val treasury = Account(Address.of("0x" + "5a".repeat(20)), AccountKind.SAFE, "Treasury", AccountCustody.Watched)
+        val treasury = Account(
+            Network.SEPOLIA,
+            Address.of("0x" + "5a".repeat(20)),
+            AccountKind.SAFE,
+            "Treasury",
+            AccountCustody.Watched,
+        )
         accounts.accounts.value = listOf(daily, treasury)
         val carol = Address.of("0x" + "33".repeat(20))
         val viewModel = viewModel(treasury.address)
@@ -538,9 +760,33 @@ class AccountDetailViewModelTest {
     }
 
     @Test
+    fun theActivityRunsNewestFirstUntilTheUserTurnsItRound() = runTest {
+        Dispatchers.setMain(UnconfinedTestDispatcher(testScheduler))
+        val viewModel = viewModel()
+        backgroundScope.launch { viewModel.uiState.collect {} }
+        viewModel.show(DetailSegment.ACTIVITY)
+        runCurrent()
+        fun ready() = viewModel.uiState.value as AccountDetailUiState.Ready
+
+        assertEquals(ActivityOrder.NEWEST_FIRST, ready().activityOrder)
+        assertIs<ActivityUiState.Shown>(ready().activity)
+
+        viewModel.orderActivity(ActivityOrder.OLDEST_FIRST)
+        runCurrent()
+        assertEquals(ActivityOrder.OLDEST_FIRST, ready().activityOrder)
+        assertIs<ActivityUiState.Shown>(ready().activity)
+    }
+
+    @Test
     fun aSafesQueueListsItsTransactionsInNonceOrderWithTheirSignaturesAndWhatIsNotSignedHere() = runTest {
         Dispatchers.setMain(UnconfinedTestDispatcher(testScheduler))
-        val treasury = Account(Address.of("0x" + "5a".repeat(20)), AccountKind.SAFE, "Treasury", AccountCustody.Watched)
+        val treasury = Account(
+            Network.SEPOLIA,
+            Address.of("0x" + "5a".repeat(20)),
+            AccountKind.SAFE,
+            "Treasury",
+            AccountCustody.Watched,
+        )
         accounts.accounts.value = listOf(daily, treasury)
         val carol = Address.of("0x" + "33".repeat(20))
         val friend = Address.of("0xdbf03b407c01e7cd3cbea99509d93f8dddc8c6fb")
@@ -597,7 +843,13 @@ class AccountDetailViewModelTest {
     @Test
     fun aFallbackHandlerThatIsNotPinnedIsSaidOnItsQueueRowAsNotSignedHere() = runTest {
         Dispatchers.setMain(UnconfinedTestDispatcher(testScheduler))
-        val treasury = Account(Address.of("0x" + "5a".repeat(20)), AccountKind.SAFE, "Treasury", AccountCustody.Watched)
+        val treasury = Account(
+            Network.SEPOLIA,
+            Address.of("0x" + "5a".repeat(20)),
+            AccountKind.SAFE,
+            "Treasury",
+            AccountCustody.Watched,
+        )
         accounts.accounts.value = listOf(daily, treasury)
         val carol = Address.of("0x" + "33".repeat(20))
         val hostile = Address.of("0x" + "66".repeat(20))
@@ -630,7 +882,13 @@ class AccountDetailViewModelTest {
     @Test
     fun aModuleEnabledIsSaidOnItsQueueRowAsNotSignedHere() = runTest {
         Dispatchers.setMain(UnconfinedTestDispatcher(testScheduler))
-        val treasury = Account(Address.of("0x" + "5a".repeat(20)), AccountKind.SAFE, "Treasury", AccountCustody.Watched)
+        val treasury = Account(
+            Network.SEPOLIA,
+            Address.of("0x" + "5a".repeat(20)),
+            AccountKind.SAFE,
+            "Treasury",
+            AccountCustody.Watched,
+        )
         accounts.accounts.value = listOf(daily, treasury)
         val module = Address.of("0x" + "66".repeat(20))
         val state = SafeState("1.4.1", l2 = false, listOf(daily.address), 1, 12, emptyList(), guard = null)
@@ -654,7 +912,13 @@ class AccountDetailViewModelTest {
     @Test
     fun aQueueThatCannotBeReadSaysSoAndAWatchOnlySafeOffersNoSend() = runTest {
         Dispatchers.setMain(UnconfinedTestDispatcher(testScheduler))
-        val treasury = Account(Address.of("0x" + "5a".repeat(20)), AccountKind.SAFE, "Treasury", AccountCustody.Watched)
+        val treasury = Account(
+            Network.SEPOLIA,
+            Address.of("0x" + "5a".repeat(20)),
+            AccountKind.SAFE,
+            "Treasury",
+            AccountCustody.Watched,
+        )
         accounts.accounts.value = listOf(daily, treasury)
         val carol = Address.of("0x" + "33".repeat(20))
         val state = SafeState("1.4.1", l2 = false, listOf(carol), 1, 3, emptyList(), guard = null)
@@ -684,29 +948,46 @@ class AccountDetailViewModelTest {
     @Test
     fun aSafesScreenShowsBeforeItsStorageIsReadAndSaysWhatItIs() = runTest {
         Dispatchers.setMain(UnconfinedTestDispatcher(testScheduler))
-        val treasury = Account(Address.of("0x" + "5a".repeat(20)), AccountKind.SAFE, "Treasury", AccountCustody.Watched)
+        val treasury = Account(
+            Network.SEPOLIA,
+            Address.of("0x" + "5a".repeat(20)),
+            AccountKind.SAFE,
+            "Treasury",
+            AccountCustody.Watched,
+        )
         accounts.accounts.value = listOf(daily, treasury)
         // A read that has not answered yet: a Safe's takes a dozen proofs.
         val slow = object : AddressKinds {
-            override fun observeKind(address: Address): Flow<KindReading> = flow { awaitCancellation() }
+            override fun observeKind(
+                network: Network,
+                address: Address,
+            ): Flow<KindReading> = flow { awaitCancellation() }
         }
         val viewModel = AccountDetailViewModel(
-            treasury.address,
+            treasury.id,
             ObserveAccount(accounts),
             ObserveAccountValue(
                 ObserveNativeBalance(balances),
                 ObserveTokenHoldings(ObserveKnownTokens(catalog, userTokens, metadata), tokenBalances),
                 ObserveUsdPrice(feeds),
-                ObserveDisplayCurrencies(feeds, currency),
-                Network.SEPOLIA,
+                ObserveDisplayCurrencies(feeds, currency, accounts),
             ),
             ObserveSafe(slow, accounts),
             ObserveSafeTxQueue(queue, ObserveSafe(slow, accounts), recovery, Network.SEPOLIA),
             ObserveKnownTokens(catalog, userTokens, metadata),
             SetTokenHidden(userTokens),
-            Network.SEPOLIA,
             ObserveEnsNames(accounts, names),
             activity(),
+            ObserveEnabledNetworks(networks),
+            SetNetworkEnabled(networks),
+            upgradeWarnings(networks, accounts),
+            HasSwapVenue(uniswap),
+            RefreshNetworkData(freshness),
+            ObserveNetworkLive(freshness),
+            ObserveLightClient(lightClient),
+            DropWaitingSwap(waitingSwaps),
+            ObserveAmountsHidden(amountsHidden),
+            ToggleAmountsHidden(amountsHidden),
         )
         backgroundScope.launch { viewModel.uiState.collect {} }
         runCurrent()
@@ -720,7 +1001,13 @@ class AccountDetailViewModelTest {
     @Test
     fun aSafeThatNoLongerVerifiesAsOneSaysSo() = runTest {
         Dispatchers.setMain(UnconfinedTestDispatcher(testScheduler))
-        val treasury = Account(Address.of("0x" + "5a".repeat(20)), AccountKind.SAFE, "Treasury", AccountCustody.Watched)
+        val treasury = Account(
+            Network.SEPOLIA,
+            Address.of("0x" + "5a".repeat(20)),
+            AccountKind.SAFE,
+            "Treasury",
+            AccountCustody.Watched,
+        )
         accounts.accounts.value = listOf(daily, treasury)
         kind.value = KindReading.Verified(AddressKind.Contract, 9)
         val viewModel = viewModel(treasury.address)
@@ -730,5 +1017,124 @@ class AccountDetailViewModelTest {
         val ready = viewModel.uiState.value as AccountDetailUiState.Ready
         assertEquals("Not a recognised Safe", ready.kindNote)
         assertEquals(Control.WATCH_ONLY, ready.control)
+    }
+
+    @Test
+    fun aRefreshProvesTheAccountsNetworkAgain() = runTest {
+        Dispatchers.setMain(UnconfinedTestDispatcher(testScheduler))
+        val viewModel = viewModel()
+        assertTrue(freshness.refreshed.isEmpty(), "opening asks nothing: the screen's own reads are fresh")
+
+        viewModel.refresh()
+        assertEquals(listOf(Network.SEPOLIA), freshness.refreshed)
+    }
+
+    @Test
+    fun simpleModeSaysHowOldTheAccountsValuesAreAndWhileARefreshRuns() = runTest {
+        Dispatchers.setMain(UnconfinedTestDispatcher(testScheduler))
+        val viewModel = viewModel()
+        backgroundScope.launch { viewModel.uiState.collect {} }
+        balances.of(daily.address).value =
+            BalanceReading.Verified(Wei.of("1000000000000000000"), 9, provenAt = NOW - 40)
+        runCurrent()
+        assertEquals("Updated 40 s ago · pull down to refresh", ready(viewModel).freshness)
+
+        viewModel.refresh()
+        runCurrent()
+        assertEquals(true, ready(viewModel).refreshing)
+        assertEquals("Checking Sepolia…", ready(viewModel).freshness)
+
+        balances.of(daily.address).value = BalanceReading.Verified(Wei.of("1000000000000000000"), 12, provenAt = NOW)
+        runCurrent()
+        assertEquals(false, ready(viewModel).refreshing)
+        assertEquals("Updated just now · pull down to refresh", ready(viewModel).freshness)
+    }
+
+    @Test
+    fun onALiveNetworkSimpleModeSaysLive() = runTest {
+        Dispatchers.setMain(UnconfinedTestDispatcher(testScheduler))
+        freshness.live.value = setOf(Network.SEPOLIA)
+        val viewModel = viewModel()
+        backgroundScope.launch { viewModel.uiState.collect {} }
+        balances.of(daily.address).value =
+            BalanceReading.Verified(Wei.of("1000000000000000000"), 9, provenAt = NOW - 600)
+        runCurrent()
+        assertEquals("Live", ready(viewModel).freshness)
+    }
+
+    @Test
+    fun aLightClientWithNoFreshHeadGetsTheCantCheckBanner() = runTest {
+        Dispatchers.setMain(UnconfinedTestDispatcher(testScheduler))
+        clientStatus.value = LightClientStatus.WaitingForHead(headAgeSeconds = 600)
+        val viewModel = viewModel()
+        backgroundScope.launch { viewModel.uiState.collect {} }
+        runCurrent()
+
+        val banner = ready(viewModel).cantCheck
+        assertEquals("Can't check Sepolia right now", banner?.title)
+        assertEquals(
+            "Its amounts can't be read yet. Sending from it waits until it can be checked. The app keeps trying.",
+            banner?.text,
+        )
+    }
+
+    @Test
+    fun whileItsLightClientCatchesUpTheAccountSaysItIsSyncingNotThatItCannotCheck() = runTest {
+        Dispatchers.setMain(UnconfinedTestDispatcher(testScheduler))
+        clientStatus.value = LightClientStatus.CatchingUp(done = 2, total = 6)
+        val viewModel = viewModel()
+        backgroundScope.launch { viewModel.uiState.collect {} }
+        runCurrent()
+        assertEquals("Syncing Sepolia · 2 of 6 periods", ready(viewModel).freshness)
+        assertNull(ready(viewModel).cantCheck, "on its way, with nothing from before: no banner")
+
+        balances.of(daily.address).value =
+            BalanceReading.LastKnown(Wei.of("1000000000000000000"), 9, asOf = NOW - 3 * 3_600)
+        runCurrent()
+
+        val banner = assertNotNull(ready(viewModel).cantCheck)
+        assertEquals("Sepolia is still syncing", banner.title)
+        assertEquals(
+            "Its amounts were last confirmed 3 h ago and may have changed. Sending from it waits until it has " +
+                "caught up.",
+            banner.text,
+        )
+        assertEquals("Syncing Sepolia · 2 of 6 periods", ready(viewModel).freshness, "its progress beside it")
+    }
+
+    @Test
+    fun aStaleCheckpointsBannerSaysWhereToDecideOnce() = runTest {
+        Dispatchers.setMain(UnconfinedTestDispatcher(testScheduler))
+        clientStatus.value = LightClientStatus.StaleAnchor(anchorAgePeriods = 5, boundPeriods = 3)
+        val viewModel = viewModel()
+        backgroundScope.launch { viewModel.uiState.collect {} }
+        runCurrent()
+
+        val text = assertNotNull(ready(viewModel).cantCheck).text
+        assertEquals(1, Regex("Settings → Networks").findAll(text).count(), text)
+        assertFalse("keeps trying" in text, "only the user's word lets it catch up")
+    }
+
+    @Test
+    fun anAmountFromBeforeSaysItsAgeAndNeverLive() = runTest {
+        Dispatchers.setMain(UnconfinedTestDispatcher(testScheduler))
+        freshness.live.value = setOf(Network.SEPOLIA)
+        val viewModel = viewModel()
+        backgroundScope.launch { viewModel.uiState.collect {} }
+        balances.of(daily.address).value =
+            BalanceReading.LastKnown(Wei.of("1000000000000000000"), 9, asOf = NOW - 3 * 3_600)
+        runCurrent()
+
+        val state = ready(viewModel)
+        assertEquals("3 h ago · may have changed", state.assets.first().ageNote)
+        assertEquals(null, state.freshness, "the banner says how the amounts stand")
+        assertEquals("Can't check Sepolia right now", state.cantCheck?.title)
+    }
+
+    private fun ready(viewModel: AccountDetailViewModel) = viewModel.uiState.value as AccountDetailUiState.Ready
+
+    private companion object {
+        /** The test's now: an hour after the balances last verified at 1_792_100_000. */
+        const val NOW = 1_792_103_600L
     }
 }

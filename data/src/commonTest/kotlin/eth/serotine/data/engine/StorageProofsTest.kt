@@ -121,6 +121,14 @@ class StorageProofsTest {
     }
 
     @Test
+    fun anAccountCarriedByBlockAccessListsIsAnchoredAtItsAttestedSlot() {
+        // Myotis 0.1.20: a watched account answered from verified BALs, its block's root attested.
+        assertEquals(ProofAnchor.Attested(11_378_990), accountProofAnchor("blockAccessList", 11_378_990, 11_937_375))
+        assertNull(accountProofAnchor("blockAccessList", -1, 11_937_375), "no attestation, no anchor")
+        assertNull(label(method = "blockAccessList"), "a storage proof is never answered from BALs")
+    }
+
+    @Test
     fun anAnchorIsNotBeforeAnotherAsTheirMatchedSlotsSay() {
         assertEquals(true, ProofAnchor.Attested(20).notBefore(ProofAnchor.Attested(20)))
         assertEquals(true, ProofAnchor.Attested(21).notBefore(ProofAnchor.Attested(20)))

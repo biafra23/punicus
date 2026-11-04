@@ -1,5 +1,6 @@
 package eth.serotine.ui.safetx
 
+import eth.serotine.domain.model.AccountId
 import eth.serotine.domain.model.Address
 import eth.serotine.domain.model.Erc20
 import eth.serotine.domain.model.Mnemonic
@@ -19,6 +20,7 @@ import eth.serotine.domain.repository.BiometricUnlock
 import eth.serotine.domain.repository.Broadcast
 import eth.serotine.domain.repository.FeeLevel
 import eth.serotine.domain.repository.KeyDeletion
+import eth.serotine.domain.repository.KeyDerivation
 import eth.serotine.domain.repository.KeyImport
 import eth.serotine.domain.repository.KeyProtection
 import eth.serotine.domain.repository.KeyStore
@@ -53,6 +55,16 @@ import eth.serotine.ui.components.Eip55
 import eth.serotine.ui.components.NotSentItem
 import eth.serotine.ui.components.SafeSwapItem
 import eth.serotine.ui.components.ShareItem
+import kotlin.test.AfterTest
+import kotlin.test.Test
+import kotlin.test.assertContentEquals
+import kotlin.test.assertEquals
+import kotlin.test.assertFalse
+import kotlin.test.assertIs
+import kotlin.test.assertNull
+import kotlin.test.assertTrue
+import kotlin.time.Duration.Companion.seconds
+import kotlin.time.TestTimeSource
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -65,16 +77,6 @@ import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.test.setMain
-import kotlin.test.AfterTest
-import kotlin.test.Test
-import kotlin.test.assertContentEquals
-import kotlin.test.assertEquals
-import kotlin.test.assertFalse
-import kotlin.test.assertIs
-import kotlin.test.assertNull
-import kotlin.test.assertTrue
-import kotlin.time.Duration.Companion.seconds
-import kotlin.time.TestTimeSource
 
 /** [SafeTxViewModel] over fake ports, through the real use cases. */
 @OptIn(ExperimentalCoroutinesApi::class)
@@ -93,6 +95,9 @@ class SafeTxViewModelTest {
 
         override suspend fun enableBiometrics(password: WalletPassword, confirmation: String): BiometricChange =
             error("not used by these tests")
+
+        override suspend fun deriveAccount(from: Address, password: WalletPassword, held: Set<Address>) =
+            KeyDerivation.Unavailable
 
         override suspend fun disableBiometrics(): BiometricChange = error("not used by these tests")
 
@@ -113,7 +118,7 @@ class SafeTxViewModelTest {
         Dispatchers.setMain(UnconfinedTestDispatcher(testScheduler))
         val now = { 1_800_000_000L }
         val viewModel = SafeTxViewModel(
-            world.safe,
+            AccountId(Network.SEPOLIA, world.safe),
             request.hash,
             ObserveAccounts(world.accounts),
             ObserveSafeTxQueue(world.queue, world.observeSafe, world.recovery, Network.SEPOLIA),
@@ -147,7 +152,6 @@ class SafeTxViewModelTest {
             RemoveQueuedSafeTx(world.queue),
             WarmFeeHistory(world.inputs),
             CheckSafeSwap(world.uniswap, world.lightClient, Network.SEPOLIA),
-            Network.SEPOLIA,
             clock,
             imported,
             formatTime = { "at $it" },
@@ -202,6 +206,7 @@ class SafeTxViewModelTest {
                     heldHere = false,
                     OwnerState.APPROVED,
                     "Approved on chain, verified at block 99",
+                    simpleDetail = "Approved on chain",
                 ),
                 OwnerStateRow(Eip55.format(world.carol), null, heldHere = false, OwnerState.SIGNED, "Signed"),
             ),
@@ -209,6 +214,7 @@ class SafeTxViewModelTest {
         )
         assertEquals("2 of 3 owners must confirm", owners.threshold)
         assertEquals("2 of 2 confirmations", owners.confirmations)
+        assertEquals("Owners checked on chain", owners.simpleVerifiedAt, "simple mode's words, no block")
         assertTrue(state.canSign, "Alice is held here and has not confirmed it")
         assertFalse(state.canApprove, "the confirmations reach the threshold already")
         assertTrue(state.canExecute)
@@ -235,6 +241,12 @@ class SafeTxViewModelTest {
                 listOf(
                     "Through Uniswap's SwapRouter02, its code proven by the light client.",
                     "Returns 0.0402 ETH now, by a verified QuoterV2 quote at block 100: it meets its minimum.",
+                    "Refused by the router after at ${HEAD_TIME + DAY}.",
+                ),
+                // Simple mode's words for the same: no block (docs/simple-ui.md).
+                simpleLines = listOf(
+                    "Through Uniswap's SwapRouter02, its code proven by the light client.",
+                    "Returns 0.0402 ETH now, as checked on chain: it meets its minimum.",
                     "Refused by the router after at ${HEAD_TIME + DAY}.",
                 ),
             ),
@@ -583,6 +595,10 @@ class SafeTxViewModelTest {
         runCurrent()
         val review = viewModel.review
         assertEquals(ReviewKind.APPROVAL, review.kind)
+        assertEquals(
+            "Checked on chain: the Safe's approveHash of this transaction should go through.",
+            review.simpleSimulation,
+        )
         assertEquals(Eip55.format(world.alice.address), review.account)
         assertEquals(FeeLevel.NORMAL, review.fee)
         assertEquals("ETH balance of Alice, which pays the fee", review.balance.what)
@@ -608,6 +624,8 @@ class SafeTxViewModelTest {
         runCurrent()
         val review = viewModel.review
         assertEquals(ReviewKind.EXECUTION, review.kind)
+        assertTrue(review.simpleSimulation.orEmpty().startsWith("Checked on chain: the whole execution"))
+        assertTrue("block" !in review.simpleSimulation.orEmpty())
         assertEquals(Eip55.format(world.alice.address), review.account, "a held owner first")
         // Dave is no owner: from him, Carol's signature alone falls short.
         assertEquals(listOf(Eip55.format(world.alice.address)), review.accounts.map { it.address })
@@ -843,6 +861,29 @@ class SafeTxViewModelTest {
     }
 
     @Test
+    fun aQuoteThatRevertsIsSaidInSimpleModeWithNoBlockAndOnlyWhileItsMessageStands() = runTest {
+        funded()
+        world.inputs.simulation = Simulation.Reverted(100)
+        val viewModel = viewModel(queued(world.request(world.ether(4))))
+
+        viewModel.startApproval()
+        runCurrent()
+        val refused = viewModel.overview
+        assertTrue("block 100" in refused.message.orEmpty(), refused.message)
+        assertEquals("It reverts, checked on chain. Nothing was signed.", refused.simpleMessage)
+
+        // Quoted again, it goes through: the message is cleared, and its simple words with it.
+        world.inputs.simulation = Simulation.Succeeded("", 100)
+        viewModel.startApproval()
+        runCurrent()
+        viewModel.back()
+        runCurrent()
+        val back = viewModel.overview
+        assertEquals(null, back.message)
+        assertEquals(null, back.simpleMessage, "no simple words for a message no longer shown")
+    }
+
+    @Test
     fun removingTakesItOutOfThisDevicesQueueAndTheScreenLeaves() = runTest {
         val viewModel = viewModel(queued(world.request(world.ether(4))))
 
@@ -1019,7 +1060,7 @@ class SafeTxViewModelTest {
     fun aTokenThatOnlyTakesABuiltInSymbolIsSaidToBeAnotherContractUpToThePrompt() = runTest {
         biometrics = BiometricUnlock.On
         val impostor = Token(Address.of("0x" + "cd".repeat(20)), "USDC", "Not USD Coin", 6, icon = null)
-        world.userTokens.add(impostor)
+        world.userTokens.add(Network.SEPOLIA, impostor)
         val transfer = SafeTx.call(
             impostor.address,
             UInt256.ZERO,

@@ -1,5 +1,7 @@
 package eth.serotine.domain.usecase
 
+import eth.serotine.domain.model.AccountId
+import eth.serotine.domain.model.Network
 import eth.serotine.domain.repository.HistoryStart
 import eth.serotine.domain.repository.HistoryStartList
 import eth.serotine.domain.repository.HistoryStarts
@@ -18,7 +20,7 @@ import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.onStart
 import kotlinx.coroutines.flow.transformLatest
 
-/** One event of an account's history read from the log index: where it is on chain. */
+/** One event of an account's history read from the log index: where it is on chain, and when. */
 interface IndexedEvent {
     /** The block it is in. */
     val blockNumber: Long
@@ -28,6 +30,13 @@ interface IndexedEvent {
 
     /** Its log's place in the block. */
     val logIndex: Int
+
+    /**
+     * When its block was produced (unix seconds), from the block's verified header, which the
+     * engine reports with the log ([eth.serotine.domain.repository.IndexedLog.blockTimestamp]);
+     * null from an engine that does not, when only the block dates the event.
+     */
+    val blockTimestamp: Long?
 }
 
 /** An account's history as the log index holds it (issue #85): its events, or why there are none. */
@@ -70,6 +79,7 @@ sealed interface IndexedHistory<out E : IndexedEvent> {
  * the engine.
  */
 internal class IndexedReader<E : IndexedEvent>(
+    private val network: Network,
     private val index: LogIndex,
     private val starts: HistoryStarts,
     private val key: LogWatchKey,
@@ -80,7 +90,7 @@ internal class IndexedReader<E : IndexedEvent>(
     @OptIn(ExperimentalCoroutinesApi::class)
     fun observe(): Flow<IndexedHistory<E>> = flow {
         var last: IndexedHistory.Read<E>? = null
-        val coverage = index.observeCoverage().onStart { emit(LogCoverageReading.Unavailable) }
+        val coverage = index.observeCoverage(network).onStart { emit(LogCoverageReading.Unavailable) }
         emitAll(
             combine(starts.observe(), coverage, ::spanOf)
                 .distinctUntilChanged()
@@ -104,7 +114,7 @@ internal class IndexedReader<E : IndexedEvent>(
     private fun spanOf(held: HistoryStartList, coverage: LogCoverageReading): Span {
         val start = when (held) {
             HistoryStartList.Unreadable -> return Span.Other(IndexedHistory.Unavailable)
-            is HistoryStartList.Loaded -> (held.starts[key.address] as? HistoryStart.Fixed)?.block
+            is HistoryStartList.Loaded -> (held.starts[AccountId(network, key.address)] as? HistoryStart.Fixed)?.block
         } ?: return Span.Other(IndexedHistory.NotFollowed)
         val entries = (coverage as? LogCoverageReading.Read)?.entries ?: return Span.Other(IndexedHistory.Unavailable)
         val covered = entries[key]?.covered ?: return Span.Other(IndexedHistory.Checking(start))
@@ -134,7 +144,7 @@ internal class IndexedReader<E : IndexedEvent>(
         }
         val kept = if (before != null && grown) before.events.filter { it.blockNumber < keptBelow } else emptyList()
         val read = ranges.flatMap(queries).map { query ->
-            when (val answer = index.logs(query)) {
+            when (val answer = index.logs(network, query)) {
                 is LogsReading.Logs -> answer.logs.mapNotNull(decode)
                 // The span moved between the coverage and the query: the next coverage reads it again.
                 is LogsReading.NotCovered, is LogsReading.BeforeStart, LogsReading.NotWatched ->

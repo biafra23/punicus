@@ -22,10 +22,11 @@ interface CowChain {
     suspend fun venue(network: Network): CowVenueReading
 
     /**
-     * [data] called on the contract at [to], from no sender, as a verified call at the light
-     * client's head: what it returned or that it reverted, or why there is no verified answer.
+     * [data] called on the contract at [to] on [network], from no sender, as a verified call at
+     * that network's light client's head: what it returned or that it reverted, or why there is no
+     * verified answer.
      */
-    suspend fun call(to: Address, data: ByteArray): Simulation
+    suspend fun call(network: Network, to: Address, data: ByteArray): Simulation
 }
 
 /** What [CowChain.venue] answers. */

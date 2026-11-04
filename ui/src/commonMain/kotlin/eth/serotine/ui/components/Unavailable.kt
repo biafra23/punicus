@@ -88,3 +88,14 @@ internal fun UnavailableDialog(
         dismissButton = { TextButton(onClick = onDismiss) { Text("Close") } },
     )
 }
+
+/**
+ * What an action on an account whose [network] is off in this wallet says (docs/networks.md, N19):
+ * its [title] ("Send needs Sepolia"), the [reason], and Turn on as the way to get it ([onTurnOn]).
+ */
+internal fun networkOffNotice(title: String, reason: String, network: String, onTurnOn: () -> Unit) =
+    UnavailableNotice(title, reason, listOf(UnavailableFix("Turn on $network", onTurnOn)))
+
+/** Why [account] cannot be added on another network while its [network] is off in this wallet. */
+internal fun addOnNetworkOffReason(network: String, account: String): String =
+    "$network is off in this wallet. Turned on, $account can be added on another network from here."

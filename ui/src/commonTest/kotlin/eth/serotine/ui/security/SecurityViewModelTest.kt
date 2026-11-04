@@ -7,6 +7,7 @@ import eth.serotine.domain.repository.BiometricChange
 import eth.serotine.domain.repository.BiometricUnavailable
 import eth.serotine.domain.repository.BiometricUnlock
 import eth.serotine.domain.repository.KeyDeletion
+import eth.serotine.domain.repository.KeyDerivation
 import eth.serotine.domain.repository.KeyImport
 import eth.serotine.domain.repository.KeyProtection
 import eth.serotine.domain.repository.KeyStore
@@ -304,6 +305,9 @@ class SecurityViewModelTest {
             confirmations += confirmation
             return enabling.await()
         }
+
+        override suspend fun deriveAccount(from: Address, password: WalletPassword, held: Set<Address>) =
+            KeyDerivation.Unavailable
 
         override suspend fun disableBiometrics(): BiometricChange {
             disabled++

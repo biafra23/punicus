@@ -2,17 +2,18 @@ package eth.serotine.data.engine
 
 import eth.serotine.data.keys.toHex
 import eth.serotine.domain.model.Address
+import eth.serotine.domain.model.Network
 import eth.serotine.domain.repository.MetadataReading
 import eth.serotine.domain.repository.ReadUnavailable
+import kotlin.test.Test
+import kotlin.test.assertEquals
+import kotlin.test.assertNull
+import kotlin.time.Duration.Companion.seconds
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.toList
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.runTest
-import kotlin.test.Test
-import kotlin.test.assertEquals
-import kotlin.test.assertNull
-import kotlin.time.Duration.Companion.seconds
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class VerifiedTokenMetadataTest {
@@ -20,7 +21,12 @@ class VerifiedTokenMetadataTest {
     private val token = Address.of("0x" + "08".repeat(20))
     private val chain = FakeChain().apply { snapshot = running(head = 9) }
 
-    private fun TestScope.metadata() = VerifiedTokenMetadata(chain, StandardTestDispatcher(testScheduler), 4.seconds)
+    private fun TestScope.metadata() = VerifiedTokenMetadata(
+        Network.SEPOLIA,
+        chain,
+        StandardTestDispatcher(testScheduler),
+        4.seconds,
+    )
 
     /** An ABI `string` answer: offset, length, the UTF-8 bytes padded to a word. */
     private fun string(text: String): String {
@@ -44,12 +50,12 @@ class VerifiedTokenMetadataTest {
 
         assertEquals(
             listOf<MetadataReading>(MetadataReading.Verified("EURC", "Euro Coin", 6, 9)),
-            metadata.observe(token).toList(),
+            metadata.observe(Network.SEPOLIA, token).toList(),
         )
         chain.calls.clear() // asked again, the contract would not answer: the first answer is kept
         assertEquals(
             listOf<MetadataReading>(MetadataReading.Verified("EURC", "Euro Coin", 6, 9)),
-            metadata.observe(token).toList(),
+            metadata.observe(Network.SEPOLIA, token).toList(),
         )
     }
 
@@ -61,7 +67,7 @@ class VerifiedTokenMetadataTest {
 
         assertEquals(
             listOf<MetadataReading>(MetadataReading.Verified("MKR", "MKR", 18, 9)),
-            metadata().observe(token).toList(),
+            metadata().observe(Network.SEPOLIA, token).toList(),
         )
     }
 
@@ -71,7 +77,10 @@ class VerifiedTokenMetadataTest {
         answer(Abi.SYMBOL, CallOutcome.Returned(string("BIG"), 9))
         answer(Abi.NAME, CallOutcome.Returned(string("Big"), 9))
 
-        assertEquals(listOf<MetadataReading>(MetadataReading.NotAToken), metadata().observe(token).toList())
+        assertEquals(
+            listOf<MetadataReading>(MetadataReading.NotAToken),
+            metadata().observe(Network.SEPOLIA, token).toList(),
+        )
     }
 
     @Test
@@ -81,7 +90,10 @@ class VerifiedTokenMetadataTest {
         answer(Abi.SYMBOL, CallOutcome.Returned("", 9))
         answer(Abi.NAME, CallOutcome.Returned("", 9))
         val metadata = metadata()
-        assertEquals(listOf<MetadataReading>(MetadataReading.NotAToken), metadata.observe(token).toList())
+        assertEquals(
+            listOf<MetadataReading>(MetadataReading.NotAToken),
+            metadata.observe(Network.SEPOLIA, token).toList(),
+        )
 
         chain.snapshot = running(head = 10)
         answer(Abi.DECIMALS, CallOutcome.Returned(word(6), 10))
@@ -89,7 +101,7 @@ class VerifiedTokenMetadataTest {
         answer(Abi.NAME, CallOutcome.Returned(string("Euro Coin"), 10))
         assertEquals(
             listOf<MetadataReading>(MetadataReading.Verified("EURC", "Euro Coin", 6, 10)),
-            metadata.observe(token).toList(),
+            metadata.observe(Network.SEPOLIA, token).toList(),
         )
     }
 
@@ -100,7 +112,7 @@ class VerifiedTokenMetadataTest {
 
         assertEquals(
             listOf<MetadataReading>(MetadataReading.Unavailable(ReadUnavailable.REFUSED)),
-            metadata().observe(token).toList(),
+            metadata().observe(Network.SEPOLIA, token).toList(),
         )
     }
 

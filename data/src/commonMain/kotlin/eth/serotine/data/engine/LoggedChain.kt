@@ -26,7 +26,7 @@ internal class LoggedChain(
 ) : EngineChain {
 
     override fun snapshot(): EngineSnapshot =
-        request("status", { "" }, { if (it == EngineSnapshot.Down) "no engine" else null }) { inner.snapshot() }
+        request("status", { "" }, ::notRunning) { inner.snapshot() }
 
     override fun proveBalance(address: Address): ProvenBalance? =
         request("requestAccount", { "address=${address.hex}" }, ::answered) { inner.proveBalance(address) }
@@ -189,4 +189,11 @@ internal class LoggedChain(
         /** The most of the engine's reason for a failure an INFO line keeps. */
         const val MAX_REASON = 200
     }
+}
+
+/** What the log says of a status read that found no light client: none on the device, or a start that failed. */
+private fun notRunning(snapshot: EngineSnapshot): String? = when (snapshot) {
+    EngineSnapshot.Down -> "no engine"
+    EngineSnapshot.Failed -> "start failed"
+    else -> null
 }

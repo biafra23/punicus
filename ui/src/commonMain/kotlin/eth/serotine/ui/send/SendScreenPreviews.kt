@@ -33,6 +33,8 @@ private val from = SendFrom("Daily", DAILY)
 
 private val ether = AssetChoice("ETH", "Ether", "eth", "1.25 ETH", verifiedAt = "block 8,412,307")
 
+private val xdai = AssetChoice("XDAI", "xDAI", "xdai", "120 XDAI", verifiedAt = "block 42,118,305")
+
 private val usdc = AssetChoice("USDC", "USDC", "usdc", "250 USDC", contract = USDC, verifiedAt = "block 8,412,305")
 
 private val friend =
@@ -116,7 +118,7 @@ private fun SendPreview(
     SerotineTheme(darkTheme = darkTheme) {
         SendScreen(
             state = state,
-            lightClient = lightClient,
+            chrome = SendChrome.Strip(lightClient),
             onAssetChange = {},
             onToChange = {},
             onPickAccount = {},
@@ -155,6 +157,24 @@ private fun SendComposeResolvingPreview() = SendPreview(
     empty.with {
         it.copy(to = "friend-example.eth", toNote = "Resolving the name with verified calls…", amount = "0.1")
     },
+)
+
+// On Gnosis Chain, which resolves no names: the field takes an address, and a name is refused.
+@Preview
+@Composable
+private fun SendComposeGnosisNoNamesPreview() = SendPreview(
+    empty.copy(
+        form = empty.form.copy(
+            network = "Gnosis Chain",
+            assets = listOf(xdai),
+            asset = xdai,
+            to = "friend-example.eth",
+            toNote = "Names are not resolved on Gnosis Chain yet: enter the address.",
+            toError = true,
+            toLabel = "Address",
+            toHint = "An address, or one of your accounts below: names are not resolved on Gnosis Chain yet",
+        ),
+    ),
 )
 
 @Preview
@@ -331,6 +351,7 @@ internal val sendScreenPreviews: List<@Composable () -> Unit> = listOf(
     { SendComposedTokenToNamePreview() },
     { SendComposeResolvingPreview() },
     { SendComposeInputErrorsPreview() },
+    { SendComposeGnosisNoNamesPreview() },
     { SendComposeNameUnavailablePreview() },
     { SendComposeQuotingPreview() },
     { SendComposeRefusedPreview() },

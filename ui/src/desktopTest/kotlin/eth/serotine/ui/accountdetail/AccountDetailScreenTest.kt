@@ -28,6 +28,7 @@ import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performScrollToNode
 import androidx.compose.ui.test.performSemanticsAction
 import androidx.compose.ui.test.performTouchInput
@@ -38,6 +39,7 @@ import androidx.compose.ui.unit.height
 import eth.serotine.domain.model.AccountKind
 import eth.serotine.ui.activity.ACTIVITY_ROW_TAG
 import eth.serotine.ui.activity.ActivityKey
+import eth.serotine.ui.activity.ActivityOrder
 import eth.serotine.ui.activity.ActivityRow
 import eth.serotine.ui.activity.ActivityState
 import eth.serotine.ui.activity.ActivityUiState
@@ -46,6 +48,7 @@ import eth.serotine.ui.components.GHOST_ROWS_UNKNOWN
 import eth.serotine.ui.components.GHOST_ROW_TAG
 import eth.serotine.ui.components.LIGHT_CLIENT_STRIP_TAG
 import eth.serotine.ui.components.LightClientItem
+import eth.serotine.ui.components.NetworkLabel
 import eth.serotine.ui.components.UNAVAILABLE_REASON_TAG
 import eth.serotine.ui.components.catchingUpStripSample
 import eth.serotine.ui.components.verifiedStripSample
@@ -64,6 +67,7 @@ class AccountDetailScreenTest {
     private val ready = AccountDetailUiState.Ready(
         label = "Daily",
         address = "0x8f3A2C71E5B9d04A6f1e3C2BA7D90E5F4c6B91c2",
+        network = NetworkLabel(11_155_111, "Sepolia", testnet = true),
         kind = AccountKind.EOA,
         control = Control.WATCH_ONLY,
         total = "$3,000.00",
@@ -82,7 +86,7 @@ class AccountDetailScreenTest {
         SerotineTheme {
             AccountDetailScreen(
                 state,
-                lightClient = lightClient,
+                chrome = AccountChrome.Strip(lightClient),
                 onBack = { events += "back" },
                 onSend = { events += "send $it" },
                 onSwap = { events += "swap $it" },
@@ -97,8 +101,29 @@ class AccountDetailScreenTest {
                 onOpenSafeTx = { events += "open $it" },
                 onImportRequest = { events += "import" },
                 onOpenActivity = { events += "open activity $it" },
+                onTurnOnNetwork = { events += "turn on" },
+                onSafeSettings = { events += "safe settings" },
             )
         }
+    }
+
+    @Test
+    fun namesTheAccountsNetworkBesideItsControl() {
+        show(ready)
+
+        rule.onNodeWithText("Sepolia · Testnet", useUnmergedTree = true).assertExists()
+    }
+
+    @Test
+    fun onANetworkThatIsOffSendSaysWhyAndTurnsItOn() {
+        show(ready.copy(control = Control.FULL_CONTROL, networkOn = false))
+
+        rule.onNodeWithText("Sepolia is off in this wallet: nothing is checked.").assertIsDisplayed()
+        rule.onNodeWithText("Send").performClick()
+        rule.onNodeWithText("Send needs Sepolia").assertIsDisplayed()
+        rule.onNodeWithText("Turn on Sepolia").performClick()
+
+        assertEquals(listOf("turn on"), events)
     }
 
     @Test
@@ -144,7 +169,7 @@ class AccountDetailScreenTest {
             SerotineTheme {
                 AccountDetailScreen(
                     state,
-                    lightClient = verifiedStripSample,
+                    chrome = AccountChrome.Strip(verifiedStripSample),
                     onBack = {},
                     onSend = {},
                     onSwap = {},
@@ -186,12 +211,45 @@ class AccountDetailScreenTest {
     }
 
     @Test
-    fun theActivityOffersNoSort() {
-        show(ready.copy(segment = DetailSegment.ACTIVITY))
+    fun theActivityOffersTheOtherOrderInPlaceOfTheSort() {
+        var state by mutableStateOf(ready.copy(segment = DetailSegment.ACTIVITY))
+        rule.setContent {
+            SerotineTheme {
+                AccountDetailScreen(
+                    state,
+                    chrome = AccountChrome.Strip(verifiedStripSample),
+                    onBack = {},
+                    onSend = {},
+                    onSwap = {},
+                    onReceive = {},
+                    onCopy = {},
+                    onRename = {},
+                    onRemove = {},
+                    onHideToken = { _, _ -> },
+                    onMessageShown = {},
+                    onSort = { events += "sort $it" },
+                    onSegment = {},
+                    onOpenSafeTx = {},
+                    onImportRequest = {},
+                    onOpenActivity = {},
+                    onOrderActivity = { order ->
+                        events += "order $order"
+                        state = state.copy(activityOrder = order)
+                    },
+                )
+            }
+        }
 
         rule.onNodeWithContentDescription("More actions").performClick()
         rule.onNodeWithText("Rename").assertIsDisplayed()
         rule.onNodeWithText("Sort by name").assertDoesNotExist()
+        rule.onNodeWithText("Newest first").assertDoesNotExist()
+        rule.onNodeWithText("Oldest first").performClick()
+        rule.onNodeWithContentDescription("More actions").performClick()
+        rule.onNodeWithText("Oldest first").assertDoesNotExist()
+        rule.onNodeWithText("Newest first").performClick()
+
+        assertEquals(listOf("order OLDEST_FIRST", "order NEWEST_FIRST"), events)
     }
 
     @Test
@@ -565,6 +623,30 @@ class AccountDetailScreenTest {
         rule.onNodeWithText("Modules: each can move this Safe's funds without the owners' signatures.").assertExists()
         rule.onNodeWithText("Assets").performClick()
         assertEquals(listOf("segment ASSETS"), events)
+    }
+
+    @Test
+    fun aSafesOwnersOpenItsSettingsAndOnANetworkThatIsOffSayWhyNot() {
+        val safe = ready.copy(kind = AccountKind.SAFE, safe = SafeDetails.Checking, segment = DetailSegment.OWNERS)
+        var state by mutableStateOf<AccountDetailUiState>(safe)
+        rule.setContent { Screen(state, verifiedStripSample) }
+
+        rule.onNodeWithTag(ACCOUNT_SAFE_SETTINGS_TAG).performScrollTo().performClick()
+        assertEquals(listOf("safe settings"), events)
+
+        state = safe.copy(networkOn = false)
+        rule.onNodeWithTag(ACCOUNT_SAFE_SETTINGS_TAG).performScrollTo().performClick()
+        rule.onNodeWithText("Safe settings needs Sepolia").assertIsDisplayed()
+        rule.onNodeWithText("Turn on Sepolia").performClick()
+        assertEquals(listOf("safe settings", "turn on"), events)
+
+        state = safe.copy(networkBlocked = true)
+        rule.onNodeWithTag(ACCOUNT_SAFE_SETTINGS_TAG).performScrollTo().performClick()
+        rule.onNodeWithTag(UNAVAILABLE_REASON_TAG).assertTextEquals(
+            "This version of Serotine can no longer follow Sepolia: nothing can be changed from its accounts until " +
+                "you update the app.",
+        )
+        assertEquals(listOf("safe settings", "turn on"), events)
     }
 
     @Test

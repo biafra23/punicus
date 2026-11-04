@@ -14,6 +14,7 @@ import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performImeAction
 import eth.serotine.ui.components.Control
+import eth.serotine.ui.components.NetworkLabel
 import eth.serotine.ui.components.verifiedStripSample
 import eth.serotine.ui.theme.SerotineTheme
 import org.junit.Rule
@@ -45,6 +46,30 @@ class WatchScreenTest {
         rule.onNodeWithText("Watch-only").assertIsDisplayed()
         rule.onNodeWithText("Add").assertIsEnabled().performClick()
         assertEquals(1, adds)
+    }
+
+    @Test
+    fun theOneCardNamesTheNetworkItIsAddedOn() {
+        show(
+            WatchUiState(
+                address = "savings-example.eth",
+                addressNote = "On Ethereum: no address\nOn Sepolia's test registry: resolves to $vitalik, " +
+                    "verified at finalized block 7",
+                detection = Detection.Account(vitalik, "Checked at block 7", null),
+                cardNetwork = NetworkLabel(11_155_111, "Sepolia", testnet = true),
+            ),
+        )
+
+        rule.onNodeWithTag(WATCH_CARD_NETWORK_TAG, useUnmergedTree = true).assertIsDisplayed()
+        rule.onNodeWithText("Sepolia · Testnet").assertIsDisplayed()
+        rule.onNodeWithText("Add").assertIsEnabled()
+    }
+
+    @Test
+    fun aCardWithNoNetworkNamesNone() {
+        show(WatchUiState(address = vitalik, detection = Detection.Account(vitalik, "Checked at block 7", null)))
+
+        rule.onNodeWithTag(WATCH_CARD_NETWORK_TAG, useUnmergedTree = true).assertDoesNotExist()
     }
 
     @Test

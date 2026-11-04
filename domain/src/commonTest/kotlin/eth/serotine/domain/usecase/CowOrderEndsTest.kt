@@ -24,14 +24,14 @@ import eth.serotine.domain.repository.LogWatchKey
 import eth.serotine.domain.repository.LogsReading
 import eth.serotine.domain.repository.ReadUnavailable
 import eth.serotine.domain.repository.ReceiptLog
-import kotlinx.coroutines.ExperimentalCoroutinesApi
-import kotlinx.coroutines.launch
-import kotlinx.coroutines.test.runCurrent
-import kotlinx.coroutines.test.runTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
+import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.test.runCurrent
+import kotlinx.coroutines.test.runTest
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class CowOrderEndsTest {
@@ -57,8 +57,8 @@ class CowOrderEndsTest {
     private val index = RecordingLogIndex()
     private val orders = MemoryCowOrders(record)
     private val light = FakeLightClient()
-    private val wallet = ListAccountRepository(Account(account, AccountKind.EOA, "Daily", AccountCustody.InKeyStore))
-    private val prove = ProveCowOrderEnds(orders, index, light, wallet) { validTo }
+    private val wallet = ListAccountRepository(Account(Network.SEPOLIA, account, AccountKind.EOA, "Daily", AccountCustody.InKeyStore))
+    private val prove = ProveCowOrderEnds(orders, index, light, wallet, Network.SEPOLIA) { validTo }
 
     private val ownerTopic = "0x" + "00".repeat(12) + account.hex.removePrefix("0x")
     private fun uidData(offset: String) = "0".repeat(62) + offset + "0".repeat(62) + "38" +
@@ -210,7 +210,7 @@ class CowOrderEndsTest {
         assertEquals(null, orders.orders.value.single().end, "the account is held: tried again")
 
         wallet.unreadable = true
-        val other = Account(Address.of("0x" + "bb".repeat(20)), AccountKind.EOA, "Other", AccountCustody.Watched)
+        val other = Account(Network.SEPOLIA, Address.of("0x" + "bb".repeat(20)), AccountKind.EOA, "Other", AccountCustody.Watched)
         wallet.accounts.value = listOf(other)
         runCurrent()
         assertEquals(null, orders.orders.value.single().end, "an account list that cannot be read removes nothing")

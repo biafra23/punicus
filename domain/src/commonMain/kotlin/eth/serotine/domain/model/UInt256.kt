@@ -233,6 +233,9 @@ class UInt256 private constructor(
         /** One. */
         val ONE: UInt256 = of(1)
 
+        /** 2^256 - 1, the largest. */
+        val MAX: UInt256 = UInt256(IntArray(LIMBS) { -1 })
+
         private val TEN: UInt256 = of(10)
 
         /** [value], which is not negative. */

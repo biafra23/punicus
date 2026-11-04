@@ -2,6 +2,7 @@ package eth.serotine.data.engine
 
 import eth.serotine.data.engine.AddressActivity.Kind
 import eth.serotine.data.keys.toHex
+import eth.serotine.domain.model.Network
 import eth.serotine.domain.model.Address
 import eth.serotine.domain.model.TokenUnits
 import eth.serotine.domain.model.Wei
@@ -322,6 +323,7 @@ class AddressActivityTest {
         val chain = FakeChain().apply { snapshot = running(head = 9) }
         val engine = FakeActivity().apply { report = report(to = 9, watching = listOf(holder)) }
         val balances = VerifiedTokenBalances(
+            Network.SEPOLIA,
             chain,
             StandardTestDispatcher(testScheduler),
             4.seconds,
@@ -329,20 +331,29 @@ class AddressActivityTest {
             gated = setOf(usdc),
         )
         chain.calls[usdc to calldata] = CallOutcome.Returned("0".repeat(63) + "1", blockNumber = 9, blockHash = engine.hashOf(9))
-        assertEquals(TokenBalanceReading.Verified(TokenUnits.of("1"), 9), balances.observeBalance(holder, usdc).first())
+        assertEquals(
+            TokenBalanceReading.Verified(TokenUnits.of("1"), 9),
+            balances.observeBalance(SEPOLIA, holder, usdc).first(),
+        )
 
         // A new head, nothing touched the holder: the proof at block 9 stands, though a new call
         // would now answer 2.
         chain.snapshot = running(head = 10)
         chain.calls[usdc to calldata] = CallOutcome.Returned("0".repeat(63) + "2", blockNumber = 10, blockHash = engine.hashOf(10))
         engine.report = report(to = 10, watching = listOf(holder))
-        assertEquals(TokenBalanceReading.Verified(TokenUnits.of("1"), 9), balances.observeBalance(holder, usdc).first())
+        assertEquals(
+            TokenBalanceReading.Verified(TokenUnits.of("1"), 9),
+            balances.observeBalance(SEPOLIA, holder, usdc).first(),
+        )
 
         // A log at block 11 may name the holder: the balance is called again.
         chain.snapshot = running(head = 11)
         chain.calls[usdc to calldata] = CallOutcome.Returned("0".repeat(63) + "3", blockNumber = 11, blockHash = engine.hashOf(11))
         engine.report = report(to = 11, touched = touch(holder, 11), watching = listOf(holder))
-        assertEquals(TokenBalanceReading.Verified(TokenUnits.of("3"), 11), balances.observeBalance(holder, usdc).first())
+        assertEquals(
+            TokenBalanceReading.Verified(TokenUnits.of("3"), 11),
+            balances.observeBalance(SEPOLIA, holder, usdc).first(),
+        )
     }
 
     @Test
@@ -350,26 +361,27 @@ class AddressActivityTest {
         val chain = FakeChain().apply { snapshot = running(head = 9) }
         val engine = FakeActivity().apply { report = report(to = 9, accountGaps = "[]", watching = listOf(a)) }
         val balances = VerifiedNativeBalances(
+            Network.SEPOLIA,
             chain,
             StandardTestDispatcher(testScheduler),
             4.seconds,
             activity = AddressActivity(engine),
         )
         chain.proofs[a] = ProvenBalance("1", 9, engine.hashOf(9))
-        assertEquals(BalanceReading.Verified(Wei.of("1"), 9), balances.observeBalance(a).first())
+        assertEquals(BalanceReading.Verified(Wei.of("1"), 9), balances.observeBalance(SEPOLIA, a).first())
 
         // Head 10, nothing touched the account: the proof at block 9 stands.
         chain.snapshot = running(head = 10)
         chain.proofs[a] = ProvenBalance("2", 10, engine.hashOf(10))
         engine.report = report(to = 10, accountGaps = "[]", watching = listOf(a))
-        assertEquals(BalanceReading.Verified(Wei.of("1"), 9), balances.observeBalance(a).first())
+        assertEquals(BalanceReading.Verified(Wei.of("1"), 9), balances.observeBalance(SEPOLIA, a).first())
 
         // A reorg replaced block 9: proven again, though nothing touched the account.
         engine.hashes[9] = "0x" + "ee".repeat(32)
         chain.snapshot = running(head = 11)
         chain.proofs[a] = ProvenBalance("3", 11, engine.hashOf(11))
         engine.report = report(to = 11, accountGaps = "[]", watching = listOf(a))
-        assertEquals(BalanceReading.Verified(Wei.of("3"), 11), balances.observeBalance(a).first())
+        assertEquals(BalanceReading.Verified(Wei.of("3"), 11), balances.observeBalance(SEPOLIA, a).first())
     }
 
     @Test
@@ -380,6 +392,7 @@ class AddressActivityTest {
         val chain = FakeChain().apply { snapshot = running(head = 9) }
         val engine = FakeActivity().apply { report = report(to = 9, watching = listOf(holder)) }
         val balances = VerifiedTokenBalances(
+            Network.SEPOLIA,
             chain,
             StandardTestDispatcher(testScheduler),
             4.seconds,
@@ -389,12 +402,18 @@ class AddressActivityTest {
         // The call ran at a block 9 the chain left; the engine now follows another block 9.
         val sibling = "0x" + "ee".repeat(32)
         chain.calls[usdc to calldata] = CallOutcome.Returned("0".repeat(63) + "1", blockNumber = 9, blockHash = sibling)
-        assertEquals(TokenBalanceReading.Verified(TokenUnits.of("1"), 9), balances.observeBalance(holder, usdc).first())
+        assertEquals(
+            TokenBalanceReading.Verified(TokenUnits.of("1"), 9),
+            balances.observeBalance(SEPOLIA, holder, usdc).first(),
+        )
 
         chain.snapshot = running(head = 10)
         chain.calls[usdc to calldata] = CallOutcome.Returned("0".repeat(63) + "2", blockNumber = 10, blockHash = engine.hashOf(10))
         engine.report = report(to = 10, watching = listOf(holder))
-        assertEquals(TokenBalanceReading.Verified(TokenUnits.of("2"), 10), balances.observeBalance(holder, usdc).first())
+        assertEquals(
+            TokenBalanceReading.Verified(TokenUnits.of("2"), 10),
+            balances.observeBalance(SEPOLIA, holder, usdc).first(),
+        )
     }
 
     @Test
@@ -405,6 +424,7 @@ class AddressActivityTest {
         val chain = FakeChain().apply { snapshot = running(head = 9) }
         val engine = FakeActivity().apply { report = report(to = 9, watching = listOf(holder)) }
         val balances = VerifiedTokenBalances(
+            Network.SEPOLIA,
             chain,
             StandardTestDispatcher(testScheduler),
             4.seconds,
@@ -412,11 +432,17 @@ class AddressActivityTest {
             gated = emptySet(),
         )
         chain.calls[custom to calldata] = CallOutcome.Returned("0".repeat(63) + "1", blockNumber = 9, blockHash = engine.hashOf(9))
-        balances.observeBalance(holder, custom).first()
+        balances.observeBalance(SEPOLIA, holder, custom).first()
         // A rebasing or interest-bearing token may change with no log naming the holder.
         chain.snapshot = running(head = 10)
         chain.calls[custom to calldata] = CallOutcome.Returned("0".repeat(63) + "2", blockNumber = 10, blockHash = engine.hashOf(10))
         engine.report = report(to = 10, watching = listOf(holder))
-        assertEquals(TokenBalanceReading.Verified(TokenUnits.of("2"), 10), balances.observeBalance(holder, custom).first())
+        assertEquals(
+            TokenBalanceReading.Verified(TokenUnits.of("2"), 10),
+            balances.observeBalance(SEPOLIA, holder, custom).first(),
+        )
     }
 }
+
+/** The one network these readings are of. */
+private val SEPOLIA = Network.SEPOLIA

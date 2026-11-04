@@ -2,6 +2,7 @@ package eth.serotine.ui.activitydetail
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import eth.serotine.domain.model.AccountId
 import eth.serotine.domain.model.Address
 import eth.serotine.domain.model.Network
 import eth.serotine.domain.model.SafeEvent
@@ -17,11 +18,13 @@ import eth.serotine.domain.usecase.IndexedHistory
 import eth.serotine.domain.usecase.KnownToken
 import eth.serotine.domain.usecase.ObserveAccountHistory
 import eth.serotine.domain.usecase.ObserveAccounts
+import eth.serotine.domain.usecase.ObserveAmountsHidden
 import eth.serotine.domain.usecase.ObserveKnownTokens
 import eth.serotine.domain.usecase.ObserveSafeHistory
 import eth.serotine.domain.usecase.ObserveSentToAddresses
 import eth.serotine.domain.usecase.ObserveTokenTransfers
 import eth.serotine.domain.usecase.SafeChainEvent
+import eth.serotine.domain.usecase.ToggleAmountsHidden
 import eth.serotine.domain.usecase.TokenTransferEvent
 import eth.serotine.ui.activity.ActivityKey
 import eth.serotine.ui.activity.ActivityRow
@@ -39,6 +42,7 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.launch
 
 /**
  * The ViewModel of the detail of one row of the Activity of the account at [address]
@@ -47,14 +51,16 @@ import kotlinx.coroutines.flow.stateIn
  * from the engine's verified log index as the Activity reads them ([ObserveTokenTransfers],
  * [ObserveSafeHistory]). Its headline and status are its row's ([ActivityRows]); its fields name
  * every address and hash it concerns in full, with the wallet's names for them ([ObserveAccounts])
- * and the tokens' symbols and decimals ([ObserveKnownTokens]). One received from an address the
+ * and the tokens' symbols and decimals ([ObserveKnownTokens]); a Safe transaction approved or
+ * executed, sent from here or seen on chain, is headed with what it does as its row is, from the
+ * request this device holds of it. One received from an address the
  * wallet never sent to ([ObserveSentToAddresses]) and that is none of its accounts says why to
  * compare it before copying it. A transfer of a contract the wallet
  * does not list is a claim, as its row is: only the contract is named, and an ERC-20 one can be
  * added. No intents: Copy is the screen's own, Status and Add token are navigation.
  */
 class ActivityDetailViewModel(
-    private val address: Address,
+    private val account: AccountId,
     private val key: ActivityKey,
     observeAccountHistory: ObserveAccountHistory,
     observeAccounts: ObserveAccounts,
@@ -62,14 +68,36 @@ class ActivityDetailViewModel(
     observeTokenTransfers: ObserveTokenTransfers,
     observeKnownTokens: ObserveKnownTokens,
     observeSentTo: ObserveSentToAddresses,
-    network: Network,
+    /** Whether amounts are hidden (docs/wallet-ux.md, *Hiding amounts*): the eye in the top bar shows it. */
+    observeAmountsHidden: ObserveAmountsHidden,
+    /** Hides amounts or shows them again: what a tap on the eye asks. */
+    private val toggleAmountsHidden: ToggleAmountsHidden,
     private val formatTime: (Long) -> String = ::formatDateTime,
 ) : ViewModel() {
+    /** The account this screen is about: its address, on its network. */
+    private val address: Address = account.address
 
-    private val rows = ActivityRows(address, network, formatTime)
+    /** The account's network: everything here is read and sent there. */
+    private val network: Network = account.network
+
+
+    /**
+     * What a row of this account says, with its amounts masked while they are [hidden], a Safe
+     * transaction in the units of the [tokens] known and by the requests in [entries], as the
+     * Activity says it.
+     */
+    private fun rowsFor(hidden: Boolean, tokens: Map<Address, KnownToken>?, entries: List<HistoryEntry>) =
+        ActivityRows(
+            address,
+            network,
+            formatTime,
+            hidden,
+            decodingTokens = ActivityRows.decodingTokens(tokens),
+            requests = ActivityRows.requestsIn(entries),
+        )
 
     private val sources = ActivitySources(
-        address,
+        account,
         observeAccounts,
         observeSafeHistory,
         observeTokenTransfers,
@@ -77,12 +105,45 @@ class ActivityDetailViewModel(
         observeSentTo,
     )
 
-    /** Only what the row is read from is followed: the history for a sent one, the log index for an event. */
-    private val shown: Flow<ActivityDetailUiState> = if (key.logIndex == null) {
-        combine(observeAccountHistory(address), sources.parties, ::renderSent)
-    } else {
-        combine(sources.parties, sources.safeHistory, sources.transfers, sources.tokens, ::renderLogged)
+    /**
+     * Only what the row is read from is followed: the history for a sent one, the log index for an
+     * event; the history beside an event too, for the request of a Safe transaction it may be of.
+     */
+    private val shown: Flow<ActivityDetailUiState> = observeAmountsHidden().let { hiddenFlow ->
+        if (key.logIndex == null) {
+            combine(
+                observeAccountHistory(account),
+                sources.parties,
+                combine(sources.tokens, hiddenFlow, ::Pair),
+            ) { history, parties, (tokens, hidden) ->
+                val entries = (history as? HistoryList.Loaded)?.entries.orEmpty()
+                renderSent(history, parties, rowsFor(hidden, tokens, entries)).withHidden(hidden)
+            }
+        } else {
+            combine(
+                sources.parties,
+                sources.safeHistory,
+                sources.transfers,
+                combine(sources.tokens, hiddenFlow, ::Pair),
+                observeAccountHistory(account),
+            ) { parties, safe, transfers, (tokens, hidden), history ->
+                val entries = (history as? HistoryList.Loaded)?.entries.orEmpty()
+                renderLogged(parties, safe, transfers, tokens, rowsFor(hidden, tokens, entries)).withHidden(hidden)
+            }
+        }
     }
+
+    /**
+     * Hides amounts, or shows them again: the eye in the top bar. This screen has no message to say a
+     * choice that could not be saved: the eye simply stays as it was.
+     */
+    fun toggleAmounts() {
+        viewModelScope.launch { toggleAmountsHidden() }
+    }
+
+    /** [this] with the eye's state, where it is drawn. */
+    private fun ActivityDetailUiState.withHidden(hidden: Boolean): ActivityDetailUiState =
+        if (this is ActivityDetailUiState.Shown) copy(amountsHidden = hidden) else this
 
     val uiState: StateFlow<ActivityDetailUiState> = shown.stateIn(
         viewModelScope,
@@ -90,7 +151,7 @@ class ActivityDetailViewModel(
         ActivityDetailUiState.Loading(sources.shortTitle),
     )
 
-    private fun renderSent(history: HistoryList, parties: Parties): ActivityDetailUiState {
+    private fun renderSent(history: HistoryList, parties: Parties, rows: ActivityRows): ActivityDetailUiState {
         val names = parties.names
         val title = sources.titleOf(names)
         val entries = when (history) {
@@ -99,7 +160,7 @@ class ActivityDetailViewModel(
         }
         val entry = entries.firstOrNull { it.transfer.hash == key.hash }
             ?: return ActivityDetailUiState.Unavailable(title, NOT_SENT_HERE)
-        return shownOf(title, rows.row(entry, names), sentFields(entry, names), opensStatus = entry.transfer.hash)
+        return shownOf(title, rows.row(entry, names), sentFields(entry, names, rows), opensStatus = entry.transfer.hash)
     }
 
     private fun renderLogged(
@@ -107,19 +168,20 @@ class ActivityDetailViewModel(
         safe: IndexedHistory<SafeChainEvent>?,
         transfers: IndexedHistory<TokenTransferEvent>?,
         tokens: Map<Address, KnownToken>?,
+        rows: ActivityRows,
     ): ActivityDetailUiState {
         val names = parties.names
         val title = sources.titleOf(names)
         if (parties.list !is AccountList.Loaded) return ActivityDetailUiState.Unavailable(title, ACCOUNTS_UNREADABLE)
         // Only an account of the wallet has its logs followed.
         if (transfers == null) return ActivityDetailUiState.Unavailable(title, NOT_IN_WALLET)
-        safe.found()?.let { return shownOf(title, rows.eventRow(it, parties), safeFields(it, names)) }
+        safe.found()?.let { return shownOf(title, rows.eventRow(it, parties), safeFields(it, names, rows)) }
         val transfer = transfers.found() ?: return missing(title, listOfNotNull(safe, transfers))
         // A transfer of nothing is not listed, and not detailed either: it plants a look-alike address.
         if (transfer.transfer.movesNothing()) return ActivityDetailUiState.Unavailable(title, MOVED_NOTHING)
         // Until the tokens are known, what moved cannot be said.
         if (tokens == null) return ActivityDetailUiState.Loading(title)
-        return transferShown(title, transfer, parties, tokens)
+        return transferShown(title, transfer, parties, tokens, rows)
     }
 
     /** The event [key] names in this history, when it is read with it. */
@@ -151,6 +213,7 @@ class ActivityDetailViewModel(
         headline = row.title,
         about = row.about,
         status = row.status,
+        simpleStatus = row.simpleStatus,
         state = row.state,
         fields = fields,
         // A row cautioned about its sender says why, here where the sender can be copied.
@@ -160,7 +223,7 @@ class ActivityDetailViewModel(
     )
 
     /** Each party a sent transaction concerns, then what it moved, then where it is on chain. */
-    private fun sentFields(entry: HistoryEntry, names: Map<Address, String>): List<DetailField> {
+    private fun sentFields(entry: HistoryEntry, names: Map<Address, String>, rows: ActivityRows): List<DetailField> {
         val transfer = entry.transfer
         val fields = mutableListOf(addressOf("From", transfer.account, names))
         when (val action = transfer.action) {
@@ -203,11 +266,16 @@ class ActivityDetailViewModel(
                 fields += DetailField("CoW order", action.uid.hex, DetailKind.HASH)
                 fields += addressOf("Settlement contract", action.settlement, names)
             }
+            is SentAction.DappCall -> {
+                fields += addressOf("To", action.to, names)
+                fields += DetailField("Value", rows.amount(action.value, TransferAsset.Native))
+                fields += DetailField("For the dApp", "${action.dapp} (stated by the dApp, not verified)")
+            }
         }
         fields += DetailField("Transaction hash", transfer.hash, DetailKind.HASH)
         fields += DetailField("Nonce", transfer.nonce.toString())
         fields += DetailField("Sent", formatTime(transfer.sentAt))
-        entry.outcome.blockNumberOrNull?.let { fields += DetailField("Block", grouped(it)) }
+        entry.outcome.blockNumberOrNull?.let { fields += DetailField("Block", grouped(it), DetailKind.BLOCK) }
         return fields
     }
 
@@ -226,7 +294,7 @@ class ActivityDetailViewModel(
     }
 
     /** What a Safe's event concerns, the Safe, then where it is on chain. */
-    private fun safeFields(event: SafeChainEvent, names: Map<Address, String>): List<DetailField> {
+    private fun safeFields(event: SafeChainEvent, names: Map<Address, String>, rows: ActivityRows): List<DetailField> {
         val fields = mutableListOf<DetailField>()
         when (val what = event.event) {
             is SafeEvent.SetUp -> {
@@ -278,6 +346,7 @@ class ActivityDetailViewModel(
         event: TokenTransferEvent,
         parties: Parties,
         tokens: Map<Address, KnownToken>,
+        rows: ActivityRows,
     ): ActivityDetailUiState {
         val names = parties.names
         val transfer = event.transfer
@@ -297,17 +366,24 @@ class ActivityDetailViewModel(
         }
         val moved = when (transfer) {
             is TokenTransfer.Fungible ->
-                DetailField("Amount", "${transfer.amount.formatUnits(known.token.decimals)} $symbol")
+                DetailField(
+                    "Amount",
+                    rows.figure(transfer.amount, known.token.decimals, displaySymbol(known.token.symbol)),
+                )
             is TokenTransfer.Nft -> DetailField("Token id", transfer.tokenId.toDecimal())
         }
         val sides = listOf(addressOf("From", transfer.from, names), addressOf("To", transfer.to, names))
         return shownOf(title, row, sides + moved + contract + loggedAt(event))
     }
 
-    /** Where an event is on chain: the transaction that logged it, and its block. */
-    private fun loggedAt(event: IndexedEvent): List<DetailField> = listOf(
+    /**
+     * Where an event is on chain: the transaction that logged it, when its block was produced where
+     * the engine reported it from the block's verified header, and its block.
+     */
+    private fun loggedAt(event: IndexedEvent): List<DetailField> = listOfNotNull(
         DetailField("Transaction hash", event.transactionHash, DetailKind.HASH),
-        DetailField("Block", grouped(event.blockNumber)),
+        event.blockTimestamp?.let { DetailField("Time", formatTime(it)) },
+        DetailField("Block", grouped(event.blockNumber), DetailKind.BLOCK),
     )
 
     /**

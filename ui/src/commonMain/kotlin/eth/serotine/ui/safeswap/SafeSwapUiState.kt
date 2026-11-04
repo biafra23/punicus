@@ -53,7 +53,9 @@ sealed interface SafeSwapUiState {
      * after, and how the swap ran from the Safe ([simulation]). An owner held here, [owner] (EIP-55)
      * of [owners], signs every one as [unlock] says; [refreshing] while it is proposed again,
      * [signing] while it is signed and queued ([progress] which of them), and [error] what the last
-     * attempt came to.
+     * attempt came to. Simple mode says no block (docs/simple-ui.md): [simpleQuotedAt],
+     * [simpleSimulation] and [simpleError] are [quotedAt], [simulation] and [error] in its words, null
+     * where they are the same.
      */
     data class Review(
         override val network: String,
@@ -86,6 +88,9 @@ sealed interface SafeSwapUiState {
         val checking: Boolean = false,
         val progress: String? = null,
         val error: String? = null,
+        val simpleQuotedAt: String? = null,
+        val simpleSimulation: String? = null,
+        val simpleError: String? = null,
     ) : SafeSwapUiState {
 
         /** Something is typed and nothing runs: the password may sign. */

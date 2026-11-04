@@ -68,7 +68,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           # Full history: :ui stamps the app's on-screen version from the nearest
-          # v* tag, and `git describe` needs HEAD's history to REACH that tag.
+          # v* tag, and `git tag --merged HEAD` needs HEAD's history to REACH that tag.
           #
           # KNOWN GAP on pull_request: checkout defaults to github.ref, which for
           # that event is the ephemeral refs/pull/<n>/merge commit — so a PR-built
@@ -95,6 +95,14 @@ jobs:
       # Retry to ride out transient external-repo resolution blips. NOT --offline:
       # offline turns a single cache miss into a hard failure.
       - name: Build the debug + unsigned release APKs
+        # The Reown project IDs (docs/walletconnect.md, *Setting up the project ID*), which :data
+        # compiles into the app: this step builds the debug and the release APK, so both. Scoped
+        # to this step, the one that needs them, so no other step's action can read them.
+        # A pull request from a fork or Dependabot gets no secrets: its build has them empty, and so
+        # WalletConnect switched off, as a local build without them does.
+        env:
+          ORG_GRADLE_PROJECT_walletConnectProjectIdDebug: ${{ secrets.WALLETCONNECT_PROJECT_ID_DEBUG }}
+          ORG_GRADLE_PROJECT_walletConnectProjectIdRelease: ${{ secrets.WALLETCONNECT_PROJECT_ID_RELEASE }}
         run: |
           for attempt in 1 2 3; do
             ./gradlew :android-app:assembleDebug :android-app:assembleRelease --stacktrace && exit 0

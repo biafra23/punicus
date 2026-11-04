@@ -1,5 +1,6 @@
 package eth.serotine.data.safe
 
+import eth.serotine.domain.model.AccountId
 import eth.serotine.domain.model.Address
 import eth.serotine.domain.model.Erc20
 import eth.serotine.domain.model.Network
@@ -9,6 +10,12 @@ import eth.serotine.domain.model.Signature
 import eth.serotine.domain.model.SigningRequest
 import eth.serotine.domain.model.UInt256
 import eth.serotine.domain.repository.SafeTxQueueList
+import kotlin.random.Random
+import kotlin.test.AfterTest
+import kotlin.test.Test
+import kotlin.test.assertEquals
+import kotlin.test.assertNull
+import kotlin.test.assertTrue
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.StandardTestDispatcher
@@ -20,12 +27,6 @@ import kotlinx.io.files.SystemFileSystem
 import kotlinx.io.files.SystemTemporaryDirectory
 import kotlinx.io.readString
 import kotlinx.io.writeString
-import kotlin.random.Random
-import kotlin.test.AfterTest
-import kotlin.test.Test
-import kotlin.test.assertEquals
-import kotlin.test.assertNull
-import kotlin.test.assertTrue
 
 /** [FileSafeTxQueue] against the [eth.serotine.domain.repository.SafeTxQueue] contract. */
 @OptIn(ExperimentalCoroutinesApi::class)
@@ -59,7 +60,7 @@ class FileSafeTxQueueTest {
     )
 
     private suspend fun TestScope.queued(of: Address = safe) =
-        (queue().observe(of).first() as SafeTxQueueList.Loaded).requests
+        (queue().observe(AccountId(Network.SEPOLIA, of)).first() as SafeTxQueueList.Loaded).requests
 
     @AfterTest
     fun cleanUp() {
@@ -98,7 +99,7 @@ class FileSafeTxQueueTest {
         listOf(request(3), request(4), request(5), request(2, on = otherSafe)).forEach { store.save(it) }
 
         assertTrue(store.remove(request(5).hash))
-        assertTrue(store.prune(safe, nonce = 4))
+        assertTrue(store.prune(AccountId(Network.SEPOLIA, safe), nonce = 4))
 
         assertEquals(listOf(request(4)), queued())
         assertEquals(listOf(request(2, on = otherSafe)), queued(otherSafe))
@@ -108,10 +109,10 @@ class FileSafeTxQueueTest {
     @Test
     fun aRequestThatNoLongerDecodesIsLeftOutAndTheOthersKeepTheirSignatures() = runTest {
         SystemFileSystem.createDirectories(directory)
-        val codec = JsonSigningRequestCodec(Network.SEPOLIA)
+        val codec = JsonSigningRequestCodec()
         val kept = request(5).withSignatures(listOf(byA, byB))
         // A request for a chain the app does not know is no request it keeps; the next one stays.
-        val elsewhere = codec.encode(request(4)).replace("11155111", "1")
+        val elsewhere = codec.encode(request(4)).replace("11155111", "10")
         SystemFileSystem.sink(file).buffered().use {
             it.writeString("""{"version":1,"requests":[$elsewhere,${codec.encode(kept)}]}""")
         }
@@ -122,9 +123,9 @@ class FileSafeTxQueueTest {
     @Test
     fun aRequestPassedOverIsCopiedAsideBeforeTheQueueIsRewritten() = runTest {
         SystemFileSystem.createDirectories(directory)
-        val codec = JsonSigningRequestCodec(Network.SEPOLIA)
+        val codec = JsonSigningRequestCodec()
         val kept = request(5).withSignatures(listOf(byA, byB))
-        val elsewhere = codec.encode(request(4)).replace("11155111", "1")
+        val elsewhere = codec.encode(request(4)).replace("11155111", "10")
         val text = """{"version":1,"requests":[$elsewhere,${codec.encode(kept)}]}"""
         SystemFileSystem.sink(file).buffered().use { it.writeString(text) }
 
@@ -152,7 +153,7 @@ class FileSafeTxQueueTest {
         SystemFileSystem.createDirectories(directory)
         SystemFileSystem.sink(file).buffered().use { it.writeString("""{"version":2,"requests":[]}""") }
 
-        assertEquals(SafeTxQueueList.Unreadable, queue().observe(safe).first())
+        assertEquals(SafeTxQueueList.Unreadable, queue().observe(AccountId(Network.SEPOLIA, safe)).first())
         assertNull(queue().save(request(4)))
     }
 }

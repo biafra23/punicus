@@ -59,3 +59,7 @@ xcuserdata/
 DerivedData/
 
 __pycache__/
+
+# Claude Code's per-user permission grants. The shared rules and skills in
+# .claude/ are committed on purpose (CLAUDE.md, "How these instructions are organized").
+.claude/settings.local.json

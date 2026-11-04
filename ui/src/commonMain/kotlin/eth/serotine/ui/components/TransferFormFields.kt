@@ -9,17 +9,14 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.material3.AssistChip
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.ListItem
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.RadioButton
 import androidx.compose.material3.SegmentedButton
 import androidx.compose.material3.SegmentedButtonDefaults
 import androidx.compose.material3.SingleChoiceSegmentedButtonRow
@@ -27,13 +24,15 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.platform.testTag
-import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.text.input.KeyboardType
@@ -43,7 +42,7 @@ import eth.serotine.domain.repository.FeeLevel
 // The transfer form (docs/wallet-ux.md, screen 7) as Send and Send from a Safe draw it, and the
 // pieces of their reviews they share.
 
-/** Test tag of each asset choice of the transfer form, for UI tests. */
+/** Test tag of the transfer form's asset dropdown, for UI tests: its options are [ASSET_OPTION_TAG]'s. */
 const val SEND_ASSET_TAG = "send-asset"
 
 /** Test tag of the recipient field, for UI tests. */
@@ -78,20 +77,20 @@ internal fun TransferFormFields(
     Heading("From")
     FromLine(form.from)
     Heading("Asset")
-    Column {
-        form.assets.forEach { asset ->
-            AssetChoiceRow(asset, selected = asset == form.asset, enabled = !form.quoting) {
-                onAssetChange(asset.contract)
-            }
-        }
+    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        AssetDropdown(
+            options = form.assets,
+            selected = form.asset,
+            placeholder = "Choose the asset to send",
+            enabled = !form.quoting,
+            tag = SEND_ASSET_TAG,
+        ) { onAssetChange(it.contract) }
         form.assetNote?.let { Note(it) }
     }
     Heading("To")
     RecipientField(form, onToChange, amountField)
     form.recipient?.let { RecipientCard(it) }
-    if (form.canRetryLookup) {
-        TextButton(onClick = onRetryLookup) { Text("Try again") }
-    }
+    if (form.canRetryLookup) RetryLookupButton(form.retryLookupWaits, onRetryLookup)
     if (form.accounts.isNotEmpty()) {
         Row(
             Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
@@ -129,35 +128,17 @@ internal fun ReviewButton(form: TransferForm, onReview: () -> Unit, modifier: Mo
     }
 }
 
-/** One asset to choose, with its verified balance; [tag] tags its row for UI tests. */
-@Composable
-internal fun AssetChoiceRow(
-    asset: AssetChoice,
-    selected: Boolean,
-    enabled: Boolean,
-    tag: String = SEND_ASSET_TAG,
-    onSelect: () -> Unit,
-) {
-    ListItem(
-        modifier = Modifier
-            .testTag(tag)
-            .selectable(selected = selected, enabled = enabled, role = Role.RadioButton, onClick = onSelect),
-        leadingContent = { TokenIcon(asset.icon, asset.symbol) },
-        headlineContent = { Text(asset.symbol) },
-        supportingContent = { Column { AssetBalanceLines(asset) } },
-        // The row is the control; the radio button only shows which one is chosen.
-        trailingContent = { RadioButton(selected = selected, onClick = null, enabled = enabled) },
-    )
-}
-
 /**
  * What every asset picker says under an asset's symbol: its verified balance and, if it has one,
- * its warning. Send's rows and the swap menus share it, so they word the verification alike.
+ * its warning. The asset dropdowns of the transfer and swap forms share it, so they word the
+ * verification alike.
  */
 @Composable
 internal fun AssetBalanceLines(asset: AssetChoice) {
     Text(
-        asset.verifiedAt?.let { "${asset.balance} · verified at $it" } ?: asset.balance,
+        asset.verifiedAt?.let { "${asset.balance} · verified at $it" }
+            ?: asset.age?.let { "${asset.balance} · $it" }
+            ?: asset.balance,
         style = MaterialTheme.typography.bodyMedium,
         color = MaterialTheme.colorScheme.onSurfaceVariant,
     )
@@ -173,13 +154,13 @@ private fun RecipientField(form: TransferForm, onToChange: (String) -> Unit, amo
         onValueChange = onToChange,
         modifier = Modifier.fillMaxWidth().testTag(SEND_TO_TAG),
         enabled = !form.quoting,
-        label = { Text("Address or ENS name") },
+        label = { Text(form.toLabel) },
         textStyle = MaterialTheme.typography.bodyMedium.copy(fontFamily = FontFamily.Monospace),
         singleLine = true,
         // The blockie once the text is an address, typed or resolved.
         leadingIcon = form.recipient?.let { recipient -> { Blockie(recipient.address, size = 24.dp) } },
         isError = form.toError,
-        supportingText = { Text(form.toNote ?: "An address, an ENS name, or one of your accounts below") },
+        supportingText = { Text(form.toNote ?: form.toHint) },
         keyboardOptions = KeyboardOptions(
             capitalization = KeyboardCapitalization.None,
             autoCorrectEnabled = false,
@@ -290,4 +271,23 @@ internal fun FeeChoice(fee: FeeLevel, enabled: Boolean, onFeeChange: (FeeLevel) 
             )
         }
     }
+}
+
+/**
+ * Try again for a name that could not be resolved: [onRetry], or, while [waits] says why asking by
+ * hand changes nothing (the light client is still syncing), greyed out, and a tap says so (owner
+ * ruling, 2026-10-18, #55).
+ */
+@Composable
+internal fun RetryLookupButton(waits: String?, onRetry: () -> Unit) {
+    // Asked about this reason alone: once it is gone, a later one is never shown unasked.
+    var asking by remember(waits) { mutableStateOf(false) }
+    if (waits == null) {
+        TextButton(onClick = onRetry) { Text("Try again") }
+        return
+    }
+    TextButton(onClick = { asking = true }, modifier = Modifier.unavailable(true)) {
+        Text("Try again", color = Unavailable.contentColor())
+    }
+    if (asking) UnavailableDialog("Try again", waits, onDismiss = { asking = false })
 }

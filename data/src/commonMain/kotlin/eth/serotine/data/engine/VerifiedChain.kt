@@ -102,7 +102,11 @@ internal data class ProvenCode(val codeHex: String, val blockNumber: Long, val a
  */
 internal sealed interface ProofAnchor {
 
-    /** The proof's state root matched the attested beacon slot [slot]. */
+    /**
+     * The state root of the account's block is the one the beacon slot [slot] attests: a proof
+     * matched it, or (Myotis 0.1.20's `blockAccessList`) verified block access lists carried an
+     * earlier proof's state to that block.
+     */
     data class Attested(val slot: Long) : ProofAnchor
 
     /**
@@ -159,8 +163,21 @@ internal sealed interface EngineSnapshot {
     /** The engine is still starting. */
     data object Booting : EngineSnapshot
 
-    /** There is no engine, or it failed to start; this is final. */
+    /** There is no engine on this device, or the host has shut down; this is final. */
     data object Down : EngineSnapshot
+
+    /**
+     * The network's light client failed to start. Not final: it is tried again when the network
+     * is next asked to run (turned off and on, or needed again after idling), so a stream keeps
+     * polling through it.
+     */
+    data object Failed : EngineSnapshot
+
+    /**
+     * The network's light client is stopped: the network is turned off in this wallet ([off]),
+     * or on with nothing needing it. It starts again when asked: not final.
+     */
+    data class Stopped(val off: Boolean) : EngineSnapshot
 
     /**
      * The engine's report; see `io.myotis.api.StatusSnapshot` for each field. [upgrade] is

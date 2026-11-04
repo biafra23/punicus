@@ -2,7 +2,7 @@ package eth.serotine.data.safe
 
 import eth.serotine.data.files.VersionedJsonFile
 import eth.serotine.data.files.VersionedJsonFile.Decision
-import eth.serotine.domain.model.Address
+import eth.serotine.domain.model.AccountId
 import eth.serotine.domain.model.Digest
 import eth.serotine.domain.model.Network
 import eth.serotine.domain.model.SigningRequest
@@ -48,9 +48,10 @@ class FileSafeTxQueue(
         },
     )
 
-    override fun observe(safe: Address): Flow<SafeTxQueueList> = file.observe().map { read ->
+    override fun observe(safe: AccountId): Flow<SafeTxQueueList> = file.observe().map { read ->
         when (read) {
-            is VersionedJsonFile.Read.Loaded -> SafeTxQueueList.Loaded(read.value.filter { it.safe == safe })
+            is VersionedJsonFile.Read.Loaded ->
+                SafeTxQueueList.Loaded(read.value.filter { it.network == safe.network && it.safe == safe.address })
             is VersionedJsonFile.Read.Unreadable -> SafeTxQueueList.Unreadable
         }
     }.distinctUntilChanged()
@@ -71,8 +72,8 @@ class FileSafeTxQueue(
         if (kept.size == requests.size) Decision(true) else Decision(true, next = kept)
     }
 
-    override suspend fun prune(safe: Address, nonce: Long): Boolean = file.change(notSaved = false) { requests ->
-        val kept = requests.filterNot { it.safe == safe && it.nonce < nonce }
+    override suspend fun prune(safe: AccountId, nonce: Long): Boolean = file.change(notSaved = false) { requests ->
+        val kept = requests.filterNot { it.network == safe.network && it.safe == safe.address && it.nonce < nonce }
         if (kept.size == requests.size) Decision(true) else Decision(true, next = kept)
     }
 
@@ -87,7 +88,7 @@ class FileSafeTxQueue(
         /** [wire] as the request it keeps, or null for one of another version, chain or range: left out. */
         fun request(wire: WireRequest): SigningRequest? {
             if (wire.v != WireRequest.VERSION) return null
-            val network = Network.entries.firstOrNull { it.chainId == wire.chainId } ?: return null
+            val network = Network.ofChainId(wire.chainId) ?: return null
             return wire.toRequest(network)
         }
     }

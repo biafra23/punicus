@@ -31,8 +31,8 @@ import kotlinx.coroutines.async
 import kotlinx.coroutines.flow.first
 
 /**
- * A wrap from an account this wallet holds, quoted for review (docs/swaps.md, *Wrapping ETH*):
- * exactly [amount] of ETH into [weth] ([WrapDirection.WRAP], `deposit`) or of [weth] back into ETH
+ * A wrap from an account this wallet holds on [network], quoted for review (docs/swaps.md,
+ * *Wrapping ETH*): exactly [amount] of ETH into [weth] ([WrapDirection.WRAP], `deposit`) or of [weth] back into ETH
  * ([WrapDirection.UNWRAP], `withdraw`), one for one, through the pinned WETH9 whose code the
  * light client proved. The unsigned [transaction] at [level]'s fees, run as a verified call from
  * [from] at [simulationBlock], went through.
@@ -47,6 +47,7 @@ import kotlinx.coroutines.flow.first
  */
 @ConsistentCopyVisibility
 data class WrapQuote internal constructor(
+    val network: Network,
     val from: Address,
     val direction: WrapDirection,
     val weth: Token,
@@ -152,13 +153,13 @@ class QuoteWrap(
         if (amount.isZero) return@cancellingReads WrapQuoting.NothingToWrap
         // An earlier transaction maybe still on its way: refused before any other read.
         quoter.heldBack(from)?.let { return@cancellingReads it.asWrapQuoting() }
-        val native = async { nativeBalances.observeBalance(from).first() }
-        val wethBalance = async { tokenBalances.observeBalance(from, weth.address).first() }
-        val records = async { unminedOf(sentTransfers, inputs, from, clock) }
+        val native = async { nativeBalances.observeBalance(network, from).first() }
+        val wethBalance = async { tokenBalances.observeBalance(network, from, weth.address).first() }
+        val records = async { unminedOf(network, sentTransfers, inputs, from, clock) }
         // Only an unwrap takes a token, which CoW orders may hold: a wrap reads neither.
         val unwrap = direction == WrapDirection.UNWRAP
         val orders = if (unwrap) async { cowOrders.observe().first() } else null
-        val head = if (unwrap) async { lightClient.observeStatus().first() } else null
+        val head = if (unwrap) async { lightClient.observeStatus(network).first() } else null
 
         val nativeBefore = when (val read = NativeRead.of(native.await())) {
             is NativeRead.Before -> read
@@ -217,6 +218,7 @@ class QuoteWrap(
         }
         WrapQuoting.Quoted(
             WrapQuote(
+                network = network,
                 from = from,
                 direction = direction,
                 weth = weth,
@@ -309,5 +311,5 @@ class SendWrap(
     private val clock: () -> Long = ::epochSecondsNow,
 ) {
     suspend operator fun invoke(quote: WrapQuote, unlock: Unlock): TransferSending =
-        signAndSend(signer, broadcaster, sentTransfers, quote.call, quote.action, clock, unlock)
+        signAndSend(signer, broadcaster, sentTransfers, quote.network, quote.call, quote.action, clock, unlock)
 }

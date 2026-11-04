@@ -68,7 +68,12 @@ class TransferStatusViewModel(
     private var latest: SentTransferStatus? = null
 
     val uiState: StateFlow<TransferStatusUiState> =
-        combine(observeSentTransfer(hash).onEach { latest = it }, observeAccounts(), retrying, ::render).stateIn(
+        combine(
+            observeSentTransfer(network, hash).onEach { latest = it },
+            observeAccounts(),
+            retrying,
+            ::render,
+        ).stateIn(
             viewModelScope,
             // Back after the timeout, no old step stands as current.
             SharingStarted.WhileSubscribed(stopTimeoutMillis = 5_000, replayExpirationMillis = 0),
@@ -118,9 +123,23 @@ class TransferStatusViewModel(
                 "Broadcast",
                 StepState.UNCONFIRMED,
                 "No peer confirmed it$takenAt: it may be on its way, or may not have reached the network",
+                simpleLabel = "Sent",
+                simpleDetail = "No peer answered$takenAt: it may be on its way, or may not have reached the network",
             )
-            unconfirmed -> StatusStep("Broadcast", StepState.UNCONFIRMED, "No peer confirmed it$takenAt")
-            else -> StatusStep("Broadcast", StepState.DONE, "Handed to the network's peers$takenAt")
+            unconfirmed -> StatusStep(
+                "Broadcast",
+                StepState.UNCONFIRMED,
+                "No peer confirmed it$takenAt",
+                simpleLabel = "Sent",
+                simpleDetail = "No peer answered$takenAt",
+            )
+            else -> StatusStep(
+                "Broadcast",
+                StepState.DONE,
+                "Handed to the network's peers$takenAt",
+                simpleLabel = "Sent",
+                simpleDetail = status.transfer?.let { formatTime(it.sentAt) },
+            )
         }
         // A used nonce the history recorded, whether the receipt is not found or not verifiable now.
         val used = nonceUsed(status)
@@ -130,25 +149,44 @@ class TransferStatusViewModel(
                 StepState.UNKNOWN,
                 "Its nonce was used on chain while the app was not watching: by this transaction, unless " +
                     "another one took its place, such as one sent from this account elsewhere",
+                simpleLabel = "Confirmed",
             )
             else -> when (progress) {
                 TransactionProgress.Pending ->
-                    StatusStep("Included", StepState.WAITING, "Waiting for a block to include it")
+                    StatusStep(
+                        "Included",
+                        StepState.WAITING,
+                        "Waiting for a block to include it",
+                        simpleLabel = "Confirmed",
+                        simpleDetail = "Waiting to be confirmed",
+                    )
                 is TransactionProgress.Included -> includedStep(progress.blockNumber, progress.succeeded)
                 is TransactionProgress.Finalized -> includedStep(progress.blockNumber, progress.succeeded)
                 is TransactionProgress.Unavailable ->
-                    StatusStep("Included", StepState.UNKNOWN, "Cannot be verified right now")
+                    StatusStep("Included", StepState.UNKNOWN, "Cannot be verified right now", simpleLabel = "Confirmed")
             }
         }
         val finalized = when {
-            used -> StatusStep("Finalized", StepState.UNKNOWN, "Not known on this device")
+            used -> StatusStep("Finalized", StepState.UNKNOWN, "Not known on this device", simpleLabel = "Final")
             else -> when (progress) {
                 TransactionProgress.Pending, is TransactionProgress.Included ->
-                    StatusStep("Finalized", StepState.WAITING, "Once the beacon chain finalizes its block")
+                    StatusStep(
+                        "Finalized",
+                        StepState.WAITING,
+                        "Once the beacon chain finalizes its block",
+                        simpleLabel = "Final",
+                        simpleDetail = "Once the network finalizes it, its outcome can't be reversed",
+                    )
                 is TransactionProgress.Finalized ->
-                    StatusStep("Finalized", StepState.DONE, "Block ${grouped(progress.blockNumber)} is finalized")
+                    StatusStep(
+                        "Finalized",
+                        StepState.DONE,
+                        "Block ${grouped(progress.blockNumber)} is finalized",
+                        simpleLabel = "Final",
+                        simpleDetail = "Its outcome can't be reversed by the network",
+                    )
                 is TransactionProgress.Unavailable ->
-                    StatusStep("Finalized", StepState.UNKNOWN, "Cannot be verified right now")
+                    StatusStep("Finalized", StepState.UNKNOWN, "Cannot be verified right now", simpleLabel = "Final")
             }
         }
         val failed = (progress as? TransactionProgress.Included)?.succeeded == false ||
@@ -204,7 +242,7 @@ class TransferStatusViewModel(
 
     /**
      * What [transfer] is called in a sentence: "transfer", "approval", "execution", "deployment",
-     * "swap", "wrap", "unwrap" or "cancellation".
+     * "swap", "wrap", "unwrap", "cancellation" or, for a dApp's, "transaction".
      */
     private fun whatOf(transfer: SentTransfer): String = when (transfer.action) {
         is SentAction.Transfer -> "transfer"
@@ -216,6 +254,7 @@ class TransferStatusViewModel(
         is SentAction.Wrap -> "wrap"
         is SentAction.Unwrap -> "unwrap"
         is SentAction.CowCancellation -> "cancellation"
+        is SentAction.DappCall -> "transaction"
     }
 
     private fun maybeSentText(what: String) = "No peer answered when this $what was broadcast, so it may not have " +
@@ -239,7 +278,8 @@ class TransferStatusViewModel(
             ""
         }
         // The name it has in the wallet now, or the one it was to be listed under.
-        val label = (list as? AccountList.Loaded)?.accounts?.firstOrNull { it.address == deployment.safe }?.label
+        val label = (list as? AccountList.Loaded)?.accounts
+            ?.firstOrNull { it.network == network && it.address == deployment.safe }?.label
             ?: deployment.label
         val mined = progress is TransactionProgress.Included || progress is TransactionProgress.Finalized
         val (text, listingFailed) = when (deployment.listed) {
@@ -269,9 +309,21 @@ class TransferStatusViewModel(
     }
 
     private fun includedStep(block: Long, succeeded: Boolean) = if (succeeded) {
-        StatusStep("Included", StepState.DONE, "In block ${grouped(block)}, its receipt verified")
+        StatusStep(
+            "Included",
+            StepState.DONE,
+            "In block ${grouped(block)}, its receipt verified",
+            simpleLabel = "Confirmed",
+            simpleDetail = "Its receipt checked on chain",
+        )
     } else {
-        StatusStep("Included", StepState.FAILED, "In block ${grouped(block)}, its receipt verified: it reverted")
+        StatusStep(
+            "Included",
+            StepState.FAILED,
+            "In block ${grouped(block)}, its receipt verified: it reverted",
+            simpleLabel = "Failed",
+            simpleDetail = "Its receipt checked on chain: it reverted",
+        )
     }
 
     /** [asset]'s symbol as shown, its decimals and its bundled icon. */
@@ -395,6 +447,7 @@ class TransferStatusViewModel(
             is SentAction.SafeExecution -> "Execution of a Safe transaction" to action.request
             is SentAction.Transfer, is SentAction.SafeDeployment, is SentAction.TokenApproval,
             is SentAction.Swap, is SentAction.Wrap, is SentAction.Unwrap, is SentAction.CowCancellation,
+            is SentAction.DappCall,
             -> return null
         }
         return SafeTxSummary(
@@ -408,7 +461,9 @@ class TransferStatusViewModel(
     private fun unavailable(reason: ReadUnavailable): String = "Where it stands cannot be verified right now: " +
         when (reason) {
             ReadUnavailable.NO_ENGINE -> "there is no light client on this device."
+            ReadUnavailable.NETWORK_OFF -> "the network's light client is not running."
             ReadUnavailable.STALE_ANCHOR -> "the light client refuses to sync."
+            ReadUnavailable.SYNCING -> "the light client is still syncing. Serotine keeps checking."
             ReadUnavailable.UNPROVEN -> "its receipt could not be verified this time. Serotine keeps checking."
             ReadUnavailable.REFUSED -> "the light client on this device cannot read receipts."
         }

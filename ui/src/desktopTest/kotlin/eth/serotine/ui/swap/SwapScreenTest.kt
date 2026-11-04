@@ -9,6 +9,7 @@ import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.assertTextEquals
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithTag
+import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
@@ -25,10 +26,14 @@ import eth.serotine.ui.components.BalanceChange
 import eth.serotine.ui.components.RouteStep
 import eth.serotine.ui.components.SWAP_AMOUNT_TAG
 import eth.serotine.ui.components.SWAP_BUY_TAG
+import eth.serotine.ui.components.SWAP_ESTIMATE_TAG
+import eth.serotine.ui.components.SWAP_INVERT_RATE_TAG
+import eth.serotine.ui.components.SWAP_RATE_TAG
 import eth.serotine.ui.components.SWAP_SELL_TAG
 import eth.serotine.ui.components.SWAP_TOLERANCE_TAG
 import eth.serotine.ui.components.SendFrom
 import eth.serotine.ui.components.SpenderItem
+import eth.serotine.ui.components.SwapEstimateItem
 import eth.serotine.ui.components.SwapForm
 import eth.serotine.ui.components.UNAVAILABLE_REASON_TAG
 import eth.serotine.ui.components.UnlockStep
@@ -93,7 +98,7 @@ class SwapScreenTest {
         SerotineTheme {
             SwapScreen(
                 state = state.value,
-                lightClient = verifiedStripSample,
+                chrome = SwapChrome.Strip(verifiedStripSample),
                 onSellChange = { events += "sell $it" },
                 onBuyChange = { events += "buy $it" },
                 onAmountChange = { events += "amount $it" },
@@ -114,6 +119,53 @@ class SwapScreenTest {
                 onBack = { events += "back" },
             )
         }
+    }
+
+    @Test
+    fun theComposeStepShowsWhatTheSwapWouldReturnAndTheRateEitherWayRound() {
+        show(
+            compose.copy(
+                form = compose.form.copy(
+                    buy = ether,
+                    amount = "40",
+                    estimate = SwapEstimateItem(
+                        label = "You receive",
+                        receive = "≈ 0.016 ETH",
+                        minimum = "At least 0.01592 ETH at 0.5 % tolerance",
+                        rate = "1 USDC ≈ 0.0004 ETH",
+                        inverseRate = "1 ETH ≈ 2500 USDC",
+                        note = "Uniswap's verified quote at block 9,412,118.",
+                    ),
+                ),
+            ),
+        )
+
+        rule.onNodeWithTag(SWAP_ESTIMATE_TAG).performScrollTo()
+        rule.onNodeWithText("You receive").assertExists()
+        rule.onNodeWithText("≈ 0.016 ETH").assertExists()
+        rule.onNodeWithText("At least 0.01592 ETH at 0.5 % tolerance").assertExists()
+        rule.onNodeWithTag(SWAP_RATE_TAG).assertTextEquals("1 USDC ≈ 0.0004 ETH")
+        rule.onNodeWithTag(SWAP_INVERT_RATE_TAG).performClick()
+        rule.onNodeWithTag(SWAP_RATE_TAG).assertTextEquals("1 ETH ≈ 2500 USDC")
+        rule.onNodeWithTag(SWAP_INVERT_RATE_TAG).performClick()
+        rule.onNodeWithTag(SWAP_RATE_TAG).assertTextEquals("1 USDC ≈ 0.0004 ETH")
+    }
+
+    @Test
+    fun theEstimateSaysWhileItIsCheckedAndWhyThereIsNone() {
+        val checking = SwapEstimateItem(label = "You receive", note = "Asking Uniswap's quoter.", checking = true)
+        val state = mutableStateOf<SwapUiState>(
+            compose.copy(form = compose.form.copy(buy = ether, amount = "40", estimate = checking)),
+        )
+        show(state)
+        rule.onNodeWithTag(SWAP_ESTIMATE_TAG).performScrollTo()
+        rule.onNodeWithText("Checking on chain…").assertExists()
+        rule.onAllNodesWithTag(SWAP_RATE_TAG).assertCountEquals(0)
+
+        val none = SwapEstimateItem(label = "You receive", note = "No Uniswap v3 pool takes USDC for ETH.")
+        state.value = compose.copy(form = compose.form.copy(buy = ether, amount = "40", estimate = none))
+        rule.onNodeWithText("No Uniswap v3 pool takes USDC for ETH.").assertExists()
+        rule.onAllNodesWithText("Checking on chain…").assertCountEquals(0)
     }
 
     @Test
@@ -327,6 +379,10 @@ class SwapScreenTest {
                 balance = BalanceChange("ETH balance, which pays the fee", "1.5 ETH", "at least 1.4994 ETH", "now"),
                 simulation = "The approval, run as a verified call, goes through.",
                 unlock = UnlockStep(),
+                step = "Step 1 of 2",
+                next = "Step 2, the swap.",
+                headline = "Allow Uniswap's SwapRouter02 to use 40 USDC",
+                scope = "Only this amount, for this swap.",
             ),
         )
 

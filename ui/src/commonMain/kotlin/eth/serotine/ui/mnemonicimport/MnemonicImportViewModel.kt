@@ -4,13 +4,18 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import eth.serotine.domain.model.Mnemonic
 import eth.serotine.domain.model.MnemonicProblem
+import eth.serotine.domain.model.Network
 import eth.serotine.domain.model.WalletPassword
 import eth.serotine.domain.repository.KeyStoreDescription
 import eth.serotine.domain.usecase.DescribeKeyStore
 import eth.serotine.domain.usecase.ImportMnemonicAccount
 import eth.serotine.domain.usecase.MnemonicImport
+import eth.serotine.domain.usecase.ObserveEnabledNetworks
+import eth.serotine.domain.usecase.SetNetworkEnabled
 import eth.serotine.ui.components.PasswordStep
 import eth.serotine.ui.components.STEPPED_DOWN_TEXT
+import eth.serotine.ui.components.chosenNetworks
+import eth.serotine.ui.components.networkChoices
 import eth.serotine.ui.components.notEnoughMemoryText
 import eth.serotine.ui.components.protectionText
 import eth.serotine.ui.mnemonicimport.MnemonicImportUiState.Entering
@@ -24,7 +29,8 @@ import kotlinx.coroutines.launch
 
 /**
  * The seed-phrase screen's ViewModel: holds the words and the wallet password as they are
- * typed and hands them to [ImportMnemonicAccount]. One of the ViewModels the [Mnemonic] and the
+ * typed, with the networks to add the account to (docs/networks.md, N9; one that is off turned on
+ * here first), and hands them to [ImportMnemonicAccount]. One of the ViewModels the [Mnemonic] and the
  * [WalletPassword] pass through (CLAUDE.md, *Trust*): it never logs, saves or caches them,
  * and drops them from its state as soon as the screen is not shown — hidden ([onHidden]) or
  * gone from the back stack ([onCleared]).
@@ -32,7 +38,15 @@ import kotlinx.coroutines.launch
 class MnemonicImportViewModel(
     private val importMnemonicAccount: ImportMnemonicAccount,
     private val describeKeyStore: DescribeKeyStore,
+    observeEnabledNetworks: ObserveEnabledNetworks,
+    private val setNetworkEnabled: SetNetworkEnabled,
 ) : ViewModel() {
+
+    /** The networks on in this wallet, as last read; null before, when no network is listed yet. */
+    private var on: Set<Network>? = null
+
+    /** The networks ticked: none until the user ticks one (N9). */
+    private var chosen: Set<Network> = emptySet()
 
     /** The key store's last answer, kept for the blank state [onHidden] and [onCleared] leave. */
     private var step: PasswordStep = PasswordStep.Checking
@@ -43,6 +57,40 @@ class MnemonicImportViewModel(
 
     init {
         describe()
+        viewModelScope.launch {
+            observeEnabledNetworks().collect { networks ->
+                on = networks.toSet()
+                refreshNetworks()
+            }
+        }
+    }
+
+    /** Ticks the network of [chainId], or unticks it; ignored while an attempt runs. */
+    fun onNetworkToggle(chainId: Long) {
+        val network = Network.ofChainId(chainId) ?: return
+        if ((state.value as? Entering)?.importing != false) return
+        chosen = if (network in chosen) chosen - network else chosen + network
+        refreshNetworks()
+    }
+
+    /** Turns the network of [chainId] on, and ticks it: the way to choose one that is off. */
+    fun onTurnOnNetwork(chainId: Long) {
+        val network = Network.ofChainId(chainId) ?: return
+        viewModelScope.launch {
+            if (setNetworkEnabled(network, on = true)) {
+                chosen = chosen + network
+                refreshNetworks()
+            }
+        }
+    }
+
+    /** The check boxes, once the networks on are read: none before, rather than every one shown off. */
+    private fun choices() = on?.let { networkChoices(it, chosen) }.orEmpty()
+
+    private fun refreshNetworks() {
+        state.update { current ->
+            if (current is Entering) current.copy(networks = choices()) else current
+        }
     }
 
     /** The words field now reads [text]. Ignored while an attempt runs and after a success. */
@@ -76,7 +124,7 @@ class MnemonicImportViewModel(
         state.value = current.copy(importing = true, error = null, passwordError = null)
         viewModelScope.launch {
             val result = try {
-                importMnemonicAccount(current.phrase, current.password)
+                importMnemonicAccount(current.phrase, current.password, current.networks.chosenNetworks())
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
@@ -98,13 +146,17 @@ class MnemonicImportViewModel(
      */
     fun onHidden() {
         state.update { current ->
-            if (current is Entering) Entering(Mnemonic.EMPTY, step = step, importing = current.importing) else current
+            if (current is Entering) {
+                Entering(Mnemonic.EMPTY, step = step, importing = current.importing, networks = current.networks)
+            } else {
+                current
+            }
         }
     }
 
     override fun onCleared() {
         // The screen is gone, and the words and the password go with it.
-        state.value = Entering(Mnemonic.EMPTY, step = step)
+        state.value = Entering(Mnemonic.EMPTY, step = step, networks = choices())
     }
 
     private fun describe() {

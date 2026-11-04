@@ -30,8 +30,20 @@ import kotlin.test.assertTrue
 @OptIn(ExperimentalCoroutinesApi::class)
 class AccountLogsTest {
 
-    private val alice = Account(Address.of("0x" + "11".repeat(20)), AccountKind.EOA, "Alice", AccountCustody.InKeyStore)
-    private val vault = Account(Address.of("0x" + "5a".repeat(20)), AccountKind.SAFE, "Vault", AccountCustody.Watched)
+    private val alice = Account(
+        Network.SEPOLIA,
+        Address.of("0x" + "11".repeat(20)),
+        AccountKind.EOA,
+        "Alice",
+        AccountCustody.InKeyStore,
+    )
+    private val vault = Account(
+        Network.SEPOLIA,
+        Address.of("0x" + "5a".repeat(20)),
+        AccountKind.SAFE,
+        "Vault",
+        AccountCustody.Watched,
+    )
     private val accounts = ListAccountRepository()
     private val starts = MemoryHistoryStarts()
     private val history = MemoryTransactionHistory()
@@ -88,6 +100,25 @@ class AccountLogsTest {
     }
 
     @Test
+    fun aNetworkStoppedAndStartedAgainIsAskedForEverythingAgain() = runTest {
+        accounts.accounts.value = listOf(alice)
+        starts.starts.value = mapOf(alice.address to HistoryStart.Fixed(9_000))
+        follow()
+        sync()
+        runCurrent()
+        assertEquals(1, index.asked.size)
+
+        // Idle, then running again: its chain is created anew, and may hold nothing of before.
+        sync(LightClientStatus.Idle)
+        runCurrent()
+        sync(head.copy(headBlock = 10_001))
+        runCurrent()
+
+        assertEquals(2, index.asked.size)
+        assertEquals(listOf(LogWatch(LogWatchKey.Mention(alice.address), 9_000)), index.asked.last().first)
+    }
+
+    @Test
     fun aSafeIsFollowedAsItsOwnEventsTooAndAnAccountWithoutANoteFromTheHead() = runTest {
         accounts.accounts.value = listOf(alice, vault)
         starts.starts.value = mapOf(vault.address to HistoryStart.Noted(HEAD_TIME))
@@ -128,7 +159,13 @@ class AccountLogsTest {
         assertEquals(HistoryStart.Fixed(1_000), starts.starts.value[alice.address], "it sent the deployment")
         assertEquals(HistoryStart.Fixed(1_000), starts.starts.value[vault.address])
 
-        val bob = Account(Address.of("0x" + "22".repeat(20)), AccountKind.EOA, "Bob", AccountCustody.InKeyStore)
+        val bob = Account(
+            Network.SEPOLIA,
+            Address.of("0x" + "22".repeat(20)),
+            AccountKind.EOA,
+            "Bob",
+            AccountCustody.InKeyStore,
+        )
         history.entries.value = listOf(HistoryEntry(sent(bob.address, nativeTo(alice.address), DAY)))
         accounts.accounts.value += bob
         runCurrent()
@@ -222,6 +259,7 @@ class AccountLogsTest {
     private fun nativeTo(to: Address) = SentAction.Transfer(to, TransferAsset.Native, UInt256.ONE)
 
     private fun sent(from: Address, action: SentAction, ageSeconds: Long, raw: Byte = 1) = SentTransfer(
+        network = Network.SEPOLIA,
         account = from,
         nonce = 0,
         signed = SignedTransfer(byteArrayOf(2, raw)),

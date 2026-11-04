@@ -269,7 +269,7 @@ class FindUniswapRouteTest {
 
         override suspend fun venue(network: Network): VenueReading = venue
 
-        override suspend fun call(to: Address, data: ByteArray): Simulation {
+        override suspend fun call(network: Network, to: Address, data: ByteArray): Simulation {
             calls++
             if (to == deployment.quoterV2) quotesAsked++
             unavailable?.takeIf { it.first == to }?.let { return Simulation.Unavailable(it.second) }
@@ -292,12 +292,24 @@ class FindUniswapRouteTest {
             ),
         )
 
-        override suspend fun fees(): FeeReading = fees
-        override suspend fun nonce(account: Address): NonceReading = error("not asked")
-        override suspend fun minedNonce(account: Address): NonceReading = error("not asked")
-        override suspend fun estimateGas(from: Address, to: Address, value: UInt256, data: ByteArray): GasEstimate =
+        override suspend fun fees(network: Network): FeeReading = fees
+        override suspend fun nonce(network: Network, account: Address): NonceReading = error("not asked")
+        override suspend fun minedNonce(network: Network, account: Address): NonceReading = error("not asked")
+        override suspend fun estimateGas(
+            network: Network,
+            from: Address,
+            to: Address,
+            value: UInt256,
+            data: ByteArray,
+        ): GasEstimate =
             error("not asked")
-        override suspend fun simulate(from: Address, to: Address, value: UInt256, data: ByteArray): Simulation =
+        override suspend fun simulate(
+            network: Network,
+            from: Address,
+            to: Address,
+            value: UInt256,
+            data: ByteArray,
+        ): Simulation =
             error("not asked")
     }
 }

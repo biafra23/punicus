@@ -26,6 +26,7 @@ import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.ExperimentalComposeUiApi
@@ -37,10 +38,12 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LifecycleEventEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import eth.serotine.domain.model.InterfaceMode
 import eth.serotine.ui.components.AmountLine
 import eth.serotine.ui.components.CHECKING_SAFE
 import eth.serotine.ui.components.FromLine
 import eth.serotine.ui.components.Heading
+import eth.serotine.ui.components.HiddenDetails
 import eth.serotine.ui.components.LightClientItem
 import eth.serotine.ui.components.Note
 import eth.serotine.ui.components.OwnerChoices
@@ -48,17 +51,21 @@ import eth.serotine.ui.components.RouteSteps
 import eth.serotine.ui.components.SafeTxActionCard
 import eth.serotine.ui.components.Spender
 import eth.serotine.ui.components.SwapFormFields
-import eth.serotine.ui.components.UnderLightClientStrip
+import eth.serotine.ui.components.UnderLightClientStripIfAny
 import eth.serotine.ui.components.UnlockFields
-import eth.serotine.ui.lightclient.LightClientViewModel
+import eth.serotine.ui.mode.LocalInterfaceMode
 import eth.serotine.ui.platform.KeepScreenOn
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.StateFlow
 
 /** Test tag of the Review button, for UI tests. */
 const val SAFE_SWAP_REVIEW_TAG = "safe-swap-review"
 
 /** Test tag of the reviewed minimum, for UI tests. */
 const val SAFE_SWAP_MINIMUM_TAG = "safe-swap-minimum"
+
+/** Test tag of the review's *Details* in simple mode, for UI tests. */
+const val SAFE_SWAP_DETAILS_TAG = "safe-swap-details"
 
 /** Test tag of each Safe transaction the swap takes, for UI tests. */
 const val SAFE_SWAP_TRANSACTION_TAG = "safe-swap-transaction"
@@ -78,14 +85,14 @@ const val SAFE_SWAP_SIGN_TAG = "safe-swap-sign"
 @Composable
 fun SafeSwapRoute(
     viewModel: SafeSwapViewModel,
-    lightClient: LightClientViewModel,
+    /** The strip of the network this screen is about: its account's. */
+    lightClient: StateFlow<LightClientItem>,
     onBack: () -> Unit,
     onProposed: (hash: String) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     // Main.immediate: as on Send, an edit reaches its field in the same frame.
     val state by viewModel.uiState.collectAsStateWithLifecycle(context = Dispatchers.Main.immediate)
-    val strip by lightClient.item.collectAsStateWithLifecycle()
     LifecycleEventEffect(Lifecycle.Event.ON_STOP) { viewModel.onHidden() }
     LifecycleEventEffect(Lifecycle.Event.ON_START) { viewModel.onShown() }
     val proposed = (state as? SafeSwapUiState.Proposed)?.hash
@@ -93,10 +100,8 @@ fun SafeSwapRoute(
     LaunchedEffect(proposed) {
         if (proposed != null) currentOnProposed(proposed)
     }
-    SafeSwapScreen(
-        state = state,
-        lightClient = strip,
-        actions = SafeSwapActions(
+    val actions = remember(viewModel) {
+        SafeSwapActions(
             onSellChange = viewModel::onSellChange,
             onBuyChange = viewModel::onBuyChange,
             onAmountChange = viewModel::onAmountChange,
@@ -109,10 +114,26 @@ fun SafeSwapRoute(
             onPasswordChange = viewModel::onPasswordChange,
             onSign = viewModel::sign,
             onSignWithBiometrics = viewModel::signWithBiometrics,
-        ),
-        onBack = onBack,
-        modifier = modifier,
-    )
+        )
+    }
+    // The same state in the view the user chose (docs/simple-ui.md).
+    when (LocalInterfaceMode.current) {
+        InterfaceMode.SIMPLE -> SimpleSafeSwapScreen(
+            state,
+            actions,
+            onBack,
+            modifier,
+            syncLine = lightClient.collectAsStateWithLifecycle().value,
+        )
+        // The strip in Detailed view; in simple mode the same item, drawn as the sync line while it says something.
+        InterfaceMode.DETAILED -> SafeSwapScreen(
+            state = state,
+            lightClient = lightClient.collectAsStateWithLifecycle().value,
+            actions = actions,
+            onBack = onBack,
+            modifier = modifier,
+        )
+    }
 }
 
 /**
@@ -142,15 +163,19 @@ class SafeSwapActions(
  * transactions it takes, decoded here, at their nonces, the Safe's balance before and after, and
  * the owner held here who signs every one. While the review takes the wallet password the window
  * is kept out of screen capture where the platform allows; where it does not, the screen says so.
+ * [lightClient] is the strip above it, Detailed view's; simple mode ([SimpleSafeSwapScreen]) has
+ * none, and keeps the review's blocks behind *Details* ([details]).
  */
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalComposeUiApi::class)
 @Composable
 fun SafeSwapScreen(
     state: SafeSwapUiState,
-    lightClient: LightClientItem,
+    lightClient: LightClientItem?,
     actions: SafeSwapActions,
     onBack: () -> Unit,
     modifier: Modifier = Modifier,
+    details: List<String> = emptyList(),
+    syncLine: LightClientItem? = null,
 ) {
     val review = state as? SafeSwapUiState.Review
     // In the review, back is to the form; while a signature runs, back waits for it. While the Safe
@@ -183,7 +208,7 @@ fun SafeSwapScreen(
             )
         },
     ) { padding ->
-        UnderLightClientStrip(lightClient, Modifier.padding(padding)) {
+        UnderLightClientStripIfAny(lightClient, Modifier.padding(padding), syncLine) {
             when (state) {
                 is SafeSwapUiState.Loading, is SafeSwapUiState.Proposed ->
                     CircularProgressIndicator(Modifier.align(Alignment.Center))
@@ -193,7 +218,7 @@ fun SafeSwapScreen(
                     textAlign = TextAlign.Center,
                 )
                 is SafeSwapUiState.Compose -> ComposeContent(state, actions)
-                is SafeSwapUiState.Review -> ReviewContent(state, actions)
+                is SafeSwapUiState.Review -> ReviewContent(state, actions, details)
             }
         }
     }
@@ -237,7 +262,7 @@ private fun ComposeContent(state: SafeSwapUiState.Compose, actions: SafeSwapActi
 }
 
 @Composable
-private fun ReviewContent(state: SafeSwapUiState.Review, actions: SafeSwapActions) {
+private fun ReviewContent(state: SafeSwapUiState.Review, actions: SafeSwapActions, details: List<String>) {
     Column(
         Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp),
@@ -281,9 +306,11 @@ private fun ReviewContent(state: SafeSwapUiState.Review, actions: SafeSwapAction
             Text(state.balance.before)
             state.balance.queued?.let { Text("− $it") }
             Text("→ ${state.balance.after}")
-            Note(state.balance.verifiedAt)
+            // Empty in simple mode, which keeps it behind Details.
+            state.balance.verifiedAt.takeIf { it.isNotEmpty() }?.let { Note(it) }
         }
         Text(state.simulation, style = MaterialTheme.typography.bodyMedium)
+        if (details.isNotEmpty()) HiddenDetails(SAFE_SWAP_DETAILS_TAG) { details.forEach { Note(it) } }
         TextButton(onClick = actions.onRefresh, enabled = state.idle) {
             if (state.refreshing) {
                 CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp)
@@ -297,11 +324,12 @@ private fun ReviewContent(state: SafeSwapUiState.Review, actions: SafeSwapAction
         Heading("Signed by")
         OwnerChoices(state.owners, state.owner, enabled = state.idle, onChoose = actions.onOwnerChange)
         Note(
-            if (state.transactions.size > 1) {
-                "Both are signed, one after the other, and queued on this device, from where they are shared " +
+            when (state.transactions.size) {
+                1 -> "Signed, it is queued on this device, from where it is shared with the other owners."
+                2 -> "Both are signed, one after the other, and queued on this device, from where they are shared " +
                     "with the other owners."
-            } else {
-                "Signed, it is queued on this device, from where it is shared with the other owners."
+                else -> "All three are signed, one after the other, and queued on this device, from where they " +
+                    "are shared with the other owners."
             },
         )
         state.error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
@@ -310,7 +338,11 @@ private fun ReviewContent(state: SafeSwapUiState.Review, actions: SafeSwapAction
             signing = state.signing,
             canSign = state.canSign,
             canSignWithBiometrics = state.canSignWithBiometrics,
-            signLabel = if (state.transactions.size > 1) "Sign both and queue" else "Sign and queue",
+            signLabel = when (state.transactions.size) {
+                1 -> "Sign and queue"
+                2 -> "Sign both and queue"
+                else -> "Sign all three and queue"
+            },
             signingLabel = when {
                 state.checking -> CHECKING_SAFE
                 state.progress != null -> "Signing ${state.progress.lowercase()}…"

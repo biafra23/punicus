@@ -47,7 +47,9 @@ sealed interface SafeProposeUiState {
      * here, [owner] (EIP-55) of [owners], signs it as [unlock] says; [refreshing] while it is
      * proposed again, [signing] while it is signed and queued, and [error] what the last attempt
      * came to. [share] is a signed request the queue could not keep, to be shared from here;
-     * [askingToDrop] while Back asks whether to leave it behind.
+     * [askingToDrop] while Back asks whether to leave it behind. Simple mode says no block
+     * (docs/simple-ui.md): [simpleSimulation] and [simpleError] are [simulation] and [error] in its
+     * words, null where they are the same.
      */
     data class Review(
         override val network: String,
@@ -70,6 +72,8 @@ sealed interface SafeProposeUiState {
         val error: String? = null,
         val share: ShareItem? = null,
         val askingToDrop: Boolean = false,
+        val simpleSimulation: String? = null,
+        val simpleError: String? = null,
     ) : SafeProposeUiState {
 
         /** Something is typed and nothing runs: the password may sign. */

@@ -2,19 +2,20 @@ package eth.serotine.data.engine
 
 import eth.serotine.data.keys.toHex
 import eth.serotine.domain.model.Address
+import eth.serotine.domain.model.Network
 import eth.serotine.domain.model.TokenUnits
 import eth.serotine.domain.repository.ReadUnavailable
 import eth.serotine.domain.repository.TokenBalanceReading
+import kotlin.test.Test
+import kotlin.test.assertEquals
+import kotlin.test.assertNull
+import kotlin.time.Duration.Companion.seconds
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.toList
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.runTest
-import kotlin.test.Test
-import kotlin.test.assertEquals
-import kotlin.test.assertNull
-import kotlin.time.Duration.Companion.seconds
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class VerifiedTokenBalancesTest {
@@ -24,7 +25,12 @@ class VerifiedTokenBalancesTest {
     private val chain = FakeChain().apply { snapshot = running(head = 9) }
     private val calldata = Abi.balanceOf(holder).toHex()
 
-    private fun TestScope.balances() = VerifiedTokenBalances(chain, StandardTestDispatcher(testScheduler), 4.seconds)
+    private fun TestScope.balances() = VerifiedTokenBalances(
+        Network.SEPOLIA,
+        chain,
+        StandardTestDispatcher(testScheduler),
+        4.seconds,
+    )
 
     @Test
     fun balanceOfIsTheSelectorAndThePaddedHolder() {
@@ -38,7 +44,7 @@ class VerifiedTokenBalancesTest {
 
         assertEquals(
             TokenBalanceReading.Verified(TokenUnits.of("1250000000"), 9),
-            balances().observeBalance(holder, usdc).first(),
+            balances().observeBalance(Network.SEPOLIA, holder, usdc).first(),
         )
     }
 
@@ -46,7 +52,7 @@ class VerifiedTokenBalancesTest {
     fun aBlockTheEngineDidNotNameIsNoBlock() = runTest {
         chain.calls[usdc to calldata] = CallOutcome.Returned("0".repeat(64), blockNumber = null)
 
-        val reading = balances().observeBalance(holder, usdc).first() as TokenBalanceReading.Verified
+        val reading = balances().observeBalance(Network.SEPOLIA, holder, usdc).first() as TokenBalanceReading.Verified
         assertEquals(TokenUnits.of("0"), reading.units)
         assertNull(reading.blockNumber)
     }
@@ -54,10 +60,10 @@ class VerifiedTokenBalancesTest {
     @Test
     fun aRevertOrSomethingThatIsNoWordIsNotAToken() = runTest {
         chain.calls[usdc to calldata] = CallOutcome.Reverted(blockNumber = 9)
-        assertEquals(TokenBalanceReading.NotAToken, balances().observeBalance(holder, usdc).first())
+        assertEquals(TokenBalanceReading.NotAToken, balances().observeBalance(Network.SEPOLIA, holder, usdc).first())
 
         chain.calls[usdc to calldata] = CallOutcome.Returned("00", blockNumber = 9)
-        assertEquals(TokenBalanceReading.NotAToken, balances().observeBalance(holder, usdc).first())
+        assertEquals(TokenBalanceReading.NotAToken, balances().observeBalance(Network.SEPOLIA, holder, usdc).first())
     }
 
     @Test
@@ -65,12 +71,12 @@ class VerifiedTokenBalancesTest {
         chain.snapshot = running(head = 9, headTimestamp = 1_792_100_000)
         chain.calls[usdc to calldata] = CallOutcome.Returned("0".repeat(56) + "4a817c80", blockNumber = 9)
         val balances = balances()
-        balances.observeBalance(holder, usdc).first()
+        balances.observeBalance(Network.SEPOLIA, holder, usdc).first()
 
         chain.snapshot = running(head = 9, headAgeMs = 60_000)
         assertEquals(
             TokenBalanceReading.LastKnown(TokenUnits.of("1250000000"), 9, asOf = 1_792_100_000),
-            balances.observeBalance(holder, usdc).first(),
+            balances.observeBalance(Network.SEPOLIA, holder, usdc).first(),
         )
     }
 
@@ -78,17 +84,17 @@ class VerifiedTokenBalancesTest {
     fun anOlderNotATokenIsNotRepeatedWhileTheHeadIsTooOld() = runTest {
         chain.calls[usdc to calldata] = CallOutcome.Reverted(blockNumber = 9)
         val balances = balances()
-        assertEquals(TokenBalanceReading.NotAToken, balances.observeBalance(holder, usdc).first())
+        assertEquals(TokenBalanceReading.NotAToken, balances.observeBalance(Network.SEPOLIA, holder, usdc).first())
 
         chain.snapshot = running(head = 9, paused = true)
-        assertEquals(TokenBalanceReading.Syncing, balances.observeBalance(holder, usdc).first())
+        assertEquals(TokenBalanceReading.Syncing, balances.observeBalance(Network.SEPOLIA, holder, usdc).first())
     }
 
     @Test
     fun noVerifiedAnswerIsUnproven() = runTest {
         assertEquals(
             TokenBalanceReading.Unavailable(ReadUnavailable.UNPROVEN),
-            balances().observeBalance(holder, usdc).first(),
+            balances().observeBalance(Network.SEPOLIA, holder, usdc).first(),
         )
     }
 
@@ -116,8 +122,13 @@ class VerifiedTokenBalancesTest {
             }
         }
 
-        val readings = VerifiedTokenBalances(counting, StandardTestDispatcher(testScheduler), 4.seconds)
-            .observeBalance(holder, usdc).toList()
+        val readings = VerifiedTokenBalances(
+            Network.SEPOLIA,
+            counting,
+            StandardTestDispatcher(testScheduler),
+            4.seconds,
+        )
+            .observeBalance(Network.SEPOLIA, holder, usdc).toList()
 
         assertEquals(listOf<TokenBalanceReading>(TokenBalanceReading.Unavailable(ReadUnavailable.REFUSED)), readings)
         assertEquals(1, asked, "the flow ends: a permanent refusal is not asked again every tick")
@@ -135,7 +146,7 @@ class VerifiedTokenBalancesTest {
         val balances = balances()
 
         val read = listOf(holder to usdc, other to usdc, holder to link, other to link).map { (who, token) ->
-            (balances.observeBalance(who, token).first() as TokenBalanceReading.Verified).units.decimal
+            (balances.observeBalance(Network.SEPOLIA, who, token).first() as TokenBalanceReading.Verified).units.decimal
         }
         assertEquals(listOf("1", "2", "3", "4"), read)
     }
@@ -146,7 +157,7 @@ class VerifiedTokenBalancesTest {
 
         assertEquals(
             TokenBalanceReading.Unavailable(ReadUnavailable.UNPROVEN),
-            balances().observeBalance(holder, usdc).first(),
+            balances().observeBalance(Network.SEPOLIA, holder, usdc).first(),
         )
     }
 }

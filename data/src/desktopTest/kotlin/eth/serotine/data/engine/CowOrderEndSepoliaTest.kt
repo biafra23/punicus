@@ -5,6 +5,7 @@ import eth.serotine.domain.model.CowOrderUid
 import eth.serotine.domain.model.GPv2Settlement
 import eth.serotine.domain.model.Network
 import eth.serotine.domain.repository.CowVenueReading
+import eth.serotine.domain.repository.LightClientRun
 import eth.serotine.domain.repository.LightClientStatus
 import eth.serotine.domain.repository.LogCoverageReading
 import eth.serotine.domain.repository.LogQuery
@@ -50,13 +51,17 @@ class CowOrderEndSepoliaTest {
     @Test
     fun theIndexProvesARealTradeAndTheFinalizedBlockCarriesItsTime(): Unit = runBlocking {
         assumeTrue("needs -PmyotisLibraryDir", System.getProperty("serotine.myotisLibraryDir") != null)
-        val node = MyotisNode.start(Network.SEPOLIA, Files.createTempDirectory("myotis-cow").toFile())
+        val node = MyotisHost.start(Files.createTempDirectory("myotis-cow").toFile())
+        node.set(Network.SEPOLIA, LightClientRun.RUN)
         val started = System.nanoTime()
         fun at() = "${(System.nanoTime() - started) / 1_000_000_000}s"
-        val progress = launch { node.lightClient.observeStatus().collect { println("[${at()}] light client: $it") } }
+        val sepolia = Network.SEPOLIA
+        val progress = launch {
+            node.lightClient.observeStatus(sepolia).collect { println("[${at()}] light client: $it") }
+        }
         try {
             val synced = withTimeout(10.minutes) {
-                node.lightClient.observeStatus().first { (it as? LightClientStatus.Synced)?.finalized != null }
+                node.lightClient.observeStatus(sepolia).first { (it as? LightClientStatus.Synced)?.finalized != null }
             }
             synced as LightClientStatus.Synced
             val finalized = assertNotNull(synced.finalized)
@@ -79,17 +84,17 @@ class CowOrderEndSepoliaTest {
             val key = LogWatchKey.Mention(owner)
             val from = tradeBlock - 10
             withTimeout(5.minutes) {
-                while (!node.logIndex.configure(listOf(LogWatch(key, from)), emptyList())) delay(2.seconds)
+                while (!node.logIndex.configure(sepolia, listOf(LogWatch(key, from)), emptyList())) delay(2.seconds)
             }
             withTimeout(30.minutes) {
-                node.logIndex.observeCoverage().first { reading ->
+                node.logIndex.observeCoverage(sepolia).first { reading ->
                     val covered = (reading as? LogCoverageReading.Read)?.entries?.get(key)?.covered
                     println("[${at()}] coverage: $covered")
                     covered != null && covered.first <= from && covered.last >= tradeBlock
                 }
             }
             val topics = listOf(GPv2Settlement.TRADE_TOPIC, GPv2Settlement.ORDER_INVALIDATED_TOPIC)
-            val reading = node.logIndex.logs(LogQuery(key, from, tradeBlock, topics, position = 1))
+            val reading = node.logIndex.logs(sepolia, LogQuery(key, from, tradeBlock, topics, position = 1))
             println("[${at()}] logs: $reading")
             val trades = assertIs<LogsReading.Logs>(reading).logs.mapNotNull {
                 GPv2Settlement.tradeOf(deployment.settlement, it.log.address, it.log.topics, it.log.data)
@@ -99,7 +104,7 @@ class CowOrderEndSepoliaTest {
             assertEquals(owner, trade.owner)
             assertEquals(tradeBlock, block)
 
-            val before = node.logIndex.logs(LogQuery(key, from - 5, tradeBlock, topics, position = 1))
+            val before = node.logIndex.logs(sepolia, LogQuery(key, from - 5, tradeBlock, topics, position = 1))
             assertEquals(LogsReading.BeforeStart(from), before, "never an empty list for blocks it never read")
         } finally {
             progress.cancel()

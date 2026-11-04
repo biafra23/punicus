@@ -21,7 +21,8 @@ import kotlinx.coroutines.sync.withLock
  * the code of its settlement contract and of its vault relayer, proven against the light client's
  * state ([VerifiedChain.proveCode], both in parallel), hashes to its pin. A check that passed, or
  * proved code other than a pin's, is remembered for as long as this adapter lives; one that could
- * not be proven is run again by the next caller. Any other network has no venue here.
+ * not be proven is run again by the next caller. Any other network has no venue here, and a call
+ * on it is refused ([ReadUnavailable.NO_ENGINE]): this engine reads no other chain.
  *
  * A call is a verified call at the head ([VerifiedChain.call]), asked only while the light client
  * can verify reads at its head, on [dispatcher]. A device without an engine ([chain] null) answers
@@ -49,8 +50,12 @@ class VerifiedCow internal constructor(
         }
     }
 
-    override suspend fun call(to: Address, data: ByteArray): Simulation =
-        chain.askVerified(dispatcher, Simulation::Unavailable) { it.call(to, data).toSimulation() }
+    override suspend fun call(network: Network, to: Address, data: ByteArray): Simulation =
+        if (network != this.network) {
+            Simulation.Unavailable(ReadUnavailable.NO_ENGINE)
+        } else {
+            chain.askVerified(dispatcher, Simulation::Unavailable) { it.call(to, data).toSimulation() }
+        }
 
     /** Each of [pinned]'s contracts' code proven and hashed, in parallel; the first that is not its pin says why. */
     private suspend fun check(pinned: PinnedCow): CowVenueReading = coroutineScope {

@@ -2,7 +2,7 @@ package eth.serotine.data.engine
 
 /**
  * How a storage proof the engine verified against the beacon chain is labelled, or null when it
- * may not be used: what `MyotisNode.proveSlot` reads off a `StorageProofResult`, over its plain
+ * may not be used: what `MyotisHost`'s `proveSlot` reads off a `StorageProofResult`, over its plain
  * values so that the decision is tested on its own. The label has two parts, each with its own
  * job ([ProofLabel]): the block a reading is shown with, and the verified anchor the proof is of,
  * which is what tells two proofs of one state from two of different states.
@@ -51,10 +51,16 @@ internal fun storageProofLabel(
  * The verified anchor of an account proof (`AccountProofResult`, what code is proven with): its
  * matched attested slot for a `stateRootMatch`, the block a header-chain walk proved
  * ([blockNumber], the walk's own) for a `headerChain`, or null for no match.
+ *
+ * A `blockAccessList` answer (Myotis 0.1.20: a watched account carried from an earlier proof by
+ * verified block access lists, no proof fetched; its docs/address-activity.md) is anchored as a
+ * `stateRootMatch` is: its [matchedBeaconSlot] is the attestation of the state root of the block
+ * it answers at, so it names the same state a storage proof matched at that slot does.
  */
 internal fun accountProofAnchor(verifyMethod: String?, matchedBeaconSlot: Long, blockNumber: Long): ProofAnchor? =
     when {
-        verifyMethod == STATE_ROOT_MATCH && matchedBeaconSlot >= 0 -> ProofAnchor.Attested(matchedBeaconSlot)
+        (verifyMethod == STATE_ROOT_MATCH || verifyMethod == BLOCK_ACCESS_LIST) && matchedBeaconSlot >= 0 ->
+            ProofAnchor.Attested(matchedBeaconSlot)
         verifyMethod == HEADER_CHAIN && blockNumber > 0 -> ProofAnchor.Walked(blockNumber)
         else -> null
     }
@@ -64,3 +70,4 @@ internal data class ProofLabel(val blockNumber: Long, val anchor: ProofAnchor)
 
 private const val HEADER_CHAIN = "headerChain"
 private const val STATE_ROOT_MATCH = "stateRootMatch"
+private const val BLOCK_ACCESS_LIST = "blockAccessList"

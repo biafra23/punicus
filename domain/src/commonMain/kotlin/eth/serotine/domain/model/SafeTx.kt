@@ -64,9 +64,18 @@ class SafeTx(
      * The hash the Safe at [safe] on the chain [chainId] checks its owners' signatures against
      * (its `getTransactionHash`): EIP-712's `keccak256(0x19 ‖ 0x01 ‖ domainSeparator ‖
      * structHash)`, with the domain of Safe 1.3.0 on — `EIP712Domain(uint256 chainId,address
-     * verifyingContract)` — and the `SafeTx` struct of the same versions. Every Safe this app
-     * recognises (the pinned deployments: 1.3.0, 1.4.1, 1.5.0) hashes so; the older domain,
-     * without a chain id, is no Safe it recognises.
+     * verifyingContract)`, computed fresh for every call — and the `SafeTx` struct
+     * ([SAFE_TX_TYPEHASH]), unchanged since 1.0.0 (its on-chain `SAFE_TX_TYPEHASH()` getter and
+     * 1.3.0's hash alike).
+     *
+     * `SafeDeployments` also recognises, for display, three Safe releases that predate this
+     * domain: 1.0.0, 1.1.1 and 1.2.0, each a `domainSeparator` computed once at setup and stored
+     * (`keccak256(abi.encode(DOMAIN_SEPARATOR_TYPEHASH, this))`, no chain id in it anywhere) and
+     * read as is, never recomputed. A Safe left on one of those — as opposed to one moved since
+     * to a pinned ≥1.3.0 singleton by its owners' own `changeMasterCopy` — checks a different
+     * hash than this one, so nothing here is signed, approved or executed against it
+     * ([eth.serotine.domain.usecase.SafeTxRefusal.TooOldToSign], checked against its verified
+     * [eth.serotine.domain.repository.SafeState.version] before this is ever called).
      */
     fun hash(chainId: Long, safe: Address): Digest {
         val domain = keccak256(DOMAIN_TYPEHASH + word(chainId) + word(safe))

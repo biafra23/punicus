@@ -1,10 +1,12 @@
 package eth.serotine.data.engine
 
 import eth.serotine.domain.model.Address
+import eth.serotine.domain.model.Network
 import eth.serotine.domain.model.Token
 import eth.serotine.domain.repository.MetadataReading
 import eth.serotine.domain.repository.ReadUnavailable
 import eth.serotine.domain.repository.TokenMetadata
+import kotlin.time.Duration
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.emitAll
@@ -14,7 +16,6 @@ import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.transformWhile
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
-import kotlin.time.Duration
 
 /**
  * [TokenMetadata] over a verified light client: a contract's `symbol()`, `name()` and
@@ -27,6 +28,7 @@ import kotlin.time.Duration
  * not be deployed yet at the head it was read at, so the next subscriber asks again.
  */
 class VerifiedTokenMetadata internal constructor(
+    private val served: Network,
     chain: VerifiedChain?,
     dispatcher: CoroutineDispatcher,
     pollInterval: Duration,
@@ -50,7 +52,11 @@ class VerifiedTokenMetadata internal constructor(
     private val answered = mutableMapOf<Address, MetadataReading>()
     private val answeredLock = Mutex()
 
-    override fun observe(token: Address): Flow<MetadataReading> = flow {
+    override fun observe(network: Network, token: Address): Flow<MetadataReading> = flow {
+        if (network != served) {
+            emit(MetadataReading.Unavailable(ReadUnavailable.NO_ENGINE))
+            return@flow
+        }
         answeredLock.withLock { answered[token] }?.let {
             emit(it)
             return@flow

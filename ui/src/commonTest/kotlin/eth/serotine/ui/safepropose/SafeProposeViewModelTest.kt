@@ -1,5 +1,6 @@
 package eth.serotine.ui.safepropose
 
+import eth.serotine.domain.model.AccountId
 import eth.serotine.domain.model.Address
 import eth.serotine.domain.model.Mnemonic
 import eth.serotine.domain.model.Network
@@ -12,6 +13,7 @@ import eth.serotine.domain.repository.BalanceReading
 import eth.serotine.domain.repository.BiometricChange
 import eth.serotine.domain.repository.BiometricUnlock
 import eth.serotine.domain.repository.KeyDeletion
+import eth.serotine.domain.repository.KeyDerivation
 import eth.serotine.domain.repository.KeyImport
 import eth.serotine.domain.repository.KeyProtection
 import eth.serotine.domain.repository.KeyStore
@@ -20,9 +22,9 @@ import eth.serotine.domain.repository.KindReading
 import eth.serotine.domain.repository.NewMnemonic
 import eth.serotine.domain.repository.ReadUnavailable
 import eth.serotine.domain.repository.Signing
-import eth.serotine.domain.repository.Unlock
 import eth.serotine.domain.repository.Simulation
 import eth.serotine.domain.repository.TokenBalanceReading
+import eth.serotine.domain.repository.Unlock
 import eth.serotine.domain.usecase.DescribeKeyStore
 import eth.serotine.domain.usecase.EncodeSigningRequest
 import eth.serotine.domain.usecase.ObserveAccountValue
@@ -43,6 +45,14 @@ import eth.serotine.ui.components.Eip55
 import eth.serotine.ui.components.SafeBalanceChange
 import eth.serotine.ui.components.SendFrom
 import eth.serotine.ui.components.ShareItem
+import kotlin.test.AfterTest
+import kotlin.test.Test
+import kotlin.test.assertEquals
+import kotlin.test.assertFalse
+import kotlin.test.assertIs
+import kotlin.test.assertTrue
+import kotlin.time.Duration.Companion.seconds
+import kotlin.time.TestTimeSource
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -54,14 +64,6 @@ import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.test.setMain
-import kotlin.test.AfterTest
-import kotlin.test.Test
-import kotlin.test.assertEquals
-import kotlin.test.assertFalse
-import kotlin.test.assertIs
-import kotlin.test.assertTrue
-import kotlin.time.Duration.Companion.seconds
-import kotlin.time.TestTimeSource
 
 /** [SafeProposeViewModel] over fake ports, through the real use cases. */
 @OptIn(ExperimentalCoroutinesApi::class)
@@ -69,6 +71,7 @@ class SafeProposeViewModelTest {
 
     private val world = SafeWorld()
     private val clock = TestTimeSource()
+    private var wallClock = 1_800_000_000L
     private val feeds = FakeFeeds()
     private var biometrics: BiometricUnlock = BiometricUnlock.NotOnThisDevice
     private val keys = object : KeyStore {
@@ -82,6 +85,9 @@ class SafeProposeViewModelTest {
         override suspend fun enableBiometrics(password: WalletPassword, confirmation: String): BiometricChange =
             error("not used by these tests")
 
+        override suspend fun deriveAccount(from: Address, password: WalletPassword, held: Set<Address>) =
+            KeyDerivation.Unavailable
+
         override suspend fun disableBiometrics(): BiometricChange = error("not used by these tests")
 
         override suspend fun delete(address: Address): KeyDeletion = error("not used by these tests")
@@ -93,15 +99,14 @@ class SafeProposeViewModelTest {
     private fun TestScope.viewModel(from: Address = world.safe, asset: Address? = null): SafeProposeViewModel {
         Dispatchers.setMain(UnconfinedTestDispatcher(testScheduler))
         val viewModel = SafeProposeViewModel(
-            from,
+            AccountId(Network.SEPOLIA, from),
             asset,
             ObserveAccounts(world.accounts),
             ObserveAccountValue(
                 ObserveNativeBalance(world.balances),
                 ObserveTokenHoldings(world.knownTokens, world.tokenBalances),
                 ObserveUsdPrice(feeds),
-                ObserveDisplayCurrencies(feeds, MemoryCurrencySetting()),
-                Network.SEPOLIA,
+                ObserveDisplayCurrencies(feeds, MemoryCurrencySetting(), world.accounts),
             ),
             world.observeSafe,
             DescribeKeyStore(keys),
@@ -116,8 +121,8 @@ class SafeProposeViewModelTest {
             ),
             SignSafeTx(world.signer, world.observeSafe, world.recovery, world.queue, Network.SEPOLIA),
             EncodeSigningRequest(world.codec),
-            Network.SEPOLIA,
             clock,
+            now = { wallClock },
         )
         backgroundScope.launch { viewModel.uiState.collect {} }
         runCurrent()
@@ -175,6 +180,7 @@ class SafeProposeViewModelTest {
             review.balance,
         )
         assertTrue(review.simulation.startsWith("The Safe's call, run as a verified call from the Safe at block 100"))
+        assertTrue(review.simpleSimulation.orEmpty().startsWith("Checked on chain: the Safe's call should go through"))
         assertEquals(listOf(AccountChoice("Alice", Eip55.format(world.alice.address))), review.owners)
         assertEquals(emptyList(), world.queue.requests.value, "nothing is queued before it is signed")
 
@@ -206,6 +212,7 @@ class SafeProposeViewModelTest {
         val viewModel = reviewed()
 
         assertTrue(viewModel.review.simulation.startsWith("Not simulated:"), viewModel.review.simulation)
+        assertEquals(null, viewModel.review.simpleSimulation, "it names no block: the same in both views")
     }
 
     @Test
@@ -224,6 +231,41 @@ class SafeProposeViewModelTest {
                 "what they move.",
             viewModel.form.error,
         )
+    }
+
+    @Test
+    fun aCallThatRevertsIsRefusedOnTheFormAndSimpleModeSaysSoWithNoBlock() = runTest {
+        world.inputs.simulation = Simulation.Reverted(100)
+        holding()
+        val viewModel = viewModel()
+        viewModel.onToChange(Eip55.format(world.recipient))
+        viewModel.onAmountChange("0.1")
+        runCurrent()
+
+        viewModel.review()
+        runCurrent()
+
+        val form = viewModel.form
+        assertTrue("at block 100" in form.error.orEmpty(), form.error)
+        assertEquals(
+            "The Safe's call reverts, checked on chain: the recipient or the token refuses it. Nothing was proposed.",
+            form.simpleError,
+        )
+    }
+
+    @Test
+    fun eachBalanceSaysHowLongAgoItWasProvedAndIsDatedAnew() = runTest {
+        holding()
+        world.balances.of(world.safe).value =
+            BalanceReading.Verified(Wei.of("1000000000000000000"), 100, provenAt = wallClock - 120)
+        val viewModel = viewModel()
+        runCurrent()
+        assertEquals("updated 2 min ago", viewModel.form.asset?.age)
+
+        wallClock += 60
+        advanceTimeBy(1.seconds)
+        runCurrent()
+        assertEquals("updated 3 min ago", viewModel.form.asset?.age, "the age is dated anew every second")
     }
 
     @Test
@@ -597,7 +639,7 @@ class SafeProposeViewModelTest {
     @Test
     fun anAddedTokenThatTakesABuiltInSymbolIsSaidToBeAnotherContract() = runTest {
         val impostor = Token(Address.of("0x" + "cd".repeat(20)), "USDC", "Not USD Coin", 6, icon = null)
-        world.userTokens.add(impostor)
+        world.userTokens.add(Network.SEPOLIA, impostor)
         holding()
         world.tokenBalances.of(world.safe, impostor.address).value =
             TokenBalanceReading.Verified(TokenUnits.of("50000000"), 99)

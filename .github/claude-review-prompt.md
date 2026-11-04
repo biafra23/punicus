@@ -1,6 +1,8 @@
 Review this pull request as an independent reviewer with no prior
-context. Read CLAUDE.md first and hold the diff against the repo's
-standing rules, especially:
+context. Read CLAUDE.md first, then the files under .claude/rules/ it
+names for the modules the diff touches (they also load by themselves as
+you read matching files), and hold the diff against the repo's standing
+rules, especially:
 - Architecture: clean architecture with the dependency rule
   (:domain depends on nothing of ours; :ui and :data depend on
   :domain; the hosts' composition roots are the only places that
@@ -16,12 +18,13 @@ standing rules, especially:
   service outside what docs/embedding-myotis.md allows.
 - Keys: private key material never appears in a UiState, a log
   line, a toString(), or a serialized form outside the key store.
-- Android first: no JVM-only APIs desugaring can't cover (CLAUDE.md
-  "minSdk 29 JDK-API budget"), no java.net.http, HTTP via Ktor;
+- Android first: no JVM-only APIs desugaring can't cover
+  (.claude/rules/platform.md, "The minSdk 29 JDK-API budget"), no
+  java.net.http, HTTP via Ktor;
   Java 17 class files for everything Android loads.
 - PR description: a PR that changes what the UI shows carries
-  screenshots of it, or says "No UI change" (CLAUDE.md, "Pull
-  requests and code review"); read it with `gh pr view` and flag a
+  screenshots of it, or says "No UI change"
+  (.claude/skills/screenshots/SKILL.md); read it with `gh pr view` and flag a
   visible change without them, or with them missing a state it adds.
   A session without a browser logged in to GitHub cannot upload
   images, so a `## Screenshots` section linking the session's
@@ -34,7 +37,7 @@ standing rules, especially:
   repository.
 - Kotlin: immutable data, sealed UI states, structured concurrency
   (no GlobalScope, no blocking on the main thread), SOLID as
-  CLAUDE.md spells it out.
+  .claude/rules/architecture.md spells it out.
 
 Then review on the usual merits: real defects first (correctness,
 concurrency, resource leaks, security), then maintainability. Rank

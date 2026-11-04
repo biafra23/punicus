@@ -25,7 +25,7 @@ data class UpgradeBannerItem(val title: String, val text: String, val details: S
             when (warning) {
                 UpgradeWarning.None -> null
                 is UpgradeWarning.Ahead -> UpgradeBannerItem(
-                    "Network upgrade ahead: update Serotine",
+                    "Network upgrade ahead on ${network.displayName}: update Serotine",
                     "Peers announce a ${network.displayName} network upgrade${warning.upgrade.onDate(formatTime)} " +
                         "that this version of Serotine does not support. Update the app before it activates, " +
                         "or Serotine stops verifying at the upgrade.",
@@ -34,16 +34,16 @@ data class UpgradeBannerItem(val title: String, val text: String, val details: S
                 )
                 is UpgradeWarning.Activated -> UpgradeBannerItem(
                     if (warning.upgrade.reportedActive) {
-                        "Network upgrade reported: update Serotine"
+                        "Network upgrade reported on ${network.displayName}: update Serotine"
                     } else {
-                        "Network upgrade due: update Serotine"
+                        "Network upgrade due on ${network.displayName}: update Serotine"
                     },
                     activatedText(warning.upgrade, network, formatTime),
                     detailsOf(warning.upgrade),
                     urgent = false,
                 )
                 is UpgradeWarning.UpdateRequired -> UpgradeBannerItem(
-                    "Update required",
+                    "Update required to follow ${network.displayName}",
                     updateRequiredText(warning.upgrade, network, formatTime),
                     detailsOf(warning.upgrade),
                     urgent = true,

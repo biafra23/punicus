@@ -25,6 +25,7 @@ internal fun LightClientHealth.healthColor(): Color {
         LightClientHealth.VERIFIED -> if (dark) Color(0xFF81C995) else Color(0xFF1E8E3E)
         LightClientHealth.STALE -> if (dark) Color(0xFFFDD663) else Color(0xFFB88700)
         LightClientHealth.NOT_VERIFIED -> if (dark) Color(0xFFEE675C) else Color(0xFFC5221F)
+        LightClientHealth.NOT_RUNNING -> if (dark) Color(0xFF9AA0A6) else Color(0xFF80868B)
     }
 }
 

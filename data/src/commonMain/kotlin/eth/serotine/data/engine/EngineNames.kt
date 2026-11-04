@@ -1,6 +1,7 @@
 package eth.serotine.data.engine
 
 import eth.serotine.domain.model.Address
+import eth.serotine.domain.model.Network
 import eth.serotine.domain.repository.NameResolution
 import eth.serotine.domain.repository.NameResolver
 import eth.serotine.domain.repository.ReadUnavailable
@@ -21,11 +22,13 @@ import kotlinx.coroutines.withContext
  * fails, has no answer.
  */
 class EngineNames internal constructor(
+    private val served: Network,
     private val chain: TransactingChain?,
     private val dispatcher: CoroutineDispatcher,
 ) : NameResolver {
 
-    override suspend fun resolve(name: String): NameResolution {
+    override suspend fun resolve(network: Network, name: String): NameResolution {
+        if (network != served) return NameResolution.Unavailable(ReadUnavailable.NO_ENGINE)
         val normalized = name.trim().lowercase()
         if (!looksLikeAName(normalized)) return NameResolution.NotAName
         val chain = chain ?: return NameResolution.Unavailable(ReadUnavailable.NO_ENGINE)

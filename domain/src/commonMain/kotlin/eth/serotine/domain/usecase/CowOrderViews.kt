@@ -1,5 +1,6 @@
 package eth.serotine.domain.usecase
 
+import eth.serotine.domain.model.AccountId
 import eth.serotine.domain.model.Address
 import eth.serotine.domain.model.CowOrderUid
 import eth.serotine.domain.model.Network
@@ -17,14 +18,16 @@ import kotlin.time.Duration
 import kotlin.time.Duration.Companion.seconds
 
 /**
- * One CoW order signed on this device, by its UID, as the record of orders has it, its end once
- * proven from the chain (docs/swaps.md, *Proving an order's end*): what its status screen shows.
+ * One CoW order signed on this device on [network], by its UID, as the record of orders has it, its
+ * end once proven from the chain (docs/swaps.md, *Proving an order's end*): what its status screen
+ * shows. An order of another network is not this one (docs/networks.md: never answered from another).
  */
-class ObserveCowOrder(private val cowOrders: CowOrders) {
+class ObserveCowOrder(private val cowOrders: CowOrders, private val network: Network) {
     operator fun invoke(uid: CowOrderUid): Flow<CowOrderReading> = cowOrders.observe().map { list ->
         when (list) {
-            is CowOrderList.Loaded -> list.orders.firstOrNull { it.uid == uid }?.let(CowOrderReading::Found)
-                ?: CowOrderReading.NotHere
+            is CowOrderList.Loaded ->
+                list.orders.firstOrNull { it.uid == uid && it.network == network }?.let(CowOrderReading::Found)
+                    ?: CowOrderReading.NotHere
             CowOrderList.Unreadable -> CowOrderReading.Unreadable
         }
     }.distinctUntilChanged()
@@ -44,13 +47,13 @@ sealed interface CowOrderReading {
 }
 
 /**
- * The CoW orders the account at [Address] signed on this device on [network], newest first, for its
+ * The CoW orders the account signed on this device, on its network, newest first, for its
  * Activity; none while the record cannot be read (Activity then lists what else it has).
  */
-class ObserveAccountCowOrders(private val cowOrders: CowOrders, private val network: Network) {
-    operator fun invoke(account: Address): Flow<List<CowOrderRecord>> = cowOrders.observe().map { list ->
+class ObserveAccountCowOrders(private val cowOrders: CowOrders) {
+    operator fun invoke(account: AccountId): Flow<List<CowOrderRecord>> = cowOrders.observe().map { list ->
         (list as? CowOrderList.Loaded)?.orders.orEmpty()
-            .filter { it.account == account && it.network == network }
+            .filter { it.account == account.address && it.network == account.network }
             .sortedByDescending { it.signedAt }
     }.distinctUntilChanged()
 }

@@ -1,6 +1,8 @@
 package eth.serotine.domain.usecase
 
+import eth.serotine.domain.model.AccountId
 import eth.serotine.domain.model.Address
+import eth.serotine.domain.model.Network
 import eth.serotine.domain.repository.HistoryStart
 import eth.serotine.domain.repository.HistoryStartList
 import eth.serotine.domain.repository.HistoryStarts
@@ -20,21 +22,27 @@ internal class MemoryHistoryStarts(vararg initial: Pair<Address, HistoryStart>) 
     val starts = MutableStateFlow(initial.toMap())
     var failSaves = false
 
-    override fun observe(): Flow<HistoryStartList> = starts.map { HistoryStartList.Loaded(it) }
+    // One network's starts, by address: these tests are all Sepolia's.
+    override fun observe(): Flow<HistoryStartList> =
+        starts.map {
+            held -> HistoryStartList.Loaded(held.mapKeys { (address, _) -> AccountId(Network.SEPOLIA, address) }) }
 
-    override suspend fun note(address: Address, atSeconds: Long): Boolean {
+    override suspend fun note(id: AccountId, atSeconds: Long): Boolean {
+        val address = id.address
         if (failSaves) return false
         starts.value = starts.value + (address to HistoryStart.Noted(atSeconds))
         return true
     }
 
-    override suspend fun fix(address: Address, block: Long): Boolean {
+    override suspend fun fix(id: AccountId, block: Long): Boolean {
+        val address = id.address
         if (failSaves || starts.value[address] is HistoryStart.Fixed) return false
         starts.value = starts.value + (address to HistoryStart.Fixed(block))
         return true
     }
 
-    override suspend fun forget(address: Address, start: HistoryStart): Boolean {
+    override suspend fun forget(id: AccountId, start: HistoryStart): Boolean {
+        val address = id.address
         if (failSaves) return false
         if (starts.value[address] == start) starts.value = starts.value - address
         return true
@@ -51,7 +59,7 @@ internal class RecordingLogIndex : LogIndex {
     val watched = mutableMapOf<LogWatchKey, Long>()
     var takes = true
 
-    override suspend fun configure(watch: List<LogWatch>, unwatch: List<LogWatchKey>): Boolean {
+    override suspend fun configure(network: Network, watch: List<LogWatch>, unwatch: List<LogWatchKey>): Boolean {
         asked += watch to unwatch
         if (!takes) return false
         unwatch.forEach { watched.remove(it) }
@@ -63,9 +71,9 @@ internal class RecordingLogIndex : LogIndex {
     val queries = mutableListOf<LogQuery>()
     var answer: (LogQuery) -> LogsReading = { LogsReading.Unavailable(ReadUnavailable.UNPROVEN) }
 
-    override fun observeCoverage(): Flow<LogCoverageReading> = coverage
+    override fun observeCoverage(network: Network): Flow<LogCoverageReading> = coverage
 
-    override suspend fun logs(query: LogQuery): LogsReading {
+    override suspend fun logs(network: Network, query: LogQuery): LogsReading {
         queries += query
         return answer(query)
     }

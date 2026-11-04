@@ -3,6 +3,7 @@ package eth.serotine.ui.createsafe
 import eth.serotine.domain.repository.FeeLevel
 import eth.serotine.ui.components.AccountChoice
 import eth.serotine.ui.components.BalanceChange
+import eth.serotine.ui.components.NetworkChip
 import eth.serotine.ui.components.NotSentItem
 import eth.serotine.ui.components.UnlockStep
 
@@ -24,22 +25,30 @@ sealed interface CreateSafeUiState {
 
     /**
      * No Safe can be created here, for the reason [message] gives: no account's key is held here to
-     * pay for the deployment, the account list cannot be read, or no Safe release is pinned.
+     * pay for the deployment, the account list cannot be read, or no Safe release is pinned. The
+     * [networks] offer another network where that is so.
      */
-    data class CannotCreate(override val network: String, val message: String) : CreateSafeUiState
+    data class CannotCreate(
+        override val network: String,
+        val message: String,
+        val networks: List<NetworkChip> = emptyList(),
+    ) : CreateSafeUiState
 
     /**
      * Screen 13, 1/3: the Safe's [name] as typed ([nameError] why it cannot be one), and its owners:
      * the wallet's accounts ([accounts], each chosen or not) and the addresses typed and added
      * ([typed], chosen; each can be taken out again). [input] is the address or ENS name being
      * typed, [inputOwner] what it is once it parses as an address or resolves, and [inputNote] what
-     * the field says under it — an error when [inputError], with [canRetryLookup] when asking again
-     * may help; [canAdd] once it can be added. [deviceKeyNote] says why this device's hardware key
+     * the field says under it — an error when [inputError], with [canRetryLookup] when Try again is
+     * shown, greyed out with [retryLookupWaits] while asking by hand changes nothing (the light client
+     * still syncing); [canAdd] once it can be added. [deviceKeyNote] says why this device's hardware key
      * is not offered. [summary] counts the owners chosen ("2 owners"), [error] says why they cannot
-     * own a Safe, and [canContinue] when they can go on to the threshold.
+     * own a Safe, and [canContinue] when they can go on to the threshold. The [networks] come first:
+     * the network the Safe is created on (docs/networks.md, N12).
      */
     data class Owners(
         override val network: String,
+        val networks: List<NetworkChip> = emptyList(),
         val name: String,
         val accounts: List<OwnerChoice>,
         val typed: List<OwnerChoice>,
@@ -50,7 +59,9 @@ sealed interface CreateSafeUiState {
         val inputOwner: OwnerChoice? = null,
         val inputNote: String? = null,
         val inputError: Boolean = false,
+        val inputLabel: String = "Address or ENS name",
         val canRetryLookup: Boolean = false,
+        val retryLookupWaits: String? = null,
         val canAdd: Boolean = false,
         val error: String? = null,
         val canContinue: Boolean = false,
@@ -84,7 +95,8 @@ sealed interface CreateSafeUiState {
      * is its verified quote (null while it is first made, or when it was refused: [error] says why).
      * [unlock] is how it is signed. [quoting] while the quote is made, [signing] while it is signed
      * and broadcast, and [notSent] once it was signed but not broadcast: then the same signed bytes
-     * are all that can be sent.
+     * are all that can be sent. Simple mode says no block (docs/simple-ui.md): [simplePrediction] and
+     * [simpleError] are [prediction] and [error] in its words, null where they are the same.
      */
     data class Review(
         override val network: String,
@@ -104,6 +116,8 @@ sealed interface CreateSafeUiState {
         val quoting: Boolean = false,
         val signing: Boolean = false,
         val notSent: NotSentItem? = null,
+        val simplePrediction: String? = null,
+        val simpleError: String? = null,
     ) : CreateSafeUiState {
 
         /** A quote stands, something is typed, and nothing else runs or has run: the password may sign. */
@@ -126,18 +140,30 @@ sealed interface CreateSafeUiState {
 /**
  * One owner the Safe may get: its EIP-55 [address], its [label] (its name in the wallet, or the
  * ENS name it was resolved from; null: none), [note] what it is ("Key on this device"), and
- * whether it is [selected] as an owner.
+ * whether it is [selected] as an owner. [simpleNote] is [note] with no block, for simple mode; null
+ * where that is [note] itself.
  */
-data class OwnerChoice(val address: String, val label: String?, val note: String, val selected: Boolean)
+data class OwnerChoice(
+    val address: String,
+    val label: String?,
+    val note: String,
+    val selected: Boolean,
+    val simpleNote: String? = null,
+)
 
-/** One owner of the Safe as the threshold and the review list it: its EIP-55 [address], [label] and [note]. */
-data class OwnerItem(val address: String, val label: String?, val note: String)
+/**
+ * One owner of the Safe as the threshold and the review list it: its EIP-55 [address], [label] and
+ * [note]; [simpleNote] is [note] with no block, for simple mode, null where that is [note] itself.
+ */
+data class OwnerItem(val address: String, val label: String?, val note: String, val simpleNote: String? = null)
 
 /**
  * The verified quote of a deployment: the most its fee can be ([maxFee], in the network's
  * currency) and what it is made of ([feeDetail]); the payer's [balance] before → after, with its
  * block; how the factory's call ran ([simulation]); and [pending], what the payer's earlier
- * transactions not mined yet may still take, if anything.
+ * transactions not mined yet may still take, if anything. [simpleSimulation] is [simulation] with
+ * no block, for simple mode, which keeps the fee's make-up, the balance's block and the run's
+ * behind *Details*.
  */
 data class DeploymentQuoteItem(
     val maxFee: String,
@@ -145,4 +171,5 @@ data class DeploymentQuoteItem(
     val balance: BalanceChange,
     val simulation: String,
     val pending: String? = null,
+    val simpleSimulation: String = simulation,
 )

@@ -1,6 +1,6 @@
 package eth.serotine.domain.usecase
 
-import eth.serotine.domain.model.Address
+import eth.serotine.domain.model.AccountId
 import eth.serotine.domain.model.SafeEvent
 import eth.serotine.domain.model.SafeEvents
 import eth.serotine.domain.repository.HistoryStarts
@@ -15,23 +15,30 @@ import kotlinx.coroutines.flow.Flow
  */
 class ObserveSafeHistory(private val index: LogIndex, private val starts: HistoryStarts) {
 
-    operator fun invoke(safe: Address): Flow<IndexedHistory<SafeChainEvent>> = IndexedReader(
+    operator fun invoke(safe: AccountId): Flow<IndexedHistory<SafeChainEvent>> = IndexedReader(
+        safe.network,
         index,
         starts,
-        LogWatchKey.Emitter(safe),
-        queries = { range -> listOf(LogQuery(LogWatchKey.Emitter(safe), range.first, range.last, SafeEvents.TOPICS)) },
+        LogWatchKey.Emitter(safe.address),
+        queries = { range ->
+            listOf(LogQuery(LogWatchKey.Emitter(safe.address), range.first, range.last, SafeEvents.TOPICS))
+        },
         decode = { log ->
             SafeEvents.decode(log.log.topics, log.log.data)?.let {
-                SafeChainEvent(it, log.blockNumber, log.transactionHash, log.logIndex)
+                SafeChainEvent(it, log.blockNumber, log.transactionHash, log.logIndex, log.blockTimestamp)
             }
         },
     ).observe()
 }
 
-/** A Safe's [event], in block [blockNumber], logged by transaction [transactionHash] at [logIndex] in the block. */
+/**
+ * A Safe's [event], in block [blockNumber], logged by transaction [transactionHash] at [logIndex]
+ * in the block, which was produced at [blockTimestamp] (unix seconds; null when the engine did not say).
+ */
 data class SafeChainEvent(
     val event: SafeEvent,
     override val blockNumber: Long,
     override val transactionHash: String,
     override val logIndex: Int,
+    override val blockTimestamp: Long? = null,
 ) : IndexedEvent

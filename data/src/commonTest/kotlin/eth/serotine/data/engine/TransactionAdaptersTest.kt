@@ -1,6 +1,7 @@
 package eth.serotine.data.engine
 
 import eth.serotine.domain.model.Address
+import eth.serotine.domain.model.Network
 import eth.serotine.domain.model.UInt256
 import eth.serotine.domain.repository.Broadcast
 import eth.serotine.domain.repository.FeeLevel
@@ -12,6 +13,13 @@ import eth.serotine.domain.repository.ReadUnavailable
 import eth.serotine.domain.repository.ReceiptLog
 import eth.serotine.domain.repository.Simulation
 import eth.serotine.domain.repository.TransactionProgress
+import kotlin.test.Test
+import kotlin.test.assertEquals
+import kotlin.test.assertFalse
+import kotlin.test.assertIs
+import kotlin.test.assertNull
+import kotlin.test.assertTrue
+import kotlin.time.Duration.Companion.seconds
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.async
@@ -22,13 +30,6 @@ import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.advanceTimeBy
 import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
-import kotlin.test.Test
-import kotlin.test.assertEquals
-import kotlin.test.assertFalse
-import kotlin.test.assertIs
-import kotlin.test.assertNull
-import kotlin.test.assertTrue
-import kotlin.time.Duration.Companion.seconds
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class TransactionAdaptersTest {
@@ -37,7 +38,11 @@ class TransactionAdaptersTest {
     private val alice = Address.of("0x" + "aa".repeat(20))
     private val bob = Address.of("0x" + "bb".repeat(20))
 
-    private fun TestScope.inputs() = EngineTransactionInputs(chain, StandardTestDispatcher(testScheduler))
+    private fun TestScope.inputs() = EngineTransactionInputs(
+        Network.SEPOLIA,
+        chain,
+        StandardTestDispatcher(testScheduler),
+    )
 
     private fun synced(finalized: Long = 0) {
         chain.base.snapshot = running(head = 100).copy(finalizedBlock = finalized)
@@ -149,12 +154,13 @@ class TransactionAdaptersTest {
         var answers = 0
         chain.feeAnswer = { if (++answers <= 2) null else history }
         val inputs = EngineTransactionInputs(
+            Network.SEPOLIA,
             chain,
             StandardTestDispatcher(testScheduler),
             timeSource = testScheduler.timeSource,
         )
 
-        val reading = async { inputs.fees() }
+        val reading = async { inputs.fees(Network.SEPOLIA) }
         advanceTimeBy(4_999)
         runCurrent()
         assertFalse(reading.isCompleted, "asked again every 2.5 s")
@@ -173,12 +179,13 @@ class TransactionAdaptersTest {
             null
         }
         val inputs = EngineTransactionInputs(
+            Network.SEPOLIA,
             chain,
             StandardTestDispatcher(testScheduler),
             timeSource = testScheduler.timeSource,
         )
 
-        assertEquals(FeeReading.Unavailable(ReadUnavailable.UNPROVEN), inputs.fees())
+        assertEquals(FeeReading.Unavailable(ReadUnavailable.UNPROVEN), inputs.fees(Network.SEPOLIA))
         // At 0, 2.5, 5, 7.5 and 10 s: none at 12.5, which the engine's own 5 s wait could carry past 15.
         assertEquals(5, answers)
         assertTrue(testScheduler.currentTime <= 15_000)
@@ -186,7 +193,7 @@ class TransactionAdaptersTest {
         // An engine that cannot verify reads is said at once, not waited for.
         chain.base.snapshot = EngineSnapshot.Down
         answers = 0
-        assertEquals(FeeReading.Unavailable(ReadUnavailable.NO_ENGINE), inputs.fees())
+        assertEquals(FeeReading.Unavailable(ReadUnavailable.NO_ENGINE), inputs.fees(Network.SEPOLIA))
         assertEquals(0, answers)
     }
 
@@ -194,18 +201,22 @@ class TransactionAdaptersTest {
     fun inputsAreAskedOnlyWhileReadsCanBeVerified() = runTest {
         chain.base.snapshot = EngineSnapshot.Booting
         chain.nonce = 7
-        assertEquals(NonceReading.Unavailable(ReadUnavailable.UNPROVEN), inputs().nonce(alice))
+        assertEquals(NonceReading.Unavailable(ReadUnavailable.SYNCING), inputs().nonce(Network.SEPOLIA, alice))
         assertEquals(0, chain.asked, "not asked at all before reads can be verified")
         chain.base.snapshot = EngineSnapshot.Down
-        assertEquals(FeeReading.Unavailable(ReadUnavailable.NO_ENGINE), inputs().fees())
+        assertEquals(FeeReading.Unavailable(ReadUnavailable.NO_ENGINE), inputs().fees(Network.SEPOLIA))
         assertEquals(
             NonceReading.Unavailable(ReadUnavailable.NO_ENGINE),
-            EngineTransactionInputs(null, StandardTestDispatcher(testScheduler)).nonce(alice),
+            EngineTransactionInputs(
+                Network.SEPOLIA,
+                null,
+                StandardTestDispatcher(testScheduler),
+            ).nonce(Network.SEPOLIA, alice),
         )
 
         synced()
         chain.nonce = 7
-        assertEquals(NonceReading.Read(7), inputs().nonce(alice))
+        assertEquals(NonceReading.Read(7), inputs().nonce(Network.SEPOLIA, alice))
     }
 
     @Test
@@ -213,23 +224,32 @@ class TransactionAdaptersTest {
         synced()
         val value = UInt256.of(5)
         chain.estimate = EstimateAnswer.Gas(21_000)
-        assertEquals(GasEstimate.Estimated(21_000), inputs().estimateGas(alice, bob, value, ByteArray(0)))
+        assertEquals(
+            GasEstimate.Estimated(21_000),
+            inputs().estimateGas(Network.SEPOLIA, alice, bob, value, ByteArray(0)),
+        )
         chain.estimate = EstimateAnswer.Reverted("08c379a0")
-        assertEquals(GasEstimate.Reverted("08c379a0"), inputs().estimateGas(alice, bob, value, ByteArray(0)))
+        assertEquals(
+            GasEstimate.Reverted("08c379a0"),
+            inputs().estimateGas(Network.SEPOLIA, alice, bob, value, ByteArray(0)),
+        )
         chain.estimate = EstimateAnswer.Infeasible("insufficient funds for transfer")
         assertEquals(
             GasEstimate.Infeasible("insufficient funds for transfer"),
-            inputs().estimateGas(alice, bob, value, ByteArray(0)),
+            inputs().estimateGas(Network.SEPOLIA, alice, bob, value, ByteArray(0)),
         )
 
         chain.call = CallOutcome.Returned("01", 99)
-        assertEquals(Simulation.Succeeded("01", 99), inputs().simulate(alice, bob, value, ByteArray(0)))
+        assertEquals(
+            Simulation.Succeeded("01", 99),
+            inputs().simulate(Network.SEPOLIA, alice, bob, value, ByteArray(0)),
+        )
         chain.call = CallOutcome.Reverted(99)
-        assertEquals(Simulation.Reverted(99), inputs().simulate(alice, bob, value, ByteArray(0)))
+        assertEquals(Simulation.Reverted(99), inputs().simulate(Network.SEPOLIA, alice, bob, value, ByteArray(0)))
         chain.call = null
         assertEquals(
             Simulation.Unavailable(ReadUnavailable.UNPROVEN),
-            inputs().simulate(alice, bob, value, ByteArray(0)),
+            inputs().simulate(Network.SEPOLIA, alice, bob, value, ByteArray(0)),
         )
     }
 
@@ -239,10 +259,10 @@ class TransactionAdaptersTest {
         chain.estimate = EstimateAnswer.Gas(0)
         assertEquals(
             GasEstimate.Unavailable(ReadUnavailable.UNPROVEN),
-            inputs().estimateGas(alice, bob, UInt256.ONE, ByteArray(0)),
+            inputs().estimateGas(Network.SEPOLIA, alice, bob, UInt256.ONE, ByteArray(0)),
         )
         chain.nonce = -1
-        assertEquals(NonceReading.Unavailable(ReadUnavailable.UNPROVEN), inputs().nonce(alice))
+        assertEquals(NonceReading.Unavailable(ReadUnavailable.UNPROVEN), inputs().nonce(Network.SEPOLIA, alice))
     }
 
     @Test
@@ -250,46 +270,56 @@ class TransactionAdaptersTest {
         synced()
         chain.nonce = 9
         chain.mined = 7
-        assertEquals(NonceReading.Read(7), inputs().minedNonce(alice), "latest, not the pending count")
+        assertEquals(NonceReading.Read(7), inputs().minedNonce(Network.SEPOLIA, alice), "latest, not the pending count")
         chain.mined = null
-        assertEquals(NonceReading.Unavailable(ReadUnavailable.UNPROVEN), inputs().minedNonce(alice))
+        assertEquals(NonceReading.Unavailable(ReadUnavailable.UNPROVEN), inputs().minedNonce(Network.SEPOLIA, alice))
         chain.mined = -1
-        assertEquals(NonceReading.Unavailable(ReadUnavailable.UNPROVEN), inputs().minedNonce(alice))
+        assertEquals(NonceReading.Unavailable(ReadUnavailable.UNPROVEN), inputs().minedNonce(Network.SEPOLIA, alice))
         chain.base.snapshot = EngineSnapshot.Down
-        assertEquals(NonceReading.Unavailable(ReadUnavailable.NO_ENGINE), inputs().minedNonce(alice))
+        assertEquals(NonceReading.Unavailable(ReadUnavailable.NO_ENGINE), inputs().minedNonce(Network.SEPOLIA, alice))
     }
 
     @Test
     fun anEngineThatFailsHasNoAnswerNotACrash() = runTest {
         synced()
         chain.failure = Error("native library broken")
-        assertEquals(NonceReading.Unavailable(ReadUnavailable.UNPROVEN), inputs().nonce(alice))
+        assertEquals(NonceReading.Unavailable(ReadUnavailable.UNPROVEN), inputs().nonce(Network.SEPOLIA, alice))
         // A CancellationException the engine's own code throws is a failure, not the end of the caller.
         chain.failure = CancellationException("thrown by the engine")
-        assertEquals(FeeReading.Unavailable(ReadUnavailable.UNPROVEN), inputs().fees())
+        assertEquals(FeeReading.Unavailable(ReadUnavailable.UNPROVEN), inputs().fees(Network.SEPOLIA))
     }
 
     @Test
     fun theBroadcastVerdictIsPassedOn() = runTest {
-        val broadcaster = EngineBroadcaster(chain, StandardTestDispatcher(testScheduler))
+        val broadcaster = EngineBroadcaster(Network.SEPOLIA, chain, StandardTestDispatcher(testScheduler))
         chain.send = SendAnswer.Sent("0x" + "ab".repeat(32))
-        assertEquals(Broadcast.Sent("0x" + "ab".repeat(32)), broadcaster.send(byteArrayOf(2, 1)))
+        assertEquals(Broadcast.Sent("0x" + "ab".repeat(32)), broadcaster.send(Network.SEPOLIA, byteArrayOf(2, 1)))
         chain.send = SendAnswer.Rejected("nonce too low: next nonce 8, tx nonce 7")
-        assertEquals(Broadcast.Rejected("nonce too low: next nonce 8, tx nonce 7"), broadcaster.send(byteArrayOf(2)))
+        assertEquals(
+            Broadcast.Rejected("nonce too low: next nonce 8, tx nonce 7"),
+            broadcaster.send(Network.SEPOLIA, byteArrayOf(2)),
+        )
         chain.failure = Error("native library broken")
-        assertEquals(Broadcast.Unavailable("the light client failed (Error)"), broadcaster.send(byteArrayOf(2)))
+        assertEquals(
+            Broadcast.Unavailable("the light client failed (Error)"),
+            broadcaster.send(Network.SEPOLIA, byteArrayOf(2)),
+        )
         assertEquals(
             Broadcast.Unavailable("no light client on this device"),
-            EngineBroadcaster(null, StandardTestDispatcher(testScheduler)).send(byteArrayOf(2)),
+            EngineBroadcaster(
+                Network.SEPOLIA,
+                null,
+                StandardTestDispatcher(testScheduler),
+            ).send(Network.SEPOLIA, byteArrayOf(2)),
         )
     }
 
     @Test
     fun aReceiptIsWatchedFromPendingToIncludedToFinalizedAndThenNoMore() = runTest {
         synced(finalized = 50)
-        val receipts = EngineReceipts(chain, StandardTestDispatcher(testScheduler), 4.seconds)
+        val receipts = EngineReceipts(Network.SEPOLIA, chain, StandardTestDispatcher(testScheduler), 4.seconds)
         val seen = mutableListOf<TransactionProgress>()
-        val watching = launch { receipts.observe("0x" + "cd".repeat(32)).toList(seen) }
+        val watching = launch { receipts.observe(Network.SEPOLIA, "0x" + "cd".repeat(32)).toList(seen) }
 
         chain.receipt = "null"
         runCurrent()
@@ -313,9 +343,9 @@ class TransactionAdaptersTest {
     @Test
     fun aReceiptThatCannotBeReadIsNotVerifiedForThatPoll() = runTest {
         synced()
-        val receipts = EngineReceipts(chain, StandardTestDispatcher(testScheduler), 4.seconds)
+        val receipts = EngineReceipts(Network.SEPOLIA, chain, StandardTestDispatcher(testScheduler), 4.seconds)
         val seen = mutableListOf<TransactionProgress>()
-        val watching = launch { receipts.observe("0x" + "cd".repeat(32)).toList(seen) }
+        val watching = launch { receipts.observe(Network.SEPOLIA, "0x" + "cd".repeat(32)).toList(seen) }
 
         chain.receipt = null
         runCurrent()
@@ -332,9 +362,9 @@ class TransactionAdaptersTest {
     @Test
     fun aReceiptErrorIsNotVerifiedAndADownEngineEndsTheWatch() = runTest {
         synced()
-        val receipts = EngineReceipts(chain, StandardTestDispatcher(testScheduler), 4.seconds)
+        val receipts = EngineReceipts(Network.SEPOLIA, chain, StandardTestDispatcher(testScheduler), 4.seconds)
         val seen = mutableListOf<TransactionProgress>()
-        val watching = launch { receipts.observe("0x" + "cd".repeat(32)).toList(seen) }
+        val watching = launch { receipts.observe(Network.SEPOLIA, "0x" + "cd".repeat(32)).toList(seen) }
 
         chain.receipt = """{"error":"receipts root mismatch"}"""
         runCurrent()
@@ -354,48 +384,54 @@ class TransactionAdaptersTest {
     @Test
     fun aMalformedHashIsRefusedOnceNotPolled() = runTest {
         synced()
-        val receipts = EngineReceipts(chain, StandardTestDispatcher(testScheduler), 4.seconds)
+        val receipts = EngineReceipts(Network.SEPOLIA, chain, StandardTestDispatcher(testScheduler), 4.seconds)
 
         assertEquals(
             listOf<TransactionProgress>(TransactionProgress.Unavailable(ReadUnavailable.REFUSED)),
-            receipts.observe("cd".repeat(32)).toList(),
+            receipts.observe(Network.SEPOLIA, "cd".repeat(32)).toList(),
         )
     }
 
     @Test
     fun aNameIsTakenOnlyAsFinalizedStateVerifiesIt() = runTest {
         synced()
-        val names = EngineNames(chain, StandardTestDispatcher(testScheduler))
+        val names = EngineNames(Network.SEPOLIA, chain, StandardTestDispatcher(testScheduler))
         chain.name = NameAnswer(bob.hex, 90, verified = true, error = null)
-        assertEquals(NameResolution.Resolved("serotine.eth", bob, 90), names.resolve(" Serotine.ETH "))
+        assertEquals(NameResolution.Resolved("serotine.eth", bob, 90), names.resolve(Network.SEPOLIA, " Serotine.ETH "))
         assertEquals(listOf("serotine.eth"), chain.resolved, "lower-cased before it is asked")
 
         chain.name = NameAnswer(bob.hex, 90, verified = false, error = null)
-        assertEquals(NameResolution.Unavailable(ReadUnavailable.UNPROVEN), names.resolve("serotine.eth"))
+        assertEquals(
+            NameResolution.Unavailable(ReadUnavailable.UNPROVEN),
+            names.resolve(Network.SEPOLIA, "serotine.eth"),
+        )
         chain.name = NameAnswer(null, 90, verified = true, error = null)
-        assertEquals(NameResolution.NoAddress, names.resolve("serotine.eth"))
+        assertEquals(NameResolution.NoAddress, names.resolve(Network.SEPOLIA, "serotine.eth"))
         chain.name = NameAnswer(null, -1, verified = false, error = "no snap peer")
-        assertEquals(NameResolution.Unavailable(ReadUnavailable.UNPROVEN), names.resolve("serotine.eth"))
+        assertEquals(
+            NameResolution.Unavailable(ReadUnavailable.UNPROVEN),
+            names.resolve(Network.SEPOLIA, "serotine.eth"),
+        )
 
-        assertEquals(NameResolution.NotAName, names.resolve("serotine"))
-        assertEquals(NameResolution.NotAName, names.resolve("a..eth"))
-        assertEquals(NameResolution.NotAName, names.resolve("my name.eth"))
+        assertEquals(NameResolution.NotAName, names.resolve(Network.SEPOLIA, "serotine"))
+        assertEquals(NameResolution.NotAName, names.resolve(Network.SEPOLIA, "a..eth"))
+        assertEquals(NameResolution.NotAName, names.resolve(Network.SEPOLIA, "my name.eth"))
     }
 
     @Test
     fun aLookAlikeNameIsNotTakenAndAnOffchainOneIsSaid() = runTest {
         synced()
-        val names = EngineNames(chain, StandardTestDispatcher(testScheduler))
+        val names = EngineNames(Network.SEPOLIA, chain, StandardTestDispatcher(testScheduler))
         chain.name = NameAnswer(bob.hex, 90, verified = true, error = null)
 
         // A Cyrillic "а", and a zero-width joiner: they hash to other nodes than they look like.
-        assertEquals(NameResolution.NotAName, names.resolve("vit\u0430lik.eth"))
-        assertEquals(NameResolution.NotAName, names.resolve("vitalik\u200d.eth"))
-        assertEquals(NameResolution.NotAName, names.resolve("-vitalik.eth"))
+        assertEquals(NameResolution.NotAName, names.resolve(Network.SEPOLIA, "vit\u0430lik.eth"))
+        assertEquals(NameResolution.NotAName, names.resolve(Network.SEPOLIA, "vitalik\u200d.eth"))
+        assertEquals(NameResolution.NotAName, names.resolve(Network.SEPOLIA, "-vitalik.eth"))
         assertEquals(emptyList<String>(), chain.resolved, "none of them asked")
-        assertEquals(NameResolution.Resolved("my-name2.eth", bob, 90), names.resolve("my-name2.eth"))
+        assertEquals(NameResolution.Resolved("my-name2.eth", bob, 90), names.resolve(Network.SEPOLIA, "my-name2.eth"))
 
         chain.name = NameAnswer(null, -1, verified = false, error = "resolves offchain (ERC-3668)", offchain = true)
-        assertEquals(NameResolution.OffchainOnly, names.resolve("dark.eth"))
+        assertEquals(NameResolution.OffchainOnly, names.resolve(Network.SEPOLIA, "dark.eth"))
     }
 }

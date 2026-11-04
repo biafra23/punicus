@@ -1,0 +1,682 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Serotine simple mode screens</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500&amp;family=Roboto+Mono&amp;display=swap">
+<style>
+body{margin:0;background:#f5f4ef;color:#1f1e1d;font-family:Roboto,system-ui,sans-serif}
+main{max-width:1720px;margin:0 auto;padding:32px 16px}
+h1{font-size:26px;font-weight:500;margin:0 0 8px}
+h2{font-size:20px;font-weight:500;margin:40px 0 4px}
+.lead,.note{max-width:860px;color:#5f5e5a;line-height:1.5}
+.g{display:flex;flex-wrap:wrap;gap:32px;margin-top:16px}
+figure{margin:0;width:390px}
+.frame{border-radius:28px;overflow:hidden;box-shadow:0 2px 12px rgba(0,0,0,.15)}
+figcaption{margin-top:10px;font-size:14px;font-weight:500}
+</style>
+</head>
+<body>
+<main>
+<h1>Serotine simple mode</h1>
+<p class="lead">Mockups H1 to T1 for the plan in <code>docs/simple-ui.md</code> (drawn 2026-10-26, approved by the owner 2026-10-27), which wins where the two differ. Simple mode is the default view; Settings → Advanced → Detailed view brings back today's screens (docs/wallet-ux.md). Blockies, the QR code, amounts, names and addresses are made up. Opens in a browser with declarative shadow DOM (Chrome 111, Safari 16.4, Firefox 123 or later).</p>
+<h2>Home and account</h2>
+<p class="note">Freshness. No block numbers anywhere. Ethereum and Gnosis (no BALs yet) are read when a screen opens and on pull-to-refresh, and say &quot;Updated 2 min ago&quot;. Sepolia (BALs) updates live. A balance older than ~1 h is dimmed and left out of the total.</p>
+<div class="g">
+<figure><div class="frame"><template shadowrootmode="open"><style>
+
+.ph{--bg:#FEF7FF;--c1:#F3EDF7;--c2:#ECE6F0;--tx:#1D1B20;--tx2:#49454F;--ol:#CAC4D0;--pr:#6750A4;--onpr:#FFFFFF;--prc:#EADDFF;--onprc:#21005D;--sc:#E8DEF8;--onsc:#1D192B;--ok:#1B6B2F;--okc:#D7F5DC;--wa:#7A4F00;--wac:#FFE7B8;--scrim:rgba(0,0,0,0.32);width:390px;height:844px;box-sizing:border-box;background:var(--bg);color:var(--tx);font-family:Roboto,system-ui,sans-serif;font-size:14px;line-height:1.4;display:flex;flex-direction:column;position:relative;overflow:hidden}
+.ph.dark{--bg:#141218;--c1:#211F26;--c2:#2B2930;--tx:#E6E0E9;--tx2:#CAC4D0;--ol:#49454F;--pr:#D0BCFF;--onpr:#381E72;--prc:#4F378B;--onprc:#EADDFF;--sc:#4A4458;--onsc:#E8DEF8;--ok:#8FD99B;--okc:#12381C;--wa:#FFCF70;--wac:#4A3200;--scrim:rgba(0,0,0,0.6)}
+.ic{width:22px;height:22px;stroke:currentColor;fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round;flex:none}
+.m{color:var(--tx2);font-size:12px}
+.bk{width:40px;height:40px;border-radius:50%;position:relative;overflow:hidden;flex:none}
+.bk span{position:absolute;width:40%;height:40%}
+.chip{font-size:12px;line-height:20px;padding:0 8px;border-radius:8px;background:var(--c2);color:var(--tx2);display:inline-block}
+button{font:inherit;color:inherit;background:none;border:0;padding:0;cursor:pointer}
+a{color:var(--pr)}a:hover{color:var(--onprc)}
+.ph{--eth:#4A63C9;--gno:#2F6E52;--sep:#B07A00;--nwon:#FFFFFF}.ph.dark{--eth:#8FA4F0;--gno:#6FBF9A;--sep:#F2C25C;--nwon:#141218}.av{position:relative;flex:none;display:flex}.nw{position:absolute;left:-3px;bottom:-3px;border-radius:50%;box-shadow:0 0 0 2px var(--bg)}.th{position:absolute;right:-8px;bottom:-4px;font-size:11px;font-weight:500;line-height:15px;padding:0 3px;border-radius:4px;background:var(--bg);color:var(--tx);box-shadow:0 1px 2px rgba(0,0,0,.35)}
+</style><div class="ph ">
+<header style="display:flex;align-items:center;padding:16px 16px 8px;gap:12px">
+<h1 style="margin:0;font-size:22px;font-weight:400;flex-grow:1">Wallet</h1>
+</header>
+<main style="flex-grow:1;padding:0 16px;display:flex;flex-direction:column;gap:4px;overflow:hidden">
+<section style="text-align:center;padding:20px 0 16px">
+<div class="m">Total</div>
+<div style="font-size:36px;font-weight:400;letter-spacing:-0.5px">€19,375.85</div>
+<div class="m">Updated 2 min ago · pull down to refresh</div>
+</section>
+<ul style="list-style:none;margin:0;padding:0;display:flex;flex-direction:column">
+<li style="display:flex;align-items:center;gap:12px;padding:12px 0;border-bottom:1px solid var(--ol)">
+<div class="av"><div class="bk" style="background:#2E6BC6"><span style="background:#E8A33D;left:10%;top:10%"></span><span style="background:#E8A33D;right:10%;bottom:10%"></span><span style="background:#9BD3F2;left:30%;bottom:5%"></span></div><svg class="nw" style="width:18px;height:18px" viewBox="0 0 16 16" role="img" aria-label="Ethereum"><circle cx="8" cy="8" r="8" fill="var(--eth)"/><path d="M8 2.6 11.4 8.1 8 10.1 4.6 8.1Z" fill="var(--nwon)"/><path d="M8 10.9 11.4 8.9 8 13.4 4.6 8.9Z" fill="var(--nwon)" opacity=".75"/></svg></div>
+<div style="flex-grow:1;min-width:0"><div style="font-size:16px">Main</div><div class="m">Ethereum</div></div>
+<div style="text-align:right"><div style="font-size:16px">€12,025.55</div><div class="m">3.2041 ETH</div></div>
+</li>
+<li style="display:flex;align-items:center;gap:12px;padding:12px 0;border-bottom:1px solid var(--ol)">
+<div class="av"><div class="bk" style="background:#1D7A5A"><span style="background:#F2C14E;right:10%;top:10%"></span><span style="background:#C2410C;left:10%;bottom:15%"></span></div><svg class="nw" style="width:18px;height:18px" viewBox="0 0 16 16" role="img" aria-label="Gnosis Chain"><circle cx="8" cy="8" r="8" fill="var(--gno)"/><circle cx="5.6" cy="7.4" r="2" fill="none" stroke="var(--nwon)" stroke-width="1.3"/><circle cx="10.4" cy="7.4" r="2" fill="none" stroke="var(--nwon)" stroke-width="1.3"/><path d="M6.8 11 8 12.6 9.2 11Z" fill="var(--nwon)"/></svg><span class="th" aria-label="2 of 3 owners sign">2/3</span></div>
+<div style="flex-grow:1;min-width:0"><div style="font-size:16px">Family Safe</div><div class="m">Gnosis Chain · Safe</div></div>
+<div style="text-align:right"><div style="font-size:16px">€4,500.00</div><div class="m">4,861.20 xDAI</div></div>
+</li>
+<li style="display:flex;align-items:center;gap:12px;padding:12px 0;border-bottom:1px solid var(--ol)">
+<div class="av"><div class="bk" style="background:#B03A6E"><span style="background:#7FD1AE;left:15%;top:15%"></span><span style="background:#2B2D6E;right:5%;bottom:20%"></span></div><svg class="nw" style="width:18px;height:18px" viewBox="0 0 16 16" role="img" aria-label="Ethereum"><circle cx="8" cy="8" r="8" fill="var(--eth)"/><path d="M8 2.6 11.4 8.1 8 10.1 4.6 8.1Z" fill="var(--nwon)"/><path d="M8 10.9 11.4 8.9 8 13.4 4.6 8.9Z" fill="var(--nwon)" opacity=".75"/></svg></div>
+<div style="flex-grow:1;min-width:0"><div style="font-size:16px;display:flex;align-items:center;gap:6px">Savings <svg class="ic" style="width:16px;height:16px;color:var(--tx2)" viewBox="0 0 24 24" role="img" aria-label="Watch only"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></svg></div><div class="m">Ethereum · watch only</div></div>
+<div style="text-align:right"><div style="font-size:16px">€2,850.30</div><div class="m">0.84 ETH</div></div>
+</li>
+<li style="display:flex;align-items:center;gap:12px;padding:12px 0;border-bottom:1px solid var(--ol)">
+<div class="av"><div class="bk" style="background:#8A5A12"><span style="background:#D9E36B;left:20%;top:5%"></span><span style="background:#4B2A8A;right:15%;bottom:10%"></span></div><svg class="nw" style="width:18px;height:18px" viewBox="0 0 16 16" role="img" aria-label="Sepolia"><circle cx="8" cy="8" r="8" fill="var(--sep)"/><path d="M8 2.6 11.4 8.1 8 10.1 4.6 8.1Z" fill="var(--nwon)"/><path d="M8 10.9 11.4 8.9 8 13.4 4.6 8.9Z" fill="var(--nwon)" opacity=".75"/></svg></div>
+<div style="flex-grow:1;min-width:0"><div style="font-size:16px">Test</div><div><span class="chip" style="background:var(--wac);color:var(--wa)">Sepolia · test network</span></div></div>
+<div style="text-align:right"><div style="font-size:16px">1.5 ETH</div><div class="m">no real value</div></div>
+</li>
+</ul>
+<p class="m" style="margin:8px 0 0">Test networks aren't counted in the total.</p>
+</main>
+<button aria-label="Add account" style="position:absolute;right:16px;bottom:96px;width:56px;height:56px;border-radius:16px;background:var(--prc);color:var(--onprc);display:flex;align-items:center;justify-content:center"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg></button>
+<nav style="display:flex;background:var(--c1);padding:12px 0 16px">
+<a href="#" style="flex:1;display:flex;flex-direction:column;align-items:center;gap:4px;text-decoration:none;color:var(--tx);font-size:12px;font-weight:500"><span style="background:var(--sc);color:var(--onsc);border-radius:16px;padding:4px 20px;display:flex"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M19 7V5a2 2 0 0 0-2-2H5a2 2 0 0 0 0 4h15a1 1 0 0 1 1 1v4h-3a2 2 0 0 0 0 4h3v3a1 1 0 0 1-1 1H5a2 2 0 0 1-2-2V5"/></svg></span>Wallet</a>
+<a href="#" style="flex:1;display:flex;flex-direction:column;align-items:center;gap:4px;text-decoration:none;color:var(--tx2);font-size:12px"><span style="padding:4px 20px;display:flex"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 21v-7M4 10V3M12 21v-9M12 8V3M20 21v-5M20 12V3M1 14h6M9 8h6M17 16h6"/></svg></span>Settings</a>
+</nav>
+</div></template></div><figcaption>H1 · Home</figcaption></figure>
+<figure><div class="frame"><template shadowrootmode="open"><style>
+
+.ph{--bg:#FEF7FF;--c1:#F3EDF7;--c2:#ECE6F0;--tx:#1D1B20;--tx2:#49454F;--ol:#CAC4D0;--pr:#6750A4;--onpr:#FFFFFF;--prc:#EADDFF;--onprc:#21005D;--sc:#E8DEF8;--onsc:#1D192B;--ok:#1B6B2F;--okc:#D7F5DC;--wa:#7A4F00;--wac:#FFE7B8;--scrim:rgba(0,0,0,0.32);width:390px;height:844px;box-sizing:border-box;background:var(--bg);color:var(--tx);font-family:Roboto,system-ui,sans-serif;font-size:14px;line-height:1.4;display:flex;flex-direction:column;position:relative;overflow:hidden}
+.ph.dark{--bg:#141218;--c1:#211F26;--c2:#2B2930;--tx:#E6E0E9;--tx2:#CAC4D0;--ol:#49454F;--pr:#D0BCFF;--onpr:#381E72;--prc:#4F378B;--onprc:#EADDFF;--sc:#4A4458;--onsc:#E8DEF8;--ok:#8FD99B;--okc:#12381C;--wa:#FFCF70;--wac:#4A3200;--scrim:rgba(0,0,0,0.6)}
+.ic{width:22px;height:22px;stroke:currentColor;fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round;flex:none}
+.m{color:var(--tx2);font-size:12px}
+.bk{width:40px;height:40px;border-radius:50%;position:relative;overflow:hidden;flex:none}
+.bk span{position:absolute;width:40%;height:40%}
+.chip{font-size:12px;line-height:20px;padding:0 8px;border-radius:8px;background:var(--c2);color:var(--tx2);display:inline-block}
+button{font:inherit;color:inherit;background:none;border:0;padding:0;cursor:pointer}
+a{color:var(--pr)}a:hover{color:var(--onprc)}
+.ph{--eth:#4A63C9;--gno:#2F6E52;--sep:#B07A00;--nwon:#FFFFFF}.ph.dark{--eth:#8FA4F0;--gno:#6FBF9A;--sep:#F2C25C;--nwon:#141218}.av{position:relative;flex:none;display:flex}.nw{position:absolute;left:-3px;bottom:-3px;border-radius:50%;box-shadow:0 0 0 2px var(--bg)}.th{position:absolute;right:-8px;bottom:-4px;font-size:11px;font-weight:500;line-height:15px;padding:0 3px;border-radius:4px;background:var(--bg);color:var(--tx);box-shadow:0 1px 2px rgba(0,0,0,.35)}
+</style><div class="ph ">
+<header style="display:flex;align-items:center;padding:16px 16px 8px;gap:12px">
+<h1 style="margin:0;font-size:22px;font-weight:400;flex-grow:1">Wallet</h1>
+</header>
+<div style="display:flex;justify-content:center;padding:4px 0">
+<div style="width:40px;height:40px;border-radius:50%;background:var(--c2);display:flex;align-items:center;justify-content:center;color:var(--pr)"><svg class="ic" viewBox="0 0 24 24" role="img" aria-label="Refreshing"><path d="M21 12a9 9 0 1 1-6.2-8.6"/></svg></div>
+</div>
+<main style="flex-grow:1;padding:0 16px;display:flex;flex-direction:column;gap:4px;overflow:hidden">
+<section style="text-align:center;padding:12px 0 16px">
+<div class="m">Total</div>
+<div style="font-size:36px;font-weight:400;letter-spacing:-0.5px">€19,375.85</div>
+<div class="m">Checking Ethereum and Gnosis Chain…</div>
+</section>
+<ul style="list-style:none;margin:0;padding:0;display:flex;flex-direction:column">
+<li style="display:flex;align-items:center;gap:12px;padding:12px 0;border-bottom:1px solid var(--ol)">
+<div class="av"><div class="bk" style="background:#2E6BC6"><span style="background:#E8A33D;left:10%;top:10%"></span><span style="background:#E8A33D;right:10%;bottom:10%"></span><span style="background:#9BD3F2;left:30%;bottom:5%"></span></div><svg class="nw" style="width:18px;height:18px" viewBox="0 0 16 16" role="img" aria-label="Ethereum"><circle cx="8" cy="8" r="8" fill="var(--eth)"/><path d="M8 2.6 11.4 8.1 8 10.1 4.6 8.1Z" fill="var(--nwon)"/><path d="M8 10.9 11.4 8.9 8 13.4 4.6 8.9Z" fill="var(--nwon)" opacity=".75"/></svg></div>
+<div style="flex-grow:1;min-width:0"><div style="font-size:16px">Main</div><div class="m">Ethereum</div></div>
+<div style="text-align:right"><div style="font-size:16px">€12,025.55</div><div class="m">checking…</div></div>
+</li>
+<li style="display:flex;align-items:center;gap:12px;padding:12px 0;border-bottom:1px solid var(--ol)">
+<div class="av"><div class="bk" style="background:#1D7A5A"><span style="background:#F2C14E;right:10%;top:10%"></span><span style="background:#C2410C;left:10%;bottom:15%"></span></div><svg class="nw" style="width:18px;height:18px" viewBox="0 0 16 16" role="img" aria-label="Gnosis Chain"><circle cx="8" cy="8" r="8" fill="var(--gno)"/><circle cx="5.6" cy="7.4" r="2" fill="none" stroke="var(--nwon)" stroke-width="1.3"/><circle cx="10.4" cy="7.4" r="2" fill="none" stroke="var(--nwon)" stroke-width="1.3"/><path d="M6.8 11 8 12.6 9.2 11Z" fill="var(--nwon)"/></svg><span class="th" aria-label="2 of 3 owners sign">2/3</span></div>
+<div style="flex-grow:1;min-width:0"><div style="font-size:16px">Family Safe</div><div class="m">Gnosis Chain · Safe</div></div>
+<div style="text-align:right"><div style="font-size:16px">€4,500.00</div><div class="m">checking…</div></div>
+</li>
+<li style="display:flex;align-items:center;gap:12px;padding:12px 0;border-bottom:1px solid var(--ol)">
+<div class="av"><div class="bk" style="background:#B03A6E"><span style="background:#7FD1AE;left:15%;top:15%"></span><span style="background:#2B2D6E;right:5%;bottom:20%"></span></div><svg class="nw" style="width:18px;height:18px" viewBox="0 0 16 16" role="img" aria-label="Ethereum"><circle cx="8" cy="8" r="8" fill="var(--eth)"/><path d="M8 2.6 11.4 8.1 8 10.1 4.6 8.1Z" fill="var(--nwon)"/><path d="M8 10.9 11.4 8.9 8 13.4 4.6 8.9Z" fill="var(--nwon)" opacity=".75"/></svg></div>
+<div style="flex-grow:1;min-width:0"><div style="font-size:16px">Savings</div><div class="m">Ethereum · watch only</div></div>
+<div style="text-align:right"><div style="font-size:16px">€2,850.30</div><div class="m">checking…</div></div>
+</li>
+<li style="display:flex;align-items:center;gap:12px;padding:12px 0;border-bottom:1px solid var(--ol)">
+<div class="av"><div class="bk" style="background:#8A5A12"><span style="background:#D9E36B;left:20%;top:5%"></span><span style="background:#4B2A8A;right:15%;bottom:10%"></span></div><svg class="nw" style="width:18px;height:18px" viewBox="0 0 16 16" role="img" aria-label="Sepolia"><circle cx="8" cy="8" r="8" fill="var(--sep)"/><path d="M8 2.6 11.4 8.1 8 10.1 4.6 8.1Z" fill="var(--nwon)"/><path d="M8 10.9 11.4 8.9 8 13.4 4.6 8.9Z" fill="var(--nwon)" opacity=".75"/></svg></div>
+<div style="flex-grow:1;min-width:0"><div style="font-size:16px">Test</div><div><span class="chip" style="background:var(--wac);color:var(--wa)">Sepolia · test network</span></div></div>
+<div style="text-align:right"><div style="font-size:16px">1.5 ETH</div><div><span class="chip" style="background:var(--okc);color:var(--ok)">live</span></div></div>
+</li>
+</ul>
+<p class="m" style="margin:8px 0 0">Sepolia updates by itself. Ethereum and Gnosis Chain are checked when you open a screen or pull down.</p>
+</main>
+<nav style="display:flex;background:var(--c1);padding:12px 0 16px">
+<a href="#" style="flex:1;display:flex;flex-direction:column;align-items:center;gap:4px;text-decoration:none;color:var(--tx);font-size:12px;font-weight:500"><span style="background:var(--sc);color:var(--onsc);border-radius:16px;padding:4px 20px;display:flex"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M19 7V5a2 2 0 0 0-2-2H5a2 2 0 0 0 0 4h15a1 1 0 0 1 1 1v4h-3a2 2 0 0 0 0 4h3v3a1 1 0 0 1-1 1H5a2 2 0 0 1-2-2V5"/></svg></span>Wallet</a>
+<a href="#" style="flex:1;display:flex;flex-direction:column;align-items:center;gap:4px;text-decoration:none;color:var(--tx2);font-size:12px"><span style="padding:4px 20px;display:flex"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 21v-7M4 10V3M12 21v-9M12 8V3M20 21v-5M20 12V3M1 14h6M9 8h6M17 16h6"/></svg></span>Settings</a>
+</nav>
+</div></template></div><figcaption>H2 · Home, pulled to refresh</figcaption></figure>
+<figure><div class="frame"><template shadowrootmode="open"><style>
+
+.ph{--bg:#FEF7FF;--c1:#F3EDF7;--c2:#ECE6F0;--tx:#1D1B20;--tx2:#49454F;--ol:#CAC4D0;--pr:#6750A4;--onpr:#FFFFFF;--prc:#EADDFF;--onprc:#21005D;--sc:#E8DEF8;--onsc:#1D192B;--ok:#1B6B2F;--okc:#D7F5DC;--wa:#7A4F00;--wac:#FFE7B8;--scrim:rgba(0,0,0,0.32);width:390px;height:844px;box-sizing:border-box;background:var(--bg);color:var(--tx);font-family:Roboto,system-ui,sans-serif;font-size:14px;line-height:1.4;display:flex;flex-direction:column;position:relative;overflow:hidden}
+.ph.dark{--bg:#141218;--c1:#211F26;--c2:#2B2930;--tx:#E6E0E9;--tx2:#CAC4D0;--ol:#49454F;--pr:#D0BCFF;--onpr:#381E72;--prc:#4F378B;--onprc:#EADDFF;--sc:#4A4458;--onsc:#E8DEF8;--ok:#8FD99B;--okc:#12381C;--wa:#FFCF70;--wac:#4A3200;--scrim:rgba(0,0,0,0.6)}
+.ic{width:22px;height:22px;stroke:currentColor;fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round;flex:none}
+.m{color:var(--tx2);font-size:12px}
+.bk{width:40px;height:40px;border-radius:50%;position:relative;overflow:hidden;flex:none}
+.bk span{position:absolute;width:40%;height:40%}
+.chip{font-size:12px;line-height:20px;padding:0 8px;border-radius:8px;background:var(--c2);color:var(--tx2);display:inline-block}
+button{font:inherit;color:inherit;background:none;border:0;padding:0;cursor:pointer}
+a{color:var(--pr)}a:hover{color:var(--onprc)}
+.ph{--eth:#4A63C9;--gno:#2F6E52;--sep:#B07A00;--nwon:#FFFFFF}.ph.dark{--eth:#8FA4F0;--gno:#6FBF9A;--sep:#F2C25C;--nwon:#141218}.av{position:relative;flex:none;display:flex}.nw{position:absolute;left:-3px;bottom:-3px;border-radius:50%;box-shadow:0 0 0 2px var(--bg)}.th{position:absolute;right:-8px;bottom:-4px;font-size:11px;font-weight:500;line-height:15px;padding:0 3px;border-radius:4px;background:var(--bg);color:var(--tx);box-shadow:0 1px 2px rgba(0,0,0,.35)}
+</style><div class="ph ">
+<header style="display:flex;align-items:center;padding:16px 16px 8px;gap:12px">
+<h1 style="margin:0;font-size:22px;font-weight:400;flex-grow:1">Wallet</h1>
+</header>
+<main style="flex-grow:1;padding:0 16px;display:flex;flex-direction:column;gap:4px;overflow:hidden">
+<div role="status" style="display:flex;gap:12px;align-items:flex-start;background:var(--wac);color:var(--wa);border-radius:12px;padding:12px 14px;margin-top:4px">
+<svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>
+<div style="flex-grow:1"><div style="font-weight:500">Can't check Ethereum right now</div><div style="font-size:13px">Its balances were last confirmed 3 h ago and may have changed. The app keeps trying.</div></div>
+</div>
+<section style="text-align:center;padding:16px 0 12px">
+<div class="m">Total</div>
+<div style="font-size:36px;font-weight:400;letter-spacing:-0.5px">€4,500.00</div>
+<div class="m">2 Ethereum accounts not counted</div>
+</section>
+<ul style="list-style:none;margin:0;padding:0;display:flex;flex-direction:column">
+<li style="display:flex;align-items:center;gap:12px;padding:12px 0;border-bottom:1px solid var(--ol)">
+<div class="av" style="opacity:0.5"><div class="bk" style="background:#2E6BC6"><span style="background:#E8A33D;left:10%;top:10%"></span><span style="background:#E8A33D;right:10%;bottom:10%"></span><span style="background:#9BD3F2;left:30%;bottom:5%"></span></div><svg class="nw" style="width:18px;height:18px" viewBox="0 0 16 16" role="img" aria-label="Ethereum"><circle cx="8" cy="8" r="8" fill="var(--eth)"/><path d="M8 2.6 11.4 8.1 8 10.1 4.6 8.1Z" fill="var(--nwon)"/><path d="M8 10.9 11.4 8.9 8 13.4 4.6 8.9Z" fill="var(--nwon)" opacity=".75"/></svg></div>
+<div style="flex-grow:1;min-width:0"><div style="font-size:16px">Main</div><div class="m">Ethereum</div></div>
+<div style="text-align:right;color:var(--tx2)"><div style="font-size:16px">3.2041 ETH</div><div class="m">3 h ago · may have changed</div></div>
+</li>
+<li style="display:flex;align-items:center;gap:12px;padding:12px 0;border-bottom:1px solid var(--ol)">
+<div class="av"><div class="bk" style="background:#1D7A5A"><span style="background:#F2C14E;right:10%;top:10%"></span><span style="background:#C2410C;left:10%;bottom:15%"></span></div><svg class="nw" style="width:18px;height:18px" viewBox="0 0 16 16" role="img" aria-label="Gnosis Chain"><circle cx="8" cy="8" r="8" fill="var(--gno)"/><circle cx="5.6" cy="7.4" r="2" fill="none" stroke="var(--nwon)" stroke-width="1.3"/><circle cx="10.4" cy="7.4" r="2" fill="none" stroke="var(--nwon)" stroke-width="1.3"/><path d="M6.8 11 8 12.6 9.2 11Z" fill="var(--nwon)"/></svg><span class="th" aria-label="2 of 3 owners sign">2/3</span></div>
+<div style="flex-grow:1;min-width:0"><div style="font-size:16px">Family Safe</div><div class="m">Gnosis Chain · Safe</div></div>
+<div style="text-align:right"><div style="font-size:16px">€4,500.00</div><div class="m">4,861.20 xDAI</div></div>
+</li>
+<li style="display:flex;align-items:center;gap:12px;padding:12px 0;border-bottom:1px solid var(--ol)">
+<div class="av" style="opacity:0.5"><div class="bk" style="background:#B03A6E"><span style="background:#7FD1AE;left:15%;top:15%"></span><span style="background:#2B2D6E;right:5%;bottom:20%"></span></div><svg class="nw" style="width:18px;height:18px" viewBox="0 0 16 16" role="img" aria-label="Ethereum"><circle cx="8" cy="8" r="8" fill="var(--eth)"/><path d="M8 2.6 11.4 8.1 8 10.1 4.6 8.1Z" fill="var(--nwon)"/><path d="M8 10.9 11.4 8.9 8 13.4 4.6 8.9Z" fill="var(--nwon)" opacity=".75"/></svg></div>
+<div style="flex-grow:1;min-width:0"><div style="font-size:16px">Savings</div><div class="m">Ethereum · watch only</div></div>
+<div style="text-align:right;color:var(--tx2)"><div style="font-size:16px">0.84 ETH</div><div class="m">3 h ago · may have changed</div></div>
+</li>
+<li style="display:flex;align-items:center;gap:12px;padding:12px 0;border-bottom:1px solid var(--ol)">
+<div class="av"><div class="bk" style="background:#8A5A12"><span style="background:#D9E36B;left:20%;top:5%"></span><span style="background:#4B2A8A;right:15%;bottom:10%"></span></div><svg class="nw" style="width:18px;height:18px" viewBox="0 0 16 16" role="img" aria-label="Sepolia"><circle cx="8" cy="8" r="8" fill="var(--sep)"/><path d="M8 2.6 11.4 8.1 8 10.1 4.6 8.1Z" fill="var(--nwon)"/><path d="M8 10.9 11.4 8.9 8 13.4 4.6 8.9Z" fill="var(--nwon)" opacity=".75"/></svg></div>
+<div style="flex-grow:1;min-width:0"><div style="font-size:16px">Test</div><div><span class="chip" style="background:var(--wac);color:var(--wa)">Sepolia · test network</span></div></div>
+<div style="text-align:right"><div style="font-size:16px">1.5 ETH</div><div class="m">no real value</div></div>
+</li>
+</ul>
+<p class="m" style="margin:8px 0 0">Sending and swapping from Ethereum accounts wait until their balances can be checked again.</p>
+</main>
+<nav style="display:flex;background:var(--c1);padding:12px 0 16px">
+<a href="#" style="flex:1;display:flex;flex-direction:column;align-items:center;gap:4px;text-decoration:none;color:var(--tx);font-size:12px;font-weight:500"><span style="background:var(--sc);color:var(--onsc);border-radius:16px;padding:4px 20px;display:flex"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M19 7V5a2 2 0 0 0-2-2H5a2 2 0 0 0 0 4h15a1 1 0 0 1 1 1v4h-3a2 2 0 0 0 0 4h3v3a1 1 0 0 1-1 1H5a2 2 0 0 1-2-2V5"/></svg></span>Wallet</a>
+<a href="#" style="flex:1;display:flex;flex-direction:column;align-items:center;gap:4px;text-decoration:none;color:var(--tx2);font-size:12px"><span style="padding:4px 20px;display:flex"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 21v-7M4 10V3M12 21v-9M12 8V3M20 21v-5M20 12V3M1 14h6M9 8h6M17 16h6"/></svg></span>Settings</a>
+</nav>
+</div></template></div><figcaption>H3 · Home, can&#x27;t check right now</figcaption></figure>
+<figure><div class="frame"><template shadowrootmode="open"><style>
+
+.ph{--bg:#FEF7FF;--c1:#F3EDF7;--c2:#ECE6F0;--tx:#1D1B20;--tx2:#49454F;--ol:#CAC4D0;--pr:#6750A4;--onpr:#FFFFFF;--prc:#EADDFF;--onprc:#21005D;--sc:#E8DEF8;--onsc:#1D192B;--ok:#1B6B2F;--okc:#D7F5DC;--wa:#7A4F00;--wac:#FFE7B8;--scrim:rgba(0,0,0,0.32);width:390px;height:844px;box-sizing:border-box;background:var(--bg);color:var(--tx);font-family:Roboto,system-ui,sans-serif;font-size:14px;line-height:1.4;display:flex;flex-direction:column;position:relative;overflow:hidden}
+.ph.dark{--bg:#141218;--c1:#211F26;--c2:#2B2930;--tx:#E6E0E9;--tx2:#CAC4D0;--ol:#49454F;--pr:#D0BCFF;--onpr:#381E72;--prc:#4F378B;--onprc:#EADDFF;--sc:#4A4458;--onsc:#E8DEF8;--ok:#8FD99B;--okc:#12381C;--wa:#FFCF70;--wac:#4A3200;--scrim:rgba(0,0,0,0.6)}
+.ic{width:22px;height:22px;stroke:currentColor;fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round;flex:none}
+.m{color:var(--tx2);font-size:12px}
+.bk{width:40px;height:40px;border-radius:50%;position:relative;overflow:hidden;flex:none}
+.bk span{position:absolute;width:40%;height:40%}
+.tk{width:40px;height:40px;border-radius:50%;flex:none;display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:500;background:var(--c2);color:var(--tx2)}
+.chip{font-size:12px;line-height:20px;padding:0 8px;border-radius:8px;background:var(--c2);color:var(--tx2);display:inline-block}
+button{font:inherit;color:inherit;background:none;border:0;padding:0;cursor:pointer}
+a{color:var(--pr)}a:hover{color:var(--onprc)}
+.ph{--eth:#4A63C9;--gno:#2F6E52;--sep:#B07A00;--nwon:#FFFFFF}.ph.dark{--eth:#8FA4F0;--gno:#6FBF9A;--sep:#F2C25C;--nwon:#141218}.av{position:relative;flex:none;display:flex}.nw{position:absolute;left:-3px;bottom:-3px;border-radius:50%;box-shadow:0 0 0 2px var(--bg)}.th{position:absolute;right:-8px;bottom:-4px;font-size:11px;font-weight:500;line-height:15px;padding:0 3px;border-radius:4px;background:var(--bg);color:var(--tx);box-shadow:0 1px 2px rgba(0,0,0,.35)}
+</style><div class="ph ">
+<header style="display:flex;align-items:center;padding:12px 8px;gap:4px">
+<a href="#" aria-label="Back" style="width:48px;height:48px;display:flex;align-items:center;justify-content:center;color:var(--tx)"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M19 12H5M12 19l-7-7 7-7"/></svg></a>
+<h1 style="margin:0;font-size:22px;font-weight:400;flex-grow:1">Main</h1>
+<button aria-label="More" style="width:48px;height:48px;display:flex;align-items:center;justify-content:center"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="5" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="12" cy="19" r="1"/></svg></button>
+</header>
+<main style="flex-grow:1;padding:0 16px;display:flex;flex-direction:column;gap:16px;overflow:hidden">
+<section style="display:flex;flex-direction:column;align-items:center;gap:4px;padding-top:4px">
+<div class="av"><div class="bk" style="background:#2E6BC6;width:56px;height:56px"><span style="background:#E8A33D;left:10%;top:10%"></span><span style="background:#E8A33D;right:10%;bottom:10%"></span><span style="background:#9BD3F2;left:30%;bottom:5%"></span></div><svg class="nw" style="width:22px;height:22px" viewBox="0 0 16 16" role="img" aria-label="Ethereum"><circle cx="8" cy="8" r="8" fill="var(--eth)"/><path d="M8 2.6 11.4 8.1 8 10.1 4.6 8.1Z" fill="var(--nwon)"/><path d="M8 10.9 11.4 8.9 8 13.4 4.6 8.9Z" fill="var(--nwon)" opacity=".75"/></svg></div>
+<div style="font-size:36px;letter-spacing:-0.5px">€12,025.55</div>
+<button style="display:flex;align-items:center;gap:6px;color:var(--tx2);font-size:13px">0x8F3a…91c2 <svg class="ic" style="width:16px;height:16px" viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg></button>
+<div style="display:flex;gap:6px"><span class="chip">Ethereum</span><span class="chip" style="display:inline-flex;align-items:center;gap:4px"><svg class="ic" style="width:14px;height:14px" viewBox="0 0 24 24" aria-hidden="true"><circle cx="7.5" cy="15.5" r="4.5"/><path d="m10.7 12.3 9.3-9.3M17 6l3 3"/></svg>Your key</span></div>
+</section>
+<div style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px">
+<a href="#" style="height:48px;border-radius:24px;background:var(--pr);color:var(--onpr);display:flex;align-items:center;justify-content:center;gap:6px;text-decoration:none;font-weight:500"><svg class="ic" style="width:18px;height:18px" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 17 17 7M7 7h10v10"/></svg>Send</a>
+<a href="#" style="height:48px;border-radius:24px;background:var(--sc);color:var(--onsc);display:flex;align-items:center;justify-content:center;gap:6px;text-decoration:none;font-weight:500"><svg class="ic" style="width:18px;height:18px" viewBox="0 0 24 24" aria-hidden="true"><path d="m16 3 4 4-4 4M20 7H4M8 21l-4-4 4-4M4 17h16"/></svg>Swap</a>
+<a href="#" style="height:48px;border-radius:24px;background:var(--sc);color:var(--onsc);display:flex;align-items:center;justify-content:center;gap:6px;text-decoration:none;font-weight:500"><svg class="ic" style="width:18px;height:18px" viewBox="0 0 24 24" aria-hidden="true"><path d="M17 7 7 17M17 17H7V7"/></svg>Receive</a>
+</div>
+<div role="tablist" style="display:flex;border-bottom:1px solid var(--ol)">
+<a href="#" role="tab" aria-selected="true" style="flex:1;text-align:center;padding:10px 0;text-decoration:none;color:var(--pr);font-weight:500;border-bottom:3px solid var(--pr)">Assets</a>
+<a href="#" role="tab" style="flex:1;text-align:center;padding:10px 0;text-decoration:none;color:var(--tx2)">Activity</a>
+</div>
+<ul style="list-style:none;margin:-8px 0 0;padding:0;display:flex;flex-direction:column">
+<li style="display:flex;align-items:center;gap:12px;padding:10px 0"><div class="tk">Ξ</div><div style="flex-grow:1"><div style="font-size:16px">Ether</div><div class="m">3.2041 ETH</div></div><div style="font-size:16px">€9,612.30</div></li>
+<li style="display:flex;align-items:center;gap:12px;padding:10px 0"><div class="tk">$</div><div style="flex-grow:1"><div style="font-size:16px">USD Coin</div><div class="m">1,250 USDC</div></div><div style="font-size:16px">€1,151.25</div></li>
+<li style="display:flex;align-items:center;gap:12px;padding:10px 0"><div class="tk">L</div><div style="flex-grow:1"><div style="font-size:16px">Chainlink</div><div class="m">40 LINK</div></div><div style="font-size:16px">€512.00</div></li>
+<li style="display:flex;align-items:center;gap:12px;padding:10px 0"><div class="tk">W</div><div style="flex-grow:1"><div style="font-size:16px">Wrapped Ether</div><div class="m">0.25 WETH</div></div><div style="font-size:16px">€750.00</div></li>
+<li style="display:flex;align-items:center;gap:12px;padding:10px 0"><div class="tk">UN</div><div style="flex-grow:1"><div style="font-size:16px">Uniswap</div><div class="m">3.5 UNI</div></div><div class="m">no price</div></li>
+</ul>
+<p class="m" style="margin:auto 0 16px;text-align:center">Updated 40 s ago · pull down to refresh</p>
+</main>
+</div></template></div><figcaption>H4 · Account</figcaption></figure>
+<figure><div class="frame"><template shadowrootmode="open"><style>
+
+.ph{--bg:#FEF7FF;--c1:#F3EDF7;--c2:#ECE6F0;--tx:#1D1B20;--tx2:#49454F;--ol:#CAC4D0;--pr:#6750A4;--onpr:#FFFFFF;--prc:#EADDFF;--onprc:#21005D;--sc:#E8DEF8;--onsc:#1D192B;--ok:#1B6B2F;--okc:#D7F5DC;--wa:#7A4F00;--wac:#FFE7B8;--scrim:rgba(0,0,0,0.32);width:390px;height:844px;box-sizing:border-box;background:var(--bg);color:var(--tx);font-family:Roboto,system-ui,sans-serif;font-size:14px;line-height:1.4;display:flex;flex-direction:column;position:relative;overflow:hidden}
+.ph.dark{--bg:#141218;--c1:#211F26;--c2:#2B2930;--tx:#E6E0E9;--tx2:#CAC4D0;--ol:#49454F;--pr:#D0BCFF;--onpr:#381E72;--prc:#4F378B;--onprc:#EADDFF;--sc:#4A4458;--onsc:#E8DEF8;--ok:#8FD99B;--okc:#12381C;--wa:#FFCF70;--wac:#4A3200;--scrim:rgba(0,0,0,0.6)}
+.ic{width:22px;height:22px;stroke:currentColor;fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round;flex:none}
+.m{color:var(--tx2);font-size:12px}
+.bk{width:40px;height:40px;border-radius:50%;position:relative;overflow:hidden;flex:none}
+.bk span{position:absolute;width:40%;height:40%}
+.tk{width:40px;height:40px;border-radius:50%;flex:none;display:flex;align-items:center;justify-content:center;background:var(--c2);color:var(--tx2)}
+.chip{font-size:12px;line-height:20px;padding:0 8px;border-radius:8px;background:var(--c2);color:var(--tx2);display:inline-block}
+button{font:inherit;color:inherit;background:none;border:0;padding:0;cursor:pointer}
+a{color:var(--pr)}a:hover{color:var(--onprc)}
+</style><div class="ph ">
+<header style="display:flex;align-items:center;padding:12px 8px;gap:4px">
+<a href="#" aria-label="Back" style="width:48px;height:48px;display:flex;align-items:center;justify-content:center;color:var(--tx)"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M19 12H5M12 19l-7-7 7-7"/></svg></a>
+<h1 style="margin:0;font-size:22px;font-weight:400;flex-grow:1">Main</h1>
+</header>
+<main style="flex-grow:1;padding:0 16px;display:flex;flex-direction:column;gap:12px;overflow:hidden">
+<div style="display:flex;align-items:baseline;gap:8px"><span style="font-size:28px">€12,025.55</span><span class="m">Ethereum</span></div>
+<div role="tablist" style="display:flex;border-bottom:1px solid var(--ol)">
+<a href="#" role="tab" style="flex:1;text-align:center;padding:10px 0;text-decoration:none;color:var(--tx2)">Assets</a>
+<a href="#" role="tab" aria-selected="true" style="flex:1;text-align:center;padding:10px 0;text-decoration:none;color:var(--pr);font-weight:500;border-bottom:3px solid var(--pr)">Activity</a>
+</div>
+<div style="background:var(--prc);color:var(--onprc);border-radius:12px;padding:12px 14px;display:flex;align-items:center;gap:12px">
+<svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="m16 3 4 4-4 4M20 7H4M8 21l-4-4 4-4M4 17h16"/></svg>
+<div style="flex-grow:1"><div style="font-weight:500">Swap 100 USDC → LINK</div><div style="font-size:13px">Step 1 done. Step 2 is waiting for you.</div></div>
+<a href="#" style="background:var(--pr);color:var(--onpr);border-radius:20px;padding:8px 14px;text-decoration:none;font-weight:500">Continue</a>
+</div>
+<h2 class="m" style="margin:4px 0 0;font-weight:500">Today</h2>
+<ul style="list-style:none;margin:0;padding:0;display:flex;flex-direction:column">
+<li style="display:flex;align-items:center;gap:12px;padding:10px 0"><div class="tk"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 17 17 7M7 7h10v10"/></svg></div><div style="flex-grow:1"><div style="font-size:16px">Sent to vitalik.eth</div><div class="m">14:02 · confirmed</div></div><div style="text-align:right"><div style="font-size:16px">−250 USDC</div><div class="m">€230.25</div></div></li>
+<li style="display:flex;align-items:center;gap:12px;padding:10px 0"><div class="tk"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg></div><div style="flex-grow:1"><div style="font-size:16px">Allowed Uniswap</div><div class="m">13:40 · 100 USDC, for one swap</div></div><div class="m">fee €0.38</div></li>
+</ul>
+<h2 class="m" style="margin:4px 0 0;font-weight:500">Yesterday</h2>
+<ul style="list-style:none;margin:0;padding:0;display:flex;flex-direction:column">
+<li style="display:flex;align-items:center;gap:12px;padding:10px 0"><div class="tk"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="m16 3 4 4-4 4M20 7H4M8 21l-4-4 4-4M4 17h16"/></svg></div><div style="flex-grow:1"><div style="font-size:16px">Swapped ETH → USDC</div><div class="m">18:21 · via CoW Protocol</div></div><div style="text-align:right"><div style="font-size:16px">+1,250 USDC</div><div class="m">−0.4 ETH</div></div></li>
+<li style="display:flex;align-items:center;gap:12px;padding:10px 0"><div class="tk"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M17 7 7 17M17 17H7V7"/></svg></div><div style="flex-grow:1"><div style="font-size:16px">Received from Family Safe</div><div class="m">09:15</div></div><div style="text-align:right"><div style="font-size:16px;color:var(--ok)">+0.5 ETH</div><div class="m">€1,500.00</div></div></li>
+</ul>
+<p class="m" style="margin:auto 0 16px;text-align:center">Activity since you added this account · updated 40 s ago</p>
+</main>
+</div></template></div><figcaption>H5 · Account, activity</figcaption></figure>
+<figure><div class="frame"><template shadowrootmode="open"><style>
+
+.ph{--bg:#FEF7FF;--c1:#F3EDF7;--c2:#ECE6F0;--tx:#1D1B20;--tx2:#49454F;--ol:#CAC4D0;--pr:#6750A4;--onpr:#FFFFFF;--prc:#EADDFF;--onprc:#21005D;--sc:#E8DEF8;--onsc:#1D192B;--ok:#1B6B2F;--okc:#D7F5DC;--wa:#7A4F00;--wac:#FFE7B8;--scrim:rgba(0,0,0,0.32);width:390px;height:844px;box-sizing:border-box;background:var(--bg);color:var(--tx);font-family:Roboto,system-ui,sans-serif;font-size:14px;line-height:1.4;display:flex;flex-direction:column;position:relative;overflow:hidden}
+.ph.dark{--bg:#141218;--c1:#211F26;--c2:#2B2930;--tx:#E6E0E9;--tx2:#CAC4D0;--ol:#49454F;--pr:#D0BCFF;--onpr:#381E72;--prc:#4F378B;--onprc:#EADDFF;--sc:#4A4458;--onsc:#E8DEF8;--ok:#8FD99B;--okc:#12381C;--wa:#FFCF70;--wac:#4A3200;--scrim:rgba(0,0,0,0.6)}
+.ic{width:22px;height:22px;stroke:currentColor;fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round;flex:none}
+.m{color:var(--tx2);font-size:12px}
+.bk{width:40px;height:40px;border-radius:50%;position:relative;overflow:hidden;flex:none}
+.bk span{position:absolute;width:40%;height:40%}
+button{font:inherit;color:inherit;background:none;border:0;padding:0;cursor:pointer}
+a{color:var(--pr)}a:hover{color:var(--onprc)}
+.ph{--eth:#4A63C9;--gno:#2F6E52;--sep:#B07A00;--nwon:#FFFFFF}.ph.dark{--eth:#8FA4F0;--gno:#6FBF9A;--sep:#F2C25C;--nwon:#141218}.av{position:relative;flex:none;display:flex}.nw{position:absolute;left:-3px;bottom:-3px;border-radius:50%;box-shadow:0 0 0 2px var(--bg)}.th{position:absolute;right:-8px;bottom:-4px;font-size:11px;font-weight:500;line-height:15px;padding:0 3px;border-radius:4px;background:var(--bg);color:var(--tx);box-shadow:0 1px 2px rgba(0,0,0,.35)}
+</style><div class="ph ">
+<header style="display:flex;align-items:center;padding:12px 8px;gap:4px">
+<a href="#" aria-label="Back" style="width:48px;height:48px;display:flex;align-items:center;justify-content:center;color:var(--tx)"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M19 12H5M12 19l-7-7 7-7"/></svg></a>
+<h1 style="margin:0;font-size:22px;font-weight:400;flex-grow:1">Receive</h1>
+</header>
+<main style="flex-grow:1;padding:8px 24px;display:flex;flex-direction:column;align-items:center;gap:16px">
+<div style="display:flex;align-items:center;gap:10px"><div class="av"><div class="bk" style="background:#2E6BC6;width:32px;height:32px"><span style="background:#E8A33D;left:10%;top:10%"></span><span style="background:#E8A33D;right:10%;bottom:10%"></span></div><svg class="nw" style="width:14px;height:14px" viewBox="0 0 16 16" role="img" aria-label="Ethereum"><circle cx="8" cy="8" r="8" fill="var(--eth)"/><path d="M8 2.6 11.4 8.1 8 10.1 4.6 8.1Z" fill="var(--nwon)"/><path d="M8 10.9 11.4 8.9 8 13.4 4.6 8.9Z" fill="var(--nwon)" opacity=".75"/></svg></div><span style="font-size:18px">Main</span></div>
+<div role="img" aria-label="QR code of the address" style="width:240px;height:240px;border-radius:16px;background:#FFFFFF;border:1px solid var(--ol);display:flex;align-items:center;justify-content:center;color:#49454F;font-size:13px">[QR code]</div>
+<div style="font-family:'Roboto Mono',monospace;font-size:15px;text-align:center;line-height:1.6;letter-spacing:0.5px">0x8F3a 2c71 E5b9 D04A<br>6F1e 3C2b A7d9 0E5F<br>4C6b 91c2</div>
+<div style="background:var(--wac);color:var(--wa);border-radius:12px;padding:10px 14px;font-size:13px;text-align:center">Only send assets on <b style="font-weight:500">Ethereum</b> to this address. Sent from another network, they can be lost.</div>
+<div style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;width:100%;margin-top:auto;margin-bottom:16px">
+<button style="height:48px;border-radius:24px;border:1px solid var(--ol);display:flex;align-items:center;justify-content:center;gap:6px;color:var(--pr);font-weight:500"><svg class="ic" style="width:18px;height:18px" viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>Copy</button>
+<button style="height:48px;border-radius:24px;background:var(--pr);color:var(--onpr);display:flex;align-items:center;justify-content:center;gap:6px;font-weight:500"><svg class="ic" style="width:18px;height:18px" viewBox="0 0 24 24" aria-hidden="true"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><path d="m8.6 13.5 6.8 4M15.4 6.5l-6.8 4"/></svg>Share</button>
+</div>
+</main>
+</div></template></div><figcaption>H6 · Receive</figcaption></figure>
+<figure><div class="frame"><template shadowrootmode="open"><style>
+
+.ph{--bg:#FEF7FF;--c1:#F3EDF7;--c2:#ECE6F0;--tx:#1D1B20;--tx2:#49454F;--ol:#CAC4D0;--pr:#6750A4;--onpr:#FFFFFF;--prc:#EADDFF;--onprc:#21005D;--sc:#E8DEF8;--onsc:#1D192B;--ok:#1B6B2F;--okc:#D7F5DC;--wa:#7A4F00;--wac:#FFE7B8;--scrim:rgba(0,0,0,0.32);width:390px;height:844px;box-sizing:border-box;background:var(--bg);color:var(--tx);font-family:Roboto,system-ui,sans-serif;font-size:14px;line-height:1.4;display:flex;flex-direction:column;position:relative;overflow:hidden}
+.ph.dark{--bg:#141218;--c1:#211F26;--c2:#2B2930;--tx:#E6E0E9;--tx2:#CAC4D0;--ol:#49454F;--pr:#D0BCFF;--onpr:#381E72;--prc:#4F378B;--onprc:#EADDFF;--sc:#4A4458;--onsc:#E8DEF8;--ok:#8FD99B;--okc:#12381C;--wa:#FFCF70;--wac:#4A3200;--scrim:rgba(0,0,0,0.6)}
+.ic{width:22px;height:22px;stroke:currentColor;fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round;flex:none}
+.m{color:var(--tx2);font-size:12px}
+.bk{width:40px;height:40px;border-radius:50%;position:relative;overflow:hidden;flex:none}
+.bk span{position:absolute;width:40%;height:40%}
+.chip{font-size:12px;line-height:20px;padding:0 8px;border-radius:8px;background:var(--c2);color:var(--tx2);display:inline-block}
+button{font:inherit;color:inherit;background:none;border:0;padding:0;cursor:pointer}
+a{color:var(--pr)}a:hover{color:var(--onprc)}
+.ph{--eth:#4A63C9;--gno:#2F6E52;--sep:#B07A00;--nwon:#FFFFFF}.ph.dark{--eth:#8FA4F0;--gno:#6FBF9A;--sep:#F2C25C;--nwon:#141218}.av{position:relative;flex:none;display:flex}.nw{position:absolute;left:-3px;bottom:-3px;border-radius:50%;box-shadow:0 0 0 2px var(--bg)}.th{position:absolute;right:-8px;bottom:-4px;font-size:11px;font-weight:500;line-height:15px;padding:0 3px;border-radius:4px;background:var(--bg);color:var(--tx);box-shadow:0 1px 2px rgba(0,0,0,.35)}
+</style><div class="ph dark">
+<header style="display:flex;align-items:center;padding:16px 16px 8px;gap:12px">
+<h1 style="margin:0;font-size:22px;font-weight:400;flex-grow:1">Wallet</h1>
+</header>
+<main style="flex-grow:1;padding:0 16px;display:flex;flex-direction:column;gap:4px;overflow:hidden">
+<section style="text-align:center;padding:20px 0 16px">
+<div class="m">Total</div>
+<div style="font-size:36px;font-weight:400;letter-spacing:-0.5px">€19,375.85</div>
+<div class="m">Updated 2 min ago · pull down to refresh</div>
+</section>
+<ul style="list-style:none;margin:0;padding:0;display:flex;flex-direction:column">
+<li style="display:flex;align-items:center;gap:12px;padding:12px 0;border-bottom:1px solid var(--ol)">
+<div class="av"><div class="bk" style="background:#2E6BC6"><span style="background:#E8A33D;left:10%;top:10%"></span><span style="background:#E8A33D;right:10%;bottom:10%"></span><span style="background:#9BD3F2;left:30%;bottom:5%"></span></div><svg class="nw" style="width:18px;height:18px" viewBox="0 0 16 16" role="img" aria-label="Ethereum"><circle cx="8" cy="8" r="8" fill="var(--eth)"/><path d="M8 2.6 11.4 8.1 8 10.1 4.6 8.1Z" fill="var(--nwon)"/><path d="M8 10.9 11.4 8.9 8 13.4 4.6 8.9Z" fill="var(--nwon)" opacity=".75"/></svg></div>
+<div style="flex-grow:1;min-width:0"><div style="font-size:16px">Main</div><div class="m">Ethereum</div></div>
+<div style="text-align:right"><div style="font-size:16px">€12,025.55</div><div class="m">3.2041 ETH</div></div>
+</li>
+<li style="display:flex;align-items:center;gap:12px;padding:12px 0;border-bottom:1px solid var(--ol)">
+<div class="av"><div class="bk" style="background:#1D7A5A"><span style="background:#F2C14E;right:10%;top:10%"></span><span style="background:#C2410C;left:10%;bottom:15%"></span></div><svg class="nw" style="width:18px;height:18px" viewBox="0 0 16 16" role="img" aria-label="Gnosis Chain"><circle cx="8" cy="8" r="8" fill="var(--gno)"/><circle cx="5.6" cy="7.4" r="2" fill="none" stroke="var(--nwon)" stroke-width="1.3"/><circle cx="10.4" cy="7.4" r="2" fill="none" stroke="var(--nwon)" stroke-width="1.3"/><path d="M6.8 11 8 12.6 9.2 11Z" fill="var(--nwon)"/></svg><span class="th" aria-label="2 of 3 owners sign">2/3</span></div>
+<div style="flex-grow:1;min-width:0"><div style="font-size:16px">Family Safe</div><div class="m">Gnosis Chain · Safe</div></div>
+<div style="text-align:right"><div style="font-size:16px">€4,500.00</div><div class="m">4,861.20 xDAI</div></div>
+</li>
+<li style="display:flex;align-items:center;gap:12px;padding:12px 0;border-bottom:1px solid var(--ol)">
+<div class="av"><div class="bk" style="background:#B03A6E"><span style="background:#7FD1AE;left:15%;top:15%"></span><span style="background:#2B2D6E;right:5%;bottom:20%"></span></div><svg class="nw" style="width:18px;height:18px" viewBox="0 0 16 16" role="img" aria-label="Ethereum"><circle cx="8" cy="8" r="8" fill="var(--eth)"/><path d="M8 2.6 11.4 8.1 8 10.1 4.6 8.1Z" fill="var(--nwon)"/><path d="M8 10.9 11.4 8.9 8 13.4 4.6 8.9Z" fill="var(--nwon)" opacity=".75"/></svg></div>
+<div style="flex-grow:1;min-width:0"><div style="font-size:16px;display:flex;align-items:center;gap:6px">Savings <svg class="ic" style="width:16px;height:16px;color:var(--tx2)" viewBox="0 0 24 24" role="img" aria-label="Watch only"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></svg></div><div class="m">Ethereum · watch only</div></div>
+<div style="text-align:right"><div style="font-size:16px">€2,850.30</div><div class="m">0.84 ETH</div></div>
+</li>
+<li style="display:flex;align-items:center;gap:12px;padding:12px 0;border-bottom:1px solid var(--ol)">
+<div class="av"><div class="bk" style="background:#8A5A12"><span style="background:#D9E36B;left:20%;top:5%"></span><span style="background:#4B2A8A;right:15%;bottom:10%"></span></div><svg class="nw" style="width:18px;height:18px" viewBox="0 0 16 16" role="img" aria-label="Sepolia"><circle cx="8" cy="8" r="8" fill="var(--sep)"/><path d="M8 2.6 11.4 8.1 8 10.1 4.6 8.1Z" fill="var(--nwon)"/><path d="M8 10.9 11.4 8.9 8 13.4 4.6 8.9Z" fill="var(--nwon)" opacity=".75"/></svg></div>
+<div style="flex-grow:1;min-width:0"><div style="font-size:16px">Test</div><div><span class="chip" style="background:var(--wac);color:var(--wa)">Sepolia · test network</span></div></div>
+<div style="text-align:right"><div style="font-size:16px">1.5 ETH</div><div class="m">no real value</div></div>
+</li>
+</ul>
+<p class="m" style="margin:8px 0 0">Test networks aren't counted in the total.</p>
+</main>
+<button aria-label="Add account" style="position:absolute;right:16px;bottom:96px;width:56px;height:56px;border-radius:16px;background:var(--prc);color:var(--onprc);display:flex;align-items:center;justify-content:center"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg></button>
+<nav style="display:flex;background:var(--c1);padding:12px 0 16px">
+<a href="#" style="flex:1;display:flex;flex-direction:column;align-items:center;gap:4px;text-decoration:none;color:var(--tx);font-size:12px;font-weight:500"><span style="background:var(--sc);color:var(--onsc);border-radius:16px;padding:4px 20px;display:flex"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M19 7V5a2 2 0 0 0-2-2H5a2 2 0 0 0 0 4h15a1 1 0 0 1 1 1v4h-3a2 2 0 0 0 0 4h3v3a1 1 0 0 1-1 1H5a2 2 0 0 1-2-2V5"/></svg></span>Wallet</a>
+<a href="#" style="flex:1;display:flex;flex-direction:column;align-items:center;gap:4px;text-decoration:none;color:var(--tx2);font-size:12px"><span style="padding:4px 20px;display:flex"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 21v-7M4 10V3M12 21v-9M12 8V3M20 21v-5M20 12V3M1 14h6M9 8h6M17 16h6"/></svg></span>Settings</a>
+</nav>
+</div></template></div><figcaption>H1 · Home, dark theme</figcaption></figure>
+</div>
+<h2>Send</h2>
+<p class="note">Send. Amount first, fee level folded into one row (Normal by default). The review is a sheet: recipient in full, the most the fee can be, the balance after, and the on-chain check said in words. Blocks, gas and the hash sit under Details.</p>
+<div class="g">
+<figure><div class="frame"><template shadowrootmode="open"><style>
+
+.ph{--bg:#FEF7FF;--c1:#F3EDF7;--c2:#ECE6F0;--tx:#1D1B20;--tx2:#49454F;--ol:#CAC4D0;--pr:#6750A4;--onpr:#FFFFFF;--prc:#EADDFF;--onprc:#21005D;--sc:#E8DEF8;--onsc:#1D192B;--ok:#1B6B2F;--okc:#D7F5DC;--wa:#7A4F00;--wac:#FFE7B8;--scrim:rgba(0,0,0,0.32);width:390px;height:844px;box-sizing:border-box;background:var(--bg);color:var(--tx);font-family:Roboto,system-ui,sans-serif;font-size:14px;line-height:1.4;display:flex;flex-direction:column;position:relative;overflow:hidden}
+.ph.dark{--bg:#141218;--c1:#211F26;--c2:#2B2930;--tx:#E6E0E9;--tx2:#CAC4D0;--ol:#49454F;--pr:#D0BCFF;--onpr:#381E72;--prc:#4F378B;--onprc:#EADDFF;--sc:#4A4458;--onsc:#E8DEF8;--ok:#8FD99B;--okc:#12381C;--wa:#FFCF70;--wac:#4A3200;--scrim:rgba(0,0,0,0.6)}
+.ic{width:22px;height:22px;stroke:currentColor;fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round;flex:none}
+.m{color:var(--tx2);font-size:12px}
+.bk{width:40px;height:40px;border-radius:50%;position:relative;overflow:hidden;flex:none}
+.bk span{position:absolute;width:40%;height:40%}
+.tk{width:40px;height:40px;border-radius:50%;flex:none;display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:500;background:var(--c2);color:var(--tx2)}
+.pill{font:inherit;font-size:13px;line-height:32px;padding:0 14px;border-radius:8px;border:1px solid var(--ol);color:var(--tx2);background:none}
+button{font:inherit;color:inherit;background:none;border:0;padding:0;cursor:pointer}
+a{color:var(--pr)}a:hover{color:var(--onprc)}
+</style><div class="ph ">
+<header style="display:flex;align-items:center;padding:12px 8px;gap:4px">
+<a href="#" aria-label="Close" style="width:48px;height:48px;display:flex;align-items:center;justify-content:center;color:var(--tx)"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M18 6 6 18M6 6l12 12"/></svg></a>
+<h1 style="margin:0;font-size:22px;font-weight:400;flex-grow:1">Send from Main</h1>
+</header>
+<main style="flex-grow:1;padding:0 16px;display:flex;flex-direction:column;gap:16px">
+<button style="display:flex;align-items:center;gap:12px;background:var(--c1);border-radius:16px;padding:12px 14px;text-align:left">
+<div class="tk">$</div><div style="flex-grow:1"><div style="font-size:16px">USD Coin</div><div class="m">1,250 USDC available</div></div>
+<svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg>
+</button>
+<section style="text-align:center;padding:12px 0">
+<label for="amt" class="m">Amount</label>
+<div style="display:flex;align-items:baseline;justify-content:center;gap:8px"><input id="amt" value="250" aria-label="Amount in USDC" style="font:inherit;font-size:48px;width:130px;text-align:right;border:0;background:none;color:var(--tx);outline:none"><span style="font-size:24px;color:var(--tx2)">USDC</span></div>
+<div class="m" style="font-size:13px">≈ €230.25</div>
+<div style="display:flex;gap:8px;justify-content:center;margin-top:12px"><button class="pill">25%</button><button class="pill">50%</button><button class="pill">Max</button></div>
+</section>
+<div>
+<label for="to" class="m">To</label>
+<div style="display:flex;align-items:center;gap:10px;border:1px solid var(--ol);border-radius:12px;padding:10px 12px;margin-top:4px">
+<div class="bk" style="background:#5B3FA8;width:28px;height:28px"><span style="background:#F0A5C0;left:10%;top:10%"></span><span style="background:#3DB8A0;right:10%;bottom:10%"></span></div>
+<div style="flex-grow:1"><input id="to" value="vitalik.eth" style="font:inherit;font-size:16px;border:0;background:none;color:var(--tx);outline:none;width:100%"><div class="m">0xd8dA…6045</div></div>
+<svg class="ic" style="color:var(--ok)" viewBox="0 0 24 24" role="img" aria-label="Name found"><path d="M20 6 9 17l-5-5"/></svg>
+</div>
+<div style="display:flex;gap:8px;margin-top:8px"><button class="pill">Savings</button><button class="pill">Family Safe</button></div>
+</div>
+<button style="display:flex;align-items:center;gap:8px;padding:8px 0;border-top:1px solid var(--ol)">
+<span style="flex-grow:1;text-align:left">Network fee</span><span class="m" style="font-size:14px">≈ €0.36 · Normal</span><svg class="ic" style="width:18px;height:18px;color:var(--tx2)" viewBox="0 0 24 24" aria-hidden="true"><path d="m9 18 6-6-6-6"/></svg>
+</button>
+<a href="#" style="margin-top:auto;margin-bottom:16px;height:52px;border-radius:26px;background:var(--pr);color:var(--onpr);display:flex;align-items:center;justify-content:center;text-decoration:none;font-weight:500;font-size:15px">Review</a>
+</main>
+</div></template></div><figcaption>S1 · Send</figcaption></figure>
+<figure><div class="frame"><template shadowrootmode="open"><style>
+
+.ph{--bg:#FEF7FF;--c1:#F3EDF7;--c2:#ECE6F0;--tx:#1D1B20;--tx2:#49454F;--ol:#CAC4D0;--pr:#6750A4;--onpr:#FFFFFF;--prc:#EADDFF;--onprc:#21005D;--sc:#E8DEF8;--onsc:#1D192B;--ok:#1B6B2F;--okc:#D7F5DC;--wa:#7A4F00;--wac:#FFE7B8;--scrim:rgba(0,0,0,0.32);width:390px;height:844px;box-sizing:border-box;background:var(--bg);color:var(--tx);font-family:Roboto,system-ui,sans-serif;font-size:14px;line-height:1.4;display:flex;flex-direction:column;position:relative;overflow:hidden}
+.ph.dark{--bg:#141218;--c1:#211F26;--c2:#2B2930;--tx:#E6E0E9;--tx2:#CAC4D0;--ol:#49454F;--pr:#D0BCFF;--onpr:#381E72;--prc:#4F378B;--onprc:#EADDFF;--sc:#4A4458;--onsc:#E8DEF8;--ok:#8FD99B;--okc:#12381C;--wa:#FFCF70;--wac:#4A3200;--scrim:rgba(0,0,0,0.6)}
+.ic{width:22px;height:22px;stroke:currentColor;fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round;flex:none}
+.m{color:var(--tx2);font-size:12px}
+.bk{width:40px;height:40px;border-radius:50%;position:relative;overflow:hidden;flex:none}
+.bk span{position:absolute;width:40%;height:40%}
+.kv{display:flex;gap:12px;padding:10px 0;border-bottom:1px solid var(--ol)}
+.kv dt{color:var(--tx2);flex-grow:1}.kv dd{margin:0;text-align:right}
+button{font:inherit;color:inherit;background:none;border:0;padding:0;cursor:pointer}
+a{color:var(--pr)}a:hover{color:var(--onprc)}
+</style><div class="ph ">
+<header style="display:flex;align-items:center;padding:12px 8px;gap:4px">
+<span style="width:48px;height:48px;display:flex;align-items:center;justify-content:center"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M18 6 6 18M6 6l12 12"/></svg></span>
+<span style="font-size:22px;flex-grow:1">Send from Main</span>
+</header>
+<div style="text-align:center;padding-top:40px;color:var(--tx2)"><div style="font-size:48px">250 USDC</div></div>
+<div style="position:absolute;inset:0;background:var(--scrim)"></div>
+<section role="dialog" aria-label="Review the transfer" style="position:absolute;left:0;right:0;bottom:0;background:var(--c1);border-radius:28px 28px 0 0;padding:12px 20px 20px;display:flex;flex-direction:column;gap:4px">
+<div style="width:32px;height:4px;border-radius:2px;background:var(--tx2);opacity:0.4;margin:0 auto 12px"></div>
+<h1 style="margin:0;text-align:center;font-size:28px;font-weight:400">Send 250 USDC</h1>
+<div class="m" style="text-align:center;font-size:13px;margin-bottom:8px">≈ €230.25</div>
+<div style="display:flex;gap:12px;align-items:flex-start;background:var(--bg);border-radius:12px;padding:12px">
+<div class="bk" style="background:#5B3FA8;width:32px;height:32px"><span style="background:#F0A5C0;left:10%;top:10%"></span><span style="background:#3DB8A0;right:10%;bottom:10%"></span></div>
+<div style="min-width:0"><div style="font-size:16px">vitalik.eth</div><div style="font-family:'Roboto Mono',monospace;font-size:12px;color:var(--tx2);word-break:break-all">0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045</div></div>
+</div>
+<dl style="margin:4px 0 0">
+<div class="kv"><dt>From</dt><dd>Main · Ethereum</dd></div>
+<div class="kv"><dt>Network fee, at most</dt><dd>0.00021 ETH <span class="m">€0.48</span></dd></div>
+<div class="kv"><dt>USDC left after</dt><dd>1,000</dd></div>
+</dl>
+<div style="display:flex;align-items:center;gap:8px;background:var(--okc);color:var(--ok);border-radius:12px;padding:10px 12px;margin-top:8px;font-size:13px">
+<svg class="ic" style="width:18px;height:18px" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><path d="m9 12 2 2 4-4"/></svg>
+<span>Checked on chain: this transfer should go through</span>
+</div>
+<button style="display:flex;align-items:center;gap:6px;color:var(--pr);padding:10px 0;font-weight:500">Details <svg class="ic" style="width:18px;height:18px" viewBox="0 0 24 24" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></button>
+<a href="#" style="height:52px;border-radius:26px;background:var(--pr);color:var(--onpr);display:flex;align-items:center;justify-content:center;gap:8px;text-decoration:none;font-weight:500;font-size:15px"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 11v3a8 8 0 0 1-1 4M8 11a4 4 0 0 1 8 0v1M5 13v-2a7 7 0 0 1 14 0v3M16 15a12 12 0 0 1-1 5M9 15c0 2-.5 4-1.5 5.5"/></svg>Confirm and send</a>
+<button style="height:44px;color:var(--pr);font-weight:500">Use password instead</button>
+</section>
+</div></template></div><figcaption>S2 · Send, review</figcaption></figure>
+<figure><div class="frame"><template shadowrootmode="open"><style>
+
+.ph{--bg:#FEF7FF;--c1:#F3EDF7;--c2:#ECE6F0;--tx:#1D1B20;--tx2:#49454F;--ol:#CAC4D0;--pr:#6750A4;--onpr:#FFFFFF;--prc:#EADDFF;--onprc:#21005D;--sc:#E8DEF8;--onsc:#1D192B;--ok:#1B6B2F;--okc:#D7F5DC;--wa:#7A4F00;--wac:#FFE7B8;--scrim:rgba(0,0,0,0.32);width:390px;height:844px;box-sizing:border-box;background:var(--bg);color:var(--tx);font-family:Roboto,system-ui,sans-serif;font-size:14px;line-height:1.4;display:flex;flex-direction:column;position:relative;overflow:hidden}
+.ph.dark{--bg:#141218;--c1:#211F26;--c2:#2B2930;--tx:#E6E0E9;--tx2:#CAC4D0;--ol:#49454F;--pr:#D0BCFF;--onpr:#381E72;--prc:#4F378B;--onprc:#EADDFF;--sc:#4A4458;--onsc:#E8DEF8;--ok:#8FD99B;--okc:#12381C;--wa:#FFCF70;--wac:#4A3200;--scrim:rgba(0,0,0,0.6)}
+.ic{width:22px;height:22px;stroke:currentColor;fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round;flex:none}
+.m{color:var(--tx2);font-size:12px}
+.dot{width:28px;height:28px;border-radius:50%;flex:none;display:flex;align-items:center;justify-content:center}
+.done{background:var(--okc);color:var(--ok)}.now{background:var(--prc);color:var(--onprc)}
+button{font:inherit;color:inherit;background:none;border:0;padding:0;cursor:pointer}
+a{color:var(--pr)}a:hover{color:var(--onprc)}
+</style><div class="ph ">
+<header style="display:flex;justify-content:flex-end;padding:12px 8px">
+<a href="#" aria-label="Close" style="width:48px;height:48px;display:flex;align-items:center;justify-content:center;color:var(--tx)"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M18 6 6 18M6 6l12 12"/></svg></a>
+</header>
+<main style="flex-grow:1;padding:0 24px;display:flex;flex-direction:column;gap:20px">
+<section style="text-align:center;display:flex;flex-direction:column;align-items:center;gap:6px">
+<div class="dot done" style="width:72px;height:72px"><svg class="ic" style="width:40px;height:40px" viewBox="0 0 24 24" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg></div>
+<h1 style="margin:8px 0 0;font-size:32px;font-weight:400">250 USDC</h1>
+<div class="m" style="font-size:14px">to vitalik.eth</div>
+</section>
+<ol style="list-style:none;margin:8px 0 0;padding:0;display:flex;flex-direction:column;gap:18px">
+<li style="display:flex;gap:14px;align-items:flex-start"><div class="dot done"><svg class="ic" style="width:16px;height:16px" viewBox="0 0 24 24" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg></div><div><div style="font-size:16px">Sent</div><div class="m">14:02</div></div></li>
+<li style="display:flex;gap:14px;align-items:flex-start"><div class="dot done"><svg class="ic" style="width:16px;height:16px" viewBox="0 0 24 24" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg></div><div><div style="font-size:16px">Confirmed</div><div class="m">12 s later · fee paid €0.31</div></div></li>
+<li style="display:flex;gap:14px;align-items:flex-start"><div class="dot now"><svg class="ic" style="width:16px;height:16px" viewBox="0 0 24 24" aria-hidden="true"><path d="M21 12a9 9 0 1 1-6.2-8.6"/></svg></div><div><div style="font-size:16px">Final</div><div class="m">in about 13 min. After that it can't be reversed by the network.</div></div></li>
+</ol>
+<div style="margin-top:auto;display:flex;flex-direction:column;gap:8px;margin-bottom:16px">
+<button style="height:48px;border-radius:24px;border:1px solid var(--ol);color:var(--pr);font-weight:500">Details</button>
+<a href="#" style="height:52px;border-radius:26px;background:var(--pr);color:var(--onpr);display:flex;align-items:center;justify-content:center;text-decoration:none;font-weight:500;font-size:15px">Done</a>
+</div>
+</main>
+</div></template></div><figcaption>S3 · Sent</figcaption></figure>
+</div>
+<h2>Swap</h2>
+<p class="note">Swap. One card. When the allowance falls short the compose screen already says &quot;2 steps&quot;. The review numbers them, each with its own fee and its own confirmation. Between them the app waits for step 1, re-quotes and asks again. &quot;Later&quot; leaves step 2 waiting in Activity.</p>
+<div class="g">
+<figure><div class="frame"><template shadowrootmode="open"><style>
+
+.ph{--bg:#FEF7FF;--c1:#F3EDF7;--c2:#ECE6F0;--tx:#1D1B20;--tx2:#49454F;--ol:#CAC4D0;--pr:#6750A4;--onpr:#FFFFFF;--prc:#EADDFF;--onprc:#21005D;--sc:#E8DEF8;--onsc:#1D192B;--ok:#1B6B2F;--okc:#D7F5DC;--wa:#7A4F00;--wac:#FFE7B8;--scrim:rgba(0,0,0,0.32);width:390px;height:844px;box-sizing:border-box;background:var(--bg);color:var(--tx);font-family:Roboto,system-ui,sans-serif;font-size:14px;line-height:1.4;display:flex;flex-direction:column;position:relative;overflow:hidden}
+.ph.dark{--bg:#141218;--c1:#211F26;--c2:#2B2930;--tx:#E6E0E9;--tx2:#CAC4D0;--ol:#49454F;--pr:#D0BCFF;--onpr:#381E72;--prc:#4F378B;--onprc:#EADDFF;--sc:#4A4458;--onsc:#E8DEF8;--ok:#8FD99B;--okc:#12381C;--wa:#FFCF70;--wac:#4A3200;--scrim:rgba(0,0,0,0.6)}
+.ic{width:22px;height:22px;stroke:currentColor;fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round;flex:none}
+.m{color:var(--tx2);font-size:12px}
+.tk{width:24px;height:24px;border-radius:50%;flex:none;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:500;background:var(--bg);color:var(--tx2)}
+.tok{display:flex;align-items:center;gap:6px;background:var(--c2);border-radius:20px;padding:6px 10px 6px 6px;font-size:15px;font-weight:500}
+button{font:inherit;color:inherit;background:none;border:0;padding:0;cursor:pointer}
+a{color:var(--pr)}a:hover{color:var(--onprc)}
+</style><div class="ph ">
+<header style="display:flex;align-items:center;padding:12px 8px;gap:4px">
+<a href="#" aria-label="Close" style="width:48px;height:48px;display:flex;align-items:center;justify-content:center;color:var(--tx)"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M18 6 6 18M6 6l12 12"/></svg></a>
+<h1 style="margin:0;font-size:22px;font-weight:400;flex-grow:1">Swap</h1>
+<button aria-label="Price tolerance" style="width:48px;height:48px;display:flex;align-items:center;justify-content:center"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 21v-7M4 10V3M12 21v-9M12 8V3M20 21v-5M20 12V3M1 14h6M9 8h6M17 16h6"/></svg></button>
+</header>
+<main style="flex-grow:1;padding:0 16px;display:flex;flex-direction:column;gap:12px">
+<div role="radiogroup" aria-label="Where to swap" style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));border:1px solid var(--ol);border-radius:20px;overflow:hidden">
+<button role="radio" aria-checked="true" style="height:40px;background:var(--sc);color:var(--onsc);font-weight:500;display:flex;align-items:center;justify-content:center;gap:6px"><svg class="ic" style="width:16px;height:16px" viewBox="0 0 24 24" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg>Uniswap</button>
+<button role="radio" aria-checked="false" style="height:40px;border-left:1px solid var(--ol)">CoW Protocol</button>
+</div>
+<div style="display:flex;flex-direction:column;gap:4px;position:relative">
+<div style="background:var(--c1);border-radius:16px;padding:14px 16px">
+<div class="m">You pay</div>
+<div style="display:flex;align-items:center;gap:8px;margin:4px 0"><span style="font-size:32px;flex-grow:1">100</span><span class="tok"><span class="tk">$</span>USDC<svg class="ic" style="width:16px;height:16px" viewBox="0 0 24 24" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></span></div>
+<div class="m">≈ €92.10 · 1,250 available</div>
+</div>
+<button aria-label="Swap the two tokens" style="position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);width:40px;height:40px;border-radius:12px;background:var(--prc);color:var(--onprc);border:4px solid var(--bg);display:flex;align-items:center;justify-content:center"><svg class="ic" style="width:18px;height:18px" viewBox="0 0 24 24" aria-hidden="true"><path d="m7 15 5 5 5-5M7 9l5-5 5 5"/></svg></button>
+<div style="background:var(--c1);border-radius:16px;padding:14px 16px">
+<div class="m">You get at least</div>
+<div style="display:flex;align-items:center;gap:8px;margin:4px 0"><span style="font-size:32px;flex-grow:1">7.18</span><span class="tok"><span class="tk">L</span>LINK<svg class="ic" style="width:16px;height:16px" viewBox="0 0 24 24" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></span></div>
+<div class="m">Expected 7.22 · ≈ €91.90</div>
+</div>
+</div>
+<dl style="margin:0;display:flex;flex-direction:column;gap:6px">
+<div style="display:flex"><dt class="m" style="flex-grow:1;font-size:13px">Price</dt><dd style="margin:0">1 LINK = 13.85 USDC</dd></div>
+<div style="display:flex"><dt class="m" style="flex-grow:1;font-size:13px">Network fees</dt><dd style="margin:0">≈ €1.20</dd></div>
+<div style="display:flex"><dt class="m" style="flex-grow:1;font-size:13px">Price tolerance</dt><dd style="margin:0">0.5%</dd></div>
+</dl>
+<div style="display:flex;gap:12px;align-items:flex-start;background:var(--prc);color:var(--onprc);border-radius:12px;padding:12px 14px">
+<svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4M12 8h.01"/></svg>
+<div style="font-size:13px"><b style="font-weight:500">2 steps.</b> First you allow Uniswap to use 100 USDC, then you swap. Each is its own transaction with its own fee.</div>
+</div>
+<a href="#" style="margin-top:auto;margin-bottom:16px;height:52px;border-radius:26px;background:var(--pr);color:var(--onpr);display:flex;align-items:center;justify-content:center;text-decoration:none;font-weight:500;font-size:15px">Review</a>
+</main>
+</div></template></div><figcaption>W1 · Swap</figcaption></figure>
+<figure><div class="frame"><template shadowrootmode="open"><style>
+
+.ph{--bg:#FEF7FF;--c1:#F3EDF7;--c2:#ECE6F0;--tx:#1D1B20;--tx2:#49454F;--ol:#CAC4D0;--pr:#6750A4;--onpr:#FFFFFF;--prc:#EADDFF;--onprc:#21005D;--sc:#E8DEF8;--onsc:#1D192B;--ok:#1B6B2F;--okc:#D7F5DC;--wa:#7A4F00;--wac:#FFE7B8;--scrim:rgba(0,0,0,0.32);width:390px;height:844px;box-sizing:border-box;background:var(--bg);color:var(--tx);font-family:Roboto,system-ui,sans-serif;font-size:14px;line-height:1.4;display:flex;flex-direction:column;position:relative;overflow:hidden}
+.ph.dark{--bg:#141218;--c1:#211F26;--c2:#2B2930;--tx:#E6E0E9;--tx2:#CAC4D0;--ol:#49454F;--pr:#D0BCFF;--onpr:#381E72;--prc:#4F378B;--onprc:#EADDFF;--sc:#4A4458;--onsc:#E8DEF8;--ok:#8FD99B;--okc:#12381C;--wa:#FFCF70;--wac:#4A3200;--scrim:rgba(0,0,0,0.6)}
+.ic{width:22px;height:22px;stroke:currentColor;fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round;flex:none}
+.m{color:var(--tx2);font-size:12px}
+.num{width:28px;height:28px;border-radius:50%;flex:none;display:flex;align-items:center;justify-content:center;font-weight:500}
+button{font:inherit;color:inherit;background:none;border:0;padding:0;cursor:pointer}
+a{color:var(--pr)}a:hover{color:var(--onprc)}
+</style><div class="ph ">
+<header style="display:flex;align-items:center;padding:12px 8px;gap:4px">
+<a href="#" aria-label="Back" style="width:48px;height:48px;display:flex;align-items:center;justify-content:center;color:var(--tx)"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M19 12H5M12 19l-7-7 7-7"/></svg></a>
+<h1 style="margin:0;font-size:22px;font-weight:400;flex-grow:1">Review swap</h1>
+</header>
+<main style="flex-grow:1;padding:0 16px;display:flex;flex-direction:column;gap:12px">
+<section style="text-align:center;padding:8px 0 4px">
+<div style="font-size:26px">100 USDC → 7.18 LINK</div>
+<div class="m" style="font-size:13px">at least · via Uniswap · from Main</div>
+</section>
+<ol style="list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:8px">
+<li style="display:flex;gap:12px;align-items:flex-start;background:var(--c1);border:2px solid var(--pr);border-radius:16px;padding:14px">
+<div class="num" style="background:var(--pr);color:var(--onpr)">1</div>
+<div style="flex-grow:1"><div style="font-size:16px">Allow Uniswap to use 100 USDC</div><div class="m" style="font-size:13px">Only this amount, for this swap. Fee at most €0.40.</div></div>
+</li>
+<li style="display:flex;gap:12px;align-items:flex-start;background:var(--c1);border-radius:16px;padding:14px">
+<div class="num" style="border:1px solid var(--ol);color:var(--tx2)">2</div>
+<div style="flex-grow:1"><div style="font-size:16px">Swap</div><div class="m" style="font-size:13px">Once step 1 is confirmed, the price is checked again and you confirm the swap. Fee at most €0.80.</div></div>
+</li>
+</ol>
+<div style="display:flex;align-items:center;gap:8px;background:var(--okc);color:var(--ok);border-radius:12px;padding:10px 12px;font-size:13px">
+<svg class="ic" style="width:18px;height:18px" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><path d="m9 12 2 2 4-4"/></svg>
+<span>Price checked on chain</span>
+</div>
+<p class="m" style="font-size:13px;margin:0">If the price moves more than 0.5% before the swap runs, it stops: you keep your USDC and pay only the fee.</p>
+<button style="display:flex;align-items:center;gap:6px;color:var(--pr);padding:4px 0;font-weight:500">Details <svg class="ic" style="width:18px;height:18px" viewBox="0 0 24 24" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></button>
+<a href="#" style="margin-top:auto;margin-bottom:16px;height:52px;border-radius:26px;background:var(--pr);color:var(--onpr);display:flex;align-items:center;justify-content:center;gap:8px;text-decoration:none;font-weight:500;font-size:15px"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 11v3a8 8 0 0 1-1 4M8 11a4 4 0 0 1 8 0v1M5 13v-2a7 7 0 0 1 14 0v3M16 15a12 12 0 0 1-1 5M9 15c0 2-.5 4-1.5 5.5"/></svg>Confirm step 1 of 2</a>
+</main>
+</div></template></div><figcaption>W2 · Swap review, Uniswap, 2 steps</figcaption></figure>
+<figure><div class="frame"><template shadowrootmode="open"><style>
+
+.ph{--bg:#FEF7FF;--c1:#F3EDF7;--c2:#ECE6F0;--tx:#1D1B20;--tx2:#49454F;--ol:#CAC4D0;--pr:#6750A4;--onpr:#FFFFFF;--prc:#EADDFF;--onprc:#21005D;--sc:#E8DEF8;--onsc:#1D192B;--ok:#1B6B2F;--okc:#D7F5DC;--wa:#7A4F00;--wac:#FFE7B8;--scrim:rgba(0,0,0,0.32);width:390px;height:844px;box-sizing:border-box;background:var(--bg);color:var(--tx);font-family:Roboto,system-ui,sans-serif;font-size:14px;line-height:1.4;display:flex;flex-direction:column;position:relative;overflow:hidden}
+.ph.dark{--bg:#141218;--c1:#211F26;--c2:#2B2930;--tx:#E6E0E9;--tx2:#CAC4D0;--ol:#49454F;--pr:#D0BCFF;--onpr:#381E72;--prc:#4F378B;--onprc:#EADDFF;--sc:#4A4458;--onsc:#E8DEF8;--ok:#8FD99B;--okc:#12381C;--wa:#FFCF70;--wac:#4A3200;--scrim:rgba(0,0,0,0.6)}
+.ic{width:22px;height:22px;stroke:currentColor;fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round;flex:none}
+.m{color:var(--tx2);font-size:12px}
+.num{width:28px;height:28px;border-radius:50%;flex:none;display:flex;align-items:center;justify-content:center;font-weight:500}
+button{font:inherit;color:inherit;background:none;border:0;padding:0;cursor:pointer}
+a{color:var(--pr)}a:hover{color:var(--onprc)}
+</style><div class="ph ">
+<header style="display:flex;align-items:center;padding:12px 8px;gap:4px">
+<a href="#" aria-label="Close" style="width:48px;height:48px;display:flex;align-items:center;justify-content:center;color:var(--tx)"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M18 6 6 18M6 6l12 12"/></svg></a>
+<h1 style="margin:0;font-size:22px;font-weight:400;flex-grow:1">Swapping</h1>
+</header>
+<main style="flex-grow:1;padding:0 16px;display:flex;flex-direction:column;gap:12px">
+<section style="text-align:center;padding:8px 0 4px">
+<div style="font-size:26px">100 USDC → LINK</div>
+<div class="m" style="font-size:13px">via Uniswap · from Main</div>
+</section>
+<ol style="list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:8px">
+<li style="display:flex;gap:12px;align-items:flex-start;background:var(--c1);border-radius:16px;padding:14px">
+<div class="num" style="background:var(--okc);color:var(--ok)"><svg class="ic" style="width:16px;height:16px" viewBox="0 0 24 24" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg></div>
+<div style="flex-grow:1"><div style="font-size:16px">Uniswap may use 100 USDC</div><div class="m" style="font-size:13px">Confirmed 20 s ago · fee paid €0.38</div></div>
+</li>
+<li style="display:flex;gap:12px;align-items:flex-start;background:var(--c1);border:2px solid var(--pr);border-radius:16px;padding:14px">
+<div class="num" style="background:var(--pr);color:var(--onpr)">2</div>
+<div style="flex-grow:1"><div style="font-size:16px">Swap 100 USDC for at least 7.17 LINK</div><div class="m" style="font-size:13px">Price checked again just now (was 7.18). Fee at most €0.80.</div></div>
+</li>
+</ol>
+<div style="display:flex;align-items:center;gap:8px;background:var(--okc);color:var(--ok);border-radius:12px;padding:10px 12px;font-size:13px">
+<svg class="ic" style="width:18px;height:18px" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><path d="m9 12 2 2 4-4"/></svg>
+<span>Price checked on chain</span>
+</div>
+<p class="m" style="font-size:13px;margin:0">You can finish this later from the account's Activity. Until you swap, the permission lets Uniswap take USDC only in a swap you send yourself.</p>
+<div style="margin-top:auto;margin-bottom:16px;display:flex;flex-direction:column;gap:8px">
+<a href="#" style="height:52px;border-radius:26px;background:var(--pr);color:var(--onpr);display:flex;align-items:center;justify-content:center;gap:8px;text-decoration:none;font-weight:500;font-size:15px"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 11v3a8 8 0 0 1-1 4M8 11a4 4 0 0 1 8 0v1M5 13v-2a7 7 0 0 1 14 0v3M16 15a12 12 0 0 1-1 5M9 15c0 2-.5 4-1.5 5.5"/></svg>Confirm step 2 of 2</a>
+<a href="#" style="height:48px;border-radius:24px;border:1px solid var(--ol);display:flex;align-items:center;justify-content:center;text-decoration:none;font-weight:500">Later</a>
+</div>
+</main>
+</div></template></div><figcaption>W3 · Swap, between the steps</figcaption></figure>
+<figure><div class="frame"><template shadowrootmode="open"><style>
+
+.ph{--bg:#FEF7FF;--c1:#F3EDF7;--c2:#ECE6F0;--tx:#1D1B20;--tx2:#49454F;--ol:#CAC4D0;--pr:#6750A4;--onpr:#FFFFFF;--prc:#EADDFF;--onprc:#21005D;--sc:#E8DEF8;--onsc:#1D192B;--ok:#1B6B2F;--okc:#D7F5DC;--wa:#7A4F00;--wac:#FFE7B8;--scrim:rgba(0,0,0,0.32);width:390px;height:844px;box-sizing:border-box;background:var(--bg);color:var(--tx);font-family:Roboto,system-ui,sans-serif;font-size:14px;line-height:1.4;display:flex;flex-direction:column;position:relative;overflow:hidden}
+.ph.dark{--bg:#141218;--c1:#211F26;--c2:#2B2930;--tx:#E6E0E9;--tx2:#CAC4D0;--ol:#49454F;--pr:#D0BCFF;--onpr:#381E72;--prc:#4F378B;--onprc:#EADDFF;--sc:#4A4458;--onsc:#E8DEF8;--ok:#8FD99B;--okc:#12381C;--wa:#FFCF70;--wac:#4A3200;--scrim:rgba(0,0,0,0.6)}
+.ic{width:22px;height:22px;stroke:currentColor;fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round;flex:none}
+.m{color:var(--tx2);font-size:12px}
+.num{width:28px;height:28px;border-radius:50%;flex:none;display:flex;align-items:center;justify-content:center;font-weight:500}
+button{font:inherit;color:inherit;background:none;border:0;padding:0;cursor:pointer}
+a{color:var(--pr)}a:hover{color:var(--onprc)}
+</style><div class="ph ">
+<header style="display:flex;align-items:center;padding:12px 8px;gap:4px">
+<a href="#" aria-label="Back" style="width:48px;height:48px;display:flex;align-items:center;justify-content:center;color:var(--tx)"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M19 12H5M12 19l-7-7 7-7"/></svg></a>
+<h1 style="margin:0;font-size:22px;font-weight:400;flex-grow:1">Review swap</h1>
+</header>
+<main style="flex-grow:1;padding:0 16px;display:flex;flex-direction:column;gap:12px">
+<section style="text-align:center;padding:8px 0 4px">
+<div style="font-size:26px">100 USDC → 7.20 LINK</div>
+<div class="m" style="font-size:13px">at least · via CoW Protocol · from Main</div>
+<div class="m" style="font-size:13px;margin-top:4px">CoW expects about 7.26 LINK (CoW's estimate, not checked on chain)</div>
+</section>
+<ol style="list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:8px">
+<li style="display:flex;gap:12px;align-items:flex-start;background:var(--c1);border:2px solid var(--pr);border-radius:16px;padding:14px">
+<div class="num" style="background:var(--pr);color:var(--onpr)">1</div>
+<div style="flex-grow:1"><div style="font-size:16px">Allow CoW Protocol to use 100 USDC</div><div class="m" style="font-size:13px">Only this amount, for this order. Fee at most €0.40.</div></div>
+</li>
+<li style="display:flex;gap:12px;align-items:flex-start;background:var(--c1);border-radius:16px;padding:14px">
+<div class="num" style="border:1px solid var(--ol);color:var(--tx2)">2</div>
+<div style="flex-grow:1"><div style="font-size:16px">Sign the order</div><div class="m" style="font-size:13px">No network fee: CoW's fee is in the price. It fills within 30 min or expires.</div></div>
+</li>
+</ol>
+<div style="display:flex;align-items:center;gap:8px;background:var(--okc);color:var(--ok);border-radius:12px;padding:10px 12px;font-size:13px">
+<svg class="ic" style="width:18px;height:18px" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><path d="m9 12 2 2 4-4"/></svg>
+<span>The minimum is at least what Uniswap gives, checked on chain</span>
+</div>
+<p class="m" style="font-size:13px;margin:0">CoW Protocol's servers see this order, your address and your IP address. Choose Uniswap to keep it on the chain alone.</p>
+<button style="display:flex;align-items:center;gap:6px;color:var(--pr);padding:4px 0;font-weight:500">Details <svg class="ic" style="width:18px;height:18px" viewBox="0 0 24 24" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></button>
+<a href="#" style="margin-top:auto;margin-bottom:16px;height:52px;border-radius:26px;background:var(--pr);color:var(--onpr);display:flex;align-items:center;justify-content:center;gap:8px;text-decoration:none;font-weight:500;font-size:15px"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 11v3a8 8 0 0 1-1 4M8 11a4 4 0 0 1 8 0v1M5 13v-2a7 7 0 0 1 14 0v3M16 15a12 12 0 0 1-1 5M9 15c0 2-.5 4-1.5 5.5"/></svg>Confirm step 1 of 2</a>
+</main>
+</div></template></div><figcaption>W4 · Swap review, CoW Protocol</figcaption></figure>
+</div>
+<h2>Settings</h2>
+<p class="note">Detailed view is off by default, in both builds. On, it brings back today&#x27;s screens: the light-client strip on every screen, blocks and proofs up front, and the Debug tab&#x27;s switch under Detailed view.</p>
+<div class="g">
+<figure><div class="frame"><template shadowrootmode="open"><style>
+
+.ph{--bg:#FEF7FF;--c1:#F3EDF7;--c2:#ECE6F0;--tx:#1D1B20;--tx2:#49454F;--ol:#CAC4D0;--pr:#6750A4;--onpr:#FFFFFF;--prc:#EADDFF;--onprc:#21005D;--sc:#E8DEF8;--onsc:#1D192B;--ok:#1B6B2F;--okc:#D7F5DC;--wa:#7A4F00;--wac:#FFE7B8;--scrim:rgba(0,0,0,0.32);width:390px;height:844px;box-sizing:border-box;background:var(--bg);color:var(--tx);font-family:Roboto,system-ui,sans-serif;font-size:14px;line-height:1.4;display:flex;flex-direction:column;position:relative;overflow:hidden}
+.ph.dark{--bg:#141218;--c1:#211F26;--c2:#2B2930;--tx:#E6E0E9;--tx2:#CAC4D0;--ol:#49454F;--pr:#D0BCFF;--onpr:#381E72;--prc:#4F378B;--onprc:#EADDFF;--sc:#4A4458;--onsc:#E8DEF8;--ok:#8FD99B;--okc:#12381C;--wa:#FFCF70;--wac:#4A3200;--scrim:rgba(0,0,0,0.6)}
+.ic{width:22px;height:22px;stroke:currentColor;fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round;flex:none;color:var(--tx2)}
+.m{color:var(--tx2);font-size:12px}
+.row{display:flex;align-items:center;gap:16px;padding:14px 0;min-height:24px}
+.row .t{flex-grow:1;font-size:16px}
+.sw{width:52px;height:32px;border-radius:16px;border:2px solid var(--tx2);box-sizing:border-box;position:relative;flex:none;background:var(--c2)}
+.sw span{position:absolute;left:6px;top:6px;width:16px;height:16px;border-radius:50%;background:var(--tx2)}
+h2{margin:12px 0 0;font-size:14px;font-weight:500;color:var(--pr)}
+button{font:inherit;color:inherit;background:none;border:0;padding:0;cursor:pointer}
+a{color:var(--pr)}a:hover{color:var(--onprc)}
+</style><div class="ph ">
+<header style="display:flex;align-items:center;padding:16px 16px 8px">
+<h1 style="margin:0;font-size:22px;font-weight:400">Settings</h1>
+</header>
+<main style="flex-grow:1;padding:0 16px;display:flex;flex-direction:column;overflow:hidden">
+<h2>Display</h2>
+<div class="row"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="M15 9.4a4 4 0 1 0 0 5.2M7 11h6M7 13h6"/></svg><span class="t">Currency</span><span class="m" style="font-size:14px">EUR</span></div>
+<div class="row"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><circle cx="8" cy="8" r="6"/><path d="M18.1 10.4A6 6 0 1 1 10.3 18"/></svg><span class="t">Tokens</span><span class="m" style="font-size:14px">18</span></div>
+<h2>Networks</h2>
+<div class="row"><span style="width:10px;height:10px;border-radius:50%;background:var(--ok);margin:0 6px"></span><div class="t">Ethereum<div class="m">Up to date · checked 2 min ago</div></div><button role="switch" aria-checked="true" aria-label="Ethereum" class="sw" style="background:var(--pr);border-color:var(--pr)"><span style="left:auto;right:4px;top:4px;width:20px;height:20px;background:var(--onpr)"></span></button></div>
+<div class="row"><span style="width:10px;height:10px;border-radius:50%;background:var(--ok);margin:0 6px"></span><div class="t">Gnosis Chain<div class="m">Up to date · checked 2 min ago</div></div><button role="switch" aria-checked="true" aria-label="Gnosis Chain" class="sw" style="background:var(--pr);border-color:var(--pr)"><span style="left:auto;right:4px;top:4px;width:20px;height:20px;background:var(--onpr)"></span></button></div>
+<div class="row"><span style="width:10px;height:10px;border-radius:50%;background:var(--ok);margin:0 6px"></span><div class="t">Sepolia<div class="m">Test network · live</div></div><button role="switch" aria-checked="true" aria-label="Sepolia" class="sw" style="background:var(--pr);border-color:var(--pr)"><span style="left:auto;right:4px;top:4px;width:20px;height:20px;background:var(--onpr)"></span></button></div>
+<h2>Security</h2>
+<div class="row"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="11" width="16" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg><div class="t">Password and fingerprint<div class="m">Fingerprint on</div></div></div>
+<h2>Advanced</h2>
+<div class="row"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"/></svg><div class="t">Detailed view<div class="m">Show the light client's state, blocks and proofs on every screen</div></div><button role="switch" aria-checked="false" aria-label="Detailed view" class="sw"><span></span></button></div>
+<div class="row"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4M12 8h.01"/></svg><span class="t">About</span><span class="m" style="font-size:14px">v0.4.0</span></div>
+</main>
+<nav style="display:flex;background:var(--c1);padding:12px 0 16px">
+<a href="#" style="flex:1;display:flex;flex-direction:column;align-items:center;gap:4px;text-decoration:none;color:var(--tx2);font-size:12px"><span style="padding:4px 20px;display:flex"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M19 7V5a2 2 0 0 0-2-2H5a2 2 0 0 0 0 4h15a1 1 0 0 1 1 1v4h-3a2 2 0 0 0 0 4h3v3a1 1 0 0 1-1 1H5a2 2 0 0 1-2-2V5"/></svg></span>Wallet</a>
+<a href="#" style="flex:1;display:flex;flex-direction:column;align-items:center;gap:4px;text-decoration:none;color:var(--tx);font-size:12px;font-weight:500"><span style="background:var(--sc);color:var(--onsc);border-radius:16px;padding:4px 20px;display:flex"><svg class="ic" style="color:var(--onsc)" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 21v-7M4 10V3M12 21v-9M12 8V3M20 21v-5M20 12V3M1 14h6M9 8h6M17 16h6"/></svg></span>Settings</a>
+</nav>
+</div></template></div><figcaption>T1 · Settings</figcaption></figure>
+</div>
+</main>
+</body>
+</html>

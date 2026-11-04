@@ -1,41 +1,43 @@
 package eth.serotine.domain.repository
 
 import eth.serotine.domain.model.Address
+import eth.serotine.domain.model.Network
 import kotlinx.coroutines.flow.Flow
 
 /**
  * The port for the engine's verified log index (issue #85; Myotis `docs/eth-getlogs-design.md`):
  * a watch-list of entries, each walked back from its own block over the verified headers, whose
  * logs the index then serves verified, and only inside the span it covers. :data implements it
- * over the Myotis engine (`eth.serotine.data.engine`). Public chain data only. Never throws, but
+ * over the Myotis engine (`eth.serotine.data.engine`), one index per network. Public chain data only. Never throws, but
  * for the caller's error [configure] names.
  */
 interface LogIndex {
 
     /**
-     * Adds [watch] to the entries the index follows, each from its [LogWatch.fromBlock], and drops
+     * Adds [watch] to the entries [network]'s index follows, each from its [LogWatch.fromBlock], and drops
      * every entry [unwatch] names, with its coverage and its logs; entries named in neither are
      * left as they are. One entry named in both is the caller's error and throws. The index keeps
      * the lowest block an entry was ever asked from, so asking again from a later block changes
      * nothing. True once the engine has taken all of it, and an unwatch is kept across a restart;
      * false when it took none of it (no engine, still starting, or it refused), and the same
-     * change may be asked again.
+     * change may be asked again; so it is for a network no adapter serves here.
      */
-    suspend fun configure(watch: List<LogWatch>, unwatch: List<LogWatchKey>): Boolean
+    suspend fun configure(network: Network, watch: List<LogWatch>, unwatch: List<LogWatchKey>): Boolean
 
     /**
-     * What the index covers of each entry it follows, polled, re-emitted when it changes; or
-     * [LogCoverageReading.Unavailable] while the engine cannot say.
+     * What [network]'s index covers of each entry it follows, polled, re-emitted when it
+     * changes; or [LogCoverageReading.Unavailable] while the engine cannot say, or none runs for
+     * [network] here.
      */
-    fun observeCoverage(): Flow<LogCoverageReading>
+    fun observeCoverage(network: Network): Flow<LogCoverageReading>
 
     /**
-     * Every log [query] selects, from the index: all of them, or none and why
+     * Every log [query] selects, from [network]'s index: all of them, or none and why
      * ([LogsReading]). The index answers only a range it covers in full, never with the part of
      * one it has, and never one reaching below the block the entry is followed from
      * ([LogsReading.BeforeStart]).
      */
-    suspend fun logs(query: LogQuery): LogsReading
+    suspend fun logs(network: Network, query: LogQuery): LogsReading
 }
 
 /** What an index entry follows: the logs of one contract, or every log that names one address. */
@@ -132,7 +134,10 @@ sealed interface LogsReading {
 /**
  * One log the index served: [log] as it is in the receipt, in block [blockNumber] (hash
  * [blockHash]), emitted by transaction [transactionHash], at [logIndex] in the block. Hashes
- * are `0x` and 64 lower-case hex digits.
+ * are `0x` and 64 lower-case hex digits. [blockTimestamp] is when the block was produced (unix
+ * seconds) as its verified header says, which the engine reports with the log from the walk
+ * that verified it; null from an engine that does not report it, when the block alone dates
+ * the log.
  */
 data class IndexedLog(
     val log: ReceiptLog,
@@ -140,4 +145,9 @@ data class IndexedLog(
     val blockHash: String,
     val transactionHash: String,
     val logIndex: Int,
-)
+    val blockTimestamp: Long? = null,
+) {
+    init {
+        require(blockTimestamp == null || blockTimestamp >= 0) { "a block's time is never before 1970" }
+    }
+}

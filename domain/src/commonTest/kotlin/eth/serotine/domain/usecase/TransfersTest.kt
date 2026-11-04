@@ -1,5 +1,6 @@
 package eth.serotine.domain.usecase
 
+import eth.serotine.domain.model.AccountId
 import eth.serotine.domain.model.Address
 import eth.serotine.domain.model.CowOrder
 import eth.serotine.domain.model.Digest
@@ -38,7 +39,6 @@ import eth.serotine.domain.repository.SentOutcome
 import eth.serotine.domain.repository.SentTransfer
 import eth.serotine.domain.repository.SentTransferList
 import eth.serotine.domain.repository.SentTransfers
-import eth.serotine.domain.repository.prunable
 import eth.serotine.domain.repository.Signer
 import eth.serotine.domain.repository.Signing
 import eth.serotine.domain.repository.Simulation
@@ -47,6 +47,11 @@ import eth.serotine.domain.repository.TokenBalances
 import eth.serotine.domain.repository.TransactionInputs
 import eth.serotine.domain.repository.TransactionProgress
 import eth.serotine.domain.repository.Unlock
+import eth.serotine.domain.repository.prunable
+import kotlin.test.Test
+import kotlin.test.assertContentEquals
+import kotlin.test.assertEquals
+import kotlin.test.assertIs
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -54,10 +59,6 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.test.runTest
-import kotlin.test.Test
-import kotlin.test.assertContentEquals
-import kotlin.test.assertEquals
-import kotlin.test.assertIs
 
 class TransfersTest {
 
@@ -70,10 +71,10 @@ class TransfersTest {
     private var native: BalanceReading = BalanceReading.Verified(Wei.of("1000000000000000000"), 100)
     private var token: TokenBalanceReading = TokenBalanceReading.Verified(TokenUnits.of("5000000"), 100)
     private val balances = object : NativeBalances {
-        override fun observeBalance(address: Address): Flow<BalanceReading> = flowOf(native)
+        override fun observeBalance(network: Network, address: Address): Flow<BalanceReading> = flowOf(native)
     }
     private val tokens = object : TokenBalances {
-        override fun observeBalance(holder: Address, token: Address): Flow<TokenBalanceReading> =
+        override fun observeBalance(network: Network, holder: Address, token: Address): Flow<TokenBalanceReading> =
             flowOf(this@TransfersTest.token)
     }
     private val sent = FakeSentTransfers()
@@ -87,23 +88,23 @@ class TransfersTest {
     @Test
     fun anAddressIsTakenAsIsAndANameIsResolved() = runTest {
         val names = object : NameResolver {
-            override suspend fun resolve(name: String): NameResolution =
+            override suspend fun resolve(network: Network, name: String): NameResolution =
                 if (name == "bob.eth") NameResolution.Resolved("bob.eth", bob, 77) else NameResolution.NoAddress
         }
         val resolve = ResolveRecipient(names)
 
-        assertEquals(RecipientLookup.Found(bob, null, null), resolve(" ${bob.hex} "))
-        assertEquals(RecipientLookup.Found(bob, "bob.eth", 77), resolve("bob.eth"))
-        assertEquals(RecipientLookup.NoAddress, resolve("nobody.eth"))
-        assertEquals(RecipientLookup.NotAnAddress, resolve("bob"))
-        assertEquals(RecipientLookup.NotAnAddress, resolve("0x1234"))
+        assertEquals(RecipientLookup.Found(bob, null, null), resolve(Network.SEPOLIA, " ${bob.hex} "))
+        assertEquals(RecipientLookup.Found(bob, "bob.eth", 77), resolve(Network.SEPOLIA, "bob.eth"))
+        assertEquals(RecipientLookup.NoAddress, resolve(Network.SEPOLIA, "nobody.eth"))
+        assertEquals(RecipientLookup.NotAnAddress, resolve(Network.SEPOLIA, "bob"))
+        assertEquals(RecipientLookup.NotAnAddress, resolve(Network.SEPOLIA, "0x1234"))
     }
 
     @Test
     fun aTypedAddressMustCarryItsChecksumRightAndANameMayStartWith0x() = runTest {
         val asked = mutableListOf<String>()
         val names = object : NameResolver {
-            override suspend fun resolve(name: String): NameResolution {
+            override suspend fun resolve(network: Network, name: String): NameResolution {
                 asked += name
                 return if (name == "dark.eth") {
                     NameResolution.OffchainOnly
@@ -115,11 +116,19 @@ class TransfersTest {
         val resolve = ResolveRecipient(names)
         val vector = "0x5aAeb6053F3E94C9b9A09f33669435E7Ef1BeAed" // EIP-55's own example
 
-        assertEquals(RecipientLookup.Found(Address.of(vector), null, null), resolve(vector))
-        assertEquals(RecipientLookup.Found(Address.of(vector), null, null), resolve(vector.lowercase()))
-        assertEquals(RecipientLookup.ChecksumMismatch, resolve(vector.replace("aAeb", "aaEb")))
-        assertEquals(RecipientLookup.Found(bob, "0xfoo.eth", 5), resolve("0xfoo.eth"))
-        assertEquals(RecipientLookup.OffchainOnly, resolve("dark.eth"))
+        assertEquals(RecipientLookup.Found(Address.of(vector), null, null), resolve(Network.SEPOLIA, vector))
+        assertEquals(
+            RecipientLookup.Found(Address.of(vector), null, null),
+            resolve(Network.SEPOLIA, vector.lowercase()),
+        )
+        assertEquals(RecipientLookup.ChecksumMismatch, resolve(Network.SEPOLIA, vector.replace("aAeb", "aaEb")))
+        assertEquals(RecipientLookup.Found(bob, "0xfoo.eth", 5), resolve(Network.SEPOLIA, "0xfoo.eth"))
+        assertEquals(RecipientLookup.OffchainOnly, resolve(Network.SEPOLIA, "dark.eth"))
+        assertEquals(listOf("0xfoo.eth", "dark.eth"), asked)
+
+        // Gnosis Chain has no names: refused there, never asked of a resolver (docs/networks.md, *Names*).
+        assertEquals(RecipientLookup.NoNamesOn(Network.GNOSIS), resolve(Network.GNOSIS, "0xfoo.eth"))
+        assertEquals(RecipientLookup.Found(Address.of(vector), null, null), resolve(Network.GNOSIS, vector))
         assertEquals(listOf("0xfoo.eth", "dark.eth"), asked)
     }
 
@@ -276,11 +285,18 @@ class TransfersTest {
     @Test
     fun aRecipientThatCanNeverGiveItBackIsRefused() = runTest {
         val names = object : NameResolver {
-            override suspend fun resolve(name: String): NameResolution = NameResolution.Resolved(name, Address.ZERO, 77)
+            override suspend fun resolve(
+                network: Network,
+                name: String,
+            ): NameResolution = NameResolution.Resolved(name, Address.ZERO, 77)
         }
         val resolve = ResolveRecipient(names)
-        assertEquals(RecipientLookup.ZeroAddress, resolve("0x" + "00".repeat(20)))
-        assertEquals(RecipientLookup.NoAddress, resolve("burn.eth"), "ENS's zero address is no address set")
+        assertEquals(RecipientLookup.ZeroAddress, resolve(Network.SEPOLIA, "0x" + "00".repeat(20)))
+        assertEquals(
+            RecipientLookup.NoAddress,
+            resolve(Network.SEPOLIA, "burn.eth"),
+            "ENS's zero address is no address set",
+        )
 
         assertEquals(
             TransferQuoting.ToZeroAddress,
@@ -296,6 +312,7 @@ class TransfersTest {
     @Test
     fun anOwnTransferNotMinedYetKeepsItsNonceAndWhatItMayStillSpend() = runTest {
         val earlier = SentTransfer(
+            network = Network.SEPOLIA,
             account = alice,
             nonce = 7,
             signed = SignedTransfer(byteArrayOf(2, 1)),
@@ -326,8 +343,13 @@ class TransfersTest {
     @Test
     fun anOwnTransferNoBlockTookInTimeHoldsItsNonceNoLonger() = runTest {
         val earlier = SentTransfer(
-            alice, 7, SignedTransfer(byteArrayOf(2, 1)), SentAction.Transfer(bob, TransferAsset.Native, UInt256.ONE),
-            UInt256.ONE, sentAt = now - RECORD_LIFETIME_SECONDS - 1,
+            Network.SEPOLIA,
+            alice,
+            7,
+            SignedTransfer(byteArrayOf(2, 1)),
+            SentAction.Transfer(bob, TransferAsset.Native, UInt256.ONE),
+            UInt256.ONE,
+            sentAt = now - RECORD_LIFETIME_SECONDS - 1,
         )
         sent.transfers.value = listOf(earlier)
 
@@ -347,8 +369,14 @@ class TransfersTest {
     @Test
     fun anEarlierTransactionThatMayHaveBeenSentHoldsTheNextOneBack() = runTest {
         val maybe = SentTransfer(
-            alice, 7, SignedTransfer(byteArrayOf(2, 1)), SentAction.Transfer(bob, TransferAsset.Native, UInt256.ONE),
-            UInt256.of(900_000_000_000_000_000L), sentAt = now - 60, maybeSent = true,
+            Network.SEPOLIA,
+            alice,
+            7,
+            SignedTransfer(byteArrayOf(2, 1)),
+            SentAction.Transfer(bob, TransferAsset.Native, UInt256.ONE),
+            UInt256.of(900_000_000_000_000_000L),
+            sentAt = now - 60,
+            maybeSent = true,
         )
         sent.transfers.value = listOf(maybe)
 
@@ -402,9 +430,13 @@ class TransfersTest {
     @Test
     fun whatAnOwnTokenTransferStillMovesIsNotAvailableToTheNext() = runTest {
         val earlier = SentTransfer(
-            alice, 7, SignedTransfer(byteArrayOf(2, 1)),
+            Network.SEPOLIA,
+            alice,
+            7,
+            SignedTransfer(byteArrayOf(2, 1)),
             SentAction.Transfer(bob, TransferAsset.Erc20Token(usdc), amount = UInt256.of(4_000_000)),
-            maxCost = UInt256.ONE, sentAt = now,
+            maxCost = UInt256.ONE,
+            sentAt = now,
         )
         sent.transfers.value = listOf(earlier)
         val usdcAsset = TransferAsset.Erc20Token(usdc)
@@ -462,12 +494,17 @@ class TransfersTest {
     @Test
     fun aSentTransferIsSeenWithItsRecordAndItsReceipt() = runTest {
         val record = SentTransfer(
-            alice, 7, SignedTransfer(byteArrayOf(2, 9)), SentAction.Transfer(bob, TransferAsset.Native, UInt256.ONE),
-            UInt256.ONE, 1,
+            Network.SEPOLIA,
+            alice,
+            7,
+            SignedTransfer(byteArrayOf(2, 9)),
+            SentAction.Transfer(bob, TransferAsset.Native, UInt256.ONE),
+            UInt256.ONE,
+            1,
         )
         sent.transfers.value = listOf(record)
         val receipts = object : ReceiptTracker {
-            override fun observe(hash: String): Flow<TransactionProgress> =
+            override fun observe(network: Network, hash: String): Flow<TransactionProgress> =
                 flowOf(TransactionProgress.Included(100, succeeded = true))
         }
 
@@ -475,9 +512,9 @@ class TransfersTest {
 
         assertEquals(
             SentTransferStatus(record, TransactionProgress.Included(100, succeeded = true)),
-            observe(record.hash).first(),
+            observe(Network.SEPOLIA, record.hash).first(),
         )
-        assertEquals(null, observe("0x" + "00".repeat(32)).first().transfer)
+        assertEquals(null, observe(Network.SEPOLIA, "0x" + "00".repeat(32)).first().transfer)
     }
 
     @Test
@@ -490,7 +527,7 @@ class TransfersTest {
             TransferAsset.Erc20Token(link),
             UInt256.ONE,
         )
-        val record = SentTransfer(alice, 7, SignedTransfer(byteArrayOf(2, 9)), swap, UInt256.ONE, 1)
+        val record = SentTransfer(Network.SEPOLIA, alice, 7, SignedTransfer(byteArrayOf(2, 9)), swap, UInt256.ONE, 1)
         sent.transfers.value = listOf(record)
         val paid = ReceiptLog(
             link.address,
@@ -503,7 +540,7 @@ class TransfersTest {
         )
         var succeeded = true
         val receipts = object : ReceiptTracker {
-            override fun observe(hash: String): Flow<TransactionProgress> =
+            override fun observe(network: Network, hash: String): Flow<TransactionProgress> =
                 flowOf(TransactionProgress.Finalized(100, succeeded, listOf(paid)))
         }
 
@@ -512,9 +549,9 @@ class TransfersTest {
         history.record(record)
         history.settle(record.hash, SentOutcome.Finalized(100, succeeded = true))
         val observe = ObserveSentTransfer(sent, receipts, history)
-        assertEquals(UInt256.of(42), observe(record.hash).first().received)
+        assertEquals(UInt256.of(42), observe(Network.SEPOLIA, record.hash).first().received)
         succeeded = false
-        assertEquals(null, observe(record.hash).first().received)
+        assertEquals(null, observe(Network.SEPOLIA, record.hash).first().received)
     }
 
     @Test
@@ -713,8 +750,14 @@ class TransfersTest {
     @Test
     fun aRetryNoPeerAnsweredStaysMaybeSentFromItsOwnBroadcast() = runTest {
         val maybe = SentTransfer(
-            alice, 7, SignedTransfer(byteArrayOf(2, 1)), SentAction.Transfer(bob, TransferAsset.Native, UInt256.ONE),
-            UInt256.ONE, sentAt = 1_800_000_000, maybeSent = true,
+            Network.SEPOLIA,
+            alice,
+            7,
+            SignedTransfer(byteArrayOf(2, 1)),
+            SentAction.Transfer(bob, TransferAsset.Native, UInt256.ONE),
+            UInt256.ONE,
+            sentAt = 1_800_000_000,
+            maybeSent = true,
         )
         sent.transfers.value = listOf(maybe)
 
@@ -730,7 +773,7 @@ class TransfersTest {
     }
 
     private fun receipts(progress: TransactionProgress = TransactionProgress.Pending) = object : ReceiptTracker {
-        override fun observe(hash: String): Flow<TransactionProgress> = flowOf(progress)
+        override fun observe(network: Network, hash: String): Flow<TransactionProgress> = flowOf(progress)
     }
 
     private inner class FakeInputs : TransactionInputs {
@@ -759,25 +802,37 @@ class TransfersTest {
         /** While set, the fee history waits for it. */
         var feesGate: CompletableDeferred<Unit>? = null
 
-        override suspend fun nonce(account: Address): NonceReading {
+        override suspend fun nonce(network: Network, account: Address): NonceReading {
             nonces++
             return NonceReading.Read(pending)
         }
 
-        override suspend fun minedNonce(account: Address): NonceReading = NonceReading.Read(mined)
+        override suspend fun minedNonce(network: Network, account: Address): NonceReading = NonceReading.Read(mined)
 
-        override suspend fun fees(): FeeReading {
+        override suspend fun fees(network: Network): FeeReading {
             feeHistories++
             feesGate?.await()
             return fees
         }
 
-        override suspend fun estimateGas(from: Address, to: Address, value: UInt256, data: ByteArray): GasEstimate {
+        override suspend fun estimateGas(
+            network: Network,
+            from: Address,
+            to: Address,
+            value: UInt256,
+            data: ByteArray,
+        ): GasEstimate {
             estimates++
             return estimate ?: GasEstimate.Estimated(gas)
         }
 
-        override suspend fun simulate(from: Address, to: Address, value: UInt256, data: ByteArray): Simulation {
+        override suspend fun simulate(
+            network: Network,
+            from: Address,
+            to: Address,
+            value: UInt256,
+            data: ByteArray,
+        ): Simulation {
             simulated += Triple(from, to, value)
             return simulation
         }
@@ -794,7 +849,7 @@ class TransfersTest {
         }
 
 
-        override suspend fun prune(account: Address, minedCount: Long, unlistedBefore: Long): Boolean {
+        override suspend fun prune(account: AccountId, minedCount: Long, unlistedBefore: Long): Boolean {
             transfers.value = transfers.value.filterNot { it.prunable(account, minedCount, unlistedBefore) }
             return true
         }
@@ -812,7 +867,7 @@ class TransfersTest {
     private class FakeBroadcaster(private val answer: Broadcast) : Broadcaster {
         val sent = mutableListOf<ByteArray>()
 
-        override suspend fun send(raw: ByteArray): Broadcast {
+        override suspend fun send(network: Network, raw: ByteArray): Broadcast {
             sent += raw
             return answer
         }

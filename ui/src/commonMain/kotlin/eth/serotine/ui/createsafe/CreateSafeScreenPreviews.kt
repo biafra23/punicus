@@ -6,6 +6,8 @@ import eth.serotine.domain.repository.FeeLevel
 import eth.serotine.ui.components.AccountChoice
 import eth.serotine.ui.components.BalanceChange
 import eth.serotine.ui.components.LightClientItem
+import eth.serotine.ui.components.NetworkChip
+import eth.serotine.ui.components.NetworkLabel
 import eth.serotine.ui.components.NotSentItem
 import eth.serotine.ui.components.UnlockStep
 import eth.serotine.ui.components.verifiedStripSample
@@ -34,8 +36,11 @@ private val savings = OwnerChoice(SAVINGS, "Savings", "Watch-only: its key is el
 private val friend =
     OwnerChoice(FRIEND, "friend-example.eth", "Resolved from friend-example.eth at finalized block 8,412,240", true)
 
+private val sepoliaChip = NetworkChip(NetworkLabel(11_155_111, "Sepolia", testnet = true), selected = true)
+
 private val owners = CreateSafeUiState.Owners(
     network = "Sepolia",
+    networks = listOf(sepoliaChip),
     name = "Family vault",
     accounts = listOf(daily, savings),
     typed = listOf(friend),
@@ -236,8 +241,30 @@ private fun CreateSafeSentPreview() = CreateSafePreview(CreateSafeUiState.Sent("
 private fun CreateSafeCannotCreatePreview() = CreateSafePreview(
     CreateSafeUiState.CannotCreate(
         "Sepolia",
-        "Creating a Safe takes an account whose key is on this device, to pay for its deployment: create or import " +
-            "one first.",
+        "Creating a Safe on Sepolia needs an account whose key is on this device there, to pay for its " +
+            "deployment. Import or create an account on it first, and fund it.",
+        listOf(sepoliaChip),
+    ),
+)
+
+/**
+ * Docs/networks.md's N12: the network first, Ethereum chosen; no account to pay on Gnosis Chain, and
+ * Sepolia off, both greyed out. Ethereum and Gnosis Chain come with parts 4 and 5.
+ */
+@Preview
+@Composable
+private fun CreateSafeNetworksPreview() = CreateSafePreview(
+    owners.copy(
+        network = "Ethereum",
+        networks = listOf(
+            NetworkChip(NetworkLabel(1, "Ethereum", testnet = false), selected = true),
+            NetworkChip(
+                NetworkLabel(100, "Gnosis Chain", testnet = false),
+                selected = false,
+                reason = "Creating a Safe on Gnosis Chain needs an account whose key is on this device there.",
+            ),
+            sepoliaChip.copy(selected = false, reason = "Sepolia is off in this wallet.", off = true),
+        ),
     ),
 )
 
@@ -265,4 +292,5 @@ internal val createSafeScreenPreviews: List<@Composable () -> Unit> = listOf(
     { CreateSafeSentPreview() },
     { CreateSafeCannotCreatePreview() },
     { CreateSafeLoadingPreview() },
+    { CreateSafeNetworksPreview() },
 )

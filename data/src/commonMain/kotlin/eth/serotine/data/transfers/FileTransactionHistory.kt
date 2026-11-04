@@ -27,6 +27,9 @@ import kotlinx.serialization.json.JsonElement
  * A file that is not one at all is set aside and the history starts empty (`FollowSentTransactions`
  * then adds back what [FileSentTransfers] still holds); one that cannot be read is
  * [HistoryList.Unreadable].
+ *
+ * Format 2 records each transaction's network ([StoredTransfer.chain]); a format-1 entry, without
+ * one, was sent on Sepolia. A build that reads only format 1 leaves a format-2 file alone.
  */
 class FileTransactionHistory(
     path: String,
@@ -115,7 +118,7 @@ class FileTransactionHistory(
     }
 
     private companion object {
-        const val FORMAT_VERSION = 1
+        const val FORMAT_VERSION = 2
         const val NOT_SEEN = "not-seen"
         const val INCLUDED = "included"
         const val FINALIZED = "finalized"

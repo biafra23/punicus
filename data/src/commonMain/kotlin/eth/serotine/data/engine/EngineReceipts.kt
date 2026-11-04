@@ -1,8 +1,10 @@
 package eth.serotine.data.engine
 
+import eth.serotine.domain.model.Network
 import eth.serotine.domain.repository.ReadUnavailable
 import eth.serotine.domain.repository.ReceiptTracker
 import eth.serotine.domain.repository.TransactionProgress
+import kotlin.time.Duration
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.delay
@@ -12,7 +14,6 @@ import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.flowOn
-import kotlin.time.Duration
 
 /**
  * [ReceiptTracker] over the engine: every [pollInterval] the receipt is asked for
@@ -23,12 +24,14 @@ import kotlin.time.Duration
  * verified read; a device without an engine answers [ReadUnavailable.NO_ENGINE] once.
  */
 class EngineReceipts internal constructor(
+    private val served: Network,
     private val chain: TransactingChain?,
     private val dispatcher: CoroutineDispatcher,
     private val pollInterval: Duration,
 ) : ReceiptTracker {
 
-    override fun observe(hash: String): Flow<TransactionProgress> {
+    override fun observe(network: Network, hash: String): Flow<TransactionProgress> {
+        if (network != served) return flowOf(NO_ENGINE)
         // Not a transaction hash: refused once, not polled as unproven forever.
         if (!HASH.matches(hash)) return flowOf(TransactionProgress.Unavailable(ReadUnavailable.REFUSED))
         val chain = chain ?: return flowOf(TransactionProgress.Unavailable(ReadUnavailable.NO_ENGINE))

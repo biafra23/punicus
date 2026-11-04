@@ -1,5 +1,6 @@
 package eth.serotine.ui.send
 
+import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.assertIsFocused
@@ -16,6 +17,7 @@ import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performTextInput
 import eth.serotine.domain.model.WalletPassword
 import eth.serotine.domain.repository.FeeLevel
+import eth.serotine.ui.components.ASSET_OPTION_TAG
 import eth.serotine.ui.components.AccountChoice
 import eth.serotine.ui.components.AssetChoice
 import eth.serotine.ui.components.BalanceChange
@@ -75,7 +77,7 @@ class SendScreenTest {
         SerotineTheme {
             SendScreen(
                 state = state,
-                lightClient = verifiedStripSample,
+                chrome = SendChrome.Strip(verifiedStripSample),
                 onAssetChange = { events += "asset $it" },
                 onToChange = { events += "to $it" },
                 onPickAccount = { events += "pick $it" },
@@ -113,7 +115,8 @@ class SendScreenTest {
 
         rule.onNodeWithText("Daily").assertIsDisplayed()
         rule.onNodeWithText("Sepolia").assertIsDisplayed()
-        rule.onAllNodesWithTag(SEND_ASSET_TAG)[1].performClick()
+        rule.onNodeWithTag(SEND_ASSET_TAG).performClick()
+        rule.onAllNodesWithTag(ASSET_OPTION_TAG)[1].performClick()
         rule.onNodeWithTag(SEND_TO_TAG).performTextInput("friend.eth")
         rule.onNodeWithText("Savings · 0xfB69…d359").performClick()
         rule.onNodeWithTag(SEND_AMOUNT_TAG).performTextInput("0.1")
@@ -126,6 +129,42 @@ class SendScreenTest {
             listOf("asset $usdcContract", "to friend.eth", "pick $savings", "amount 0.1", "max", "fee FAST"),
             events.filterNot { it == "to " || it == "amount " },
         )
+    }
+
+    @Test
+    fun theAssetIsChosenFromAMenuOfTheAccountsAssetsWithTheirBalances() {
+        show(compose)
+
+        // Closed, the line shows the chosen asset and no other.
+        rule.onAllNodesWithTag(ASSET_OPTION_TAG).assertCountEquals(0)
+        rule.onNodeWithText("250 USDC · verified at block 9").assertDoesNotExist()
+        rule.onNodeWithTag(SEND_ASSET_TAG).performClick()
+        rule.onAllNodesWithTag(ASSET_OPTION_TAG).assertCountEquals(2)
+        rule.onNodeWithText("250 USDC · verified at block 9").assertIsDisplayed()
+        rule.onNodeWithContentDescription("Chosen").assertIsDisplayed()
+        rule.onAllNodesWithTag(ASSET_OPTION_TAG)[1].performClick()
+
+        rule.onAllNodesWithTag(ASSET_OPTION_TAG).assertCountEquals(0)
+        assertEquals(listOf("asset $usdcContract"), events)
+    }
+
+    @Test
+    fun withNoAssetChosenTheMenuAsksForOneAndSaysWhy() {
+        val note = "The token asked for is not among this account's tokens: choose another asset."
+        show(compose.copy(form = form.copy(asset = null, assetNote = note)))
+
+        rule.onNodeWithText("Choose the asset to send").assertIsDisplayed()
+        rule.onNodeWithText(note).assertIsDisplayed()
+        rule.onNodeWithTag(SEND_ASSET_TAG).assertIsEnabled()
+    }
+
+    @Test
+    fun whileQuotingTheAssetIsHeldAndItsMenuDoesNotOpen() {
+        show(compose.copy(form = form.copy(quoting = true)))
+
+        rule.onNodeWithTag(SEND_ASSET_TAG).assertIsNotEnabled().performClick()
+        rule.onAllNodesWithTag(ASSET_OPTION_TAG).assertCountEquals(0)
+        assertEquals(emptyList(), events)
     }
 
     @Test
@@ -181,6 +220,9 @@ class SendScreenTest {
     fun theReviewShowsTheQuoteAndSignsWithThePassword() {
         show(review.copy(unlock = UnlockStep(WalletPassword("made-up test password"))))
 
+        // The network first, and in the button that signs (docs/networks.md, N14).
+        rule.onNodeWithTag(SEND_NETWORK_TAG).assertTextEquals("On ${review.network}")
+        rule.onNodeWithTag(SEND_SIGN_TAG).assertTextEquals("Sign and send on ${review.network}")
         rule.onNodeWithTag(SEND_AMOUNT_REVIEWED_TAG).assertTextEquals("0.1 ETH")
         rule.onNodeWithTag(SEND_RECIPIENT_TAG).assertTextEquals(savings)
         rule.onNodeWithText("At most 0.000462 ETH").assertIsDisplayed()

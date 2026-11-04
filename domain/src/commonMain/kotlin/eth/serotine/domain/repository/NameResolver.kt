@@ -1,6 +1,7 @@
 package eth.serotine.domain.repository
 
 import eth.serotine.domain.model.Address
+import eth.serotine.domain.model.Network
 
 /**
  * The port for ENS names (docs/wallet-ux.md, screen 7): a name's address, resolved by the
@@ -9,8 +10,11 @@ import eth.serotine.domain.model.Address
  * Blocks on the engine, bounded by it; never throws.
  */
 interface NameResolver {
-    /** The address [name] (as typed: `vitalik.eth`) points to. */
-    suspend fun resolve(name: String): NameResolution
+    /**
+     * The address [name] (as typed: `vitalik.eth`) points to in [network]'s registry, never
+     * another network's. A [network] no adapter serves here is refused ([ReadUnavailable.NO_ENGINE]).
+     */
+    suspend fun resolve(network: Network, name: String): NameResolution
 }
 
 /** The outcome of [NameResolver.resolve]. */

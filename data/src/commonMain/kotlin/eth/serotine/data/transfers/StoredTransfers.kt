@@ -10,6 +10,8 @@ import eth.serotine.domain.model.Token
 import eth.serotine.domain.model.TransferAsset
 import eth.serotine.domain.model.UInt256
 import eth.serotine.domain.repository.SafeListing
+import eth.serotine.domain.repository.DappRequestId
+import eth.serotine.domain.repository.DappSessionId
 import eth.serotine.domain.repository.SentAction
 import eth.serotine.domain.repository.SentTransfer
 import kotlinx.serialization.Serializable
@@ -25,10 +27,13 @@ private const val WRAP = "wrap"
 private const val UNWRAP = "unwrap"
 
 /**
- * One transaction: a transfer's [to], [token] (null: the native currency) and [amount], a
+ * One transaction, sent on the network of [chain] (absent in a record written before networks:
+ * Sepolia, the only one there was; one of a network this build does not know does not decode):
+ * a transfer's [to], [token] (null: the native currency) and [amount], a
  * Safe transaction's approval or execution ([safe]), a Safe's deployment ([deployment]), a
- * token approval ([approval]), a swap ([swap]), a wrap or unwrap ([wrap]) or a CoW order's
- * cancellation on chain ([cancellation]) — exactly one of the seven, else the file is damaged.
+ * token approval ([approval]), a swap ([swap]), a wrap or unwrap ([wrap]), a CoW order's
+ * cancellation on chain ([cancellation]) or a dApp's transaction ([dappCall]) — exactly one of the
+ * eight, else the file is damaged.
  */
 @Serializable
 internal class StoredTransfer(
@@ -44,11 +49,14 @@ internal class StoredTransfer(
     val swap: StoredSwap? = null,
     val wrap: StoredWrap? = null,
     val cancellation: StoredCowCancellation? = null,
+    val dappCall: StoredDappCall? = null,
     val maxCost: String,
     val sentAt: Long,
     val maybeSent: Boolean = false,
+    val chain: Long? = null,
 ) {
     fun toTransfer() = SentTransfer(
+        network = if (chain == null) Network.SEPOLIA else requireNotNull(Network.ofChainId(chain)) { "a chain" },
         account = Address.of(account),
         nonce = nonce,
         signed = SignedTransfer(raw.hexBytes()),
@@ -59,7 +67,7 @@ internal class StoredTransfer(
     )
 
     private fun action(): SentAction {
-        val kinds = listOfNotNull(deployment, safe, approval, swap, wrap, cancellation)
+        val kinds = listOfNotNull(deployment, safe, approval, swap, wrap, cancellation, dappCall)
         require(kinds.size <= 1) { "more than one kind of transaction" }
         val transferFields = to != null || token != null || amount != null
         require(kinds.isEmpty() || !transferFields) { "a transfer and another kind at once" }
@@ -69,6 +77,7 @@ internal class StoredTransfer(
         swap?.let { return it.toAction() }
         wrap?.let { return it.toAction() }
         cancellation?.let { return it.toAction() }
+        dappCall?.let { return it.toAction() }
         return SentAction.Transfer(
             to = Address.of(requireNotNull(to) { "a transfer without a recipient" }),
             asset = token?.let { TransferAsset.Erc20Token(it.toToken()) } ?: TransferAsset.Native,
@@ -128,6 +137,16 @@ internal class StoredWrap(val kind: String, val weth: StoredToken, val amount: S
     }
 }
 
+/**
+ * A dApp's transaction: its recipient [to], its [value] in wei, the [dapp] it was sent for (its claim),
+ * and the request it answers: request [id] on the session [topic].
+ */
+@Serializable
+internal class StoredDappCall(val to: String, val value: String, val dapp: String, val topic: String, val id: Long) {
+    fun toAction() =
+        SentAction.DappCall(Address.of(to), UInt256.of(value), dapp, DappRequestId(DappSessionId(topic), id))
+}
+
 /** A CoW order's cancellation on chain: the order [uid], at the settlement contract [settlement]. */
 @Serializable
 internal class StoredCowCancellation(val settlement: String, val uid: String) {
@@ -139,7 +158,7 @@ internal class StoredCowCancellation(val settlement: String, val uid: String) {
 internal class StoredSafeCall(val kind: String, val request: WireRequest) {
     fun toAction(): SentAction {
         require(request.v == WireRequest.VERSION) { "a request of another version" }
-        val network = requireNotNull(Network.entries.firstOrNull { it.chainId == request.chainId }) { "a chain" }
+        val network = requireNotNull(Network.ofChainId(request.chainId)) { "a chain" }
         val decoded = requireNotNull(request.toRequest(network)) { "a request out of range" }
         return when (kind) {
             APPROVAL -> SentAction.SafeApproval(decoded)
@@ -197,7 +216,11 @@ internal fun storedTransfer(transfer: SentTransfer): StoredTransfer {
             is SentAction.SafeExecution -> safeCall(EXECUTION, action.request)
             is SentAction.Transfer, is SentAction.SafeDeployment, is SentAction.TokenApproval,
             is SentAction.Swap, is SentAction.Wrap, is SentAction.Unwrap, is SentAction.CowCancellation,
+            is SentAction.DappCall,
             -> null
+        },
+        dappCall = (action as? SentAction.DappCall)?.let {
+            StoredDappCall(it.to.hex, it.value.toDecimal(), it.dapp, it.request.session.topic, it.request.id)
         },
         approval = (action as? SentAction.TokenApproval)?.let {
             StoredApproval(stored(it.token), it.spender.hex, it.amount.toDecimal())
@@ -233,6 +256,7 @@ internal fun storedTransfer(transfer: SentTransfer): StoredTransfer {
         maxCost = transfer.maxCost.toDecimal(),
         sentAt = transfer.sentAt,
         maybeSent = transfer.maybeSent,
+        chain = transfer.network.chainId,
     )
 }
 

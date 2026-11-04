@@ -1,6 +1,6 @@
 package eth.serotine.domain.repository
 
-import eth.serotine.domain.model.Address
+import eth.serotine.domain.model.AccountId
 import eth.serotine.domain.model.Digest
 import eth.serotine.domain.model.SigningRequest
 import kotlinx.coroutines.flow.Flow
@@ -16,10 +16,10 @@ import kotlinx.coroutines.flow.Flow
 interface SafeTxQueue {
 
     /**
-     * The requests queued for the Safe at [safe], in the order they were first saved, re-emitted
+     * The requests queued for the Safe [safe] (its network and address), in the order they were first saved, re-emitted
      * on each change; or that the queue cannot be read.
      */
-    fun observe(safe: Address): Flow<SafeTxQueueList>
+    fun observe(safe: AccountId): Flow<SafeTxQueueList>
 
     /**
      * Saves [request]: a request with the same [SigningRequest.hash] already queued gets the
@@ -32,11 +32,11 @@ interface SafeTxQueue {
     suspend fun remove(hash: Digest): Boolean
 
     /**
-     * Forgets the requests for the Safe at [safe] whose nonce is below [nonce], its verified
+     * Forgets the requests for the Safe [safe] whose nonce is below [nonce], its verified
      * nonce: each of those nonces is used on chain, by that transaction or another, so none of
      * them can ever run. False when the queue could not be saved.
      */
-    suspend fun prune(safe: Address, nonce: Long): Boolean
+    suspend fun prune(safe: AccountId, nonce: Long): Boolean
 }
 
 /** What [SafeTxQueue.observe] holds. */

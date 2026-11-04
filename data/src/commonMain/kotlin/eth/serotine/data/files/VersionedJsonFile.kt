@@ -38,7 +38,8 @@ import kotlin.time.Duration.Companion.seconds
  *
  * Reading, which never destroys or hides what is stored:
  * - no file: [empty];
- * - a newer format, or a file that cannot be read: [Read.Unreadable], the file untouched, and
+ * - a newer format, a file whose [decode] finds content only a newer version writes
+ *   ([NewerContent]), or a file that cannot be read: [Read.Unreadable], the file untouched, and
  *   nothing can be changed until it can be read. An unreadable file is read again by every
  *   new subscriber, and every [RETRY_INTERVAL] while one stays subscribed, so it recovers on
  *   its own once the file can be read (a lock released, a permission fixed);
@@ -149,6 +150,8 @@ internal class VersionedJsonFile<T>(
         if (version != null && version > formatVersion) return@withContext Read.Unreadable(newerFormat = true)
         val value = try {
             version?.let { decode(it, text) }
+        } catch (e: NewerContent) {
+            return@withContext Read.Unreadable(newerFormat = true)
         } catch (e: Exception) {
             null
         }
@@ -256,3 +259,10 @@ internal class VersionedJsonFile<T>(
         fun report(what: String) = println("Serotine: $what")
     }
 }
+
+/**
+ * What a [VersionedJsonFile]'s decode throws for content of its own format that only a newer
+ * version of the app writes (an account on a network this version does not know): the file is
+ * then a newer one's, [VersionedJsonFile.Read.Unreadable] and left untouched, never damaged.
+ */
+internal class NewerContent(what: String) : Exception(what)

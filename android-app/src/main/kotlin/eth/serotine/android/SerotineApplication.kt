@@ -9,6 +9,7 @@ import android.net.NetworkCapabilities
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
+import android.os.SystemClock
 import android.util.Log
 import android.widget.Toast
 import eth.serotine.android.keys.ForegroundActivity
@@ -17,11 +18,13 @@ import eth.serotine.android.upgrade.AndroidUpgradeNotifier
 import eth.serotine.android.upgrade.UpgradeCheckJob
 import eth.serotine.android.widget.RateRefreshJob
 import eth.serotine.android.widget.RateWidget
+import eth.serotine.android.widget.RateWidgetPairs
 import eth.serotine.data.account.FileAccountRepository
 import eth.serotine.data.cow.FileCowOrders
 import eth.serotine.data.cow.HttpCowApi
+import eth.serotine.data.walletconnect.WalletConnectDapps
 import eth.serotine.data.engine.AndroidDnsServers
-import eth.serotine.data.engine.MyotisNode
+import eth.serotine.data.engine.MyotisHost
 import eth.serotine.data.history.FileHistoryStarts
 import eth.serotine.data.keys.AndroidBiometricKey
 import eth.serotine.data.keys.AndroidKeystoreSecret
@@ -29,38 +32,61 @@ import eth.serotine.data.keys.EnvelopeKeyStore
 import eth.serotine.data.keys.PasswordOnlyTier
 import eth.serotine.data.keys.Secp256k1Recovery
 import eth.serotine.data.logs.MemoryDebugLog
+import eth.serotine.data.networks.FileNetworkSettings
+import eth.serotine.data.prices.PinnedFeedTable
 import eth.serotine.data.rates.FileLastExchangeRate
 import eth.serotine.data.safe.FileSafeTxQueue
 import eth.serotine.data.safe.JsonSigningRequestCodec
 import eth.serotine.data.safe.PinnedSafeReleases
 import eth.serotine.data.settings.FileDebugScreen
 import eth.serotine.data.settings.FileDisplayCurrency
+import eth.serotine.data.settings.FileAmountsHidden
+import eth.serotine.data.settings.FileInterfaceMode
 import eth.serotine.data.settings.FileSwapVenue
+import eth.serotine.data.swaps.FileWaitingSwaps
 import eth.serotine.data.tokens.BuiltInTokenCatalog
 import eth.serotine.data.tokens.FileUserTokens
 import eth.serotine.data.transfers.FileSentTransfers
 import eth.serotine.data.transfers.FileTransactionHistory
 import eth.serotine.data.upgrade.FileKnownUpgradeStore
 import eth.serotine.domain.model.Network
-import eth.serotine.domain.model.RateSnapshot
+import eth.serotine.domain.model.PriceId
+import eth.serotine.domain.model.RatePair
+import eth.serotine.domain.repository.AccountList
 import eth.serotine.domain.usecase.FollowAccountLogs
+import eth.serotine.domain.usecase.AnswerDappRequestsAtOnce
+import eth.serotine.domain.usecase.FollowDappAccounts
 import eth.serotine.domain.usecase.FollowDebugScreen
 import eth.serotine.domain.usecase.FollowExchangeRate
+import eth.serotine.domain.usecase.FollowInterfaceMode
+import eth.serotine.domain.usecase.FollowNetworks
 import eth.serotine.domain.usecase.FollowSafeDeployments
 import eth.serotine.domain.usecase.FollowSentTransactions
 import eth.serotine.domain.usecase.FollowUpgradeReports
 import eth.serotine.domain.usecase.HistoryNotingAccounts
 import eth.serotine.domain.usecase.HistoryRecordingSentTransfers
 import eth.serotine.domain.usecase.ListDeployedSafe
+import eth.serotine.domain.usecase.NetworkDemand
+import eth.serotine.domain.usecase.ObserveDebugTab
 import eth.serotine.domain.usecase.ObserveDisplayCurrencies
 import eth.serotine.domain.usecase.ProveCowOrderEnds
 import eth.serotine.domain.usecase.ReadExchangeRate
+import eth.serotine.domain.usecase.RateWidgetChoices
 import eth.serotine.domain.usecase.RefreshExchangeRate
 import eth.serotine.domain.usecase.UpgradeNotices
 import eth.serotine.domain.usecase.WatchAddress
 import eth.serotine.ui.APP_VERSION
 import eth.serotine.ui.AppGraph
+import eth.serotine.ui.components.NetworkLabel
 import eth.serotine.ui.platform.ScreenCaptureDebugSwitch
+import eth.serotine.ui.ratewidget.WidgetPairUiState
+import eth.serotine.ui.ratewidget.widgetBaseUiState
+import eth.serotine.ui.ratewidget.widgetNetworkUiState
+import eth.serotine.ui.ratewidget.widgetQuoteUiState
+import java.util.concurrent.atomic.AtomicReference
+import kotlin.time.Duration
+import kotlin.time.Duration.Companion.minutes
+import kotlin.time.Duration.Companion.seconds
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineExceptionHandler
 import kotlinx.coroutines.CoroutineScope
@@ -68,17 +94,19 @@ import kotlinx.coroutines.Deferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.NonCancellable
-import kotlinx.coroutines.async
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.cancel
+import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
-import java.util.concurrent.atomic.AtomicReference
-import kotlin.time.Duration
-import kotlin.time.Duration.Companion.minutes
-import kotlin.time.Duration.Companion.seconds
 
 /**
  * The Android composition root: the one place that knows which adapters implement the
@@ -96,29 +124,66 @@ import kotlin.time.Duration.Companion.seconds
  */
 class SerotineApplication : Application() {
 
-    // Sepolia only, for now (CLAUDE.md, *Data sources*). The engine boots in the background
+    // A light client per network that is on and needed (CLAUDE.md, *Data sources*). The engine boots in the background
     // and keeps its state under the app's private files; on an ABI the engine library does
     // not ship (it has arm64-v8a and x86_64), balances say so. The balances last verified are
     // kept with the other files (none of which leave the device), to be shown as such after a
     // restart until a head can be read. The adapters' diagnostics and the engine's own log go to
     // logcat in the debug app only (debuggable below); each request asked of the engine goes to
     // the Debug tab's log, in memory, in either app.
-    private val node: MyotisNode by lazy {
-        MyotisNode.start(
-            Network.SEPOLIA,
+    // One engine, one light client per network that is on and needed: FollowNetworks starts with
+    // the host and runs for the life of the process (docs/networks.md, *The engine host*).
+    private val node: MyotisHost by lazy {
+        MyotisHost.start(
             filesDir.resolve("myotis"),
             AndroidDnsServers(this),
             lastBalances = filesDir.resolve("last-balances.json").path,
             debugLog = if (debuggable) { line -> Log.d(LOG_TAG, line) } else null,
             apiLog = debugLog,
-        )
+        ).also { host ->
+            scope.launch { followNetworks(host) }
+            // Values proven on demand in simple mode, at every head in Detailed view (docs/simple-ui.md).
+            scope.launch { followInterfaceMode(host) }
+        }
     }
+
+    /** Keeps the proving of values to the view the user chose, for the life of the process. */
+    private suspend fun followInterfaceMode(host: MyotisHost) {
+        try {
+            FollowInterfaceMode(interfaceMode, host)()
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            System.err.println("Serotine: following the view stopped: ${e::class.simpleName}")
+        }
+    }
+
+    /**
+     * Keeps each network's light client running while it is on and needed, for the life of the
+     * process. A failure ends it and is reported: the light clients keep their last state.
+     */
+    private suspend fun followNetworks(host: MyotisHost) {
+        try {
+            FollowNetworks(networkSettings, accounts, networkDemand, host)()
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            System.err.println("Serotine: following the networks stopped: ${e::class.simpleName}")
+        }
+    }
+
+    /** The screens' holds on a network with no account on it yet (Watch, Add token), and the widget's read's. */
+    private val networkDemand = NetworkDemand()
 
     /** The Debug tab's log: in memory for the life of the process, never in a file. */
     private val debugLog by lazy { MemoryDebugLog() }
 
     /** Whether the user turned the Debug tab on, beside the other settings: [debugLog] records only then. */
     private val debugScreen by lazy { FileDebugScreen(filesDir.resolve("debug-screen.json").path) }
+
+    /** The view the user chose, simple mode or Detailed view (docs/simple-ui.md), beside the other settings. */
+    private val interfaceMode by lazy { FileInterfaceMode(filesDir.resolve("ui-mode.json").path) }
+    private val amountsHidden by lazy { FileAmountsHidden(filesDir.resolve("amounts-hidden.json").path) }
 
     /** eth.serotine.debug is debuggable, the release app is not: what the debug app's extras hang on. */
     private val debuggable by lazy { applicationInfo.flags and ApplicationInfo.FLAG_DEBUGGABLE != 0 }
@@ -129,9 +194,21 @@ class SerotineApplication : Application() {
      */
     private val knownUpgrades by lazy { FileKnownUpgradeStore(filesDir.resolve("upgrade.json").path, APP_VERSION) }
 
-    /** What the user hears about an upgrade outside the app. Needs no engine, so a reminder never starts one. */
+    /**
+     * Which networks are on (docs/networks.md, *Networks on and off*), beside the other settings.
+     * A network the file does not mention yet gets this app's default: the release app turns on
+     * the real networks and leaves Sepolia off, the debug app turns on Sepolia alone.
+     */
+    private val networkSettings by lazy {
+        FileNetworkSettings(filesDir.resolve("networks.json").path, defaultOn = { it.testnet == debuggable })
+    }
+
+    /**
+     * What the user hears about each network's upgrades outside the app, apart (docs/networks.md,
+     * *Upgrades and the update screen*). Needs no engine, so a reminder never starts one.
+     */
     private val upgradeNotices by lazy {
-        UpgradeNotices(knownUpgrades, AndroidUpgradeNotifier(this, Network.SEPOLIA))
+        Network.entries.associateWith { UpgradeNotices(it, knownUpgrades, AndroidUpgradeNotifier(this, it)) }
     }
 
     /**
@@ -178,6 +255,19 @@ class SerotineApplication : Application() {
 
     /** The venue last chosen on Swap, compose, which the next swap starts at. */
     private val swapVenue by lazy { FileSwapVenue(filesDir.resolve("swap-venue.json").path) }
+    private val waitingSwaps by lazy { FileWaitingSwaps(filesDir.resolve("waiting-swaps.json").path) }
+
+    /**
+     * dApp sessions over WalletConnect (docs/walletconnect.md), with this build type's project ID:
+     * off without one. Their state is in the app's files, which stay out of backups and device
+     * transfers (data_extraction_rules.xml), as ruling 8 asks.
+     */
+    private val dapps by lazy {
+        WalletConnectDapps(
+            filesDir.resolve("walletconnect/state.json").path,
+            WalletConnectDapps.projectIdFor(debuggable),
+        )
+    }
 
     /**
      * The exchange rate last verified, for the widget, beside the other files: a price and its
@@ -185,14 +275,87 @@ class SerotineApplication : Application() {
      */
     private val lastRate by lazy { FileLastExchangeRate(filesDir.resolve("last-exchange-rate.json").path) }
 
-    /** Reads the widget's rate, and the one of a day before, through the engine, and keeps it in [lastRate]. */
-    private val refreshRate by lazy {
-        RefreshExchangeRate(
-            ObserveDisplayCurrencies(node.priceFeeds, displayCurrency),
-            ReadExchangeRate(node.priceFeeds, node.priceHistory),
-            lastRate,
-            Network.SEPOLIA,
+    /** What a widget's rate is read with through the engine: the display currency, and the reads. */
+    private val rateReads by lazy {
+        ObserveDisplayCurrencies(node.priceFeeds, displayCurrency, accounts) to
+            ReadExchangeRate(node.priceFeeds, node.priceHistory)
+    }
+
+    /**
+     * Reads [pair]'s widget rate, and the one of a day before, through the engine, and keeps it in
+     * [lastRate]: one per pair, each widget showing one (docs/wallet-ux.md, *Home-screen widget*).
+     */
+    private fun refreshRate(pair: RatePair): RefreshExchangeRate {
+        val (currencies, read) = rateReads
+        return RefreshExchangeRate(currencies, read, lastRate, pair)
+    }
+
+    /**
+     * What a widget being placed may show, from the pinned tables alone: choosing starts no
+     * engine (docs/wallet-ux.md, *Home-screen widget*).
+     */
+    private val widgetChoices by lazy { RateWidgetChoices(tokenCatalog, PinnedFeedTable()) }
+
+    /** The built-in token list, which the screens and the widget's configuration share. */
+    private val tokenCatalog by lazy { BuiltInTokenCatalog() }
+
+    /**
+     * Draws every placed widget from the rates kept for their pairs, saying so where a network
+     * is off, without the engine; [refreshing] as [RateWidget.draw] takes it.
+     */
+    private suspend fun drawWidgets(refreshing: Boolean? = null) {
+        val pairs = RateWidget.pairs(this)
+        val rates = pairs.associateWith { lastRate.load(it) }
+        // Each (network, base) once: widgets of the same base in different currencies share it.
+        val iconOf = pairs.map { it.network to it.base }.distinct()
+            .associateWith { (network, base) -> widgetChoices.icon(network, base) }
+        val icons = pairs.associateWith { iconOf[it.network to it.base] }
+        RateWidget.draw(this, rates, icons, networkSettings.observe().first(), refreshing)
+    }
+
+    /**
+     * The step of a widget's configuration with [network] and [base] chosen so far (null: not
+     * yet): the networks it may show (docs/networks.md, *The widget*), then what its rate may be
+     * of on [network], then the currencies [base] may be shown in.
+     */
+    suspend fun widgetPairStep(network: Network?, base: PriceId?): WidgetPairUiState = when {
+        network == null -> widgetNetworkChoices()
+        base == null -> widgetBaseUiState(network, widgetChoices.bases(network))
+        else -> widgetQuoteUiState(network, base.id, widgetChoices.quotes(network, base))
+    }
+
+    /** The networks a widget being placed may show. */
+    private suspend fun widgetNetworkChoices(): WidgetPairUiState.Networks {
+        val on = networkSettings.observe().first()
+        val listed = accounts.observeAccounts().first() as? AccountList.Loaded
+        return widgetNetworkUiState(
+            Network.entries.map(NetworkLabel::of),
+            on.mapTo(HashSet()) { it.chainId },
+            listed?.accounts?.mapTo(HashSet()) { it.network.chainId },
         )
+    }
+
+    /**
+     * The widget [id] was placed showing [pair]: recorded, drawn, its rate read soon, and
+     * followed while the app is open. False when the choice could not be stored. Called on the
+     * main thread; the choice is written off it.
+     */
+    suspend fun rateWidgetConfigured(id: Int, pair: RatePair): Boolean {
+        if (!RateWidgetPairs(this).set(id, pair)) return false
+        // On the scheduling lane, so a cancel asked for by a removal meanwhile never lands before it.
+        scope.launch(jobScheduling) {
+            drawWidgets()
+            RateRefreshJob.schedule(this@SerotineApplication, now = true)
+        }
+        rateWidgetsChanged()
+        return true
+    }
+
+    /** The widgets placed, or their pairs, changed: their rates are followed anew while the app is open. */
+    fun rateWidgetsChanged() {
+        rateFollowing?.cancel()
+        rateFollowing = null
+        followRateForWidgets()
     }
 
     val graph: AppGraph by lazy {
@@ -212,7 +375,7 @@ class SerotineApplication : Application() {
             accounts = accounts,
             keys = keyStore,
             nativeBalances = node.nativeBalances,
-            tokenCatalog = BuiltInTokenCatalog(Network.SEPOLIA),
+            tokenCatalog = tokenCatalog,
             tokenBalances = node.tokenBalances,
             tokenMetadata = node.tokenMetadata,
             userTokens = FileUserTokens(filesDir.resolve("tokens.json").path),
@@ -220,6 +383,8 @@ class SerotineApplication : Application() {
             displayCurrency = displayCurrency,
             addressKinds = node.addressKinds,
             lightClient = node.lightClient,
+            staleAnchorConsent = node,
+            networkFreshness = node,
             networkUpgrades = node.networkUpgrades,
             knownUpgrades = knownUpgrades,
             transactionInputs = node.transactionInputs,
@@ -234,12 +399,12 @@ class SerotineApplication : Application() {
             // The Safe transactions waiting for their owners, with the signatures collected (public
             // data, no key in them), beside the account list in the app's private files.
             safeTxQueue = FileSafeTxQueue(filesDir.resolve("safe-tx-queue.json").path),
-            signingRequests = JsonSigningRequestCodec(Network.SEPOLIA),
+            signingRequests = JsonSigningRequestCodec(),
             signatureRecovery = Secp256k1Recovery(),
             safeApprovals = node.safeApprovals,
             // Safe 1.4.1's singleton, factory and proxy code, pinned in code: what a new Safe is created from.
             safeReleases = PinnedSafeReleases(),
-            // Uniswap v3 on Sepolia, its pinned contracts proven by their code before any quote.
+            // Uniswap v3 on each network that has it pinned, its contracts proven by their code before any quote.
             uniswap = node.uniswap,
             // CoW Protocol: its pinned contracts proven by their code, and its order API, an off-chain
             // service used only for a swap the user sends to CoW (CLAUDE.md, *Data sources*).
@@ -247,12 +412,19 @@ class SerotineApplication : Application() {
             cowApi = HttpCowApi.create(),
             cowOrders = cowOrders,
             swapVenue = swapVenue,
-            network = Network.SEPOLIA,
+            waitingSwaps = waitingSwaps,
             debugLog = debugLog,
             debugScreen = debugScreen,
+            interfaceMode = interfaceMode,
+            amountsHidden = amountsHidden,
             // The debug app only: Settings may lift FLAG_SECURE for a screen recording, until the
             // process ends. The release app has no switch (docs/keys-and-signing.md, rule 8).
             screenCaptureDebugSwitch = if (debuggable) ScreenCaptureDebugSwitch() else null,
+            networkDemand = networkDemand,
+            networkSettings = networkSettings,
+            dappSessions = dapps,
+            dappRequests = dapps.requests,
+            dappConnectionsOff = WalletConnectDapps.projectIdFor(debuggable).isEmpty(),
         )
     }
 
@@ -286,6 +458,7 @@ class SerotineApplication : Application() {
     private var accountLogs: Job? = null
     private var cowOrderEnds: Job? = null
     private var rateFollowing: Job? = null
+    private var dappRelay: Job? = null
     private val sleep = Runnable { node.pause() }
     private val stopAppWork = Runnable {
         following?.cancel()
@@ -298,6 +471,8 @@ class SerotineApplication : Application() {
         accountLogs = null
         cowOrderEnds?.cancel()
         cowOrderEnds = null
+        dappRelay?.cancel()
+        dappRelay = null
     }
 
     /** The activity in front, for the biometric prompt. */
@@ -321,7 +496,9 @@ class SerotineApplication : Application() {
         scope.launch { UpgradeCheckJob.schedule(this@SerotineApplication) }
         // The debug log records while the Debug tab is on, for the life of the process: it needs
         // no engine, and a request made while the app is in the background is one too.
-        scope.launch { FollowDebugScreen(debugScreen, debugLog)() }
+        scope.launch { FollowDebugScreen(ObserveDebugTab(debugScreen, interfaceMode), debugLog)() }
+        // Records each network's default the first time it is found unrecorded, before any engine starts.
+        scope.launch { networkSettings.observe().first() }
         // Kept scheduled while a widget is placed, whatever cancelled it (a widget restored by a
         // launcher, say): the job's own period is kept.
         scope.launch(jobScheduling) {
@@ -329,7 +506,7 @@ class SerotineApplication : Application() {
             if (RateWidget.placed(app)) {
                 RateRefreshJob.schedule(app, now = false)
                 // From the file: a spinner a process that ended left on the widget stops.
-                RateWidget.draw(app, lastRate.load())
+                drawWidgets()
             }
         }
     }
@@ -346,12 +523,49 @@ class SerotineApplication : Application() {
         handler.removeCallbacks(stopAppWork)
         // Not active: never started, stopped by the last stopAppWork, or ended with an engine that is down.
         if (following?.isActive != true) {
-            following = scope.launch { FollowUpgradeReports(node.networkUpgrades, upgradeNotices)() }
+            // Each network's reports into its own notices; a network that is off or idle reports none.
+            following = scope.launch {
+                upgradeNotices.forEach { (network, notices) ->
+                    launch { FollowUpgradeReports(network, node.networkUpgrades, notices)() }
+                }
+            }
         }
         if (deployments?.isActive != true) deployments = scope.launch { followSafeDeployments() }
         if (sentTransactions?.isActive != true) sentTransactions = scope.launch { followSentTransactions() }
         if (accountLogs?.isActive != true) accountLogs = scope.launch { followAccountLogs() }
         if (cowOrderEnds?.isActive != true) cowOrderEnds = scope.launch { proveCowOrderEnds() }
+        // The relay connection while the app holds its work: dApp messages arrive while it is open.
+        if (dappRelay?.isActive != true) dappRelay = scope.launch { runDappRelay() }
+    }
+
+    /**
+     * Keeps WalletConnect's relay connection (docs/walletconnect.md), and each session's accounts to
+     * those a dApp may still be offered (accountsChanged), and answers at once the requests that need
+     * no one's decision, until stopped. A failure ends that one alone.
+     */
+    private suspend fun runDappRelay() = coroutineScope {
+        launch {
+            reportingFailure("following the dApp sessions' accounts") {
+                FollowDappAccounts(dapps, accounts, networkSettings)()
+            }
+        }
+        launch {
+            reportingFailure("answering the dApps' requests") {
+                AnswerDappRequestsAtOnce(dapps.requests, sentTransfers, transactionHistory)()
+            }
+        }
+        reportingFailure("the WalletConnect relay connection") { dapps.run() }
+    }
+
+    /** Runs [work]; a failure ends it, said with its kind only, never the wallet. */
+    private suspend fun reportingFailure(what: String, work: suspend () -> Unit) {
+        try {
+            work()
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            System.err.println("Serotine: $what stopped: ${e::class.simpleName}")
+        }
     }
 
     /** Turns the engine's networking on for one more hold. Main thread. */
@@ -361,9 +575,9 @@ class SerotineApplication : Application() {
         node.resume()
     }
 
-    /** Ends a [wakeEngine]: [PAUSE_DELAY_MS] after the last hold of any kind, networking goes off. Main thread. */
-    private fun sleepEngine() {
-        if (--holds == 0) handler.postDelayed(sleep, PAUSE_DELAY_MS)
+    /** Ends a [wakeEngine]: [pauseAfterMs] after the last hold of any kind, networking goes off. Main thread. */
+    private fun sleepEngine(pauseAfterMs: Long = PAUSE_DELAY_MS) {
+        if (--holds == 0) handler.postDelayed(sleep, pauseAfterMs)
     }
 
     /**
@@ -376,20 +590,39 @@ class SerotineApplication : Application() {
     private fun followRateForWidgets() {
         if (visible == 0 || rateFollowing?.isActive == true) return
         rateFollowing = scope.launch {
-            if (!RateWidget.placed(this@SerotineApplication)) return@launch
-            try {
-                FollowExchangeRate(
-                    displayCurrency,
-                    refreshRate,
-                    maxAgeSeconds = RATE_MAX_AGE_MINUTES * 60,
-                    checkEvery = RATE_CHECK_MINUTES.minutes,
-                    readTimeout = RATE_READ_TIMEOUT,
-                ).invoke { RateWidget.draw(this@SerotineApplication, it) }
-            } catch (e: CancellationException) {
-                throw e
-            } catch (e: Exception) {
-                System.err.println("Serotine: following the widget's exchange rate stopped: ${e::class.simpleName}")
+            val following = this
+            // Each pair a widget shows, and only while its network is on: one that is off reads
+            // nothing, and one turned on while the app is open is followed from then on. With none
+            // on, it waits for the next change of the settings.
+            networkSettings.observe().distinctUntilChanged().collectLatest { on ->
+                val followed = RateWidget.pairs(this@SerotineApplication).filter { it.network in on }
+                if (followed.isEmpty()) return@collectLatest
+                coroutineScope {
+                    for (pair in followed) launch { followRate(pair) }
+                }
+                // Every follower ended (each only on a failure): the following itself ends, not this
+                // round alone, so the next start of an activity or a placed widget starts it again.
+                following.cancel()
             }
+        }
+    }
+
+    /** Keeps [pair]'s widget rate current while the app is open ([FollowExchangeRate]); a failure ends it alone. */
+    private suspend fun followRate(pair: RatePair) {
+        try {
+            FollowExchangeRate(
+                displayCurrency,
+                refreshRate(pair),
+                maxAgeSeconds = RATE_MAX_AGE_MINUTES * 60,
+                checkEvery = RATE_CHECK_MINUTES.minutes,
+                readTimeout = RATE_READ_TIMEOUT,
+            ).invoke { drawWidgets() }
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            System.err.println(
+                "Serotine: following a ${pair.network.displayName} widget's rate stopped: ${e::class.simpleName}",
+            )
         }
     }
 
@@ -415,7 +648,7 @@ class SerotineApplication : Application() {
      * The widget's read in progress, which a read asked for meanwhile joins, with how many wait
      * for it: the last to stop waiting gives it up. Under [readLock].
      */
-    private class SharedRead(val read: Deferred<RateSnapshot?>) {
+    private class SharedRead(val read: Deferred<Boolean>) {
         var waiting = 0
     }
     private var sharedRead: SharedRead? = null
@@ -440,15 +673,15 @@ class SerotineApplication : Application() {
             return null
         }
         wakeEngine()
-        var read: RateSnapshot? = null
+        var read = false
         return scope.launch {
             if (manual) {
                 // Also in a process started for the job alone, which knows of no tap.
                 manualRefresh.set(ManualRefresh.RUNNING)
-                RateWidget.draw(app, lastRate.load())
+                drawWidgets()
             }
             read = joinRead(if (manual) MANUAL_READ_TIMEOUT else RATE_READ_TIMEOUT)
-            if (!manual) read?.let { RateWidget.draw(app, it) }
+            if (!manual && read) drawWidgets()
         }.also { job ->
             // On completion, not in a finally: a job cancelled before it started never runs its
             // body, and the hold must end anyway.
@@ -460,10 +693,10 @@ class SerotineApplication : Application() {
                     }
                     return@invokeOnCompletion
                 }
-                val failed = read == null && cause !is CancellationException
+                val failed = !read && cause !is CancellationException
                 scope.launch(NonCancellable) {
                     try {
-                        RateWidget.draw(app, read ?: lastRate.load(), refreshing = false)
+                        drawWidgets(refreshing = false)
                     } finally {
                         handler.post {
                             if (failed) toast(R.string.rate_widget_not_refreshed)
@@ -480,25 +713,60 @@ class SerotineApplication : Application() {
     }
 
     /**
-     * The widget's read: the one in progress, or a new one given [RATE_READ_TIMEOUT], waited for
-     * at most [timeout]; null when none was read in that time. The last waiter to stop gives it
+     * The widgets' read: the one in progress, or a new one given [RATE_READ_TIMEOUT], waited for
+     * at most [timeout]; whether any pair's rate was read in that time. It reads, at once, the
+     * rate of each pair a placed widget shows whose network is on, waking those networks alone (a
+     * network that is off reads nothing; its widgets say so). The last waiter to stop gives it
      * up, so no read outlives everyone who asked for it.
      */
-    private suspend fun joinRead(timeout: Duration): RateSnapshot? {
+    private suspend fun joinRead(timeout: Duration): Boolean {
         val shared = readLock.withLock {
             val current = sharedRead?.takeIf { it.read.isActive }
-                ?: SharedRead(scope.async { withTimeoutOrNull(RATE_READ_TIMEOUT) { refreshRate() } })
+                ?: SharedRead(
+                    scope.async {
+                        val on = networkSettings.observe().first()
+                        val byNetwork = RateWidget.pairs(this@SerotineApplication)
+                            .filter { it.network in on }
+                            .groupBy { it.network }
+                        byNetwork.map { (network, pairs) ->
+                            async {
+                                // The widgets' network runs for as long as this read does, with no account on it too.
+                                val hold = networkDemand.hold(network)
+                                try {
+                                    pairs.map { pair -> async { readWidgetRate(pair) } }.awaitAll().any { it }
+                                } finally {
+                                    hold.release()
+                                }
+                            }
+                        }.awaitAll().any { it }
+                    },
+                )
             sharedRead = current
             current.waiting++
             current
         }
         try {
-            return withTimeoutOrNull(timeout) { shared.read.await() }
+            return withTimeoutOrNull(timeout) { shared.read.await() } ?: false
         } finally {
             withContext(NonCancellable) {
                 readLock.withLock { if (--shared.waiting == 0) shared.read.cancel() }
             }
         }
+    }
+
+    /**
+     * Reads [pair]'s widget rate once, given [RATE_READ_TIMEOUT]; whether it was read. A failure
+     * ends this read alone.
+     */
+    private suspend fun readWidgetRate(pair: RatePair): Boolean = try {
+        withTimeoutOrNull(RATE_READ_TIMEOUT) { refreshRate(pair)() } != null
+    } catch (e: CancellationException) {
+        throw e
+    } catch (e: Exception) {
+        // The others' reads still count.
+        val name = pair.network.displayName
+        System.err.println("Serotine: a $name widget's rate was not read: ${e::class.simpleName}")
+        false
     }
 
     /**
@@ -521,8 +789,14 @@ class SerotineApplication : Application() {
         val app = this
         scope.launch(jobScheduling) {
             try {
-                RateWidget.draw(app, lastRate.load())
-                if (!RateRefreshJob.refreshNow(app)) giveUpManualRefresh(R.string.rate_widget_not_started)
+                drawWidgets()
+                // Every network the widgets show is off: nothing to read, and the widgets say so.
+                val on = networkSettings.observe().first()
+                if (RateWidget.pairs(app).none { it.network in on }) {
+                    giveUpManualRefresh(R.string.rate_widget_network_off)
+                } else if (!RateRefreshJob.refreshNow(app)) {
+                    giveUpManualRefresh(R.string.rate_widget_not_started)
+                }
             } finally {
                 done()
             }
@@ -540,7 +814,7 @@ class SerotineApplication : Application() {
     /** Ends a refresh asked for that never started: the button again, and [text] said. */
     private suspend fun giveUpManualRefresh(text: Int) {
         if (!manualRefresh.compareAndSet(ManualRefresh.REQUESTED, ManualRefresh.NONE)) return
-        RateWidget.draw(this, lastRate.load())
+        drawWidgets()
         handler.post { toast(text) }
     }
 
@@ -558,7 +832,7 @@ class SerotineApplication : Application() {
     fun drawRateWidgets(done: () -> Unit) {
         scope.launch {
             try {
-                RateWidget.draw(this@SerotineApplication, lastRate.load())
+                drawWidgets()
             } finally {
                 done()
             }
@@ -583,13 +857,21 @@ class SerotineApplication : Application() {
      * *Proving an order's end*), after dropping the ended ones signed over a week ago; runs until
      * cancelled. A failure ends it, never the wallet: the next hold proves them again.
      */
-    private suspend fun proveCowOrderEnds() {
-        try {
-            ProveCowOrderEnds(cowOrders, node.logIndex, node.lightClient, accounts)()
-        } catch (e: CancellationException) {
-            throw e
-        } catch (e: Exception) {
-            System.err.println("Serotine: proving the CoW orders' ends stopped: ${e::class.simpleName}")
+    private suspend fun proveCowOrderEnds() = coroutineScope {
+        // Each network's orders, at its own finalized blocks; a failure ends that one only.
+        Network.entries.forEach { network ->
+            launch {
+                try {
+                    ProveCowOrderEnds(cowOrders, node.logIndex, node.lightClient, accounts, network)()
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (e: Exception) {
+                    System.err.println(
+                        "Serotine: proving the CoW orders' ends on ${network.displayName} stopped: " +
+                            "${e::class.simpleName}",
+                    )
+                }
+            }
         }
     }
 
@@ -598,20 +880,28 @@ class SerotineApplication : Application() {
      * #85); runs until cancelled. A failure ends it, never the wallet: the next hold follows them
      * again.
      */
-    private suspend fun followAccountLogs() {
-        try {
-            FollowAccountLogs(
-                accounts,
-                historyStarts,
-                transactionHistory,
-                node.lightClient,
-                node.logIndex,
-                Network.SEPOLIA,
-            )()
-        } catch (e: CancellationException) {
-            throw e
-        } catch (e: Exception) {
-            System.err.println("Serotine: following the accounts' logs stopped: ${e::class.simpleName}")
+    private suspend fun followAccountLogs() = coroutineScope {
+        // Each network's log index follows that network's accounts; a failure ends that one only.
+        Network.entries.forEach { network ->
+            launch {
+                try {
+                    FollowAccountLogs(
+                        accounts,
+                        historyStarts,
+                        transactionHistory,
+                        node.lightClient,
+                        node.logIndex,
+                        network,
+                    )()
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (e: Exception) {
+                    System.err.println(
+                        "Serotine: following the accounts\' logs on ${network.displayName} stopped: " +
+                            "${e::class.simpleName}",
+                    )
+                }
+            }
         }
     }
 
@@ -651,15 +941,17 @@ class SerotineApplication : Application() {
     }
 
     /**
-     * Ends a [holdEngine]. [PAUSE_DELAY_MS] after the last one, neither the reports nor the
+     * Ends a [holdEngine]. [pauseAfterMs] after the last one, neither the reports nor the
      * deployments are followed (the reminder alarm covers the reports until the next hold, and
      * a deployment's record keeps it for the next), whatever else still holds the engine, and
      * once nothing does, networking goes off (a backgrounded wallet keeps no sockets or timers
-     * open). The delay keeps a rotation or a quick app switch from pausing at all. Main thread.
+     * open). The delay keeps a rotation from pausing at all; the last screen's release waits
+     * [GRACE_PERIOD_MS] instead, so a quick app switch does not either ([GracePeriodJob]). A
+     * hold whose end leaves nothing to keep the process from being frozen passes 0. Main thread.
      */
-    fun releaseEngine() {
-        if (--appHolds == 0) handler.postDelayed(stopAppWork, PAUSE_DELAY_MS)
-        sleepEngine()
+    fun releaseEngine(pauseAfterMs: Long = PAUSE_DELAY_MS) {
+        if (--appHolds == 0) handler.postDelayed(stopAppWork, pauseAfterMs)
+        sleepEngine(pauseAfterMs)
     }
 
     /**
@@ -669,7 +961,7 @@ class SerotineApplication : Application() {
      */
     fun whenUpgradeCheckWanted(then: (Boolean) -> Unit) {
         scope.launch {
-            val wanted = !upgradeNotices.allSaid()
+            val wanted = upgradeNotices.values.any { !it.allSaid() }
             handler.post { then(wanted) }
         }
     }
@@ -678,18 +970,22 @@ class SerotineApplication : Application() {
     fun remindOfUpgrades(done: () -> Unit) {
         scope.launch {
             try {
-                upgradeNotices.remind()
+                upgradeNotices.values.forEach { it.remind() }
             } finally {
                 done()
             }
         }
     }
 
-    /** Holds the engine, and follows a placed widget's rate, while any activity is visible. */
+    /**
+     * Holds the engine, and follows a placed widget's rate, while any activity is visible, and the
+     * engine for [GRACE_PERIOD_MS] more once none is: the last one stopped, except for a
+     * configuration change, starts a [GracePeriodJob], and the next one started cancels it.
+     */
     private inner class HoldWhileVisible : ActivityLifecycleCallbacks {
         override fun onActivityStarted(activity: Activity) {
-            visible++
             holdEngine()
+            if (visible++ == 0) scope.launch(jobScheduling) { GracePeriodJob.cancel(this@SerotineApplication) }
             followRateForWidgets()
         }
 
@@ -697,8 +993,12 @@ class SerotineApplication : Application() {
             if (--visible == 0) {
                 rateFollowing?.cancel()
                 rateFollowing = null
+                if (!activity.isChangingConfigurations) {
+                    val until = SystemClock.elapsedRealtime() + GRACE_PERIOD_MS
+                    scope.launch(jobScheduling) { GracePeriodJob.start(this@SerotineApplication, until) }
+                }
             }
-            releaseEngine()
+            releaseEngine(pauseAfterMs = GRACE_PERIOD_MS)
         }
 
         override fun onActivityCreated(activity: Activity, savedInstanceState: Bundle?) = Unit
@@ -710,6 +1010,12 @@ class SerotineApplication : Application() {
 
     private companion object {
         const val PAUSE_DELAY_MS = 30_000L
+
+        /**
+         * How long the networking stays on after the app's last screen left the foreground: a
+         * quick switch to another app, to copy an address say, comes back to synced light clients.
+         */
+        const val GRACE_PERIOD_MS = 60_000L
 
         /** How old the widget's rate may be while the app is open before it is read again. */
         const val RATE_MAX_AGE_MINUTES = 30L

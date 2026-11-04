@@ -1,6 +1,7 @@
 package eth.serotine.domain.usecase
 
 import eth.serotine.domain.model.Address
+import eth.serotine.domain.model.Network
 import eth.serotine.domain.model.Token
 import eth.serotine.domain.repository.MetadataReading
 import eth.serotine.domain.repository.ReadUnavailable
@@ -20,11 +21,11 @@ class AddToken(
     private val metadata: TokenMetadata,
     private val knownTokens: ObserveKnownTokens,
 ) {
-    suspend operator fun invoke(address: Address): TokenAdd {
-        knownTokens().first().tokens.firstOrNull { it.token.address == address }?.let {
+    suspend operator fun invoke(network: Network, address: Address): TokenAdd {
+        knownTokens(network).first().tokens.firstOrNull { it.token.address == address }?.let {
             return TokenAdd.AlreadyKnown(it.token)
         }
-        val said = when (val reading = metadata.observe(address).first()) {
+        val said = when (val reading = metadata.observe(network, address).first()) {
             MetadataReading.Syncing -> return TokenAdd.NotVerified(null)
             is MetadataReading.Unavailable -> return TokenAdd.NotVerified(reading.reason)
             MetadataReading.NotAToken -> return TokenAdd.NotAToken
@@ -32,7 +33,7 @@ class AddToken(
         }
         val token = runCatching { Token(address, said.symbol, said.name, said.decimals, icon = null) }
             .getOrElse { return TokenAdd.NotAToken } // a blank symbol, decimals no amount can show
-        return when (userTokens.add(token)) {
+        return when (userTokens.add(network, token)) {
             TokenChange.Changed -> TokenAdd.Added(token)
             TokenChange.AlreadyPresent -> TokenAdd.AlreadyKnown(token)
             TokenChange.NotFound, TokenChange.NotSaved -> TokenAdd.NotSaved
@@ -60,10 +61,11 @@ sealed interface TokenAdd {
 
 /** Hides a token from every account, or shows it again: a built-in one or an added one. */
 class SetTokenHidden(private val userTokens: UserTokens) {
-    suspend operator fun invoke(address: Address, hidden: Boolean): TokenChange = userTokens.setHidden(address, hidden)
+    suspend operator fun invoke(network: Network, address: Address, hidden: Boolean): TokenChange =
+        userTokens.setHidden(network, address, hidden)
 }
 
 /** Takes a token the user added out of the wallet; a built-in one can only be hidden. */
 class RemoveToken(private val userTokens: UserTokens) {
-    suspend operator fun invoke(address: Address): TokenChange = userTokens.remove(address)
+    suspend operator fun invoke(network: Network, address: Address): TokenChange = userTokens.remove(network, address)
 }

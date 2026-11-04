@@ -1,6 +1,8 @@
 package eth.serotine.domain.usecase
 
+import eth.serotine.domain.model.AccountId
 import eth.serotine.domain.model.Address
+import eth.serotine.domain.model.Network
 import eth.serotine.domain.model.SafeTxAction
 import eth.serotine.domain.model.SigningRequest
 import eth.serotine.domain.repository.HistoryEntry
@@ -15,6 +17,9 @@ import eth.serotine.domain.repository.SentTransfers
 import eth.serotine.domain.repository.TransactionHistory
 import eth.serotine.domain.repository.TransactionInputs
 import eth.serotine.domain.repository.TransactionProgress
+import kotlin.time.Duration
+import kotlin.time.Duration.Companion.minutes
+import kotlin.time.Duration.Companion.seconds
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
@@ -26,9 +31,6 @@ import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeoutOrNull
-import kotlin.time.Duration
-import kotlin.time.Duration.Companion.minutes
-import kotlin.time.Duration.Companion.seconds
 
 /**
  * [sentTransfers], whose every record also goes into [history] at the moment it is made: what
@@ -115,7 +117,7 @@ class FollowSentTransactions(
         if (left > 0 && outcomeOf(transfer.hash) !is SentOutcome.Included) {
             launch {
                 withTimeoutOrNull(left.seconds) {
-                    receipts.observe(transfer.hash).collect { progress -> settle(transfer, progress) }
+                    receipts.observe(transfer.network, transfer.hash).collect { progress -> settle(transfer, progress) }
                 }
             }
         }
@@ -145,7 +147,7 @@ class FollowSentTransactions(
         var usedBefore = false
         while (true) {
             if (outcomeOf(transfer.hash) != SentOutcome.NotSeen) return
-            val used = when (val reading = minedCount(transfer.account)) {
+            val used = when (val reading = minedCount(transfer.network, transfer.account)) {
                 is NonceReading.Read -> reading.nonce > transfer.nonce
                 is NonceReading.Unavailable, null -> null
             }
@@ -162,8 +164,8 @@ class FollowSentTransactions(
     }
 
     /** [account]'s verified count of mined transactions, or null when the port broke its promise not to throw. */
-    private suspend fun minedCount(account: Address): NonceReading? = try {
-        inputs.minedNonce(account)
+    private suspend fun minedCount(network: Network, account: Address): NonceReading? = try {
+        inputs.minedNonce(network, account)
     } catch (e: CancellationException) {
         throw e
     } catch (e: Exception) {
@@ -181,10 +183,10 @@ class FollowSentTransactions(
  * whichever account of this wallet sent them.
  */
 class ObserveAccountHistory(private val history: TransactionHistory) {
-    operator fun invoke(address: Address): Flow<HistoryList> = history.observe().map { list ->
+    operator fun invoke(account: AccountId): Flow<HistoryList> = history.observe().map { list ->
         when (list) {
             is HistoryList.Loaded -> HistoryList.Loaded(
-                list.entries.filter { it.concerns(address) }.sortedByDescending { it.transfer.sentAt },
+                list.entries.filter { it.concerns(account) }.sortedByDescending { it.transfer.sentAt },
             )
             HistoryList.Unreadable -> list
         }
@@ -209,8 +211,9 @@ class ObserveSentToAddresses(private val history: TransactionHistory) {
         is SentAction.Transfer -> action.to
         is SentAction.SafeApproval -> action.request.recipient()
         is SentAction.SafeExecution -> action.request.recipient()
+        // A dApp's call names no recipient the app decoded itself: it vouches for no sender.
         is SentAction.TokenApproval, is SentAction.Swap, is SentAction.Wrap, is SentAction.Unwrap,
-        is SentAction.SafeDeployment, is SentAction.CowCancellation,
+        is SentAction.SafeDeployment, is SentAction.CowCancellation, is SentAction.DappCall,
         -> null
     }
 
@@ -221,16 +224,17 @@ class ObserveSentToAddresses(private val history: TransactionHistory) {
     }
 }
 
-/** Whether [address] sent this transaction, or is the Safe it approves, executes or deploys. */
-fun HistoryEntry.concerns(address: Address): Boolean {
-    if (transfer.account == address) return true
+/** Whether the account [id] sent this transaction, or is the Safe it approves, executes or deploys. */
+fun HistoryEntry.concerns(id: AccountId): Boolean {
+    if (transfer.accountId == id) return true
+    if (transfer.network != id.network) return false
     return when (val action = transfer.action) {
         is SentAction.Transfer, is SentAction.TokenApproval, is SentAction.Swap, is SentAction.Wrap,
-        is SentAction.Unwrap, is SentAction.CowCancellation,
+        is SentAction.Unwrap, is SentAction.CowCancellation, is SentAction.DappCall,
         -> false
-        is SentAction.SafeApproval -> action.request.safe == address
-        is SentAction.SafeExecution -> action.request.safe == address
-        is SentAction.SafeDeployment -> action.safe == address
+        is SentAction.SafeApproval -> action.request.safe == id.address
+        is SentAction.SafeExecution -> action.request.safe == id.address
+        is SentAction.SafeDeployment -> action.safe == id.address
     }
 }
 

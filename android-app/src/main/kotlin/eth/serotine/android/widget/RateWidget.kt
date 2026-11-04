@@ -13,6 +13,7 @@ import eth.serotine.android.MainActivity
 import eth.serotine.android.R
 import eth.serotine.android.SerotineApplication
 import eth.serotine.domain.model.Network
+import eth.serotine.domain.model.RatePair
 import eth.serotine.domain.model.RateSnapshot
 import eth.serotine.ui.ratewidget.Trend
 import eth.serotine.ui.ratewidget.rateWidgetContent
@@ -25,7 +26,9 @@ import eth.serotine.ui.ratewidget.rateWidgetContent
  * ([SerotineApplication.holdEngine]), and from its refresh button, which reads it now on any
  * network, a spinner in the button's place meanwhile ([SerotineApplication.refreshRateWidgetsNow]).
  * Placing the first one schedules the job and removing the last one cancels it. A tap anywhere
- * else opens the app.
+ * else opens the app. Each widget shows one rate, of a network's native currency or of a price of
+ * its tokens, in a currency or the display currency, chosen when it is placed
+ * ([RateWidgetConfigureActivity], kept in [RateWidgetPairs]; docs/wallet-ux.md, *Home-screen widget*).
  */
 class RateWidget : AppWidgetProvider() {
 
@@ -44,6 +47,18 @@ class RateWidget : AppWidgetProvider() {
         app.drawRateWidgets { pending.finish() }
     }
 
+    override fun onDeleted(context: Context, appWidgetIds: IntArray) {
+        RateWidgetPairs(context).forget(appWidgetIds)
+        // The pairs the widgets left show are followed from here on, not the removed one's.
+        (context.applicationContext as SerotineApplication).rateWidgetsChanged()
+    }
+
+    override fun onRestored(context: Context, oldWidgetIds: IntArray, newWidgetIds: IntArray) {
+        // A launcher restored from a backup gives the widgets new ids: each keeps its pair.
+        RateWidgetPairs(context).moved(oldWidgetIds, newWidgetIds)
+        (context.applicationContext as SerotineApplication).rateWidgetsChanged()
+    }
+
     override fun onEnabled(context: Context) {
         (context.applicationContext as SerotineApplication).rateWidgetPlaced()
     }
@@ -56,25 +71,51 @@ class RateWidget : AppWidgetProvider() {
         /** What the refresh button sends this receiver; only this app's own PendingIntent can. */
         private const val ACTION_REFRESH = "eth.serotine.android.widget.REFRESH"
 
-        /** Whether a widget is on a home screen: the only case anything is read for one. */
-        fun placed(context: Context): Boolean =
+        /** The ids of the widgets on the home screen. */
+        fun ids(context: Context): IntArray =
             AppWidgetManager.getInstance(context).getAppWidgetIds(ComponentName(context, RateWidget::class.java))
-                .isNotEmpty()
+
+        /** Whether a widget is on a home screen: the only case anything is read for one. */
+        fun placed(context: Context): Boolean = ids(context).isNotEmpty()
+
+        /** The pairs the placed widgets show, each once: what a refresh reads. */
+        fun pairs(context: Context): Set<RatePair> {
+            val pairs = RateWidgetPairs(context)
+            return ids(context).mapTo(LinkedHashSet()) { pairs.of(it) }
+        }
 
         /**
-         * Draws [snapshot] (null: none kept yet) on every widget placed, with the spinner in the
+         * Draws every widget placed with its pair's rate in [rates] (none kept yet: absent or
+         * null) and its watched asset's bundled icon key in [icons] (absent or null: no icon
+         * shown), saying so where that pair's network is not [on], with the spinner in the
          * refresh button's place while a refresh the user asked for is on its way
          * ([SerotineApplication.refreshShown]), unless [refreshing] says otherwise. Any thread.
          */
-        fun draw(context: Context, snapshot: RateSnapshot?, refreshing: Boolean? = null) {
+        fun draw(
+            context: Context,
+            rates: Map<RatePair, RateSnapshot?>,
+            icons: Map<RatePair, String?>,
+            on: Set<Network>,
+            refreshing: Boolean? = null,
+        ) {
             val manager = AppWidgetManager.getInstance(context)
-            val widgets = ComponentName(context, RateWidget::class.java)
-            if (manager.getAppWidgetIds(widgets).isEmpty()) return
+            val pairs = RateWidgetPairs(context)
             val spinner = refreshing ?: (context.applicationContext as SerotineApplication).refreshShown
-            manager.updateAppWidget(widgets, views(context, snapshot, spinner))
+            for (id in ids(context)) {
+                val pair = pairs.of(id)
+                val views = views(context, rates[pair], icons[pair], pair, pair.network in on, spinner)
+                manager.updateAppWidget(id, views)
+            }
         }
 
-        private fun views(context: Context, snapshot: RateSnapshot?, refreshing: Boolean): RemoteViews {
+        private fun views(
+            context: Context,
+            snapshot: RateSnapshot?,
+            icon: String?,
+            pair: RatePair,
+            on: Boolean,
+            refreshing: Boolean,
+        ): RemoteViews {
             // The date with the time: a widget is not redrawn at midnight, so a time alone could
             // pass yesterday's rate off as today's.
             val readAt = snapshot?.let {
@@ -85,12 +126,13 @@ class RateWidget : AppWidgetProvider() {
                         DateUtils.FORMAT_NO_YEAR,
                 )
             }.orEmpty()
-            val content = rateWidgetContent(snapshot, Network.SEPOLIA, readAt)
+            val content = rateWidgetContent(snapshot, pair, readAt, on, icon)
             val change = when (content.trend) {
                 Trend.UP -> R.id.widget_change_up
                 Trend.DOWN -> R.id.widget_change_down
                 Trend.FLAT, Trend.UNKNOWN -> R.id.widget_change_flat
             }.takeIf { content.change != null }
+            val iconRes = content.icon?.let(WidgetAssetIcons::of)
             return RemoteViews(context.packageName, R.layout.widget_rate).apply {
                 setTextViewText(R.id.widget_pair, content.pair)
                 setTextViewText(R.id.widget_rate, content.rate)
@@ -99,6 +141,8 @@ class RateWidget : AppWidgetProvider() {
                     setViewVisibility(id, if (id == change) View.VISIBLE else View.GONE)
                     if (id == change) setTextViewText(id, content.change)
                 }
+                setViewVisibility(R.id.widget_icon, if (iconRes != null) View.VISIBLE else View.GONE)
+                if (iconRes != null) setImageViewResource(R.id.widget_icon, iconRes)
                 setViewVisibility(R.id.widget_refresh, if (refreshing) View.GONE else View.VISIBLE)
                 setViewVisibility(R.id.widget_refreshing, if (refreshing) View.VISIBLE else View.GONE)
                 setOnClickPendingIntent(R.id.widget_refresh, refresh(context))

@@ -13,7 +13,9 @@ package eth.serotine.domain.model
  * `src/assets/v1.4.1/compatibility_fallback_handler.json`: canonical
  * `0xfd0732Dc9E303f09fCEf3a7388Ad10A83459Ec99`, code hash
  * `0x7c6007a5d711cea8dfd5d91f5940ec29c7f200fe511eb1fc1397b367af3c42f9`, the canonical deployment
- * on Sepolia (11155111), read 2026-10-18.
+ * on Sepolia (11155111), read 2026-10-18, on Ethereum (1), with the same code hash, read
+ * 2026-10-23 at block 26,256,227, and on Gnosis Chain (100), the same again, read 2026-10-23 at
+ * block 48,904,746.
  */
 object PinnedFallbackHandlers {
 
@@ -22,7 +24,7 @@ object PinnedFallbackHandlers {
 
     /** The CompatibilityFallbackHandler pinned on [network]. */
     fun compatibility(network: Network): Address = when (network) {
-        Network.SEPOLIA -> COMPATIBILITY_1_4_1
+        Network.ETHEREUM, Network.GNOSIS, Network.SEPOLIA -> COMPATIBILITY_1_4_1
     }
 
     /** Whether a Safe on [network] may be given [handler] (null: none) by a transaction signed here. */

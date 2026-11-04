@@ -4,6 +4,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import eth.serotine.domain.model.Account
 import eth.serotine.domain.model.AccountCustody
+import eth.serotine.domain.model.AccountId
 import eth.serotine.domain.model.AccountKind
 import eth.serotine.domain.model.Address
 import eth.serotine.domain.model.Digest
@@ -73,9 +74,12 @@ import eth.serotine.ui.components.safeSwapItem
 import eth.serotine.ui.components.safeTxActionItem
 import eth.serotine.ui.components.safeTxRefusalText
 import eth.serotine.ui.components.shareItem
+import eth.serotine.ui.components.simpleSafeTxRefusalText
 import eth.serotine.ui.components.shortAddress
 import eth.serotine.ui.components.verifiedAt
 import eth.serotine.ui.platform.formatDateTime
+import kotlin.time.TimeMark
+import kotlin.time.TimeSource
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.Job
@@ -99,8 +103,6 @@ import kotlinx.coroutines.flow.transformLatest
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import kotlin.time.TimeMark
-import kotlin.time.TimeSource
 
 /**
  * The Safe transaction screen's ViewModel (docs/wallet-ux.md, screen 17): the transaction [hash]
@@ -129,7 +131,7 @@ import kotlin.time.TimeSource
  * it; it is dropped once used, when the screen is not shown ([onHidden]) and when it is gone.
  */
 class SafeTxViewModel(
-    private val safe: Address,
+    private val account: AccountId,
     private val hash: Digest,
     observeAccounts: ObserveAccounts,
     observeSafeTxQueue: ObserveSafeTxQueue,
@@ -146,13 +148,18 @@ class SafeTxViewModel(
     private val removeQueuedSafeTx: RemoveQueuedSafeTx,
     private val warmFeeHistory: WarmFeeHistory,
     private val checkSafeSwap: CheckSafeSwap,
-    private val network: Network,
     private val timeSource: TimeSource = TimeSource.Monotonic,
     /** Whether the screen was opened by the import that just queued the transaction: its overview says so first. */
     imported: Boolean = false,
     /** Dates a swap's deadline in the user's own time zone. */
     private val formatTime: (Long) -> String = ::formatDateTime,
 ) : ViewModel() {
+    /** The account this screen is about: its address, on its network. */
+    private val safe: Address = account.address
+
+    /** The account's network: everything here is read and sent there. */
+    private val network: Network = account.network
+
 
     init {
         // Approve and Execute quote a transaction: the fee history is asked for now, ready by then.
@@ -280,7 +287,12 @@ class SafeTxViewModel(
         val unsaved: SigningRequest? = null,
         /** Just imported: where it went is said ([addedText]) until another message or a step replaces it. */
         val imported: Boolean = false,
+        /** [message] in simple mode's words, with no block, while it is the message it is of. */
+        val simple: SimpleText? = null,
     )
+
+    /** [text], simple mode's words for the message [of], which it stands for only while that is the message. */
+    private data class SimpleText(val of: String, val text: String)
 
     private val view = MutableStateFlow(View(imported = imported))
     private val step = MutableStateFlow<Step>(Step.Overview)
@@ -337,11 +349,19 @@ class SafeTxViewModel(
     }
 
     private val accounts: Flow<List<Account>> = observeAccounts()
-        .map { (it as? AccountList.Loaded)?.accounts.orEmpty() }
+        // The Safe's network's accounts: what pays for an approval or an execution there, and what names
+        // its owners; an owner whose key is held on another network still signs ([ObserveSafe]).
+        .map { list -> (list as? AccountList.Loaded)?.accounts.orEmpty().filter { it.network == network } }
 
     /** What the screen shows and acts on, or why there is no transaction to act on ([Queued]). */
     private val context: StateFlow<Source?> =
-        combine(queued, request, owners, accounts, observeKnownTokens()) { queued, request, owners, accounts, tokens ->
+        combine(
+            queued,
+            request,
+            owners,
+            accounts,
+            observeKnownTokens(network),
+        ) { queued, request, owners, accounts, tokens ->
             if (queued !is Queued.Found || request == null) return@combine queued
             val held = accounts.filter { it.kind == AccountKind.EOA && it.custody == AccountCustody.InKeyStore }
             Context(
@@ -678,7 +698,8 @@ class SafeTxViewModel(
                     hidden = hiddenWhileQuoting,
                 )
                 is Quoted.Refused -> {
-                    view.update { it.copy(message = next.message) }
+                    val simple = next.simple?.let { SimpleText(next.message, it) }
+                    view.update { it.copy(message = next.message, simple = simple) }
                     step.value = Step.Overview
                 }
             }
@@ -707,7 +728,8 @@ class SafeTxViewModel(
                 )
                 // Nothing to sign any more: the overview says why.
                 is Quoted.Refused -> {
-                    view.update { it.copy(message = next.message) }
+                    val simple = next.simple?.let { SimpleText(next.message, it) }
+                    view.update { it.copy(message = next.message, simple = simple) }
                     step.value = Step.Overview
                 }
             }
@@ -719,7 +741,7 @@ class SafeTxViewModel(
     /** What a quote came to. */
     private sealed interface Quoted {
         data class Made(val quote: TxQuote) : Quoted
-        data class Refused(val message: String) : Quoted
+        data class Refused(val message: String, val simple: String? = null) : Quoted
     }
 
     /**
@@ -737,11 +759,11 @@ class SafeTxViewModel(
             when (kind) {
                 ReviewKind.APPROVAL -> when (val quoting = quoteSafeApproval(request, account, level, safeChecked)) {
                     is SafeApprovalQuoting.Quoted -> Quoted.Made(TxQuote.Approval(quoting.quote))
-                    is SafeApprovalQuoting.Refused -> Quoted.Refused(safeTxRefusalText(quoting.refusal, network))
+                    is SafeApprovalQuoting.Refused -> refused(quoting.refusal)
                 }
                 ReviewKind.EXECUTION -> when (val quoting = quoteSafeExecution(request, account, level, safeChecked)) {
                     is SafeExecutionQuoting.Quoted -> Quoted.Made(TxQuote.Execution(quoting.quote))
-                    is SafeExecutionQuoting.Refused -> Quoted.Refused(safeTxRefusalText(quoting.refusal, network))
+                    is SafeExecutionQuoting.Refused -> refused(quoting.refusal)
                 }
             }
         } catch (e: CancellationException) {
@@ -814,7 +836,9 @@ class SafeTxViewModel(
                     ),
                 )
                 is SafeTxSigning.Refused -> {
-                    view.update { it.copy(message = safeTxRefusalText(result.refusal, network)) }
+                    val message = safeTxRefusalText(result.refusal, network)
+                    val simple = simpleSafeTxRefusalText(result.refusal)?.let { SimpleText(message, it) }
+                    view.update { it.copy(message = message, simple = simple) }
                     step.value = Step.Overview
                 }
                 null -> step.value = latest.copy(signing = false, unlock = latest.unlock.copy(error = SIGN_FAILED))
@@ -1025,7 +1049,7 @@ class SafeTxViewModel(
                 hash = hashText,
                 owners = ownersItem(shown),
                 swap = swap,
-                gasTerms = tx.gasTerms?.let(::gasTermsItem),
+                gasTerms = tx.gasTerms?.let { gasTermsItem(it, this.network) },
                 // What the transaction alone says, or what it would do to the Safe as it stands now.
                 refusal = (tx.refusal ?: read?.refusal)
                     ?.let { safeTxRefusalText(it, this.network) },
@@ -1038,6 +1062,8 @@ class SafeTxViewModel(
                 canShare = shown.found.safeNonce != null,
                 share = if (view.sharing && shown.found.safeNonce != null) share(request) else null,
                 message = view.message ?: if (view.imported) addedText(header) else null,
+                simpleMessage = view.simple?.takeIf { it.of == view.message }?.text,
+                simpleRefusal = (tx.refusal ?: read?.refusal)?.let(::simpleSafeTxRefusalText),
             )
         }
     }
@@ -1095,9 +1121,14 @@ class SafeTxViewModel(
     private fun choice(context: Context, address: Address) =
         SignerChoice(context.labelOf(address), Eip55.format(address))
 
+    /** [refusal] as a quote refused: its text, and simple mode's words for it where they differ. */
+    private fun refused(refusal: SafeTxRefusal) =
+        Quoted.Refused(safeTxRefusalText(refusal, network), simpleSafeTxRefusalText(refusal))
+
     private fun ownersItem(context: Context): OwnersItem = when (val owners = context.owners) {
         null -> OwnersItem.Checking
-        is SafeTxOwnersReading.Refused -> OwnersItem.Unavailable(safeTxRefusalText(owners.refusal, network))
+        is SafeTxOwnersReading.Refused ->
+            OwnersItem.Unavailable(safeTxRefusalText(owners.refusal, network), simpleSafeTxRefusalText(owners.refusal))
         is SafeTxOwnersReading.Read -> OwnersItem.Shown(
             rows = owners.owners.map { owner ->
                 val (state, detail) = when (val confirmation = owner.confirmation) {
@@ -1108,11 +1139,21 @@ class SafeTxViewModel(
                     is OwnerConfirmation.Unknown -> OwnerState.UNKNOWN to
                         "No signature; whether it approved on chain cannot be verified right now"
                 }
-                OwnerStateRow(Eip55.format(owner.owner), context.labels[owner.owner], owner.held, state, detail)
+                val approved = owner.confirmation is OwnerConfirmation.ApprovedOnChain
+                val simpleDetail = "Approved on chain".takeIf { approved }
+                OwnerStateRow(
+                    Eip55.format(owner.owner),
+                    context.labels[owner.owner],
+                    owner.held,
+                    state,
+                    detail,
+                    simpleDetail = simpleDetail?.takeIf { it != detail },
+                )
             },
             threshold = "${owners.threshold} of ${owners.owners.size} owners must confirm",
             confirmations = "${owners.confirmations} of ${owners.threshold} confirmations",
             verifiedAt = "Owners verified at block ${grouped(owners.blockNumber)}",
+            simpleVerifiedAt = "Owners checked on chain",
         )
     }
 
@@ -1157,6 +1198,12 @@ class SafeTxViewModel(
                 ReviewKind.EXECUTION ->
                     "The whole execution — the Safe's checks of the confirmations and the nonce, its guard if it " +
                         "has one, and the call itself — run as a verified call from this account $ran, goes through."
+            },
+            simpleSimulation = when (step.kind) {
+                ReviewKind.APPROVAL ->
+                    "Checked on chain: the Safe's approveHash of this transaction should go through."
+                ReviewKind.EXECUTION -> "Checked on chain: the whole execution — the Safe's checks of the " +
+                    "confirmations and the nonce, its guard if it has one, and the call itself — should go through."
             },
             unlock = step.unlock,
             confirmations = (step.quote as? TxQuote.Execution)?.quote?.let { confirmationsText(context, it) },
@@ -1210,7 +1257,7 @@ class SafeTxViewModel(
     private fun warmFees() {
         viewModelScope.launch {
             try {
-                warmFeeHistory()
+                warmFeeHistory(network)
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {

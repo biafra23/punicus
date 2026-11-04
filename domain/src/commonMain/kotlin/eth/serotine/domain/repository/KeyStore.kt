@@ -32,6 +32,20 @@ interface KeyStore {
     suspend fun importMnemonic(mnemonic: Mnemonic, password: WalletPassword): KeyImport
 
     /**
+     * Stores a further account of the seed sealed under [from]'s address, without the words: an
+     * imported mnemonic's envelope holds its seed for this (docs/keys-and-signing.md; owner ruling,
+     * 2026-10-15). The account is BIP-44's `m/44'/60'/0'/0/i` with the empty passphrase, i the
+     * lowest index whose address is not in [held] (the addresses the caller holds keys for where
+     * the account is added), so the accounts of one phrase are the ones other wallets list for it,
+     * in their order, and one removed comes back first. [password] must be the wallet password: it opens [from]'s
+     * envelope, and the new account's seed is sealed under it as an import seals one, in an
+     * envelope of its own, joining the biometric path when that is on. An address whose envelope
+     * is stored already (its account was never added to the list) is left as it is and named.
+     * The seed and the keys exist only inside this call. Never throws.
+     */
+    suspend fun deriveAccount(from: Address, password: WalletPassword, held: Set<Address>): KeyDerivation
+
+    /**
      * A new BIP-39 mnemonic of 12 words, from 128 bits of the platform's secure randomness,
      * for Create account (docs/wallet-ux.md, screen 12): the backup words shown at creation, the
      * mnemonic exception's other end (CLAUDE.md, *Trust*). Nothing is stored: the words are
@@ -253,9 +267,48 @@ sealed interface KeyImport {
     data class NotEnoughMemory(val step: MemoryStep) : KeyImport
 }
 
-/** Where an import ran short of memory ([KeyImport.NotEnoughMemory]). */
+/** The outcome of [KeyStore.deriveAccount]. */
+sealed interface KeyDerivation {
+
+    /**
+     * The seed is stored for [address], account [index] of its phrase, with [protection];
+     * [steppedDown] as for [KeyImport.Stored].
+     */
+    data class Stored(
+        val address: Address,
+        val index: Int,
+        val protection: KeyProtection,
+        val steppedDown: Boolean = false,
+    ) : KeyDerivation
+
+    /** This device holds no key for the account to derive from. Nothing was stored. */
+    data object NoKey : KeyDerivation
+
+    /** That is not the wallet password. Nothing was stored. */
+    data object WrongPassword : KeyDerivation
+
+    /**
+     * The key store cannot open the account's envelope on this device (it does not work here, its
+     * hardware key is gone, or the envelope is damaged). Nothing was stored.
+     */
+    data object Unavailable : KeyDerivation
+
+    /** The new envelope could not be written. Nothing was stored. */
+    data object NotSaved : KeyDerivation
+
+    /**
+     * Not enough free memory to stretch the password at [step]: opening the account's envelope
+     * ([MemoryStep.CHECK_PASSWORD]), or protecting the new one. Nothing was stored.
+     */
+    data class NotEnoughMemory(val step: MemoryStep) : KeyDerivation
+}
+
+/**
+ * Where an import or a derivation ran short of memory ([KeyImport.NotEnoughMemory],
+ * [KeyDerivation.NotEnoughMemory]).
+ */
 enum class MemoryStep {
-    /** Checking the password against a stored envelope, which a later import does first. */
+    /** Checking the password against a stored envelope, which a later import, or a derivation, does first. */
     CHECK_PASSWORD,
 
     /** Protecting the seed: sealing its envelope under the password. */

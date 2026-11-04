@@ -225,6 +225,7 @@ class HttpCowApi internal constructor(
 
 /** CoW's order API on [network], pinned: none for a network CoW is not offered on. */
 internal fun baseUrlOf(network: Network): String? = when (network) {
+    Network.ETHEREUM, Network.GNOSIS -> null
     Network.SEPOLIA -> "https://api.cow.fi/sepolia/api/v1"
 }
 

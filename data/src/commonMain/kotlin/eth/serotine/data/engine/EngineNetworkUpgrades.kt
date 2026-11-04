@@ -1,5 +1,6 @@
 package eth.serotine.data.engine
 
+import eth.serotine.domain.model.Network
 import eth.serotine.domain.model.NetworkUpgrade
 import eth.serotine.domain.repository.NetworkUpgrades
 import kotlinx.coroutines.CoroutineDispatcher
@@ -20,12 +21,14 @@ import kotlin.time.Duration
  * still starting reports none; a poll the engine fails is skipped.
  */
 class EngineNetworkUpgrades internal constructor(
+    private val served: Network,
     private val chain: VerifiedChain?,
     private val dispatcher: CoroutineDispatcher,
     private val pollInterval: Duration,
 ) : NetworkUpgrades {
 
-    override fun observeUpgrade(): Flow<NetworkUpgrade?> {
+    override fun observeUpgrade(network: Network): Flow<NetworkUpgrade?> {
+        if (network != served) return flowOf(null)
         val chain = chain ?: return flowOf(null)
         return chain.snapshots(pollInterval)
             .map { (it as? EngineSnapshot.Running)?.upgrade }

@@ -14,6 +14,12 @@ import kotlinx.serialization.Serializable
  * DEK'    AES-256-GCM(KEK, DEK),             aad = version, address, hardware tag, salt, ops, mem
  * ```
  *
+ * The envelope also names the account [index] of the seed it is filed for ([SealedSeed.index],
+ * BIP-44's `m/44'/60'/0'/0/index`; 0, the first, when absent). It is not bound as additional
+ * data, so envelopes sealed before it existed still open: signing derives the key at that index
+ * and refuses one that is not the account the envelope is filed under, so an index edited on disk
+ * signs nothing.
+ *
  * Both factors are necessary (rule 1): the password is mixed into the KEK, never compared.
  * The salt and the Argon2id parameters are bound as the DEK wrap's additional data and
  * checked against a floor and a ceiling when opening (rule 2), so a parameter block edited
@@ -59,7 +65,7 @@ internal object Envelope {
     }
 
     /**
-     * [seed] sealed for [address] under [password] and [hardware]. [withDek] is handed the new
+     * [seed] sealed for [address], its account [index], under [password] and [hardware]. [withDek] is handed the new
      * DEK before it is zeroed, for the biometric path to wrap it too (rule 4: its own key, the
      * password path untouched); it must not keep it. The password is stretched first, by
      * [stretch], so [Argon2idOutOfMemory] leaves before anything else is made.
@@ -71,8 +77,10 @@ internal object Envelope {
         hardware: HardwareSecret?,
         cost: Cost,
         stretch: PasswordStretch = PasswordStretch.Sodium,
+        index: Int = 0,
         withDek: (ByteArray) -> Unit = {},
     ): SealedSeed {
+        require(index >= 0) { "a non-hardened index" }
         val salt = EnvelopeCrypto.randomBytes(SALT_BYTES)
         val hardwareTag = hardware?.tag ?: NO_HARDWARE
         val kek = kek(password, salt, cost.opsLimit, cost.memLimitBytes, hardware, stretch)
@@ -97,6 +105,7 @@ internal object Envelope {
                 ).toHex(),
                 seedNonce = seedNonce.toHex(),
                 seed = EnvelopeCrypto.aesGcmSeal(dek, seedNonce, seed, seedAad(address)).toHex(),
+                index = index,
             )
         } finally {
             kek.fill(0)
@@ -107,13 +116,14 @@ internal object Envelope {
     /**
      * Whether [sealed] is an envelope this code may try to open with [hardware], judged
      * without the password: this version, this device's hardware tag, parameters within the
-     * floor and the ceiling, a well-formed salt and nonces, and — when [address] is given —
+     * floor and the ceiling, a well-formed salt and nonces, a non-hardened index, and — when [address] is given —
      * that address, the one its file is named after.
      */
     fun canOpen(sealed: SealedSeed, hardware: HardwareSecret?, address: String? = null): Boolean =
         sealed.version == VERSION &&
             sealed.hardware == (hardware?.tag ?: NO_HARDWARE) &&
             withinBounds(sealed.opsLimit, sealed.memLimitBytes) &&
+            sealed.index >= 0 &&
             (address == null || sealed.address == address) &&
             hexOfLength(sealed.salt, SALT_BYTES) &&
             hexOfLength(sealed.dekNonce, NONCE_BYTES) &&
@@ -288,7 +298,11 @@ internal object Envelope {
     private val KEK_INFO = "serotine-envelope-v1 kek".encodeToByteArray()
 }
 
-/** An envelope as it is stored: everything hex, nothing secret in the clear. */
+/**
+ * An envelope as it is stored: everything hex, nothing secret in the clear. [index] is the account
+ * of the seed it is filed for, left out when it is the first (0), as every envelope sealed before
+ * further accounts could be derived is.
+ */
 @Serializable
 internal class SealedSeed(
     val version: Int,
@@ -301,4 +315,5 @@ internal class SealedSeed(
     val dek: String,
     val seedNonce: String,
     val seed: String,
+    val index: Int = 0,
 )

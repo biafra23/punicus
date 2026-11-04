@@ -11,7 +11,7 @@ import kotlinx.serialization.json.intOrNull
 
 /**
  * [SigningRequestCodec] as compact JSON (docs/wallet-ux.md, *Co-signing a Safe transaction*),
- * for requests on [network]:
+ * for requests on every network the app knows ([Network]):
  *
  * ```
  * {"v":1,"chainId":11155111,"safe":"0x…","tx":{"to":"0x…","value":"0","data":"0x…","operation":0,
@@ -24,11 +24,12 @@ import kotlinx.serialization.json.intOrNull
  * whitespace a share sheet may add around it, must be exactly what [encode] makes of the
  * request it decodes to, so each request has one text and no text carries anything beside its
  * fields (a second value of a key, a comment, a field this version does not know). `v` is read
- * first: any version but 1 is [SigningRequestDecoding.UnknownVersion]; a chain other than
- * [network]'s, [SigningRequestDecoding.WrongChain]. Text longer than [MAX_LENGTH] is refused
+ * first: any version but 1 is [SigningRequestDecoding.UnknownVersion]; a chain that is no
+ * [Network], [SigningRequestDecoding.UnknownChain]. Whether the request is for the Safe it is
+ * imported to, on that Safe's network, is the importing use case's to check. Text longer than [MAX_LENGTH] is refused
  * before it is parsed.
  */
-class JsonSigningRequestCodec(private val network: Network) : SigningRequestCodec {
+class JsonSigningRequestCodec : SigningRequestCodec {
 
     override fun encode(request: SigningRequest): String =
         JSON.encodeToString(WireRequest.serializer(), WireRequest.of(request))
@@ -49,7 +50,7 @@ class JsonSigningRequestCodec(private val network: Network) : SigningRequestCode
             ?: return SigningRequestDecoding.Malformed
         if (version != WireRequest.VERSION) return SigningRequestDecoding.UnknownVersion(version)
         val wire = JSON.decodeFromJsonElement(WireRequest.serializer(), json)
-        if (wire.chainId != network.chainId) return SigningRequestDecoding.WrongChain(wire.chainId)
+        val network = Network.ofChainId(wire.chainId) ?: return SigningRequestDecoding.UnknownChain(wire.chainId)
         val request = wire.toRequest(network) ?: return SigningRequestDecoding.Malformed
         if (encode(request) != text) return SigningRequestDecoding.Malformed
         return SigningRequestDecoding.Decoded(request)

@@ -1,6 +1,8 @@
 package eth.serotine.ui.swap
 
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
@@ -29,6 +31,7 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SegmentedButton
 import androidx.compose.material3.SegmentedButtonDefaults
 import androidx.compose.material3.SingleChoiceSegmentedButtonRow
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
@@ -52,6 +55,7 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LifecycleEventEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import eth.serotine.domain.model.InterfaceMode
 import eth.serotine.domain.model.SwapVenue
 import eth.serotine.domain.repository.FeeLevel
 import eth.serotine.ui.components.AmountLine
@@ -60,6 +64,7 @@ import eth.serotine.ui.components.Blockie
 import eth.serotine.ui.components.FeeChoice
 import eth.serotine.ui.components.FromLine
 import eth.serotine.ui.components.Heading
+import eth.serotine.ui.components.HiddenDetails
 import eth.serotine.ui.components.LightClientItem
 import eth.serotine.ui.components.NotSentFields
 import eth.serotine.ui.components.Note
@@ -70,10 +75,12 @@ import eth.serotine.ui.components.TokenIcon
 import eth.serotine.ui.components.Unavailable
 import eth.serotine.ui.components.UnavailableDialog
 import eth.serotine.ui.components.UnderLightClientStrip
+import eth.serotine.ui.components.UnderLightClientStripIfAny
 import eth.serotine.ui.components.UnlockFields
 import eth.serotine.ui.components.unavailable
-import eth.serotine.ui.lightclient.LightClientViewModel
+import eth.serotine.ui.mode.LocalInterfaceMode
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.StateFlow
 
 /** Test tag of the Review button, for UI tests. */
 const val SWAP_REVIEW_TAG = "swap-review"
@@ -102,21 +109,31 @@ const val SWAP_UNISWAP_INSTEAD_TAG = "swap-uniswap-instead"
 /** Test tag of the button that opens a CoW order's status, for UI tests. */
 const val SWAP_OPEN_ORDER_TAG = "swap-open-order"
 
+/** Test tag of the line that says the swap waits for its approval's block, for UI tests. */
+const val SWAP_AWAITING_TAG = "swap-awaiting"
+
+/** Test tag of the button that leaves the swap while its approval waits, for UI tests. */
+const val SWAP_LATER_TAG = "swap-later"
+
+/** Test tag of simple mode's Details button, for UI tests. */
+const val SWAP_DETAILS_TAG = "swap-details"
+
 /** Test tag of the button that leaves a placed CoW order's screen, for UI tests. */
 const val SWAP_DONE_TAG = "swap-done"
 
 /**
- * Binds [SwapScreen] to its ViewModel. A swap broadcast ends the screen through [onSent] with its
- * hash, and [onOpenTransfer] opens the status of a transaction that holds the swap back (its
- * approval, an earlier swap, one that may still be on its way); [onOpenOrder] opens a CoW order's
- * status, the one placed or an earlier one that holds the swap back; the screen stopping being shown
- * becomes [SwapViewModel.onHidden] (the password goes) and being shown again
- * [SwapViewModel.onShown] (the review is quoted anew).
+ * Binds [SwapScreen], or in simple mode [SimpleSwapScreen], to its ViewModel. A swap broadcast ends
+ * the screen through [onSent] with its hash, and [onOpenTransfer] opens the status of a transaction
+ * that holds the swap back (its approval, an earlier swap, one that may still be on its way);
+ * [onOpenOrder] opens a CoW order's status, the one placed or an earlier one that holds the swap
+ * back; the screen stopping being shown becomes [SwapViewModel.onHidden] (the password goes) and
+ * being shown again [SwapViewModel.onShown] (the review is quoted anew).
  */
 @Composable
 fun SwapRoute(
     viewModel: SwapViewModel,
-    lightClient: LightClientViewModel,
+    /** The strip of the network this screen is about: its account's. */
+    lightClient: StateFlow<LightClientItem>,
     onBack: () -> Unit,
     onSent: (hash: String) -> Unit,
     onOpenTransfer: (hash: String) -> Unit,
@@ -125,7 +142,6 @@ fun SwapRoute(
 ) {
     // Main.immediate: as on Send, an edit reaches its field in the same frame.
     val state by viewModel.uiState.collectAsStateWithLifecycle(context = Dispatchers.Main.immediate)
-    val strip by lightClient.item.collectAsStateWithLifecycle()
     LifecycleEventEffect(Lifecycle.Event.ON_STOP) { viewModel.onHidden() }
     LifecycleEventEffect(Lifecycle.Event.ON_START) { viewModel.onShown() }
     val sent = (state as? SwapUiState.Sent)?.hash
@@ -133,42 +149,72 @@ fun SwapRoute(
     LaunchedEffect(sent) {
         if (sent != null) currentOnSent(sent)
     }
-    SwapScreen(
-        state = state,
-        lightClient = strip,
-        onSellChange = viewModel::onSellChange,
-        onBuyChange = viewModel::onBuyChange,
-        onAmountChange = viewModel::onAmountChange,
-        onMax = viewModel::onMax,
-        onToleranceChange = viewModel::onToleranceChange,
-        onFeeChange = viewModel::onFeeChange,
-        onVenueChange = viewModel::onVenueChange,
-        onSwapOnUniswap = viewModel::swapOnUniswap,
-        onReview = viewModel::review,
-        onEdit = viewModel::edit,
-        onRefresh = viewModel::refresh,
-        onPasswordChange = viewModel::onPasswordChange,
-        onSign = viewModel::sign,
-        onSignWithBiometrics = viewModel::signWithBiometrics,
-        onRetry = viewModel::retry,
-        onOpenTransfer = onOpenTransfer,
-        onOpenOrder = onOpenOrder,
-        onBack = onBack,
-        modifier = modifier,
-    )
+    // The same state in the view the user chose (docs/simple-ui.md).
+    when (LocalInterfaceMode.current) {
+        InterfaceMode.SIMPLE -> SimpleSwapScreen(
+            state = state,
+            onSellChange = viewModel::onSellChange,
+            onBuyChange = viewModel::onBuyChange,
+            onAmountChange = viewModel::onAmountChange,
+            onMax = viewModel::onMax,
+            onToleranceChange = viewModel::onToleranceChange,
+            onFeeChange = viewModel::onFeeChange,
+            onVenueChange = viewModel::onVenueChange,
+            onSwapOnUniswap = viewModel::swapOnUniswap,
+            onReview = viewModel::review,
+            onEdit = viewModel::edit,
+            onRefresh = viewModel::refresh,
+            onPasswordChange = viewModel::onPasswordChange,
+            onSign = viewModel::sign,
+            onSignWithBiometrics = viewModel::signWithBiometrics,
+            onRetry = viewModel::retry,
+            onOpenTransfer = onOpenTransfer,
+            onOpenOrder = onOpenOrder,
+            onBack = onBack,
+            modifier = modifier,
+            syncLine = lightClient.collectAsStateWithLifecycle().value,
+        )
+        // The strip in Detailed view; in simple mode the same item, drawn as the sync line while it says something.
+        InterfaceMode.DETAILED -> SwapScreen(
+            state = state,
+            chrome = SwapChrome.Strip(lightClient.collectAsStateWithLifecycle().value),
+            onSellChange = viewModel::onSellChange,
+            onBuyChange = viewModel::onBuyChange,
+            onAmountChange = viewModel::onAmountChange,
+            onMax = viewModel::onMax,
+            onToleranceChange = viewModel::onToleranceChange,
+            onFeeChange = viewModel::onFeeChange,
+            onVenueChange = viewModel::onVenueChange,
+            onSwapOnUniswap = viewModel::swapOnUniswap,
+            onReview = viewModel::review,
+            onEdit = viewModel::edit,
+            onRefresh = viewModel::refresh,
+            onPasswordChange = viewModel::onPasswordChange,
+            onSign = viewModel::sign,
+            onSignWithBiometrics = viewModel::signWithBiometrics,
+            onRetry = viewModel::retry,
+            onOpenTransfer = onOpenTransfer,
+            onOpenOrder = onOpenOrder,
+            onBack = onBack,
+            modifier = modifier,
+        )
+    }
 }
 
 /**
  * Swap (docs/swaps.md; screens 22 and 23) as a pure function of [state]: the compose step — the
  * venue, sell, buy, amount, tolerance and fee — then the review of the approval the swap needs
  * first, if any, and of the swap on Uniswap or the order on CoW, or of the wrap ETH for WETH and
- * back is, each with the unlock that signs it; and a CoW order once handed to CoW.
+ * back is, each with the unlock that signs it; the wait for the approval's block between them
+ * (step 1 of 2, then step 2); and a CoW order once handed to CoW. Its [chrome] is Detailed view's
+ * light-client strip and full reviews, or simple mode's ([SimpleSwapScreen]): no strip, and the
+ * reviews' detail behind *Details*.
  */
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalComposeUiApi::class)
 @Composable
 fun SwapScreen(
     state: SwapUiState,
-    lightClient: LightClientItem,
+    chrome: SwapChrome,
     onSellChange: (contract: String?) -> Unit,
     onBuyChange: (contract: String?) -> Unit,
     onAmountChange: (String) -> Unit,
@@ -213,6 +259,7 @@ fun SwapScreen(
                     Text(
                         when (state) {
                             is SwapUiState.ApprovalReview -> "Approve"
+                            is SwapUiState.ApprovalPending -> "Swapping"
                             is SwapUiState.SwapReview -> "Review swap"
                             is SwapUiState.WrapReview -> state.title
                             is SwapUiState.CowReview -> "Review order"
@@ -233,7 +280,8 @@ fun SwapScreen(
             )
         },
     ) { padding ->
-        UnderLightClientStrip(lightClient, Modifier.padding(padding)) {
+        val simple = chrome is SwapChrome.Simple
+        val body: @Composable BoxScope.() -> Unit = {
             when (state) {
                 is SwapUiState.Loading -> CircularProgressIndicator(Modifier.align(Alignment.Center))
                 is SwapUiState.Sent -> Column(
@@ -262,11 +310,38 @@ fun SwapScreen(
                     onOpenTransfer,
                     onOpenOrder,
                 )
+                is SwapUiState.ApprovalPending -> ReviewColumn {
+                    Text(state.title, style = MaterialTheme.typography.titleLarge)
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(12.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp)
+                        Text("Waiting for a block to have it…", Modifier.testTag(SWAP_AWAITING_TAG))
+                    }
+                    Text(state.message, style = MaterialTheme.typography.bodyMedium)
+                    OutlinedButton(onClick = { onOpenTransfer(state.hash) }, Modifier.testTag(SWAP_EARLIER_TAG)) {
+                        Text("Open the approval")
+                    }
+                    OutlinedButton(onClick = onBack, Modifier.align(Alignment.End).testTag(SWAP_LATER_TAG)) {
+                        Text("Later")
+                    }
+                }
                 is SwapUiState.ApprovalReview -> ReviewColumn {
-                    ApprovalContent(state)
+                    StepLabel(state.step)
+                    state.earlierFailed?.let { failed ->
+                        Text(failed.note, color = MaterialTheme.colorScheme.error)
+                        OutlinedButton(
+                            onClick = { onOpenTransfer(failed.hash) },
+                            modifier = Modifier.testTag(SWAP_EARLIER_TAG),
+                        ) {
+                            Text("Open the earlier approval")
+                        }
+                    }
+                    if (simple) SimpleApprovalContent(state) else ApprovalContent(state)
                     ReviewFooter(
                         state,
-                        "Sign and send the approval",
+                        if (simple) "Confirm ${state.step.lowercase()}" else "Sign and send the approval",
                         onRefresh,
                         onPasswordChange,
                         onSign,
@@ -275,10 +350,15 @@ fun SwapScreen(
                     )
                 }
                 is SwapUiState.SwapReview -> ReviewColumn {
-                    SwapContent(state)
+                    state.step?.let { StepLabel(it) }
+                    if (simple) SimpleSwapContent(state) else SwapContent(state)
                     ReviewFooter(
                         state,
-                        "Sign and swap",
+                        when {
+                            !simple -> "Sign and swap"
+                            state.step != null -> "Confirm ${state.step.lowercase()}"
+                            else -> "Confirm swap"
+                        },
                         onRefresh,
                         onPasswordChange,
                         onSign,
@@ -299,7 +379,8 @@ fun SwapScreen(
                     )
                 }
                 is SwapUiState.CowReview -> ReviewColumn {
-                    CowContent(state)
+                    state.step?.let { StepLabel(it) }
+                    if (simple) SimpleCowContent(state) else CowContent(state)
                     if (state.uniswapGivesMore) {
                         OutlinedButton(
                             onClick = onSwapOnUniswap,
@@ -311,7 +392,11 @@ fun SwapScreen(
                     }
                     ReviewFooter(
                         state,
-                        "Sign and send to CoW",
+                        when {
+                            !simple -> "Sign and send to CoW"
+                            state.step != null -> "Confirm ${state.step.lowercase()}"
+                            else -> "Confirm order"
+                        },
                         onRefresh,
                         onPasswordChange,
                         onSign,
@@ -333,7 +418,24 @@ fun SwapScreen(
                 }
             }
         }
+        when (chrome) {
+            is SwapChrome.Strip -> UnderLightClientStrip(chrome.item, Modifier.padding(padding), body)
+            is SwapChrome.Simple -> UnderLightClientStripIfAny(null, Modifier.padding(padding), chrome.sync, body)
+        }
     }
+}
+
+/**
+ * What Swap shows of its network's light client and how it reviews: Detailed view's [Strip] of
+ * [Strip.item] with the full reviews, or simple mode's [Simple], with neither the strip nor a block
+ * in sight and each review's detail behind *Details* (docs/simple-ui.md, W1 to W4).
+ */
+sealed interface SwapChrome {
+    /** Detailed view: the light client's strip and the full reviews. */
+    data class Strip(val item: LightClientItem) : SwapChrome
+
+    /** Simple mode: no strip but the [sync] line while it has something to say, and the simple reviews. */
+    data class Simple(val sync: LightClientItem? = null) : SwapChrome
 }
 
 @Composable
@@ -625,3 +727,148 @@ private fun ReviewFooter(
         )
     }
 }
+
+/** Which step of the swap a review is ("Step 1 of 2"): said above it in either view. */
+@Composable
+private fun StepLabel(step: String) {
+    Text(step, style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary)
+}
+
+/** A line of a simple review: what it is, and its value at the end. */
+@Composable
+private fun ReviewLine(label: String, value: String) {
+    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+        Text(
+            label,
+            Modifier.weight(1f),
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        Text(value, style = MaterialTheme.typography.bodyMedium)
+    }
+}
+
+/** A check made on chain, said in words (docs/simple-ui.md, W2). */
+@Composable
+private fun Checked(text: String) {
+    Surface(
+        Modifier.fillMaxWidth(),
+        shape = MaterialTheme.shapes.medium,
+        color = MaterialTheme.colorScheme.secondaryContainer,
+        contentColor = MaterialTheme.colorScheme.onSecondaryContainer,
+    ) {
+        Text(text, Modifier.padding(12.dp), style = MaterialTheme.typography.bodyMedium)
+    }
+}
+
+/** A simple review's detail, behind *Details*: the routes, the blocks, the fee's make-up. */
+@Composable
+private fun Details(content: @Composable ColumnScope.() -> Unit) = HiddenDetails(SWAP_DETAILS_TAG, content)
+
+/**
+ * The approval in simple mode (docs/simple-ui.md, W2): what it allows, for this swap only, and its
+ * fee, with step 2 named after it; the router's address, the allowance now and the simulation
+ * behind *Details*.
+ */
+@Composable
+private fun SimpleApprovalContent(state: SwapUiState.ApprovalReview) {
+    Text(state.headline, style = MaterialTheme.typography.titleLarge)
+    Text("${state.scope} Fee at most ${state.maxFee}.", style = MaterialTheme.typography.bodyMedium)
+    state.resetNote?.let { Text(it, color = MaterialTheme.colorScheme.error) }
+    Heading("From")
+    FromLine(state.from)
+    Checked("Checked on chain: this approval should go through. It moves nothing.")
+    Text(state.next, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+    Details {
+        Spender(state.spender)
+        Note("It may take ${state.allowance} now.")
+        Note(state.feeDetail)
+        Balance(state.balance)
+        Note(state.simulation)
+    }
+}
+
+/**
+ * The swap on Uniswap in simple mode (docs/simple-ui.md, W2 and W3): what it sells for at least
+ * what, the price checked on chain, the tolerance and the price impact, the fee and the balances
+ * after; the route, the router, the deadline and the blocks behind *Details*.
+ */
+@Composable
+private fun SimpleSwapContent(state: SwapUiState.SwapReview) {
+    AmountLine(state.sell.icon, state.sell.symbol, state.sold)
+    Text("for at least", style = MaterialTheme.typography.labelMedium)
+    Row(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
+        TokenIcon(state.buy.icon, state.buy.symbol, size = 40.dp)
+        SelectionContainer {
+            Text(state.minimum, Modifier.testTag(SWAP_MINIMUM_TAG), style = MaterialTheme.typography.headlineSmall)
+        }
+    }
+    Note(state.tolerance)
+    Checked("Price checked on chain")
+    Text(state.priceImpact, Modifier.testTag(SWAP_IMPACT_TAG), style = MaterialTheme.typography.bodyMedium)
+    state.priceHint?.let { Note(it) }
+    Heading("From, and paid to")
+    FromLine(state.from)
+    ReviewLine("Network fee, at most", state.maxFee)
+    state.balances.forEach { ReviewLine("${it.short} after", it.after) }
+    state.pending?.let { Text(it, style = MaterialTheme.typography.bodySmall) }
+    Details {
+        Heading("Expected")
+        AmountLine(state.buy.icon, state.buy.symbol, state.receive)
+        Note(state.ranAt)
+        Heading("Route")
+        RouteSteps(state.route)
+        Note(state.routeNote)
+        state.netNote?.let { Note(it) }
+        Heading("Through")
+        Spender(state.spender)
+        state.allowanceNote?.let { Note(it) }
+        Note(state.deadline)
+        Note(state.feeDetail)
+        state.balances.forEach { Balance(it) }
+    }
+}
+
+/**
+ * The order on CoW in simple mode (docs/simple-ui.md, W4): what it sells for at least what, CoW's
+ * estimate marked as not checked on chain beside the verified Uniswap quote, and what CoW learns
+ * (owner ruling, 2026-10-22); the settlement contract, the validity and the balances behind *Details*.
+ */
+@Composable
+private fun SimpleCowContent(state: SwapUiState.CowReview) {
+    AmountLine(state.sell.icon, state.sell.symbol, state.sold)
+    Text("for at least", style = MaterialTheme.typography.labelMedium)
+    Row(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
+        TokenIcon(state.buy.icon, state.buy.symbol, size = 40.dp)
+        SelectionContainer {
+            Text(state.minimum, Modifier.testTag(SWAP_MINIMUM_TAG), style = MaterialTheme.typography.headlineSmall)
+        }
+    }
+    ReviewLine("CoW expects, not checked on chain", state.estimate)
+    ReviewLine("Uniswap, checked on chain", state.uniswapNet)
+    Text(
+        state.comparison,
+        color = if (state.uniswapGivesMore) MaterialTheme.colorScheme.error else Color.Unspecified,
+        style = MaterialTheme.typography.bodyMedium,
+    )
+    Checked("Checked on chain: the minimum is never below what Uniswap gives, less the gas and your tolerance")
+    Text(
+        "No network fee from this account: CoW takes it out of the trade.",
+        style = MaterialTheme.typography.bodyMedium,
+    )
+    Heading("From, and paid to")
+    FromLine(state.from)
+    state.pending?.let { Text(it, style = MaterialTheme.typography.bodySmall) }
+    Heading("What CoW learns")
+    Note(state.disclosure)
+    Details {
+        Note(state.estimateNote)
+        Note(state.uniswapNote)
+        Note(state.minimumNote)
+        Note(state.validUntil)
+        Heading("Settled by")
+        Spender(state.settlement)
+        state.balances.forEach { Balance(it) }
+    }
+}
+

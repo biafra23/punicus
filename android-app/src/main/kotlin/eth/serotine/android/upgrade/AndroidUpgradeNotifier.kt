@@ -17,12 +17,14 @@ import eth.serotine.domain.repository.UpgradeNotifier
 import eth.serotine.ui.update.UpgradeNotificationText
 
 /**
- * [UpgradeNotifier] on Android: a notification on the "Network upgrades" channel, which
- * opens the app, and an inexact alarm ([AlarmManager.setAndAllowWhileIdle], no exact-alarm
- * permission) that wakes [UpgradeReminderReceiver] for the next reminder, the app running or
- * not. Alarms do not survive a reboot or an update; the receiver arms the next one again
- * then. Without the notification permission (Android 13 and later), a notice is dropped: the
- * app's own screens still say it.
+ * [UpgradeNotifier] on Android, for [network]'s upgrades: a notification on the "Network
+ * upgrades" channel, one per network (a newer notice of the same network replaces the one
+ * before), which opens the app, and an inexact alarm, one per network
+ * ([AlarmManager.setAndAllowWhileIdle], no exact-alarm permission), that wakes
+ * [UpgradeReminderReceiver] for the next reminder, the app running or not. Each network's
+ * notification and alarm have ids of their own, fixed for good. Alarms do not survive a reboot
+ * or an update; the receiver arms the next one again then. Without the notification permission
+ * (Android 13 and later), a notice is dropped: the app's own screens still say it.
  */
 class AndroidUpgradeNotifier(private val context: Context, private val network: Network) : UpgradeNotifier {
 
@@ -55,7 +57,7 @@ class AndroidUpgradeNotifier(private val context: Context, private val network: 
             .build()
         try {
             // One notification id: a newer notice replaces the one before.
-            manager.notify(NOTIFICATION_ID, notification)
+            manager.notify(network.notificationId, notification)
         } catch (e: SecurityException) {
             // The permission was revoked in between: the app's screens still say it.
         }
@@ -65,7 +67,8 @@ class AndroidUpgradeNotifier(private val context: Context, private val network: 
         val alarms = context.getSystemService(AlarmManager::class.java) ?: return
         val remind = PendingIntent.getBroadcast(
             context,
-            0,
+            // One alarm per network: each network's next reminder is armed apart.
+            network.alarmRequestCode,
             Intent(context, UpgradeReminderReceiver::class.java).setAction(UpgradeReminderReceiver.ACTION_REMIND),
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
         )
@@ -78,6 +81,24 @@ class AndroidUpgradeNotifier(private val context: Context, private val network: 
 
     private companion object {
         const val CHANNEL_ID = "network-upgrades"
-        const val NOTIFICATION_ID = 1
     }
 }
+
+/**
+ * Each network's own notification id, fixed for good: Sepolia keeps the one its notices had before
+ * there were networks, so a notification an earlier version posted is still its own to replace.
+ */
+private val Network.notificationId: Int
+    get() = when (this) {
+        Network.SEPOLIA -> 1
+        Network.ETHEREUM -> 2
+        Network.GNOSIS -> 3
+    }
+
+/** Each network's own alarm, fixed for good: Sepolia's the request code its alarm had before. */
+private val Network.alarmRequestCode: Int
+    get() = when (this) {
+        Network.SEPOLIA -> 0
+        Network.ETHEREUM -> 1
+        Network.GNOSIS -> 2
+    }

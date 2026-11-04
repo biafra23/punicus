@@ -13,6 +13,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.stateIn
@@ -33,6 +34,12 @@ class DebugViewModel(
 ) : ViewModel() {
 
     private val filter = MutableStateFlow("")
+
+    /**
+     * The text typed, at once: the field shows this rather than [uiState]'s copy, which is made on
+     * the background dispatcher and arrives after the next keystroke, moving the cursor back.
+     */
+    val filterText: StateFlow<String> = filter.asStateFlow()
 
     /** The lines last shown, by record id: read and replaced by [uiState]'s flow alone, one emission at a time. */
     private var made = emptyMap<Long, DebugLogLine>()

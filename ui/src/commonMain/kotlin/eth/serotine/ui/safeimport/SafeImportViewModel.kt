@@ -2,6 +2,7 @@ package eth.serotine.ui.safeimport
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import eth.serotine.domain.model.AccountId
 import eth.serotine.domain.model.Address
 import eth.serotine.domain.model.Network
 import eth.serotine.domain.repository.ReadUnavailable
@@ -12,6 +13,7 @@ import eth.serotine.domain.usecase.SafeTxRefusal
 import eth.serotine.domain.usecase.SigningRequestImport
 import eth.serotine.ui.components.Eip55
 import eth.serotine.ui.components.safeTxRefusalText
+import eth.serotine.ui.components.simpleSafeTxRefusalText
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -32,15 +34,24 @@ import kotlinx.coroutines.launch
  * Scanning a QR code is not offered: the platforms' cameras are not wired in.
  */
 class SafeImportViewModel(
-    private val safe: Address,
+    private val account: AccountId,
     observeAccount: ObserveAccount,
     private val importSigningRequest: ImportSigningRequest,
-    private val network: Network,
 ) : ViewModel() {
+    /** The account this screen is about: its address, on its network. */
+    private val safe: Address = account.address
+
+    /** The account's network: everything here is read and sent there. */
+    private val network: Network = account.network
+
 
     /** Where the import stands. */
     private sealed interface Step {
-        data class Entering(val importing: Boolean = false, val error: String? = null) : Step
+        data class Entering(
+            val importing: Boolean = false,
+            val error: String? = null,
+            val simpleError: String? = null,
+        ) : Step
 
         data class Imported(val hash: String) : Step
     }
@@ -49,7 +60,7 @@ class SafeImportViewModel(
     private val text = MutableStateFlow("")
     private val step = MutableStateFlow<Step>(Step.Entering())
 
-    val uiState: StateFlow<SafeImportUiState> = combine(observeAccount(safe), text, step) { lookup, text, step ->
+    val uiState: StateFlow<SafeImportUiState> = combine(observeAccount(account), text, step) { lookup, text, step ->
         when (step) {
             is Step.Imported -> SafeImportUiState.Imported(network.displayName, step.hash)
             is Step.Entering -> SafeImportUiState.Entering(
@@ -59,6 +70,7 @@ class SafeImportViewModel(
                 text = text,
                 importing = step.importing,
                 error = step.error,
+                simpleError = step.simpleError,
             )
         }
     }.stateIn(
@@ -82,7 +94,7 @@ class SafeImportViewModel(
         step.value = Step.Entering(importing = true)
         viewModelScope.launch {
             val imported = try {
-                importSigningRequest(pasted, safe)
+                importSigningRequest(pasted, account)
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
@@ -97,8 +109,10 @@ class SafeImportViewModel(
                     } else {
                         Step.Entering(error = NOT_SAVED)
                     }
-                    is SigningRequestImport.Refused ->
-                        Step.Entering(error = safeTxRefusalText(imported.refusal, network))
+                    is SigningRequestImport.Refused -> Step.Entering(
+                        error = safeTxRefusalText(imported.refusal, network),
+                        simpleError = simpleSafeTxRefusalText(imported.refusal),
+                    )
                 }
             }
         }

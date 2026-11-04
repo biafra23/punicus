@@ -76,9 +76,15 @@ class VerifiedCowTest {
         chain.snapshot = running()
         val data = byteArrayOf(0xf6.toByte(), 0x98.toByte(), 0xda.toByte(), 0x25)
         chain.calls[deployment.settlement to data.toHex()] = CallOutcome.Returned("ab".repeat(32), 120)
-        assertEquals(Simulation.Succeeded("ab".repeat(32), 120), venue().call(deployment.settlement, data))
+        assertEquals(
+            Simulation.Succeeded("ab".repeat(32), 120),
+            venue().call(Network.SEPOLIA, deployment.settlement, data),
+        )
         chain.calls.clear()
-        assertEquals(Simulation.Unavailable(ReadUnavailable.UNPROVEN), venue().call(deployment.settlement, data))
+        assertEquals(
+            Simulation.Unavailable(ReadUnavailable.UNPROVEN),
+            venue().call(Network.SEPOLIA, deployment.settlement, data),
+        )
     }
 
     @Test

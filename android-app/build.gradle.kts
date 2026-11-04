@@ -48,8 +48,8 @@ android {
         // Core-library desugaring: at minSdk 29 this supplies the Java 9-11 API
         // backports (List.of, String.strip, Collectors.toUnmodifiable*, …) and — from
         // desugar_jdk_libs 2.1.5 — Stream.toList(), for our modules AND third-party
-        // jars alike. What it does NOT cover is listed in CLAUDE.md ("minSdk 29
-        // JDK-API budget") and enforced by scripts/check_apk_min_api.py on the APK.
+        // jars alike. What it does NOT cover is listed in .claude/rules/platform.md
+        // ("minSdk 29 JDK-API budget") and enforced by scripts/check_apk_min_api.py on the APK.
         isCoreLibraryDesugaringEnabled = true
     }
 

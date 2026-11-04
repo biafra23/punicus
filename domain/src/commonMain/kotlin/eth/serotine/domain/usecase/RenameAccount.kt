@@ -1,6 +1,6 @@
 package eth.serotine.domain.usecase
 
-import eth.serotine.domain.model.Address
+import eth.serotine.domain.model.AccountId
 import eth.serotine.domain.repository.AccountChange
 import eth.serotine.domain.repository.AccountRepository
 
@@ -8,14 +8,14 @@ import eth.serotine.domain.repository.AccountRepository
  * Gives an account a new name: [label] without its surrounding whitespace, refused when
  * nothing is left of it ([AccountRename.Blank]) or when it is longer than
  * [MAX_LABEL_LENGTH] ([AccountRename.TooLong]). The name is the user's own; two accounts
- * may share one, since the address is what identifies an account.
+ * may share one, since the network and address are what identify an account.
  */
 class RenameAccount(private val accounts: AccountRepository) {
-    suspend operator fun invoke(address: Address, label: String): AccountRename {
+    suspend operator fun invoke(id: AccountId, label: String): AccountRename {
         val name = label.trim()
         if (name.isEmpty()) return AccountRename.Blank
         if (name.length > MAX_LABEL_LENGTH) return AccountRename.TooLong
-        return when (accounts.rename(address, name)) {
+        return when (accounts.rename(id, name)) {
             AccountChange.Changed -> AccountRename.Renamed
             AccountChange.NotFound -> AccountRename.NotFound
             AccountChange.NotSaved -> AccountRename.NotSaved

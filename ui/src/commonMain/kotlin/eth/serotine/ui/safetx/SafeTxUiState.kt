@@ -42,7 +42,9 @@ sealed interface SafeTxUiState {
      * threshold, [executeNote] saying why it cannot be executed yet; [quoting] while an approval
      * or an execution is quoted for review. [canShare] once the Safe is verified, so that what is
      * shared carries only signatures its current owners made; [share] is the request opened for
-     * sharing, null while closed; [message] what the last action came to, or null.
+     * sharing, null while closed; [message] what the last action came to, or null. Simple mode says
+     * no block (docs/simple-ui.md): [simpleRefusal] and [simpleMessage] are [refusal] and [message]
+     * in its words, null where they are the same.
      */
     data class Overview(
         override val network: String,
@@ -62,6 +64,8 @@ sealed interface SafeTxUiState {
         val canShare: Boolean = true,
         val share: ShareItem? = null,
         val message: String? = null,
+        val simpleRefusal: String? = null,
+        val simpleMessage: String? = null,
     ) : SafeTxUiState
 
     /**
@@ -104,7 +108,9 @@ sealed interface SafeTxUiState {
      * minimum fallen behind the market included. [unlock] is how it is signed; [refreshing]
      * while it is quoted again,
      * [signing] while it is signed and broadcast, and [notSent] once it was signed but not
-     * broadcast: then the same signed bytes are all that can be sent.
+     * broadcast: then the same signed bytes are all that can be sent. [simpleSimulation] is
+     * [simulation] with no block, for simple mode (null: the same), which keeps the fee's make-up and
+     * the blocks behind *Details*.
      */
     data class Review(
         override val network: String,
@@ -127,6 +133,7 @@ sealed interface SafeTxUiState {
         val refreshing: Boolean = false,
         val signing: Boolean = false,
         val notSent: NotSentItem? = null,
+        val simpleSimulation: String? = null,
     ) : SafeTxUiState {
 
         /** Something is typed, and nothing else runs or has run: the password may sign. */
@@ -164,23 +171,25 @@ sealed interface OwnersItem {
     /**
      * Every owner's stand ([rows], in the Safe's order), how many must confirm ([threshold], "2 of
      * 3 owners must confirm"), how many do ([confirmations], "1 of 2 confirmations"), and the block
-     * the owners were verified at ([verifiedAt]).
+     * the owners were verified at ([verifiedAt]); [simpleVerifiedAt] that with no block, for simple mode
+     * (null: the same).
      */
     data class Shown(
         val rows: List<OwnerStateRow>,
         val threshold: String,
         val confirmations: String,
         val verifiedAt: String,
+        val simpleVerifiedAt: String? = null,
     ) : OwnersItem
 
-    /** Not verifiable right now, for the reason [message] gives. */
-    data class Unavailable(val message: String) : OwnersItem
+    /** Not verifiable right now, for the reason [message] gives; [simpleMessage] that with no block, or null. */
+    data class Unavailable(val message: String, val simpleMessage: String? = null) : OwnersItem
 }
 
 /**
  * One owner: its EIP-55 [address], its name in the wallet ([label], null: not in it), whether its
  * key is held on this device ([heldHere]), its [state], and [detail] ("Approved on chain at block
- * 9,412,118").
+ * 9,412,118"); [simpleDetail] that with no block, for simple mode, null where it is [detail] itself.
  */
 data class OwnerStateRow(
     val address: String,
@@ -188,6 +197,7 @@ data class OwnerStateRow(
     val heldHere: Boolean,
     val state: OwnerState,
     val detail: String,
+    val simpleDetail: String? = null,
 )
 
 /** Where one owner stands on a Safe transaction. */

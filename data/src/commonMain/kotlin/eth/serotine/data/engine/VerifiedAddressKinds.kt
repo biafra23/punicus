@@ -3,21 +3,24 @@ package eth.serotine.data.engine
 import eth.serotine.data.keys.toHex
 import eth.serotine.data.safe.SafeDeployments
 import eth.serotine.domain.model.Address
+import eth.serotine.domain.model.Network
 import eth.serotine.domain.repository.AddressKind
 import eth.serotine.domain.repository.AddressKinds
 import eth.serotine.domain.repository.KindReading
+import eth.serotine.domain.repository.ReadUnavailable
 import eth.serotine.domain.repository.SafeState
+import kotlin.time.Duration
+import kotlin.time.Duration.Companion.seconds
+import kotlin.time.TimeMark
+import kotlin.time.TimeSource
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
 import org.kotlincrypto.hash.sha3.Keccak256
-import kotlin.time.Duration
-import kotlin.time.Duration.Companion.seconds
-import kotlin.time.TimeMark
-import kotlin.time.TimeSource
 
 /**
  * [AddressKinds] over a verified light client: an address's code, proven by
@@ -57,6 +60,7 @@ import kotlin.time.TimeSource
  * anywhere near this path.
  */
 class VerifiedAddressKinds internal constructor(
+    private val served: Network,
     chain: VerifiedChain?,
     dispatcher: CoroutineDispatcher,
     pollInterval: Duration,
@@ -340,11 +344,14 @@ class VerifiedAddressKinds internal constructor(
         data object Broken : Walk
     }
 
-    override fun observeKind(address: Address): Flow<KindReading> = reads.observe(address).map { reading ->
-        when (reading) {
-            EngineReading.Syncing, is EngineReading.LastKnown -> KindReading.Syncing
-            is EngineReading.Proven -> KindReading.Verified(reading.value, reading.blockNumber)
-            is EngineReading.Unavailable -> KindReading.Unavailable(reading.reason)
+    override fun observeKind(network: Network, address: Address): Flow<KindReading> {
+        if (network != served) return flowOf(KindReading.Unavailable(ReadUnavailable.NO_ENGINE))
+        return reads.observe(address).map { reading ->
+            when (reading) {
+                EngineReading.Syncing, is EngineReading.LastKnown -> KindReading.Syncing
+                is EngineReading.Proven -> KindReading.Verified(reading.value, reading.blockNumber)
+                is EngineReading.Unavailable -> KindReading.Unavailable(reading.reason)
+            }
         }
     }
 

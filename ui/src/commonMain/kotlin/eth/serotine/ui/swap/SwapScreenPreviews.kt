@@ -11,6 +11,7 @@ import eth.serotine.ui.components.NotSentItem
 import eth.serotine.ui.components.RouteStep
 import eth.serotine.ui.components.SendFrom
 import eth.serotine.ui.components.SpenderItem
+import eth.serotine.ui.components.SwapEstimateItem
 import eth.serotine.ui.components.SwapForm
 import eth.serotine.ui.components.UnlockStep
 import eth.serotine.ui.components.verifiedStripSample
@@ -113,6 +114,18 @@ private val empty = SwapUiState.Compose(
     ),
 )
 
+/** What 40 USDC would return, as the ViewModel draws the compose step's verified quote. */
+private val estimate = SwapEstimateItem(
+    label = "You receive",
+    receive = "≈ 0.01587 ETH",
+    minimum = "At least 0.01579 ETH at 0.5 % tolerance",
+    rate = "1 USDC ≈ 0.0003968 ETH",
+    inverseRate = "1 ETH ≈ 2519.98 USDC",
+    note = "Uniswap's verified quote at block 8,412,307. The review quotes the swap again, with its network fee, " +
+        "before anything is signed.",
+    simpleNote = "Checked on chain. The review checks it again before you confirm.",
+)
+
 private val composed = empty.with {
     it.copy(
         sellOptions = listOf(ether, usdc),
@@ -122,10 +135,20 @@ private val composed = empty.with {
         amount = "40",
         amountHint = "≈ $40.00 · testnet prices",
         canReview = true,
+        estimate = estimate,
     )
 }.copy(venue = VenueItem(SwapVenue.UNISWAP))
 
-private val onCow = composed.copy(venue = VenueItem(SwapVenue.COW))
+private val onCow = composed.with {
+    it.copy(
+        estimate = estimate.copy(
+            label = "On Uniswap, you would receive",
+            note = "Uniswap's verified quote at block 8,412,307, to compare. CoW is asked for its own estimate " +
+                "only when you review the order.",
+            simpleNote = "Uniswap's price, checked on chain. CoW's own estimate comes with the review.",
+        ),
+    )
+}.copy(venue = VenueItem(SwapVenue.COW))
 
 /** This form step with [edit] applied to its form and the fee [fee]. */
 private fun SwapUiState.Compose.with(fee: FeeLevel = this.fee, edit: (SwapForm) -> SwapForm = { it }) =
@@ -151,6 +174,10 @@ private val approval = SwapUiState.ApprovalReview(
     simulation = "The approval, run as a verified call from this account at block 8,412,307, goes through. It " +
         "moves nothing: the swap is its own transaction, quoted once a block has this one.",
     unlock = UnlockStep(),
+    step = "Step 1 of 2",
+    next = "Step 2, the swap: once a block has this approval, the price is checked again and you confirm the swap.",
+    headline = "Allow Uniswap's SwapRouter02 to use 40 USDC",
+    scope = "Only this amount, for this swap.",
 )
 
 private val review = SwapUiState.SwapReview(
@@ -244,7 +271,7 @@ private fun SwapPreview(
     SerotineTheme(darkTheme = darkTheme) {
         SwapScreen(
             state = state,
-            lightClient = lightClient,
+            chrome = SwapChrome.Strip(lightClient),
             onSellChange = {},
             onBuyChange = {},
             onAmountChange = {},
@@ -281,6 +308,45 @@ private fun SwapComposedPreview() = SwapPreview(composed)
 
 @Preview
 @Composable
+private fun SwapComposeEstimateCheckingPreview() = SwapPreview(
+    composed.with {
+        it.copy(
+            estimate = SwapEstimateItem(
+                label = "You receive",
+                note = "Asking Uniswap's quoter, through the light client.",
+                checking = true,
+            ),
+        )
+    },
+)
+
+@Preview
+@Composable
+private fun SwapComposeEstimateUnavailablePreview() = SwapPreview(
+    composed.with {
+        it.copy(
+            estimate = SwapEstimateItem(
+                label = "You receive",
+                note = "The light client is still syncing: the swap is quoted once it has caught up.",
+            ),
+        )
+    },
+)
+
+@Preview
+@Composable
+private fun SwapComposeHighImpactPreview() = SwapPreview(
+    composed.with {
+        it.copy(
+            estimate = estimate.copy(
+                impact = "Price impact 3.42 %: this amount moves the pools' price. The review says more.",
+            ),
+        )
+    },
+)
+
+@Preview
+@Composable
 private fun SwapComposeQuotingPreview() = SwapPreview(composed.with { it.copy(quoting = true, canReview = false) })
 
 @Preview
@@ -305,6 +371,8 @@ private fun SwapComposeNoRoutePreview() = SwapPreview(
         it.copy(
             buy = link,
             error = "No Uniswap v3 pool takes USDC for LINK, directly or through WETH, for this amount.",
+            // The estimate says no more than the refused Review: the ViewModel leaves it out.
+            estimate = null,
         )
     },
 )
@@ -386,6 +454,11 @@ private fun SwapApprovalResetFirstPreview() = SwapPreview(
         resetNote = "USDC refuses to move one allowance to another, as the approval of the whole amount showed: " +
             "this sets it to zero first, and the whole amount is approved once that is in a block.",
         unlock = UnlockStep(WalletPassword("made-up preview password")),
+        step = "Step 1 of 3",
+        next = "Step 2, the approval of the whole amount: once a block has this one, it is checked again and you " +
+            "confirm it, then the swap.",
+        headline = "Set what Uniswap's SwapRouter02 may use of USDC to zero",
+        scope = "It allows nothing: the whole amount is approved in the next step.",
     ),
 )
 
@@ -484,6 +557,38 @@ private fun SwapWatchOnlyPreview() = SwapPreview(
 @Composable
 private fun SwapSentPreview() = SwapPreview(SwapUiState.Sent("Sepolia", "0x" + "5e".repeat(32)))
 
+/** Between the steps: the approval sent, the swap quoted once a block has it. */
+@Preview
+@Composable
+private fun SwapApprovalPendingPreview() = SwapPreview(
+    SwapUiState.ApprovalPending(
+        network = "Sepolia",
+        hash = "0x" + "a1".repeat(32),
+        title = "Step 1 of 2 sent: the approval",
+        message = "Once a block has the approval, the swap is quoted again here and you confirm step 2. If you " +
+            "leave, it waits in this account's Activity: Continue there quotes it again. The approval only lets " +
+            "USDC be taken in a swap you send yourself.",
+    ),
+)
+
+/** The swap quoted once its approval is in a block: step 2 of 2. */
+@Preview
+@Composable
+private fun SwapReviewStepTwoPreview() = SwapPreview(review.copy(step = "Step 2 of 2"))
+
+/** A block has the approval sent before, yet the allowance still falls short: said before another is sent. */
+@Preview
+@Composable
+private fun SwapApprovalEarlierFailedPreview() = SwapPreview(
+    approval.copy(
+        earlierFailed = FailedApproval(
+            "A block has the approval sent before, yet the allowance still falls short: it may have failed. Open " +
+                "it to see why before you send another.",
+            "0x" + "a1".repeat(32),
+        ),
+    ),
+)
+
 @Preview
 @Composable
 private fun SwapWrapReviewPreview() = SwapPreview(
@@ -503,6 +608,9 @@ internal val swapScreenPreviews: List<@Composable () -> Unit> = listOf(
     { SwapComposeEmptyPreview() },
     { SwapComposeEmptyDarkPreview() },
     { SwapComposedPreview() },
+    { SwapComposeEstimateCheckingPreview() },
+    { SwapComposeEstimateUnavailablePreview() },
+    { SwapComposeHighImpactPreview() },
     { SwapComposeQuotingPreview() },
     { SwapComposeInputErrorsPreview() },
     { SwapComposeNoRoutePreview() },
@@ -529,6 +637,9 @@ internal val swapScreenPreviews: List<@Composable () -> Unit> = listOf(
     { SwapLoadingPreview() },
     { SwapWatchOnlyPreview() },
     { SwapSentPreview() },
+    { SwapApprovalPendingPreview() },
+    { SwapReviewStepTwoPreview() },
+    { SwapApprovalEarlierFailedPreview() },
     { SwapWrapReviewPreview() },
     { SwapWrapReviewDarkPreview() },
     { SwapUnwrapReviewPreview() },

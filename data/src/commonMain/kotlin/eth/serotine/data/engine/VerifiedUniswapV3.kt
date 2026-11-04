@@ -53,8 +53,12 @@ class VerifiedUniswapV3 internal constructor(
         }
     }
 
-    override suspend fun call(to: Address, data: ByteArray): Simulation =
-        chain.askVerified(dispatcher, Simulation::Unavailable) { it.call(to, data).toSimulation() }
+    override suspend fun call(network: Network, to: Address, data: ByteArray): Simulation =
+        if (network != this.network) {
+            Simulation.Unavailable(ReadUnavailable.NO_ENGINE)
+        } else {
+            chain.askVerified(dispatcher, Simulation::Unavailable) { it.call(to, data).toSimulation() }
+        }
 
     /** Each of [pinned]'s contracts' code proven and hashed, in parallel; the first that is not its pin says why. */
     private suspend fun check(pinned: PinnedUniswapV3): VenueReading = coroutineScope {

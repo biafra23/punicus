@@ -3,7 +3,8 @@ package eth.serotine.ios
 import eth.serotine.data.account.FileAccountRepository
 import eth.serotine.data.cow.FileCowOrders
 import eth.serotine.data.cow.HttpCowApi
-import eth.serotine.data.engine.MyotisNode
+import eth.serotine.data.walletconnect.WalletConnectDapps
+import eth.serotine.data.engine.MyotisHost
 import eth.serotine.data.history.FileHistoryStarts
 import eth.serotine.data.keys.EnvelopeKeyStore
 import eth.serotine.data.keys.IosBiometricKey
@@ -11,12 +12,16 @@ import eth.serotine.data.keys.PasswordOnlyTier
 import eth.serotine.data.keys.Secp256k1Recovery
 import eth.serotine.data.keys.iosHardwareSecret
 import eth.serotine.data.logs.MemoryDebugLog
+import eth.serotine.data.networks.FileNetworkSettings
 import eth.serotine.data.safe.FileSafeTxQueue
 import eth.serotine.data.safe.JsonSigningRequestCodec
 import eth.serotine.data.safe.PinnedSafeReleases
 import eth.serotine.data.settings.FileDebugScreen
 import eth.serotine.data.settings.FileDisplayCurrency
+import eth.serotine.data.settings.FileAmountsHidden
+import eth.serotine.data.settings.FileInterfaceMode
 import eth.serotine.data.settings.FileSwapVenue
+import eth.serotine.data.swaps.FileWaitingSwaps
 import eth.serotine.data.tokens.BuiltInTokenCatalog
 import eth.serotine.data.tokens.FileUserTokens
 import eth.serotine.data.transfers.FileSentTransfers
@@ -24,25 +29,40 @@ import eth.serotine.data.transfers.FileTransactionHistory
 import eth.serotine.data.upgrade.FileKnownUpgradeStore
 import eth.serotine.domain.model.Network
 import eth.serotine.domain.usecase.FollowAccountLogs
+import eth.serotine.domain.usecase.AnswerDappRequestsAtOnce
+import eth.serotine.domain.usecase.FollowDappAccounts
 import eth.serotine.domain.usecase.FollowDebugScreen
+import eth.serotine.domain.usecase.FollowInterfaceMode
+import eth.serotine.domain.usecase.FollowNetworks
 import eth.serotine.domain.usecase.FollowSafeDeployments
 import eth.serotine.domain.usecase.FollowSentTransactions
 import eth.serotine.domain.usecase.FollowUpgradeReports
 import eth.serotine.domain.usecase.HistoryNotingAccounts
 import eth.serotine.domain.usecase.HistoryRecordingSentTransfers
 import eth.serotine.domain.usecase.ListDeployedSafe
+import eth.serotine.domain.usecase.NetworkDemand
+import eth.serotine.domain.usecase.ObserveDebugTab
 import eth.serotine.domain.usecase.ProveCowOrderEnds
 import eth.serotine.domain.usecase.UpgradeNotices
 import eth.serotine.domain.usecase.WatchAddress
 import eth.serotine.ui.APP_VERSION
 import eth.serotine.ui.AppGraph
+import kotlin.concurrent.atomics.AtomicBoolean
+import kotlin.concurrent.atomics.ExperimentalAtomicApi
+import kotlin.experimental.ExperimentalNativeApi
+import kotlin.native.Platform
+import kotlin.time.Duration
+import kotlin.time.Duration.Companion.seconds
+import kotlin.time.TimeSource
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineExceptionHandler
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.IO
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeoutOrNull
@@ -61,12 +81,6 @@ import platform.UIKit.UIApplicationDidEnterBackgroundNotification
 import platform.UIKit.UIApplicationWillEnterForegroundNotification
 import platform.UIKit.UIApplicationWillTerminateNotification
 import platform.UIKit.UIBackgroundTaskInvalid
-import kotlin.concurrent.atomics.AtomicBoolean
-import kotlin.concurrent.atomics.ExperimentalAtomicApi
-import kotlin.experimental.ExperimentalNativeApi
-import kotlin.native.Platform
-import kotlin.time.Duration.Companion.seconds
-import kotlin.time.TimeSource
 
 /**
  * The iOS composition root: the process's one wallet, which the Swift app creates once, before
@@ -77,10 +91,12 @@ import kotlin.time.TimeSource
  * runs the work no screen owns: the engine's network-upgrade reports followed into
  * notifications, the Safes this wallet deployed listed once the light client proves them, and
  * how the transactions sent from here end recorded. That work runs while the app is in the
- * foreground; in the background the engine's networking is paused (a suspended app keeps no
- * sockets open) and resumed on return, and a reminder due meanwhile comes as the notification
- * [IosUpgradeNotifier] scheduled. The pause runs as a background task, so iOS lets it close the
- * engine's connections before it suspends the app. An app terminated while running shuts the
+ * foreground and for a grace period after it ([GRACE_PERIOD]), so a quick switch to another app
+ * comes back to synced light clients; then, in the background, the engine's networking is paused
+ * (a suspended app keeps no sockets open) and resumed on return, and a reminder due meanwhile
+ * comes as the notification [IosUpgradeNotifier] scheduled. The grace period and the pause run as
+ * a background task, so iOS keeps the app awake for them and lets it close the engine's
+ * connections before it suspends the app. An app terminated while running shuts the
  * engine down, waiting for that only briefly ([TERMINATE_WAIT]); an app killed while suspended
  * runs no code, which the engine survives as any mobile app's state must.
  */
@@ -108,22 +124,26 @@ class SerotineWallet {
     /** Whether the user turned the Debug tab on, beside the other settings: [debugLog] records only then. */
     private val debugScreen = FileDebugScreen("$dataDir/debug-screen.json")
 
-    // Sepolia only, for now (CLAUDE.md, *Data sources*). The engine boots in the background;
-    // its state can be fetched again, so it stays out of backups. The balances last verified are
-    // kept beside it, to be shown as such after a restart. The adapters' diagnostics and the
+    /** The view the user chose, simple mode or Detailed view (docs/simple-ui.md), beside the other settings. */
+    private val interfaceMode = FileInterfaceMode("$dataDir/ui-mode.json")
+    private val amountsHidden = FileAmountsHidden("$dataDir/amounts-hidden.json")
+
+    // One engine, one light client per network that is on and needed: FollowNetworks starts with
+    // the wallet and runs for the life of the process (docs/networks.md, *The engine host*). The
+    // engine's state can be fetched again, so it stays out of backups. The balances last verified
+    // are kept beside it, to be shown as such after a restart. The adapters' diagnostics and the
     // engine's own log go to the device's log in a debug build only: NSLog, not println, whose
     // stdout reaches no one on a device unless Xcode launched the app. Each request asked of the
     // engine goes to the Debug tab's log ([debugLog]), in memory, in any build.
     @OptIn(ExperimentalNativeApi::class)
-    private val node: MyotisNode = run {
+    private val node: MyotisHost = run {
         val engineDir = "$dataDir/myotis"
         createDirectoryOutOfBackups(engineDir)
         // The line is NSLog's format, its `%` escaped, so nothing crosses NSLog's C varargs: with
         // NSLog("%@", line) the debug app died at launch on the simulator (#129's CI).
         val debugLog: ((String) -> Unit)? =
             if (Platform.isDebugBinary) { line -> NSLog(line.replace("%", "%%")) } else null
-        MyotisNode.start(
-            Network.SEPOLIA,
+        MyotisHost.start(
             engineDir,
             lastBalances = "$dataDir/last-balances.json",
             debugLog = debugLog,
@@ -133,8 +153,33 @@ class SerotineWallet {
 
     // One record per process, read by the screens and written by the notices; this version's only.
     private val knownUpgrades = FileKnownUpgradeStore("$dataDir/upgrade.json", APP_VERSION)
-    private val notifier = IosUpgradeNotifier(Network.SEPOLIA)
-    private val upgradeNotices = UpgradeNotices(knownUpgrades, notifier)
+
+    /**
+     * Which networks are on (docs/networks.md, *Networks on and off*). A network the file does not
+     * mention yet gets this build's default: the release binary turns on the real networks and
+     * leaves Sepolia off, the debug binary turns on Sepolia alone.
+     */
+    @OptIn(ExperimentalNativeApi::class)
+    private val networkSettings =
+        FileNetworkSettings("$dataDir/networks.json", defaultOn = { it.testnet == Platform.isDebugBinary })
+    /**
+     * dApp sessions over WalletConnect (docs/walletconnect.md), with this binary's project ID: the
+     * debug one's or the release one's; off without one. Their state is in a directory of its own,
+     * which the store keeps owner-only and out of iCloud and computer backups (ruling 8).
+     */
+    @OptIn(ExperimentalNativeApi::class)
+    private val dappProjectId = WalletConnectDapps.projectIdFor(debug = Platform.isDebugBinary)
+    private val dapps = WalletConnectDapps("$dataDir/walletconnect/state.json", dappProjectId)
+
+    /** Each network's notifications, apart: held here, as the first one is the notification center's delegate. */
+    private val notifiers = Network.entries.associateWith(::IosUpgradeNotifier)
+
+    /** What the user hears about each network's upgrades outside the app, apart (docs/networks.md). */
+    private val upgradeNotices =
+        notifiers.mapValues { (network, notifier) -> UpgradeNotices(network, knownUpgrades, notifier) }
+
+    /** The screens' holds on a network with no account on it yet (Watch, Add token). */
+    private val networkDemand = NetworkDemand()
 
     // One instance each, which the graph and the background work share. Each account added is
     // noted where its history starts (issue #85): addresses with a block or a time, public data only.
@@ -168,7 +213,7 @@ class SerotineWallet {
             accounts = accounts,
             keys = keyStore,
             nativeBalances = node.nativeBalances,
-            tokenCatalog = BuiltInTokenCatalog(Network.SEPOLIA),
+            tokenCatalog = BuiltInTokenCatalog(),
             tokenBalances = node.tokenBalances,
             tokenMetadata = node.tokenMetadata,
             userTokens = FileUserTokens("$dataDir/tokens.json"),
@@ -176,6 +221,8 @@ class SerotineWallet {
             displayCurrency = FileDisplayCurrency("$dataDir/display-currency.json"),
             addressKinds = node.addressKinds,
             lightClient = node.lightClient,
+            staleAnchorConsent = node,
+            networkFreshness = node,
             networkUpgrades = node.networkUpgrades,
             knownUpgrades = knownUpgrades,
             transactionInputs = node.transactionInputs,
@@ -189,12 +236,12 @@ class SerotineWallet {
             logIndex = node.logIndex,
             // The Safe transactions waiting for their owners, with the signatures collected (public).
             safeTxQueue = FileSafeTxQueue("$dataDir/safe-tx-queue.json"),
-            signingRequests = JsonSigningRequestCodec(Network.SEPOLIA),
+            signingRequests = JsonSigningRequestCodec(),
             signatureRecovery = Secp256k1Recovery(),
             safeApprovals = node.safeApprovals,
             // Safe 1.4.1's singleton, factory and proxy code, pinned in code: what a new Safe is created from.
             safeReleases = PinnedSafeReleases(),
-            // Uniswap v3 on Sepolia, its pinned contracts proven by their code before any quote.
+            // Uniswap v3 on each network that has it pinned, its contracts proven by their code before any quote.
             uniswap = node.uniswap,
             // CoW Protocol: its pinned contracts proven by their code, and its order API, an off-chain
             // service used only for a swap the user sends to CoW (CLAUDE.md, *Data sources*). Until
@@ -204,11 +251,18 @@ class SerotineWallet {
             cowApi = HttpCowApi.create(),
             cowOrders = cowOrders,
             swapVenue = FileSwapVenue("$dataDir/swap-venue.json"),
-            network = Network.SEPOLIA,
+            waitingSwaps = FileWaitingSwaps("$dataDir/waiting-swaps.json"),
             debugLog = debugLog,
             debugScreen = debugScreen,
+            interfaceMode = interfaceMode,
+            amountsHidden = amountsHidden,
             // iOS blocks no capture, so there is nothing for a debug switch to lift.
             screenCaptureDebugSwitch = null,
+            networkDemand = networkDemand,
+            networkSettings = networkSettings,
+            dappSessions = dapps,
+            dappRequests = dapps.requests,
+            dappConnectionsOff = dappProjectId.isEmpty(),
         )
     }
 
@@ -225,18 +279,34 @@ class SerotineWallet {
     /** The work running while the app is in the foreground; main thread only. */
     private var foregroundWork: List<Job> = emptyList()
 
+    /** The wait before the pause, while the app is in the background and still awake; main thread only. */
+    private var gracePeriod: Job? = null
+
     init {
         // At launch the app is in the foreground: the work starts with the wallet.
         startForegroundWork()
         // The debug log records while the Debug tab is on, for the life of the process.
-        scope.launch { FollowDebugScreen(debugScreen, debugLog)() }
+        scope.launch { FollowDebugScreen(ObserveDebugTab(debugScreen, interfaceMode), debugLog)() }
+        // Each network's light client runs while it is on and needed (docs/networks.md, *The engine
+        // host*); following the setting also records each network's default. A failure ends it,
+        // never the wallet: the light clients keep their last state.
+        scope.launch {
+            reportingFailure("following the networks") {
+                FollowNetworks(networkSettings, accounts, networkDemand, node)()
+            }
+        }
+        // Values proven on demand in simple mode, at every head in Detailed view (docs/simple-ui.md).
+        scope.launch {
+            reportingFailure("following the view") { FollowInterfaceMode(interfaceMode, node)() }
+        }
         val center = NSNotificationCenter.defaultCenter
         center.addObserverForName(UIApplicationDidEnterBackgroundNotification, null, NSOperationQueue.mainQueue) {
-            keepAwakeUntil("pause the engine", node.pause())
-            foregroundWork.forEach { it.cancel() }
-            foregroundWork = emptyList()
+            pauseAfterGracePeriod()
         }
         center.addObserverForName(UIApplicationWillEnterForegroundNotification, null, NSOperationQueue.mainQueue) {
+            // Back within the grace period: nothing was paused, and the light clients are still synced.
+            gracePeriod?.cancel()
+            gracePeriod = null
             node.resume()
             startForegroundWork()
         }
@@ -246,7 +316,8 @@ class SerotineWallet {
             val shutdown = scope.launch(Dispatchers.IO) { node.shutdown() }
             runBlocking { withTimeoutOrNull(TERMINATE_WAIT) { shutdown.join() } }
         }
-        notifier.askPermission()
+        // One permission for every network's notices: asked once, by one of them.
+        notifiers.values.first().askPermission()
         startupTime("wallet built")
     }
 
@@ -257,19 +328,52 @@ class SerotineWallet {
     }
 
     /**
-     * Asks iOS to keep the app running in the background until [job] has finished, or until the
-     * system's own limit; the task ends exactly once, whichever comes first.
+     * Keeps the engine's networking and the foreground work on for [GRACE_PERIOD] after the app
+     * went to the background, so a user who switches away for a moment, to copy an address say,
+     * finds the light clients still synced on return; then stops the work and pauses the engine.
+     * iOS keeps the app awake for this as a background task, which it limits to about 30 s: the
+     * wait is cut short to leave [PAUSE_MARGIN] for the pause within the time iOS says is left,
+     * and a task iOS ends early pauses at once. Main thread.
      */
     @OptIn(ExperimentalAtomicApi::class)
-    private fun keepAwakeUntil(name: String, job: Job) {
+    private fun pauseAfterGracePeriod() {
+        gracePeriod?.cancel()
         val app = UIApplication.sharedApplication
+        val paused = AtomicBoolean(false)
         val ended = AtomicBoolean(false)
         var task = UIBackgroundTaskInvalid
         val end = {
             if (ended.compareAndSet(false, true) && task != UIBackgroundTaskInvalid) app.endBackgroundTask(task)
         }
-        task = app.beginBackgroundTaskWithName(name) { end() }
-        job.invokeOnCompletion { end() }
+        // Once per grace period, on the main thread: the foreground work stops, and the pause runs.
+        val pause = {
+            if (paused.compareAndSet(false, true)) {
+                foregroundWork.forEach { it.cancel() }
+                foregroundWork = emptyList()
+                node.pause()
+            } else {
+                null
+            }
+        }
+        var waiting: Job? = null
+        task = app.beginBackgroundTaskWithName("keep the network on briefly, then pause the engine") {
+            // iOS ends the task: the pause cannot be waited for any more, only asked for.
+            waiting?.cancel()
+            if (gracePeriod === waiting) gracePeriod = null
+            pause()
+            end()
+        }
+        // In the background, the time iOS still gives the task; without a task, none.
+        val left = if (task == UIBackgroundTaskInvalid) Duration.ZERO else app.backgroundTimeRemaining.seconds
+        val wait = minOf(GRACE_PERIOD, left - PAUSE_MARGIN).coerceAtLeast(Duration.ZERO)
+        val waited = scope.launch(Dispatchers.Main) {
+            delay(wait)
+            pause()?.join()
+        }
+        // Ended by the pause, by a return to the foreground (nothing paused) or by iOS.
+        waited.invokeOnCompletion { end() }
+        waiting = waited
+        gracePeriod = waited
     }
 
     /**
@@ -279,10 +383,14 @@ class SerotineWallet {
      */
     private fun startForegroundWork() {
         if (foregroundWork.isNotEmpty()) return
-        foregroundWork = listOf(
+        foregroundWork = upgradeNotices.map { (network, notices) ->
+            // Each network's upgrade reports, while its light client runs (one off or idle reports none).
             scope.launch {
-                reportingFailure("upgrade notices") { FollowUpgradeReports(node.networkUpgrades, upgradeNotices)() }
-            },
+                reportingFailure("upgrade notices of ${network.displayName}") {
+                    FollowUpgradeReports(network, node.networkUpgrades, notices)()
+                }
+            }
+        } + listOf(
             scope.launch {
                 // The Safes this wallet deployed are listed whatever screen is open, and again after a
                 // restart (docs/wallet-ux.md, screen 15).
@@ -297,31 +405,50 @@ class SerotineWallet {
                 }
             },
             scope.launch {
+                // The relay connection while the app is in front: dApp messages arrive while it is open.
+                reportingFailure("the WalletConnect relay connection") { dapps.run() }
+            },
+            scope.launch {
+                // Each session's accounts kept to those still in the wallet (accountsChanged).
+                reportingFailure("following the dApp sessions' accounts") {
+                    FollowDappAccounts(dapps, accounts, networkSettings)()
+                }
+            },
+            scope.launch {
+                // The requests that need no one's decision, answered at once.
+                reportingFailure("answering the dApps' requests") {
+                    AnswerDappRequestsAtOnce(dapps.requests, sentTransfers, transactionHistory)()
+                }
+            },
+            scope.launch {
                 // How each transaction sent from here ends is recorded whatever screen is open (issue #85).
                 reportingFailure("following sent transactions") {
                     FollowSentTransactions(transactionHistory, sentRecord, node.receipts, node.transactionInputs)()
                 }
             },
-            scope.launch {
-                // The engine's log index follows every account from where its history starts (issue #85).
-                reportingFailure("following the accounts' logs") {
-                    FollowAccountLogs(
-                        accounts,
-                        historyStarts,
-                        transactionHistory,
-                        node.lightClient,
-                        node.logIndex,
-                        Network.SEPOLIA,
-                    )()
-                }
-            },
-            scope.launch {
-                // Each CoW order's end is proven from the accounts' log-index entries (docs/swaps.md).
-                reportingFailure("proving the CoW orders' ends") {
-                    ProveCowOrderEnds(cowOrders, node.logIndex, node.lightClient, accounts)()
-                }
-            },
-        )
+        ) + Network.entries.flatMap { network ->
+            listOf(
+                scope.launch {
+                    // Each network's log index follows its accounts from where each history starts (issue #85).
+                    reportingFailure("following the accounts' logs on ${network.displayName}") {
+                        FollowAccountLogs(
+                            accounts,
+                            historyStarts,
+                            transactionHistory,
+                            node.lightClient,
+                            node.logIndex,
+                            network,
+                        )()
+                    }
+                },
+                scope.launch {
+                    // Each CoW order's end is proven from its network's log-index entries (docs/swaps.md).
+                    reportingFailure("proving the CoW orders' ends on ${network.displayName}") {
+                        ProveCowOrderEnds(cowOrders, node.logIndex, node.lightClient, accounts, network)()
+                    }
+                },
+            )
+        }
     }
 
     /** Runs [work]; a failure ends it, said on the console with its kind only, never the wallet. */
@@ -338,6 +465,15 @@ class SerotineWallet {
     private companion object {
         /** How long a termination waits for the engine's shutdown; iOS allows about five seconds. */
         val TERMINATE_WAIT = 3.seconds
+
+        /**
+         * How long the networking stays on after the app went to the background: within the about
+         * 30 s iOS gives a background task.
+         */
+        val GRACE_PERIOD = 25.seconds
+
+        /** What the pause is left of the background task's time, to close the engine's connections. */
+        val PAUSE_MARGIN = 3.seconds
     }
 }
 

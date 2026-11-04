@@ -1,6 +1,7 @@
 package eth.serotine.domain.usecase
 
 import eth.serotine.domain.model.Address
+import eth.serotine.domain.model.Network
 import eth.serotine.domain.model.Token
 import eth.serotine.domain.repository.TokenBalanceReading
 import eth.serotine.domain.repository.TokenBalances
@@ -22,11 +23,11 @@ class ObserveTokenHoldings(
     private val knownTokens: ObserveKnownTokens,
     private val balances: TokenBalances,
 ) {
-    operator fun invoke(holder: Address): Flow<TokenHoldings> = knownTokens()
+    operator fun invoke(network: Network, holder: Address): Flow<TokenHoldings> = knownTokens(network)
         .map { known -> known.tokens.filter { it.shown } to known.settingsUnavailable }
         .readEach(
             keys = { (tokens, _) -> tokens.mapTo(LinkedHashSet()) { it.token.address } },
-            read = { address -> balances.observeBalance(holder, address) },
+            read = { address -> balances.observeBalance(network, holder, address) },
         )
         .map { (shown, read) ->
             val (tokens, settingsUnavailable) = shown

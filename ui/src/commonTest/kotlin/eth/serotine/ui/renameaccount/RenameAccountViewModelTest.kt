@@ -2,29 +2,37 @@ package eth.serotine.ui.renameaccount
 
 import eth.serotine.domain.model.Account
 import eth.serotine.domain.model.AccountCustody
+import eth.serotine.domain.model.AccountId
 import eth.serotine.domain.model.AccountKind
 import eth.serotine.domain.model.Address
+import eth.serotine.domain.model.Network
 import eth.serotine.domain.usecase.ObserveAccount
 import eth.serotine.domain.usecase.RenameAccount
 import eth.serotine.ui.FakeAccounts
+import kotlin.test.AfterTest
+import kotlin.test.Test
+import kotlin.test.assertEquals
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.test.setMain
-import kotlin.test.AfterTest
-import kotlin.test.Test
-import kotlin.test.assertEquals
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class RenameAccountViewModelTest {
 
-    private val daily = Account(Address.of("0x" + "11".repeat(20)), AccountKind.EOA, "Daily", AccountCustody.InKeyStore)
+    private val daily = Account(
+        Network.SEPOLIA,
+        Address.of("0x" + "11".repeat(20)),
+        AccountKind.EOA,
+        "Daily",
+        AccountCustody.InKeyStore,
+    )
     private val accounts = FakeAccounts(daily)
 
     private fun viewModel(address: Address = daily.address) =
-        RenameAccountViewModel(address, ObserveAccount(accounts), RenameAccount(accounts))
+        RenameAccountViewModel(AccountId(Network.SEPOLIA, address), ObserveAccount(accounts), RenameAccount(accounts))
 
     @AfterTest
     fun resetMainDispatcher() = Dispatchers.resetMain()

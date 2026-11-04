@@ -2,9 +2,12 @@
 <!-- The exchange-rate widget (RateWidget). updatePeriodMillis 0: the widget never wakes the
      device to update itself; RateRefreshJob refreshes it on an unmetered network, and the app
      while it is open. previewLayout and the target cells are read from Android 12 on; earlier
-     launchers size it by its minimum and show the app icon as its preview. -->
+     launchers size it by its minimum and show the app icon as its preview. configure: placing
+     one asks for its network (docs/networks.md, *The widget*), which it keeps; for another
+     network, the user places another widget. -->
 <appwidget-provider xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:tools="http://schemas.android.com/tools"
+    android:configure="eth.serotine.android.widget.RateWidgetConfigureActivity"
     android:description="@string/rate_widget_description"
     android:initialLayout="@layout/widget_rate"
     android:minWidth="110dp"

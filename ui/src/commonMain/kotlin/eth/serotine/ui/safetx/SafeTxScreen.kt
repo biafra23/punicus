@@ -63,6 +63,7 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LifecycleEventEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import eth.serotine.domain.model.InterfaceMode
 import eth.serotine.domain.repository.FeeLevel
 import eth.serotine.ui.components.AccountAvatar
 import eth.serotine.ui.components.AddressLine
@@ -73,6 +74,7 @@ import eth.serotine.ui.components.GhostCircle
 import eth.serotine.ui.components.GhostLine
 import eth.serotine.ui.components.GhostRows
 import eth.serotine.ui.components.Heading
+import eth.serotine.ui.components.HiddenDetails
 import eth.serotine.ui.components.LightClientItem
 import eth.serotine.ui.components.NotSentFields
 import eth.serotine.ui.components.Note
@@ -84,17 +86,21 @@ import eth.serotine.ui.components.SerotineIcons
 import eth.serotine.ui.components.Unavailable
 import eth.serotine.ui.components.UnavailableDialog
 import eth.serotine.ui.components.UnavailableNotice
-import eth.serotine.ui.components.UnderLightClientStrip
+import eth.serotine.ui.components.UnderLightClientStripIfAny
 import eth.serotine.ui.components.UnlockFields
 import eth.serotine.ui.components.levelName
 import eth.serotine.ui.components.shortAddress
 import eth.serotine.ui.components.unavailable
-import eth.serotine.ui.lightclient.LightClientViewModel
+import eth.serotine.ui.mode.LocalInterfaceMode
 import eth.serotine.ui.platform.KeepScreenOn
 import eth.serotine.ui.platform.rememberCopyText
 import eth.serotine.ui.platform.rememberShareText
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
+
+/** Test tag of the *Details* that keep the blocks in simple mode, for UI tests. */
+const val SAFE_TX_DETAILS_TAG = "safe-tx-details"
 
 /** Test tag of the transaction's hash, for UI tests. */
 const val SAFE_TX_HASH_TAG = "safe-tx-hash"
@@ -121,7 +127,8 @@ const val SAFE_TX_SIGN_TAG = "safe-tx-sign"
 @Composable
 fun SafeTxRoute(
     viewModel: SafeTxViewModel,
-    lightClient: LightClientViewModel,
+    /** The strip of the network this screen is about: its account's. */
+    lightClient: StateFlow<LightClientItem>,
     onBack: () -> Unit,
     onSent: (hash: String) -> Unit,
     onProposeAgain: () -> Unit,
@@ -129,7 +136,6 @@ fun SafeTxRoute(
 ) {
     // Main.immediate: as on Send, an edit reaches its field in the same frame.
     val state by viewModel.uiState.collectAsStateWithLifecycle(context = Dispatchers.Main.immediate)
-    val strip by lightClient.item.collectAsStateWithLifecycle()
     LifecycleEventEffect(Lifecycle.Event.ON_STOP) { viewModel.onHidden() }
     LifecycleEventEffect(Lifecycle.Event.ON_START) { viewModel.onShown() }
     val sent = (state as? SafeTxUiState.Sent)?.hash
@@ -142,10 +148,8 @@ fun SafeTxRoute(
             removed -> currentOnBack()
         }
     }
-    SafeTxScreen(
-        state = state,
-        lightClient = strip,
-        actions = SafeTxActions(
+    val actions = remember(viewModel, onProposeAgain) {
+        SafeTxActions(
             onShare = viewModel::onShare,
             onShareClosed = viewModel::onShareClosed,
             onCheckAgain = viewModel::checkAgain,
@@ -163,12 +167,32 @@ fun SafeTxRoute(
             onRetry = viewModel::retry,
             onStepBack = viewModel::back,
             onProposeAgain = onProposeAgain,
-        ),
-        onBack = onBack,
-        onCopy = rememberCopyText(),
-        onShareText = rememberShareText(),
-        modifier = modifier,
-    )
+        )
+    }
+    val copy = rememberCopyText()
+    val share = rememberShareText()
+    // The same state in the view the user chose (docs/simple-ui.md).
+    when (LocalInterfaceMode.current) {
+        InterfaceMode.SIMPLE -> SimpleSafeTxScreen(
+            state,
+            actions,
+            onBack,
+            copy,
+            share,
+            modifier,
+            syncLine = lightClient.collectAsStateWithLifecycle().value,
+        )
+        // The strip in Detailed view; in simple mode the same item, drawn as the sync line while it says something.
+        InterfaceMode.DETAILED -> SafeTxScreen(
+            state = state,
+            lightClient = lightClient.collectAsStateWithLifecycle().value,
+            actions = actions,
+            onBack = onBack,
+            onCopy = copy,
+            onShareText = share,
+            modifier = modifier,
+        )
+    }
 }
 
 /**
@@ -205,18 +229,22 @@ class SafeTxActions(
  * from this device; then the step that signs. [onCopy] puts the request's text on the clipboard
  * and [onShareText] hands it to the platform's share sheet (null where there is none). While a
  * step takes the wallet password the window is kept out of screen capture where the platform
- * allows; where it does not, the screen says so.
+ * allows; where it does not, the screen says so. [lightClient] is the strip above it, Detailed
+ * view's; simple mode ([SimpleSafeTxScreen]) has none, and keeps the blocks behind *Details*
+ * ([details]).
  */
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalComposeUiApi::class)
 @Composable
 fun SafeTxScreen(
     state: SafeTxUiState,
-    lightClient: LightClientItem,
+    lightClient: LightClientItem?,
     actions: SafeTxActions,
     onBack: () -> Unit,
     onCopy: (String) -> Unit,
     onShareText: ((String) -> Unit)?,
     modifier: Modifier = Modifier,
+    details: List<String> = emptyList(),
+    syncLine: LightClientItem? = null,
 ) {
     val review = state as? SafeTxUiState.Review
     val signing = state as? SafeTxUiState.Signing
@@ -275,7 +303,7 @@ fun SafeTxScreen(
             )
         },
     ) { padding ->
-        UnderLightClientStrip(lightClient, Modifier.padding(padding)) {
+        UnderLightClientStripIfAny(lightClient, Modifier.padding(padding), syncLine) {
             when (state) {
                 is SafeTxUiState.Loading, is SafeTxUiState.Sent, is SafeTxUiState.Removed ->
                     CircularProgressIndicator(Modifier.align(Alignment.Center))
@@ -284,9 +312,9 @@ fun SafeTxScreen(
                     Modifier.align(Alignment.Center).padding(24.dp),
                     textAlign = TextAlign.Center,
                 )
-                is SafeTxUiState.Overview -> OverviewContent(state, actions, copy, onShareText)
-                is SafeTxUiState.Signing -> SigningContent(state, actions)
-                is SafeTxUiState.Review -> ReviewContent(state, actions)
+                is SafeTxUiState.Overview -> OverviewContent(state, actions, copy, onShareText, details)
+                is SafeTxUiState.Signing -> SigningContent(state, actions, details)
+                is SafeTxUiState.Review -> ReviewContent(state, actions, details)
             }
         }
     }
@@ -298,6 +326,7 @@ private fun OverviewContent(
     actions: SafeTxActions,
     onCopy: (String) -> Unit,
     onShareText: ((String) -> Unit)?,
+    details: List<String>,
 ) {
     var confirmRemove by remember { mutableStateOf(false) }
     var unavailable by remember { mutableStateOf<String?>(null) }
@@ -325,6 +354,7 @@ private fun OverviewContent(
         }
         state.refusal?.let { Text(it, color = MaterialTheme.colorScheme.error) }
         Owners(state.owners, actions.onCheckAgain)
+        if (details.isNotEmpty()) HiddenDetails(SAFE_TX_DETAILS_TAG) { details.forEach { Note(it) } }
         state.message?.let { message ->
             Surface(
                 Modifier.fillMaxWidth(),
@@ -528,7 +558,7 @@ private val OwnerState.description: String
     }
 
 @Composable
-private fun SigningContent(state: SafeTxUiState.Signing, actions: SafeTxActions) {
+private fun SigningContent(state: SafeTxUiState.Signing, actions: SafeTxActions, details: List<String>) {
     Column(
         Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp),
@@ -536,6 +566,7 @@ private fun SigningContent(state: SafeTxUiState.Signing, actions: SafeTxActions)
         SafeLine(state.safe)
         SafeTxActionCard(state.action)
         state.swap?.let { SafeSwapBlock(it) }
+        if (details.isNotEmpty()) HiddenDetails(SAFE_TX_DETAILS_TAG) { details.forEach { Note(it) } }
         Text(state.nonce, style = MaterialTheme.typography.titleSmall)
         HashLine(state.hash)
         Note("The owner signs this hash, computed here from the transaction's fields: nothing else.")
@@ -560,7 +591,7 @@ private fun SigningContent(state: SafeTxUiState.Signing, actions: SafeTxActions)
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun ReviewContent(state: SafeTxUiState.Review, actions: SafeTxActions) {
+private fun ReviewContent(state: SafeTxUiState.Review, actions: SafeTxActions, details: List<String>) {
     Column(
         Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp),
@@ -587,15 +618,17 @@ private fun ReviewContent(state: SafeTxUiState.Review, actions: SafeTxActions) {
             }
         }
         Text("At most ${state.maxFee}")
-        Note(state.feeDetail)
+        // Empty in simple mode, which keeps it behind Details.
+        state.feeDetail.takeIf { it.isNotEmpty() }?.let { Note(it) }
         Heading("Verified simulation")
         Column {
             Text(state.balance.what, style = MaterialTheme.typography.labelLarge)
             Text("${state.balance.before} → ${state.balance.after}")
-            Note(state.balance.verifiedAt)
+            state.balance.verifiedAt.takeIf { it.isNotEmpty() }?.let { Note(it) }
         }
         Text(state.simulation, style = MaterialTheme.typography.bodyMedium)
         state.pending?.let { Text(it, style = MaterialTheme.typography.bodySmall) }
+        if (details.isNotEmpty()) HiddenDetails(SAFE_TX_DETAILS_TAG) { details.forEach { Note(it) } }
         TextButton(onClick = actions.onRefresh, enabled = state.idle) {
             if (state.refreshing) {
                 CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp)

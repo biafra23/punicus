@@ -84,16 +84,23 @@ class FollowSafeDeployments(
     /** How [deployment]'s listing ends now, or null when it has not ended and is to be tried again. */
     private suspend fun listing(transfer: SentTransfer, deployment: SentAction.SafeDeployment): SafeListing? {
         val list = accounts.observeAccounts().first()
-        if (list is AccountList.Loaded && list.accounts.any { it.address == deployment.safe }) return SafeListing.LISTED
+        if (list is AccountList.Loaded &&
+            list.accounts.any { it.network == transfer.network && it.address == deployment.safe }
+        ) {
+            return SafeListing.LISTED
+        }
         val succeeded = when (
-            val progress = receipts.observe(transfer.hash)
+            val progress = receipts.observe(transfer.network, transfer.hash)
                 .first { it is TransactionProgress.Included || it is TransactionProgress.Finalized }
         ) {
             is TransactionProgress.Included -> progress.succeeded
             is TransactionProgress.Finalized -> progress.succeeded
             else -> return null
         }
-        val outcome = if (succeeded) listDeployedSafe(deployment) else listDeployedSafe.afterRevert(deployment)
+        val outcome = if (succeeded) listDeployedSafe(
+                transfer.network,
+                deployment,
+            ) else listDeployedSafe.afterRevert(transfer.network, deployment)
         return when (outcome) {
             is DeployedSafeListing.Listed, is DeployedSafeListing.AlreadyInWallet -> SafeListing.LISTED
             DeployedSafeListing.NoSafe -> SafeListing.NO_SAFE

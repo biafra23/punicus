@@ -4,6 +4,7 @@ import eth.serotine.domain.model.Account
 import eth.serotine.domain.model.AccountCustody
 import eth.serotine.domain.model.AccountKind
 import eth.serotine.domain.model.Address
+import eth.serotine.domain.model.Network
 import eth.serotine.domain.model.SignedTransfer
 import eth.serotine.domain.model.UInt256
 import eth.serotine.domain.repository.AddressKind
@@ -15,6 +16,8 @@ import eth.serotine.domain.repository.SafeState
 import eth.serotine.domain.repository.SentAction
 import eth.serotine.domain.repository.SentTransfer
 import eth.serotine.domain.repository.TransactionProgress
+import kotlin.test.Test
+import kotlin.test.assertEquals
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -23,8 +26,6 @@ import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.advanceTimeBy
 import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
-import kotlin.test.Test
-import kotlin.test.assertEquals
 
 /** [FollowSafeDeployments] over fake ports: the listing of a deployed Safe, whatever screen is open. */
 @OptIn(ExperimentalCoroutinesApi::class)
@@ -33,6 +34,7 @@ class FollowSafeDeploymentsTest {
     private val world = SafeWorld()
     private val owners = listOf(world.alice.address, world.carol)
     private val deployment = SentTransfer(
+        network = Network.SEPOLIA,
         account = world.alice.address,
         nonce = 7,
         signed = SignedTransfer(byteArrayOf(2, 7)),
@@ -43,11 +45,11 @@ class FollowSafeDeploymentsTest {
     private val accounts = ListAccountRepository(world.alice)
     private val kind = MutableStateFlow<KindReading>(KindReading.Verified(AddressKind.Eoa, 100))
     private val kinds = object : AddressKinds {
-        override fun observeKind(address: Address): Flow<KindReading> = kind
+        override fun observeKind(network: Network, address: Address): Flow<KindReading> = kind
     }
     private val progress = MutableStateFlow<TransactionProgress>(TransactionProgress.Pending)
     private val receipts = object : ReceiptTracker {
-        override fun observe(hash: String): Flow<TransactionProgress> = progress
+        override fun observe(network: Network, hash: String): Flow<TransactionProgress> = progress
     }
     private var now = 1_800_000_100L
 
@@ -86,7 +88,10 @@ class FollowSafeDeploymentsTest {
         safeThere()
         runCurrent()
         assertEquals(
-            listOf(world.alice, Account(world.safe, AccountKind.SAFE, "Vault", AccountCustody.Watched)),
+            listOf(
+                world.alice,
+                Account(Network.SEPOLIA, world.safe, AccountKind.SAFE, "Vault", AccountCustody.Watched),
+            ),
             accounts.accounts.value,
         )
         assertEquals(SafeListing.LISTED, listed, "ended: never listed again")
@@ -131,7 +136,13 @@ class FollowSafeDeploymentsTest {
 
     @Test
     fun aSafeInTheWalletAlreadyEndsAsListedAtOnce() = runTest {
-        accounts.accounts.value += Account(world.safe, AccountKind.SAFE, "Mine", AccountCustody.Watched)
+        accounts.accounts.value += Account(
+            Network.SEPOLIA,
+            world.safe,
+            AccountKind.SAFE,
+            "Mine",
+            AccountCustody.Watched,
+        )
         world.sent.transfers.value = listOf(deployment)
         follow()
 

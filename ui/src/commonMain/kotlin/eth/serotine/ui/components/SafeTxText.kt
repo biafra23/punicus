@@ -43,13 +43,15 @@ data class SafeTxActionItem(
  * [proposeAgain] when Uniswap's swap is worth proposing again in its place: its minimum has
  * fallen behind the market, or its deadline has passed (owner ruling, 2026-10-19);
  * [proposeAgainReason] why that cannot be done from here (no owner held here), the offer then
- * greyed out (owner ruling, 2026-10-18, #55), or null when it can.
+ * greyed out (owner ruling, 2026-10-18, #55), or null when it can. [simpleLines] are [lines] with
+ * no block, for simple mode (docs/simple-ui.md); null where they are [lines] themselves.
  */
 data class SafeSwapItem(
     val lines: List<String>,
     val warning: String? = null,
     val proposeAgain: Boolean = false,
     val proposeAgainReason: String? = null,
+    val simpleLines: List<String>? = null,
 )
 
 /** An address a Safe transaction names: [what] it is ("To", "New owner") and its EIP-55 [address]. */
@@ -73,22 +75,24 @@ internal data class DecodingToken(val token: Token, val sharesBuiltInSymbol: Boo
  * [action], a transaction of a Safe at [nonce], as screens show it: a transfer's amount in the
  * token's units where the wallet knows the token ([tokens], the known ones by address), marked when
  * the token only takes a built-in token's symbol; its smallest units where it does not; and every
- * address it names in full.
+ * address it names in full. With [hideAmounts] every amount reads [AMOUNT_MASK] beside its unit
+ * (docs/wallet-ux.md, *Hiding amounts*); what is not an amount (a nonce, a threshold) stays.
  */
 internal fun safeTxActionItem(
     action: SafeTxAction,
     nonce: Long,
     tokens: List<DecodingToken>,
     network: Network,
+    hideAmounts: Boolean = false,
 ): SafeTxActionItem = when (action) {
     is SafeTxAction.NativeTransfer -> SafeTxActionItem(
-        title = "Send ${action.amount.formatUnits(NATIVE_DECIMALS)} ${network.nativeSymbol}",
+        title = "Send ${nativeAmount(action.amount, network, hideAmounts).text}",
         addresses = listOf(ActionAddress("To", Eip55.format(action.to))),
         icon = network.nativeIcon,
         symbol = network.nativeSymbol,
     )
     is SafeTxAction.TokenTransfer -> {
-        val amount = tokenAmount(action.token, action.amount, tokens)
+        val amount = tokenAmount(action.token, action.amount, tokens, hideAmounts)
         SafeTxActionItem(
             title = "Send ${amount.text}",
             addresses = listOf(
@@ -102,7 +106,7 @@ internal fun safeTxActionItem(
         )
     }
     is SafeTxAction.TokenApproval -> {
-        val amount = tokenAmount(action.token, action.amount, tokens)
+        val amount = tokenAmount(action.token, action.amount, tokens, hideAmounts)
         SafeTxActionItem(
             title = "Allow a contract to take ${amount.text}",
             addresses = listOf(
@@ -120,10 +124,10 @@ internal fun safeTxActionItem(
     }
     is SafeTxAction.Swap -> {
         val swap = action.swap
-        val sold = if (swap.sellsEther) nativeAmount(swap.amountIn, network) else
-            tokenAmount(swap.route.tokenIn, swap.amountIn, tokens)
-        val bought = if (swap.buysEther) nativeAmount(swap.minimumOut, network) else
-            tokenAmount(swap.route.tokenOut, swap.minimumOut, tokens)
+        val sold = if (swap.sellsEther) nativeAmount(swap.amountIn, network, hideAmounts) else
+            tokenAmount(swap.route.tokenIn, swap.amountIn, tokens, hideAmounts)
+        val bought = if (swap.buysEther) nativeAmount(swap.minimumOut, network, hideAmounts) else
+            tokenAmount(swap.route.tokenOut, swap.minimumOut, tokens, hideAmounts)
         SafeTxActionItem(
             title = "Swap ${sold.text} for at least ${bought.text}",
             addresses = listOfNotNull(
@@ -331,12 +335,18 @@ private fun swapItem(
                 "of it. Propose it again with a fresh minimum, or execute it as signed."
         },
     )
+    val simpleNow = (checked.now as? SwapNow.Quoted)?.let { quote ->
+        "Returns ${bought(quote.amountOut)} now, as checked on chain" + if (checked.meetsMinimum == true) {
+            ": it meets its minimum."
+        } else {
+            ": below its minimum, so executed now it reverts."
+        }
+    } ?: now
+    val router = "Through Uniswap's SwapRouter02, its code proven by the light client."
+    val deadline = "Refused by the router after ${formatTime(swap.deadline)}."
     return SafeSwapItem(
-        lines = listOf(
-            "Through Uniswap's SwapRouter02, its code proven by the light client.",
-            now,
-            "Refused by the router after ${formatTime(swap.deadline)}.",
-        ),
+        lines = listOf(router, now, deadline),
+        simpleLines = listOf(router, simpleNow, deadline).takeIf { simpleNow != now },
         warning = warnings.takeIf { it.isNotEmpty() }?.joinToString(" "),
         proposeAgain = checked.expired == true || checked.leftOpen != null,
     )
@@ -361,22 +371,29 @@ private class AmountText(
     val unknownNote: String? = null,
 )
 
-private fun nativeAmount(amount: UInt256, network: Network) = AmountText(
-    "${amount.formatUnits(NATIVE_DECIMALS)} ${network.nativeSymbol}",
+/** [amount] of the network's currency, or [AMOUNT_MASK] of it while amounts are [hidden]. */
+private fun nativeAmount(amount: UInt256, network: Network, hidden: Boolean = false) = AmountText(
+    "${if (hidden) AMOUNT_MASK else amount.formatUnits(NATIVE_DECIMALS)} ${network.nativeSymbol}",
     network.nativeIcon,
     network.nativeSymbol,
 )
 
-private fun tokenAmount(address: Address, amount: UInt256, tokens: List<DecodingToken>): AmountText {
+/** [amount] of the token at [address] in its units, or [AMOUNT_MASK] of it while amounts are [hidden]. */
+private fun tokenAmount(
+    address: Address,
+    amount: UInt256,
+    tokens: List<DecodingToken>,
+    hidden: Boolean = false,
+): AmountText {
     val known = tokens.firstOrNull { it.token.address == address }
         ?: return AmountText(
-            "${grouped(amount)} units of a token",
+            "${if (hidden) AMOUNT_MASK else grouped(amount)} units of a token",
             unknownNote = "Serotine does not know the token at this contract: the amount is in its smallest " +
                 "units, and how many decimals it has is not known here.",
         )
     val symbol = displaySymbol(known.token.symbol)
     return AmountText(
-        "${amount.formatUnits(known.token.decimals)} $symbol",
+        "${if (hidden) AMOUNT_MASK else amount.formatUnits(known.token.decimals)} $symbol",
         known.token.icon,
         symbol,
         warning = if (known.sharesBuiltInSymbol) "Not the built-in $symbol: another contract" else null,
@@ -394,13 +411,20 @@ private fun callData(selector: String?, size: Int): String =
 
 private fun bytes(count: Int) = if (count == 1) "1 byte" else "${grouped(count.toLong())} bytes"
 
-/** [terms] as screens show them, before the warning that says what they can do. */
-internal fun gasTermsItem(terms: SafeTxGasTerms): GasTermsItem = GasTermsItem(
+/**
+ * [terms] as screens show them, a refund in [network]'s own currency, before the warning that
+ * says what they can do.
+ */
+internal fun gasTermsItem(terms: SafeTxGasTerms, network: Network): GasTermsItem = GasTermsItem(
     lines = listOf(
         "safeTxGas: ${grouped(terms.safeTxGas)}",
         "baseGas: ${grouped(terms.baseGas)}",
         "gasPrice: ${grouped(terms.gasPrice)}" + if (terms.gasToken == null) " wei" else " of the gas token's units",
-        if (terms.gasToken == null) "A refund is paid in ether" else "A refund is paid in the gas token",
+        if (terms.gasToken == null) {
+            "A refund is paid in ${network.nativeSymbol}"
+        } else {
+            "A refund is paid in the gas token"
+        },
         if (terms.receiver == null) "A refund goes to whoever executes it" else "A refund goes to the refund receiver",
     ),
     addresses = listOfNotNull(
@@ -426,8 +450,12 @@ internal fun safeTxRefusalText(refusal: SafeTxRefusal, network: Network): String
     SafeTxRefusal.Malformed -> "This text is not a Safe signing request."
     is SafeTxRefusal.UnknownVersion ->
         "A signing request of a newer version (${refusal.version}): update Serotine to read it."
-    is SafeTxRefusal.WrongChain ->
-        "A request for another network (chain id ${refusal.chainId}), not ${network.displayName}."
+    // The same address on another network is another Safe: both are named (docs/networks.md, N15).
+    is SafeTxRefusal.WrongChain -> Network.ofChainId(refusal.chainId)?.let { other ->
+        "This request is for the Safe at this address on ${other.displayName}. This account is the Safe on " +
+            "${network.displayName}: a different Safe, with its own owners and nonce. Watch the Safe on " +
+            "${other.displayName} to sign it there."
+    } ?: "A request for chain id ${refusal.chainId}, which is not a network this wallet supports."
     SafeTxRefusal.NotASafe -> "The address holds no Safe Serotine recognises, as its verified code and storage say."
     is SafeTxRefusal.OtherSafe ->
         "This request is for another Safe, ${Eip55.format(refusal.safe)}: import it from that Safe's own screen."
@@ -463,6 +491,9 @@ internal fun safeTxRefusalText(refusal: SafeTxRefusal, network: Network): String
     is SafeTxRefusal.SafeUnavailable ->
         if (refusal.reason == ReadUnavailable.UNPROVEN) SAFE_UNPROVEN else unavailableText(refusal.reason)
     is SafeTxRefusal.NotQuoted -> callRefusalText(refusal.refusal, network)
+    is SafeTxRefusal.TooOldToSign -> "This Safe is still on version ${refusal.version}, from before the way " +
+        "Serotine checks signatures today: it is shown, but not signed, approved or executed here. Migrating it " +
+        "to a newer version (in Safe{Wallet} or another app) fixes this."
 }
 
 /**
@@ -493,6 +524,20 @@ internal fun callRefusalText(refusal: CallRefusal, network: Network): String = w
 }
 
 /**
+ * [safeTxRefusalText] in simple mode's words, with no block (docs/simple-ui.md); null where that is
+ * [safeTxRefusalText] itself, which names none.
+ */
+internal fun simpleSafeTxRefusalText(refusal: SafeTxRefusal): String? =
+    (refusal as? SafeTxRefusal.NotQuoted)?.let { simpleCallRefusalText(it.refusal) }
+
+/**
+ * [callRefusalText] in simple mode's words, with no block (docs/simple-ui.md); null where that is
+ * [callRefusalText] itself, which names none.
+ */
+internal fun simpleCallRefusalText(refusal: CallRefusal): String? =
+    if (refusal is CallRefusal.Reverts) "It reverts, checked on chain. Nothing was signed." else null
+
+/**
  * Why nothing new is quoted from an account whose earlier transaction may still be on its way
  * ([CallRefusal.EarlierMaybeSent]), where the screen offers no way to its status: Send on that
  * account does.
@@ -519,7 +564,9 @@ internal fun figureText(figure: QuoteFigure?, ofWhat: String): String = when (fi
 /** Why a verified figure could not be had right now, display-ready. */
 internal fun unavailableText(reason: ReadUnavailable): String = when (reason) {
     ReadUnavailable.NO_ENGINE -> "There is no light client on this device, so nothing can be verified."
+    ReadUnavailable.NETWORK_OFF -> "The network's light client is not running, so nothing can be verified."
     ReadUnavailable.STALE_ANCHOR -> "The light client refuses to sync, so nothing can be verified."
+    ReadUnavailable.SYNCING -> "The light client is still syncing, so nothing can be verified yet."
     ReadUnavailable.UNPROVEN -> "A figure could not be verified this time: try again."
     ReadUnavailable.REFUSED -> "The light client on this device cannot read this."
 }

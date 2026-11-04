@@ -2,6 +2,7 @@ package eth.serotine.domain.usecase
 
 import eth.serotine.domain.model.Account
 import eth.serotine.domain.model.AccountCustody
+import eth.serotine.domain.model.AccountId
 import eth.serotine.domain.model.Address
 import eth.serotine.domain.model.Mnemonic
 import eth.serotine.domain.model.WalletPassword
@@ -11,6 +12,7 @@ import eth.serotine.domain.repository.AccountList
 import eth.serotine.domain.repository.AccountRepository
 import eth.serotine.domain.repository.BiometricChange
 import eth.serotine.domain.repository.KeyDeletion
+import eth.serotine.domain.repository.KeyDerivation
 import eth.serotine.domain.repository.KeyImport
 import eth.serotine.domain.repository.KeyProtection
 import eth.serotine.domain.repository.KeyStore
@@ -33,27 +35,27 @@ internal class ListAccountRepository(vararg initial: Account) : AccountRepositor
 
     override suspend fun add(account: Account): AccountAdd = when {
         unreadable || failSaves -> AccountAdd.NotSaved
-        accounts.value.any { it.address == account.address } -> AccountAdd.AlreadyPresent
+        accounts.value.any { it.id == account.id } -> AccountAdd.AlreadyPresent
         else -> {
             accounts.value = accounts.value + account
             AccountAdd.Added
         }
     }
 
-    override suspend fun setCustody(address: Address, custody: AccountCustody): AccountChange =
-        change(address) { current -> current.map { if (it.address == address) it.copy(custody = custody) else it } }
+    override suspend fun setCustody(id: AccountId, custody: AccountCustody): AccountChange =
+        change(id) { current -> current.map { if (it.id == id) it.copy(custody = custody) else it } }
 
-    override suspend fun rename(address: Address, label: String): AccountChange = change(address) { current ->
-        current.map { if (it.address == address) it.copy(label = label, ensName = null) else it }
+    override suspend fun rename(id: AccountId, label: String): AccountChange = change(id) { current ->
+        current.map { if (it.id == id) it.copy(label = label, ensName = null) else it }
     }
 
-    override suspend fun remove(address: Address): AccountChange = change(address) { current ->
-        current.filterNot { it.address == address }
+    override suspend fun remove(id: AccountId): AccountChange = change(id) { current ->
+        current.filterNot { it.id == id }
     }
 
-    private fun change(address: Address, edit: (List<Account>) -> List<Account>): AccountChange = when {
+    private fun change(id: AccountId, edit: (List<Account>) -> List<Account>): AccountChange = when {
         unreadable || failSaves -> AccountChange.NotSaved
-        accounts.value.none { it.address == address } -> AccountChange.NotFound
+        accounts.value.none { it.id == id } -> AccountChange.NotFound
         else -> {
             accounts.value = edit(accounts.value)
             AccountChange.Changed
@@ -79,7 +81,16 @@ internal class RecordingKeyStore(stored: List<Address>) : KeyStore {
     var importing: Address? = null
     var importDelayMillis = 0L
 
+    /** What a derivation answers, given the addresses it was told are held ([heldAtDerivation]). */
+    var derivation: (Set<Address>) -> KeyDerivation = { KeyDerivation.Unavailable }
+    var heldAtDerivation: Set<Address>? = null
+
     override suspend fun describe(): KeyStoreDescription = error("not used by these tests")
+
+    override suspend fun deriveAccount(from: Address, password: WalletPassword, held: Set<Address>): KeyDerivation {
+        heldAtDerivation = held
+        return derivation(held).also { if (it is KeyDerivation.Stored) stored += it.address }
+    }
 
     override suspend fun importMnemonic(mnemonic: Mnemonic, password: WalletPassword): KeyImport {
         val address = importing ?: error("no import set up")

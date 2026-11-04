@@ -10,8 +10,12 @@ import eth.serotine.ui.activity.ActivityKey
 import eth.serotine.ui.activity.ActivityRow
 import eth.serotine.ui.activity.ActivityState
 import eth.serotine.ui.activity.ActivityUiState
+import eth.serotine.ui.activity.WaitingStep
 import eth.serotine.ui.components.Control
+import eth.serotine.ui.components.LightClientHealth
 import eth.serotine.ui.components.LightClientItem
+import eth.serotine.ui.components.NetworkLabel
+import eth.serotine.ui.components.POOL_AVERAGE
 import eth.serotine.ui.components.catchingUpStripSample
 import eth.serotine.ui.components.staleStripSample
 import eth.serotine.ui.components.verifiedStripSample
@@ -28,6 +32,8 @@ private const val SAVINGS = "0xfB6916095ca1df60bB79Ce92cE3Ea74c37c5d359"
 private const val TREASURY = "0xdbF03B407c01E7cD3CBea99509d93f8DDDC8C6FB"
 
 private const val PRICES = "Prices: Chainlink feeds, read through the light client, testnet prices"
+
+private val sepolia = NetworkLabel(11_155_111, "Sepolia", testnet = true)
 
 private val ether = AssetRow(
     "ETH",
@@ -64,6 +70,7 @@ private val uniswap = AssetRow(
 private val daily = AccountDetailUiState.Ready(
     label = "Daily",
     address = DAILY,
+    network = sepolia,
     kind = AccountKind.EOA,
     control = Control.FULL_CONTROL,
     total = "$3,375.00",
@@ -75,6 +82,7 @@ private val daily = AccountDetailUiState.Ready(
 private val treasury = AccountDetailUiState.Ready(
     label = "Treasury",
     address = TREASURY,
+    network = sepolia,
     kind = AccountKind.SAFE,
     control = Control.CO_SIGNER,
     total = "$1,650.00",
@@ -119,6 +127,13 @@ private val treasury = AccountDetailUiState.Ready(
     ),
 )
 
+/** A swap of 100 USDC for LINK whose step 2 waits, as its card in the Activity says it. */
+internal val WAITING_SWAP = WaitingStep(
+    title = "Swap 100 USDC → LINK",
+    message = "Step 1 done. Step 2 is waiting for you.",
+    sell = "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+)
+
 private const val ACTIVITY_COVERAGE = "Transactions sent from this device. Transactions received, and those sent " +
     "from this account elsewhere, are not listed yet."
 
@@ -144,6 +159,17 @@ private val activityRows = listOf(
         state = ActivityState.DONE,
         opens = ActivityKey("0x" + "6".repeat(64)),
     ),
+    // A dApp's transaction, its name the dApp's own claim.
+    ActivityRow(
+        key = "0x" + "d".repeat(64),
+        title = "Sent for a dApp stating it is “Example dApp”",
+        detail = "To 0xfB69…d359",
+        about = "0xfB6916095ca1df60bB79Ce92cE3Ea74c37c5d359",
+        time = "Oct 19, 2026, 3:30 PM",
+        status = "In block 9,411,870",
+        state = ActivityState.DONE,
+        opens = ActivityKey("0x" + "d".repeat(64)),
+    ),
     ActivityRow(
         key = "0x" + "1".repeat(64),
         title = "Sent 0.25 ETH",
@@ -156,7 +182,7 @@ private val activityRows = listOf(
     ),
     ActivityRow(
         key = "0x" + "2".repeat(64),
-        title = "Executed a Safe transaction",
+        title = "Executed: Send 0.25 ETH",
         detail = "Safe nonce 4 · Treasury · 0xfB69…d359",
         about = "0xfB6916095ca1df60bB79Ce92cE3Ea74c37c5d359",
         time = "Oct 18, 2026, 9:15 AM",
@@ -203,14 +229,17 @@ private const val TOKENS_ACTIVITY_COVERAGE = "Transactions sent from this device
     "when it was added here: its token transfers. ETH it received, and transactions sent from it elsewhere, " +
     "are not listed yet."
 
-/** An account's token transfers among a transaction sent from here. */
+/**
+ * An account's token transfers among a transaction sent from here, by date: each event dated by its
+ * block's verified header where the engine reported it, and by its block alone where it did not.
+ */
 private val tokenActivityRows = listOf(
     ActivityRow(
         key = "0x" + "f".repeat(64) + ":1",
         title = "Received 0.01 USDC",
         detail = "From 0x5290…9EE7",
         about = "0x52908400098527886E0F7030069857D2E4169EE7",
-        time = "Block 9,418,200",
+        time = "Oct 19, 2026, 6:48 PM",
         status = "From an address you have not sent to: compare every character before you copy it",
         state = ActivityState.CAUTION,
         opens = ActivityKey("0x" + "f".repeat(64), 1),
@@ -220,7 +249,7 @@ private val tokenActivityRows = listOf(
         title = "Received 250 USDC",
         detail = "From Treasury · 0xfB69…d359",
         about = "0xfB6916095ca1df60bB79Ce92cE3Ea74c37c5d359",
-        time = "Block 9,417,045",
+        time = "Oct 19, 2026, 3:06 PM",
         status = "On chain, from the token's verified logs",
         state = ActivityState.DONE,
         opens = ActivityKey("0x" + "b".repeat(64), 2),
@@ -235,12 +264,14 @@ private val tokenActivityRows = listOf(
         state = ActivityState.DONE,
         opens = ActivityKey("0x" + "c".repeat(64)),
     ),
+    // Dated by its block alone: the engine did not report when the block was produced.
     ActivityRow(
         key = "0x" + "d".repeat(64) + ":0",
         title = "An unlisted token logged a transfer to it",
         detail = "Contract 0x27b1…1c26",
         about = "0x27b1fdb04752bbc536007a920d24acb045561c26",
         time = "Block 9,408,511",
+        simpleTime = null,
         status = "The claim of a contract the wallet does not list: open it to add it as a token and see what moved",
         state = ActivityState.UNKNOWN,
         opens = ActivityKey("0x" + "d".repeat(64), 0),
@@ -250,21 +281,24 @@ private val tokenActivityRows = listOf(
         title = "Received 1.25 LINK",
         detail = "From Carol · 0xdbF0…C6FB",
         about = "0xdbF03B407c01E7cD3CBea99509d93f8DDDC8C6FB",
-        time = "Block 9,402,980",
+        time = "Oct 17, 2026, 4:21 PM",
         status = "On chain, from the token's verified logs",
         state = ActivityState.DONE,
         opens = ActivityKey("0x" + "e".repeat(64), 5),
     ),
 )
 
-/** A Safe's events among a transaction sent from here, as its Activity merges them by block. */
+/**
+ * A Safe's events among a transaction sent from here, as its Activity merges them by date; an
+ * execution says what the Safe transaction did where this device holds its request.
+ */
 private val safeActivityRows = listOf(
     ActivityRow(
         key = "0x" + "a".repeat(64) + ":0",
         title = "Module enabled",
         detail = "0x8617…070D",
         about = "0x8617E340B3D01FA5F11F306F4090FD50E238070D",
-        time = "Block 9,416,880",
+        time = "Oct 19, 2026, 5:42 PM",
         status = "A module can move this Safe's funds without its owners",
         state = ActivityState.WARNING,
         opens = ActivityKey("0x" + "a".repeat(64), 0),
@@ -274,14 +308,14 @@ private val safeActivityRows = listOf(
         title = "Received 0.5 ETH",
         detail = "From Bob · 0x5aAe…eAed",
         about = "0x5aAeb6053F3E94C9b9A09f33669435E7Ef1BeAed",
-        time = "Block 9,415,302",
+        time = "Oct 19, 2026, 2:38 PM",
         status = "On chain, from the Safe's verified logs",
         state = ActivityState.DONE,
         opens = ActivityKey("0x" + "6".repeat(64), 0),
     ),
     ActivityRow(
         key = "0x" + "7".repeat(64),
-        title = "Executed transaction 4",
+        title = "Executed transaction 4: Send 0.25 ETH",
         detail = "By Alice · 0xfB69…d359",
         about = "0xfB6916095ca1df60bB79Ce92cE3Ea74c37c5d359",
         time = "Oct 19, 2026, 2:02 PM",
@@ -294,17 +328,17 @@ private val safeActivityRows = listOf(
         title = "Owner added",
         detail = "Carol · 0xdbF0…C6FB",
         about = "0xdbF03B407c01E7cD3CBea99509d93f8DDDC8C6FB",
-        time = "Block 9,411,040",
+        time = "Oct 19, 2026, 9:51 AM",
         status = "On chain, from the Safe's verified logs",
         state = ActivityState.DONE,
         opens = ActivityKey("0x" + "8".repeat(64), 3),
     ),
     ActivityRow(
         key = "0x" + "9".repeat(64) + ":1",
-        title = "A Safe transaction failed",
+        title = "Failed: Send 40 USDC",
         detail = "Safe transaction 0x3f1c…a9e2",
         about = "0x52908400098527886E0F7030069857D2E4169EE7",
-        time = "Block 9,410,377",
+        time = "Oct 19, 2026, 7:32 AM",
         status = "Failed on chain: its call reverted",
         state = ActivityState.FAILED,
         opens = ActivityKey("0x" + "9".repeat(64), 1),
@@ -320,7 +354,7 @@ private fun AccountDetailPreview(
     SerotineTheme(darkTheme = darkTheme) {
         AccountDetailScreen(
             state = state,
-            lightClient = lightClient,
+            chrome = AccountChrome.Strip(lightClient),
             onBack = {},
             onSend = {},
             onSwap = {},
@@ -346,6 +380,16 @@ private fun AccountDetailAssetsPreview() = AccountDetailPreview(daily)
 @Preview
 @Composable
 private fun AccountDetailAssetsDarkPreview() = AccountDetailPreview(daily, darkTheme = true)
+
+/** Amounts hidden: the eye beside Back closed, the total and each asset's amount and value masked. */
+@Preview
+@Composable
+private fun AccountDetailAssetsHiddenPreview() = AccountDetailPreview(daily.withAmountsHidden(true))
+
+@Preview
+@Composable
+private fun AccountDetailAssetsHiddenDarkPreview() =
+    AccountDetailPreview(daily.withAmountsHidden(true), darkTheme = true)
 
 @Preview
 @Composable
@@ -429,6 +473,11 @@ private fun AccountDetailSafeOwnersPreview() = AccountDetailPreview(treasury.cop
 
 @Preview
 @Composable
+private fun AccountDetailSafeOwnersNetworkOffPreview() =
+    AccountDetailPreview(treasury.copy(segment = DetailSegment.OWNERS, networkOn = false))
+
+@Preview
+@Composable
 private fun AccountDetailSafeQueuePreview() = AccountDetailPreview(treasury.copy(segment = DetailSegment.QUEUE))
 
 @Preview
@@ -496,6 +545,27 @@ private fun AccountDetailNotASafePreview() = AccountDetailPreview(
 @Composable
 private fun AccountDetailActivityPreview() = AccountDetailPreview(
     daily.copy(segment = DetailSegment.ACTIVITY, activity = ActivityUiState.Shown(activityRows, ACTIVITY_COVERAGE)),
+)
+
+/** A swap whose step 2 waits: its card above the Activity, the same in both views. */
+@Preview
+@Composable
+private fun AccountDetailWaitingSwapPreview() = AccountDetailPreview(
+    daily.copy(
+        segment = DetailSegment.ACTIVITY,
+        activity = ActivityUiState.Shown(activityRows, ACTIVITY_COVERAGE, waiting = listOf(WAITING_SWAP)),
+    ),
+)
+
+/** The same card, in the dark theme. */
+@Preview
+@Composable
+private fun AccountDetailWaitingSwapDarkPreview() = AccountDetailPreview(
+    daily.copy(
+        segment = DetailSegment.ACTIVITY,
+        activity = ActivityUiState.Shown(activityRows, ACTIVITY_COVERAGE, waiting = listOf(WAITING_SWAP)),
+    ),
+    darkTheme = true,
 )
 
 @Preview
@@ -581,6 +651,57 @@ private fun AccountDetailEnsNameMovedPreview() = AccountDetailPreview(
     ),
 )
 
+/**
+ * Docs/networks.md's N3: an account on Ethereum, real prices, no testnet note; COW, which no feed
+ * prices, at its pool's average, labelled, and counted in the total, which says so (#205).
+ */
+@Preview
+@Composable
+private fun AccountDetailEthereumPreview() = AccountDetailPreview(
+    daily.copy(
+        label = "Main",
+        network = NetworkLabel(1, "Ethereum", testnet = false),
+        total = "€9,722.30",
+        totalNote = "Includes Uniswap averages",
+        assets = listOf(
+            ether.copy(amount = "3.2041 ETH", verifiedAt = "block 23,618,402", value = "€9,612.30"),
+            AssetRow(
+                "COW",
+                "CoW Protocol Token",
+                "1,000 COW",
+                "cow",
+                verified = true,
+                verifiedAt = "block 23,618,401",
+                value = "≈ €110.00 · $POOL_AVERAGE",
+                contract = "0xdef1ca1fb7fbcdc777520aa7f396b4e015f497ab",
+            ),
+        ),
+        pricesNote = "Prices: Chainlink feeds and Uniswap 30-min averages, read through the light client",
+    ),
+)
+
+/** N19: an account on a network that is off; Send and Swap greyed out, Receive kept. */
+@Preview
+@Composable
+private fun AccountDetailNetworkOffPreview() = AccountDetailPreview(
+    daily.copy(
+        label = "Test",
+        total = "Off",
+        totalNote = null,
+        assets = listOf(
+            ether.copy(
+                amount = "0.84 ETH",
+                verified = false,
+                verifiedAt = null,
+                value = null,
+                lastKnown = "Last verified Oct 21, 2026, 6:02 PM · Sepolia is off",
+            ),
+        ),
+        networkOn = false,
+    ),
+    lightClient = LightClientItem("Turned off in this wallet", null, false, LightClientHealth.NOT_RUNNING),
+)
+
 /** Every preview above, which AccountDetailScreenPreviewsTest renders: a new preview goes in here too. */
 internal val accountDetailScreenPreviews: List<@Composable () -> Unit> = listOf(
     { AccountDetailAssetsPreview() },
@@ -602,6 +723,8 @@ internal val accountDetailScreenPreviews: List<@Composable () -> Unit> = listOf(
     { AccountDetailEnsNameMovedPreview() },
     { AccountDetailActivityPreview() },
     { AccountDetailActivityDarkPreview() },
+    { AccountDetailWaitingSwapPreview() },
+    { AccountDetailWaitingSwapDarkPreview() },
     { AccountDetailActivityEmptyPreview() },
     { AccountDetailActivityLoadingPreview() },
     { AccountDetailActivityUnavailablePreview() },
@@ -611,4 +734,9 @@ internal val accountDetailScreenPreviews: List<@Composable () -> Unit> = listOf(
     { AccountDetailNarrowPreview() },
     { AccountDetailSafeQueueReadingPreview() },
     { AccountDetailCheckingDarkPreview() },
+    { AccountDetailEthereumPreview() },
+    { AccountDetailNetworkOffPreview() },
+    { AccountDetailSafeOwnersNetworkOffPreview() },
+    { AccountDetailAssetsHiddenPreview() },
+    { AccountDetailAssetsHiddenDarkPreview() },
 )

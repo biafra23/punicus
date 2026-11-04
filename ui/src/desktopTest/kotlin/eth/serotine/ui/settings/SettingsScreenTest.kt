@@ -11,8 +11,8 @@ import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
 import eth.serotine.ui.APP_VERSION
+import eth.serotine.ui.components.LightClientHealth.NOT_RUNNING
 import eth.serotine.ui.components.LightClientHealth.VERIFIED
-import eth.serotine.ui.components.LightClientItem
 import eth.serotine.ui.theme.SerotineTheme
 import org.junit.Rule
 import org.junit.Test
@@ -29,25 +29,42 @@ class SettingsScreenTest {
     private var securityOpened = 0
     private val screenCaptureChanges = mutableListOf<Boolean>()
     private val debugScreenChanges = mutableListOf<Boolean>()
+    private val detailedViewChanges = mutableListOf<Boolean>()
+    private val networkChanges = mutableListOf<Pair<Long, Boolean>>()
+    private var turnOffsConfirmed = 0
+    private var turnOffsCancelled = 0
 
-    private fun show(screenCaptureAllowed: Boolean? = null, debugScreen: Boolean = false) = rule.setContent {
+    private val sepolia =
+        NetworkRow(11_155_111, "Sepolia", true, "1 account · Verified at block 9,412,118 · 8 s ago", VERIFIED, true)
+
+    private fun show(
+        screenCaptureAllowed: Boolean? = null,
+        debugScreen: Boolean? = null,
+        detailedView: Boolean = false,
+        networks: List<NetworkRow> = listOf(sepolia),
+        turningOff: TurnOffConfirmation? = null,
+    ) = rule.setContent {
         SerotineTheme {
-            val lightClient = LightClientItem("Verified at block 9,412,118 · 8 s ago", null, false, VERIFIED)
             SettingsScreen(
                 SettingsUiState(
-                    "Sepolia",
-                    lightClient,
+                    networks,
                     APP_VERSION,
                     tokens = "3 built in · 1 added",
                     currency = "EUR",
                     screenCaptureAllowed = screenCaptureAllowed,
                     debugScreen = debugScreen,
+                    detailedView = detailedView,
+                    turningOff = turningOff,
                 ),
                 onCurrency = { currencyOpened++ },
                 onTokens = { tokensOpened++ },
                 onSecurity = { securityOpened++ },
                 onScreenCaptureChange = { screenCaptureChanges += it },
                 onDebugScreenChange = { debugScreenChanges += it },
+                onNetworkChange = { chainId, on -> networkChanges += chainId to on },
+                onConfirmTurnOff = { turnOffsConfirmed++ },
+                onCancelTurnOff = { turnOffsCancelled++ },
+                onDetailedViewChange = { detailedViewChanges += it },
             )
         }
     }
@@ -77,12 +94,46 @@ class SettingsScreenTest {
     }
 
     @Test
-    fun namesTheOnlyNetworkAndTheLightClientsState() {
-        show()
+    fun eachNetworkIsARowWithItsLineAndASwitchThatTurnsItOnAndOff() {
+        val ethereum = NetworkRow(1, "Ethereum", false, "No account · Off", NOT_RUNNING)
+        show(networks = listOf(sepolia, ethereum))
 
-        rule.onNodeWithText("Sepolia").assertIsDisplayed()
-        rule.onNodeWithText("The only network for now").assertIsDisplayed()
-        rule.onNodeWithText("Verified at block 9,412,118 · 8 s ago").assertIsDisplayed()
+        rule.onNodeWithText("Sepolia · Testnet").assertIsDisplayed()
+        rule.onNodeWithText("1 account · Verified at block 9,412,118 · 8 s ago").assertIsDisplayed()
+        rule.onNodeWithText("Ethereum").assertIsDisplayed()
+        rule.onNodeWithText("No account · Off").assertIsDisplayed()
+        rule.onNodeWithText("A network that is off checks nothing; its accounts stay in your list.").assertExists()
+
+        rule.onNodeWithTag(SETTINGS_NETWORK_TAG + 11_155_111).assertIsOn().performClick()
+        rule.onNodeWithTag(SETTINGS_NETWORK_TAG + 1).assertIsOff().performClick()
+        assertEquals(listOf(11_155_111L to false, 1L to true), networkChanges)
+    }
+
+    @Test
+    fun aSwitchNotSavedIsSaidUnderItsNetwork() {
+        show(networks = listOf(sepolia.copy(notSaved = true)))
+
+        rule.onNodeWithText("The change could not be saved.").assertIsDisplayed()
+    }
+
+    @Test
+    fun turningOffANetworkWithAccountsAsksFirst() {
+        show(
+            turningOff = TurnOffConfirmation(
+                11_155_111,
+                "Turn off Sepolia?",
+                "Its account, Main, stays in your list.",
+                waiting = "A transaction sent from it is not confirmed yet.",
+            ),
+        )
+
+        rule.onNodeWithText("Turn off Sepolia?").assertIsDisplayed()
+        rule.onNodeWithText("Its account, Main, stays in your list.").assertIsDisplayed()
+        rule.onNodeWithText("A transaction sent from it is not confirmed yet.").assertIsDisplayed()
+        rule.onNodeWithText("Cancel").performClick()
+        assertEquals(1, turnOffsCancelled)
+        rule.onNodeWithText("Turn off").performClick()
+        assertEquals(1, turnOffsConfirmed)
     }
 
     @Test
@@ -107,7 +158,7 @@ class SettingsScreenTest {
         show(screenCaptureAllowed = false)
 
         rule.onNodeWithText("Allow screen recording").assertExists()
-        rule.onNodeWithTag(SETTINGS_SCREEN_CAPTURE_TAG).assertIsOff().performClick()
+        rule.onNodeWithTag(SETTINGS_SCREEN_CAPTURE_TAG).performScrollTo().assertIsOff().performClick()
         assertEquals(listOf(true), screenCaptureChanges)
     }
 
@@ -115,13 +166,29 @@ class SettingsScreenTest {
     fun theDebugBuildsRowSaysWhenCaptureIsAllowed() {
         show(screenCaptureAllowed = true)
 
-        rule.onNodeWithTag(SETTINGS_SCREEN_CAPTURE_TAG).assertIsOn().performClick()
+        rule.onNodeWithTag(SETTINGS_SCREEN_CAPTURE_TAG).performScrollTo().assertIsOn().performClick()
         assertEquals(listOf(false), screenCaptureChanges)
     }
 
     @Test
+    fun connectedDappsOpensAndInABuildWithoutAProjectIdSaysWhyItIsGreyedOut() {
+        var opened = 0
+        rule.setContent {
+            SettingsScreen(
+                SettingsUiState(networks = emptyList(), version = "1.0"),
+                onCurrency = {}, onTokens = {}, onSecurity = {}, onScreenCaptureChange = {}, onDebugScreenChange = {},
+                onConnections = { opened++ },
+                connectionsOff = true,
+            )
+        }
+        rule.onNodeWithText("Connected dApps").performScrollTo().performClick()
+        assertEquals(0, opened)
+        rule.onNodeWithText(CONNECTIONS_OFF).assertExists()
+    }
+
+    @Test
     fun theDebugTabsRowTurnsItOnAndOff() {
-        show()
+        show(debugScreen = false, detailedView = true)
 
         rule.onNodeWithTag(SETTINGS_DEBUG_SCREEN_TAG).performScrollTo().assertIsOff().performClick()
         assertEquals(listOf(true), debugScreenChanges)
@@ -129,9 +196,24 @@ class SettingsScreenTest {
 
     @Test
     fun theDebugTabsRowSaysWhenItIsOn() {
-        show(debugScreen = true)
+        show(debugScreen = true, detailedView = true)
 
         rule.onNodeWithTag(SETTINGS_DEBUG_SCREEN_TAG).performScrollTo().assertIsOn().performClick()
         assertEquals(listOf(false), debugScreenChanges)
+    }
+
+    @Test
+    fun detailedViewsRowTurnsItOnAndOff() {
+        show()
+
+        rule.onNodeWithTag(SETTINGS_DETAILED_VIEW_TAG).performScrollTo().assertIsOff().performClick()
+        assertEquals(listOf(true), detailedViewChanges)
+    }
+
+    @Test
+    fun theDebugTabsRowIsAbsentWhereTheStateOffersNone() {
+        show(debugScreen = null)
+
+        rule.onNodeWithTag(SETTINGS_DEBUG_SCREEN_TAG).assertDoesNotExist()
     }
 }

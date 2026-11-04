@@ -1,18 +1,19 @@
 package eth.serotine.domain.usecase
 
+import eth.serotine.domain.model.Network
 import eth.serotine.domain.model.SwapVenue
 import eth.serotine.domain.repository.LightClient
 import eth.serotine.domain.repository.LightClientStatus
 import eth.serotine.domain.repository.SwapVenueSetting
 import eth.serotine.domain.repository.VenueChoice
-import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.first
-import kotlinx.coroutines.test.runTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.test.runTest
 
 class SwapVenuesTest {
 
@@ -61,7 +62,8 @@ class SwapVenuesTest {
     fun cowIsOfferedOnlyWhereTheLightClientDatesFinalizedBlocks() {
         val dating = object : LightClient {
             override val datesFinalizedBlocks = true
-            override fun observeStatus(): Flow<LightClientStatus> = MutableStateFlow(LightClientStatus.Starting)
+            override fun observeStatus(network: Network): Flow<LightClientStatus> =
+                MutableStateFlow(LightClientStatus.Starting)
         }
         val notDating = object : LightClient by dating {
             override val datesFinalizedBlocks: Boolean = false

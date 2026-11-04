@@ -33,10 +33,13 @@ rule in code.
 - `:domain` depends on nothing of ours and on no framework. Its libraries are
   coroutines' `Flow` and kotlincrypto's Keccak-256 (`sha3`), both pure Kotlin
   on every target. Keccak-256 is there by the owner's ruling (2026-10-18,
-  #50) for the transaction encoding and hashing alone: the EIP-1559 signing
-  digest and transaction hash, a Safe transaction's EIP-712 hash, the CREATE2
-  address of a Safe and EIP-55. It is the one library besides coroutines, and
-  nothing else comes in under it. It has
+  #50), widened (owner ruling, 2026-11-03, on #218) from a closed list of
+  uses to any of Ethereum's hashing, as pure computation: every signing
+  digest (EIP-1559, EIP-191, EIP-712 for a Safe transaction, a CoW order or
+  a dApp's typed data), transaction hashes, CREATE2 addresses, EIP-55, ABI
+  selectors and event topics. The digest a signer signs is computed here,
+  where the use case can show what it is the hash of. It is the one library
+  besides coroutines, and any other still needs a ruling. It has
   no Android target on purpose: Android
   consumers resolve its JVM variant, as they do kotlinx-coroutines, so nothing
   in it can ever import `android.*` (and that variant emits Java 17 class
@@ -81,10 +84,10 @@ review finding, whatever it saves.
 | `eth.serotine.domain.model` | entities and value objects (`Account`, `Address`, `AccountKind`, `SafeTx` and its `SigningRequest`, `SafeRelease`) and the encodings computed here (`SafeCreation`: `setup`, `createProxyWithNonce` and the CREATE2 address) — immutable, validated in `init`/factory |
 | `eth.serotine.domain.repository` | the ports, as interfaces named after what they manage |
 | `eth.serotine.domain.usecase` | one class per user-visible capability, `operator fun invoke`; what several share is internal there (`CallQuoter` and `signAndSend`, the quote and the send of any transaction from an account the wallet holds: a transfer, a Safe transaction's approval or execution, a Safe's deployment) |
-| `eth.serotine.data.<area>` | adapters, one package per area (`account`, `keys`, `engine`, `upgrade`, `tokens`, `prices`, `safe` — the pinned deployments and the release a Safe is created from, the queue of Safe transactions and the signing requests' text —, `settings`, `transfers`, `history` — where each account's history starts —, `rates` — the exchange rate last verified, for a home-screen widget —, `logs` — the Debug tab's log, in memory, and the `LogSink` adapters write it through —, `files`) |
+| `eth.serotine.data.<area>` | adapters, one package per area (`account`, `keys`, `engine`, `upgrade`, `tokens`, `prices`, `safe` — the pinned deployments and the release a Safe is created from, the queue of Safe transactions and the signing requests' text —, `settings`, `transfers`, `history` — where each account's history starts —, `rates` — the exchange rate last verified, for a home-screen widget —, `logs` — the Debug tab's log, in memory, and the `LogSink` adapters write it through —, `files`, `walletconnect` — WalletConnect v2's wallet role over its relay, docs/walletconnect.md —) |
 | `eth.serotine.ui.<feature>` | one package per screen: `<Feature>Screen`, `<Feature>ViewModel`, `<Feature>UiState` (`send` holds one screen with two steps, compose and review; `safepropose` is Send from a Safe, on the same transfer form; `transferstatus` follows a transaction once sent; `safetx` is one Safe transaction with its signing, approval and execution steps; `safeimport` imports a signing request; `createsafe` holds one screen with three steps, owners, threshold and review) |
 | `eth.serotine.ui.activity` | an account's Activity, a tab of its detail rather than a screen, so with no ViewModel of its own: `AccountActivity`, which `AccountDetailViewModel` reads while the tab is shown, `ActivityUiState` and the list's items (`activityItems`), which `AccountDetailScreen` draws in the tab |
-| `eth.serotine.ui.ratewidget` | what a host's home-screen widget shows of the exchange rate last verified, display-ready (`rateWidgetContent`); the host draws it in its own widget toolkit: no screen, no ViewModel |
+| `eth.serotine.ui.ratewidget` | what a host's home-screen widget shows of the exchange rate last verified, display-ready (`rateWidgetContent`), which the host draws in its own widget toolkit; and the widget's configuration (`WidgetPairScreen`: network, price, currency), whose steps the host computes: no ViewModel |
 | `eth.serotine.ui.debug` | the Debug tab (`DebugScreen`, `DebugViewModel`, `DebugUiState`), and `DebugTabViewModel`, which tells `App` whether the bar shows the tab |
 | `eth.serotine.ui.lightclient` | `LightClientViewModel`, the light client's status strip as the screens that depend on it draw it: no screen of its own |
 | `eth.serotine.ui.components` | stateless composables more than one screen draws (the blockie, an account's avatar, a token's icon, a QR code, the long-press menu, the transfer form, the unlock that signs, a Safe transaction's decoded action, a signing request shared) and the display helpers and display-ready types they share (EIP-55, amounts, the light client's line, the seed screens' password step, the transfer form's inputs and texts, what a Safe transaction does and why one is refused); no ViewModel, no use case |

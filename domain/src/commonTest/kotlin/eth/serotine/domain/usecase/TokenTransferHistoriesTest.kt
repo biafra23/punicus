@@ -51,7 +51,7 @@ class TokenTransferHistoriesTest {
             mapOf(LogWatchKey.Mention(alice) to LogCoverage(9_000, 9_000L..9_200L)),
         )
         val seen = mutableListOf<IndexedHistory<TokenTransferEvent>>()
-        backgroundScope.launch { ObserveTokenTransfers(index, starts)(alice).collect { seen += it } }
+        backgroundScope.launch { ObserveTokenTransfers(index, starts)(alice.onSepolia).collect { seen += it } }
         runCurrent()
 
         val key = LogWatchKey.Mention(alice)

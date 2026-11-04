@@ -39,6 +39,8 @@ internal data class AssetOption(
     val balance: UInt256?,
     val balanceText: String,
     val verifiedAt: String?,
+    /** When the head the balance was proved at was produced, in unix seconds; null when not known. */
+    val provenAt: Long?,
     val valuation: Valuation?,
     val warning: String?,
 ) {
@@ -46,8 +48,8 @@ internal data class AssetOption(
     val contract: Address?
         get() = (asset as? TransferAsset.Erc20Token)?.token?.address
 
-    /** As the form lists it. */
-    fun choice() = AssetChoice(
+    /** As the form lists it, its balance dated against [now] (unix seconds) where one is given. */
+    fun choice(now: Long? = null) = AssetChoice(
         symbol = symbol,
         name = name,
         icon = icon,
@@ -55,6 +57,7 @@ internal data class AssetOption(
         contract = contract?.let(Eip55::format),
         verifiedAt = verifiedAt,
         warning = warning,
+        age = provenAt?.let { at -> now?.let { "updated ${agoText(at, it)}" } },
     )
 }
 
@@ -84,6 +87,7 @@ internal fun assetOptions(
             else -> balanceText(native, network)
         },
         verifiedAt = (native as? BalanceReading.Verified)?.let { block(it.blockNumber) },
+        provenAt = (native as? BalanceReading.Verified)?.provenAt,
         valuation = value.nativeValue,
         warning = null,
     )
@@ -109,6 +113,7 @@ internal fun assetOptions(
                 is TokenBalanceReading.Unavailable -> "Not verified"
             },
             verifiedAt = verified?.blockNumber?.let(::block),
+            provenAt = verified?.provenAt,
             valuation = valuation,
             warning = if (holding.sharesBuiltInSymbol) "Not the built-in $symbol: another contract" else null,
         )
@@ -133,13 +138,16 @@ internal sealed interface RecipientState {
 }
 
 /**
- * The recipient as [typed] (the text, trimmed, and how often the user asked to resolve it again),
- * resolved by [lookUp]: an address at once, a name once the typing paused, so that a name is not
- * resolved for every letter of it.
+ * The recipient as [typed] (the text, trimmed, and what asks to resolve it again when it changes:
+ * how often the user asked; on Watch, how often its registry was asked again), resolved by
+ * [lookUp]: an address at once, a name once the typing paused, so that a name is not resolved for
+ * every letter of it. While the light client is still syncing, it is looked up again by itself
+ * every [SYNC_RETRY_MS] until it can be answered (docs/simple-ui.md, *A read refused while syncing
+ * says so*).
  */
 @OptIn(ExperimentalCoroutinesApi::class)
 internal fun recipientStates(
-    typed: Flow<Pair<String, Int>>,
+    typed: Flow<Pair<String, Any?>>,
     lookUp: suspend (String) -> RecipientLookup,
 ): Flow<RecipientState> = typed
     .distinctUntilChanged()
@@ -153,8 +161,27 @@ internal fun recipientStates(
             emit(RecipientState.Resolving(text))
             delay(NAME_PAUSE_MS)
         }
-        emit(RecipientState.Done(text, lookUp(text)))
+        var result = lookUp(text)
+        emit(RecipientState.Done(text, result))
+        while (result.syncing) {
+            delay(SYNC_RETRY_MS)
+            result = lookUp(text)
+            emit(RecipientState.Done(text, result))
+        }
     }
+
+/** Whether this lookup could not be answered because the light client is still syncing. */
+private val RecipientLookup.syncing: Boolean
+    get() = this is RecipientLookup.Unavailable && reason == ReadUnavailable.SYNCING
+
+/**
+ * Why asking again for [result] by hand changes nothing, for its greyed-out Try again: the light
+ * client is still syncing, and the name is looked up again by itself. Null where asking may help.
+ */
+internal fun retryLookupWaits(result: RecipientLookup?): String? = RETRY_WAITS.takeIf { result?.syncing == true }
+
+private const val RETRY_WAITS = "The light client is still syncing. The name is looked up again by itself every few " +
+    "seconds until it has caught up."
 
 /** [text], a typed recipient, as it is resolved: an all-caps copy upper-cases the `0x` prefix too. */
 internal fun recipientText(text: String): String = if (text.startsWith("0X")) "0x" + text.drop(2) else text
@@ -183,8 +210,13 @@ internal suspend fun resolveAgain(
     val name = found.name ?: return ResolvedAgain.Same(found)
     val again = lookUp(name)
     if (again is RecipientLookup.Found && again.address == found.address) return ResolvedAgain.Same(again)
+    if (again.syncing) return ResolvedAgain.Changed(stillSyncing(name))
     return ResolvedAgain.Changed(said(name, again is RecipientLookup.Unavailable))
 }
+
+/** Why [name] is not taken again now: the light client is still syncing, never "this time". */
+private fun stillSyncing(name: String): String =
+    "The light client is still syncing, so “$name” can't be checked again yet. Try again once it has caught up."
 
 /** Why a recipient's [name] is not signed for again: it could not be verified again ([unverifiable]), or it moved. */
 private fun recipientChanged(name: String, unverifiable: Boolean): String = if (unverifiable) {
@@ -225,8 +257,23 @@ internal fun recipientNote(text: String, lookup: RecipientState?): Pair<String?,
         RecipientLookup.ZeroAddress -> ZERO_ADDRESS to true
         RecipientLookup.OffchainOnly -> OFFCHAIN to true
         RecipientLookup.NoAddress -> "This name has no address." to true
+        is RecipientLookup.NoNamesOn -> noNamesText(result.network) to true
         is RecipientLookup.Unavailable -> nameUnavailable(result.reason) to true
     }
+}
+
+/** Why a name typed on [network] is refused: names are not resolved there (docs/networks.md, *Names*). */
+internal fun noNamesText(network: Network): String =
+    "Names are not resolved on ${network.displayName} yet: enter the address."
+
+/** The label of a field that takes an address, and a name where [network] resolves names. */
+internal fun addressFieldLabel(network: Network): String = if (network.ensNames) "Address or ENS name" else "Address"
+
+/** What a recipient field says under it on [network] while nothing is typed. */
+internal fun recipientHint(network: Network): String = if (network.ensNames) {
+    "An address, an ENS name, or one of your accounts below"
+} else {
+    "An address, or one of your accounts below: names are not resolved on ${network.displayName} yet"
 }
 
 /** An amount typed, in an asset's smallest units, or why it is none (both null while still being typed). */
@@ -271,13 +318,19 @@ internal fun amountHint(amount: UInt256?, option: AssetOption?, currency: Displa
     val valued = option?.valuation as? Valuation.Valued ?: return null
     val balance = option.balance?.takeUnless { it.isZero } ?: return null
     val share = amount.toDecimal().toDouble() / balance.toDecimal().toDouble()
-    return valuationText(valued.copy(amount = valued.amount * share), currency, network)?.let { "≈ $it" }
+    // A hint, so "≈" leads it; a value at a pool's average already starts with one.
+    return valuationText(valued.copy(amount = valued.amount * share), currency, network)
+        ?.let { if (it.startsWith("≈")) it else "≈ $it" }
 }
 
 /** Why a name could not be resolved with verified calls, display-ready. */
 internal fun nameUnavailable(reason: ReadUnavailable): String = when (reason) {
     ReadUnavailable.NO_ENGINE -> "There is no light client on this device, so the name cannot be resolved."
+    ReadUnavailable.NETWORK_OFF -> "The network's light client is not running, so the name cannot be resolved."
     ReadUnavailable.STALE_ANCHOR -> "The light client refuses to sync, so the name cannot be resolved."
+    ReadUnavailable.SYNCING ->
+        "The light client is still syncing, so the name can't be resolved yet. It is looked up again once it has " +
+            "caught up."
     ReadUnavailable.UNPROVEN -> "The name could not be resolved with verified calls this time."
     ReadUnavailable.REFUSED -> "The light client on this device cannot resolve names."
 }
@@ -369,6 +422,9 @@ private const val ADDRESS_LENGTH = 42
 
 /** How long the typing must pause before a name is resolved. */
 private const val NAME_PAUSE_MS = 600L
+
+/** How often a name is looked up again while the light client is still syncing. */
+internal const val SYNC_RETRY_MS = 5_000L
 private val HEX_SO_FAR = Regex("^(0|0[xX][0-9a-fA-F]*)$")
 private val LABEL_SO_FAR = Regex("^[A-Za-z0-9-]+$")
 private val DECIMAL = Regex("^(0|[1-9][0-9]*)(\\.[0-9]+)?$")

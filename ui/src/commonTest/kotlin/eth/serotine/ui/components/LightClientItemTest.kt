@@ -62,7 +62,12 @@ class LightClientItemTest {
         )
     }
 
-    private fun item(status: LightClientStatus) = LightClientItem.from(status, NOW)
+    /** [status] as Detailed view's strip draws it: simple mode's line is tested on its own, below. */
+    private fun item(status: LightClientStatus) = LightClientItem.from(status, NOW).copy(simpleText = null)
+
+    /** Simple mode's sync line for [status] on Ethereum. */
+    private fun simple(status: LightClientStatus, decidedHere: Boolean = false) =
+        LightClientItem.from(status, NOW, decidedHere, network = "Ethereum").simpleText
 
     private companion object {
         const val NOW = 1_792_100_000L
@@ -92,7 +97,8 @@ class LightClientItemTest {
         )
         assertEquals(
             LightClientItem(
-                "Sync refused: the trust anchor is 20 periods old, past the limit of 13",
+                "Not syncing: the last trusted checkpoint is 20 periods old, past the safe limit of 13 · " +
+                    "decide in Settings → Networks",
                 null,
                 false,
                 NOT_VERIFIED,
@@ -100,12 +106,57 @@ class LightClientItemTest {
             item(LightClientStatus.StaleAnchor(anchorAgePeriods = 20, boundPeriods = 13)),
         )
         assertEquals(
-            LightClientItem("Sync refused: the trust anchor is 20 periods old", null, false, NOT_VERIFIED),
+            LightClientItem(
+                "Not syncing: the last trusted checkpoint is 20 periods old · decide in Settings → Networks",
+                null,
+                false,
+                NOT_VERIFIED,
+            ),
             item(LightClientStatus.StaleAnchor(anchorAgePeriods = 20, boundPeriods = 0)),
         )
         assertEquals(
             LightClientItem("No light client on this device", null, false, NOT_VERIFIED),
             item(LightClientStatus.Unavailable),
         )
+    }
+
+    @Test
+    fun simpleModesSyncLineSaysWhatKeepsTheNetworkFromVerifiedReads() {
+        assertEquals("Syncing Ethereum · starting", simple(LightClientStatus.Starting))
+        assertEquals("Syncing Ethereum · starting", simple(LightClientStatus.Bootstrapping(lookingForServers = true)))
+        assertEquals("Syncing Ethereum · 2 of 6 periods", simple(LightClientStatus.CatchingUp(done = 2, total = 6)))
+        assertEquals("Syncing Ethereum", simple(LightClientStatus.CatchingUp(done = 0, total = 0)))
+        assertEquals("Syncing Ethereum", simple(LightClientStatus.CatchingUp(done = 6, total = 6)))
+        assertEquals(
+            "Syncing Ethereum · waiting for its first block",
+            simple(LightClientStatus.WaitingForHead(headAgeSeconds = null)),
+        )
+        assertEquals(
+            "Waiting for a new Ethereum block · the last is 3 min old",
+            simple(LightClientStatus.WaitingForHead(headAgeSeconds = 185)),
+        )
+        assertEquals(
+            "Looking for Ethereum peers that can prove balances",
+            simple(LightClientStatus.WaitingForProofPeers(headBlock = 11_922_744, headTimestamp = null)),
+        )
+        assertEquals(
+            "Ethereum isn't syncing: its checkpoint is too old · decide in Settings → Networks",
+            simple(LightClientStatus.StaleAnchor(anchorAgePeriods = 20, boundPeriods = 13)),
+        )
+        assertEquals(
+            "Ethereum isn't syncing: its checkpoint is too old",
+            simple(LightClientStatus.StaleAnchor(anchorAgePeriods = 20, boundPeriods = 13), decidedHere = true),
+        )
+        assertEquals("No light client for Ethereum on this device", simple(LightClientStatus.Unavailable))
+    }
+
+    @Test
+    fun simpleModeDrawsNoSyncLineWhileNothingNeedsSaying() {
+        listOf(
+            LightClientStatus.Synced(headBlock = 11_922_744, headTimestamp = NOW - 8, finalized = null),
+            LightClientStatus.Sleeping,
+            LightClientStatus.Off,
+            LightClientStatus.Idle,
+        ).forEach { status -> assertEquals(null, simple(status), "$status") }
     }
 }

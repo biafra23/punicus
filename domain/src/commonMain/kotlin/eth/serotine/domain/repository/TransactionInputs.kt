@@ -1,41 +1,44 @@
 package eth.serotine.domain.repository
 
 import eth.serotine.domain.model.Address
+import eth.serotine.domain.model.Network
 import eth.serotine.domain.model.UInt256
 
 /**
  * The port for what a transaction needs from the chain before it is signed: the sender's next
  * nonce, the fees the last blocks paid, the gas it takes, and how it runs — every answer from
- * the embedded light client's verified state (CLAUDE.md, *Trust*). :data implements it over the
- * Myotis engine; nothing else may answer it. Every call blocks on the engine, bounded by it,
+ * the embedded light client's verified state (CLAUDE.md, *Trust*), each network's by its own.
+ * :data implements it over the Myotis engine; nothing else may answer it. Every call names its
+ * network; one no adapter serves here is refused ([ReadUnavailable.NO_ENGINE]), never answered
+ * from another network. Every call blocks on the engine, bounded by it,
  * and never throws.
  */
 interface TransactionInputs {
 
     /**
-     * The nonce [account]'s next transaction must carry: its verified transaction count, plus
+     * The nonce [account]'s next transaction on [network] must carry: its verified transaction count, plus
      * the engine's own record of transactions it sent that are not mined yet. That record is the
      * engine's memory: it lasts while the process does and an entry expires, so a send right after
      * a restart, before an earlier one is mined, can be given the earlier one's nonce: the app's
      * own record ([SentTransfers]) is what [eth.serotine.domain.usecase.QuoteTransfer] covers that
      * with.
      */
-    suspend fun nonce(account: Address): NonceReading
+    suspend fun nonce(network: Network, account: Address): NonceReading
 
     /**
-     * [account]'s verified count of mined transactions at the head (`latest`): every nonce below
+     * [account]'s verified count of mined transactions on [network] at the head (`latest`): every nonce below
      * it is used on chain.
      */
-    suspend fun minedNonce(account: Address): NonceReading
+    suspend fun minedNonce(network: Network, account: Address): NonceReading
 
-    /** The fee levels the verified fee history of the last blocks suggests. */
-    suspend fun fees(): FeeReading
+    /** The fee levels the verified fee history of [network]'s last blocks suggests. */
+    suspend fun fees(network: Network): FeeReading
 
     /**
-     * The gas a transaction from [from] to [to] carrying [value] and [data] takes, as the
+     * The gas a transaction on [network] from [from] to [to] carrying [value] and [data] takes, as the
      * engine's own EVM runs it over verified state at the head, with its safety buffer.
      */
-    suspend fun estimateGas(from: Address, to: Address, value: UInt256, data: ByteArray): GasEstimate
+    suspend fun estimateGas(network: Network, from: Address, to: Address, value: UInt256, data: ByteArray): GasEstimate
 
     /**
      * The same transaction run as a verified call from [from] against the head: what the
@@ -43,7 +46,7 @@ interface TransactionInputs {
      * contract's address — a Safe's call run as the Safe makes it — and an engine that will not
      * run a call from one answers [Simulation.Refused].
      */
-    suspend fun simulate(from: Address, to: Address, value: UInt256, data: ByteArray): Simulation
+    suspend fun simulate(network: Network, from: Address, to: Address, value: UInt256, data: ByteArray): Simulation
 }
 
 /** The outcome of [TransactionInputs.nonce]. */

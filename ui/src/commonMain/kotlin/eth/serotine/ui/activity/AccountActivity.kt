@@ -1,5 +1,6 @@
 package eth.serotine.ui.activity
 
+import eth.serotine.domain.model.AccountId
 import eth.serotine.domain.model.Address
 import eth.serotine.domain.model.Network
 import eth.serotine.domain.model.SafeEvent
@@ -11,16 +12,18 @@ import eth.serotine.domain.repository.HistoryEntry
 import eth.serotine.domain.repository.HistoryList
 import eth.serotine.domain.repository.SentAction
 import eth.serotine.domain.repository.SentOutcome
-import eth.serotine.domain.usecase.ObserveAccountCowOrders
-import eth.serotine.domain.usecase.ObserveAccountHistory
-import eth.serotine.domain.usecase.KnownToken
+import eth.serotine.domain.repository.WaitingSwap
 import eth.serotine.domain.usecase.IndexedEvent
 import eth.serotine.domain.usecase.IndexedHistory
+import eth.serotine.domain.usecase.KnownToken
+import eth.serotine.domain.usecase.ObserveAccountCowOrders
+import eth.serotine.domain.usecase.ObserveAccountHistory
 import eth.serotine.domain.usecase.ObserveAccounts
 import eth.serotine.domain.usecase.ObserveKnownTokens
 import eth.serotine.domain.usecase.ObserveSafeHistory
 import eth.serotine.domain.usecase.ObserveSentToAddresses
 import eth.serotine.domain.usecase.ObserveTokenTransfers
+import eth.serotine.domain.usecase.ObserveWaitingSwaps
 import eth.serotine.domain.usecase.SafeChainEvent
 import eth.serotine.domain.usecase.TokenTransferEvent
 import eth.serotine.ui.components.grouped
@@ -40,9 +43,10 @@ import kotlinx.coroutines.flow.map
  * address the wallet never sent to ([ObserveSentToAddresses]) and that is none of its accounts
  * is cautioned. A log of a transaction listed as sent, in a block, is left out when its row says
  * the same. The CoW orders the account signed here ([ObserveAccountCowOrders]) are listed among
- * the transactions, by when each was signed, and open their status. [formatTime] dates each in
- * the user's own time zone. A row opens its detail, which
- * is navigation.
+ * the transactions, and open their status. Every row goes by when it happened, newest first
+ * ([merged]). Above them, each swap whose next step waits for the user ([ObserveWaitingSwaps]),
+ * said from its approval's outcome in the account's history. [formatTime] dates each in the
+ * user's own time zone. A row opens its detail, which is navigation.
  */
 class AccountActivity(
     private val observeAccountHistory: ObserveAccountHistory,
@@ -52,20 +56,24 @@ class AccountActivity(
     private val observeKnownTokens: ObserveKnownTokens,
     private val observeSentTo: ObserveSentToAddresses,
     private val observeCowOrders: ObserveAccountCowOrders,
-    private val network: Network,
+    private val observeWaitingSwaps: ObserveWaitingSwaps,
     private val formatTime: (Long) -> String = ::formatDateTime,
 ) {
 
-    /** The Activity of the account at [address], as it changes; nothing is read until it is collected. */
-    fun of(address: Address): Flow<ActivityUiState> = Listing(address).state
+    /**
+     * The Activity of the [account], as it changes, with every amount masked while [hideAmounts] says
+     * so (docs/wallet-ux.md, *Hiding amounts*); nothing is read until it is collected.
+     */
+    fun of(account: AccountId, hideAmounts: Flow<Boolean>): Flow<ActivityUiState> =
+        Listing(account, hideAmounts).state
 
-    /** One account's Activity: the [address] its rows and sources are of. */
-    private inner class Listing(private val address: Address) {
+    /** One account's Activity: the [account] its rows and sources are of, and whether its amounts are hidden. */
+    private inner class Listing(private val account: AccountId, private val hideAmounts: Flow<Boolean>) {
 
-        private val rows = ActivityRows(address, network, formatTime)
+        private val address: Address = account.address
 
         private val sources = ActivitySources(
-            address,
+            account,
             observeAccounts,
             observeSafeHistory,
             observeTokenTransfers,
@@ -74,7 +82,12 @@ class AccountActivity(
         )
 
         val state: Flow<ActivityUiState> = combine(
-            combine(observeAccountHistory(address), observeCowOrders(address)) { history, orders -> history to orders },
+            combine(
+                observeAccountHistory(account),
+                observeCowOrders(account),
+                observeWaitingSwaps(account),
+                hideAmounts,
+            ) { history, orders, waiting, hidden -> SentHere(history, orders, waiting, hidden) },
             sources.parties,
             sources.safeHistory,
             sources.transfers,
@@ -83,7 +96,7 @@ class AccountActivity(
         )
 
         private fun render(
-            sentHere: Pair<HistoryList, List<CowOrderRecord>>,
+            sentHere: SentHere,
             parties: Parties,
             safe: IndexedHistory<SafeChainEvent>?,
             transfers: IndexedHistory<TokenTransferEvent>?,
@@ -95,21 +108,42 @@ class AccountActivity(
                 HistoryList.Unreadable -> return ActivityUiState.Unavailable(UNREADABLE)
                 is HistoryList.Loaded -> history.entries
             }
-            // The CoW orders signed here among them, by when each was signed: a live one waits for
-            // its end as a transaction waits for its block, a filled or cancelled one goes by the
-            // block of its fill or its cancellation, and one never filled by where it was signed
-            // (the block that proved it came later).
-            val sent = (
-                entries.map {
-                    val listed = Listed(
-                        rows.row(it, names),
-                        it.outcome.blockNumberOrNull,
-                        pending = it.outcome == SentOutcome.NotSeen,
-                    )
-                    it.transfer.sentAt to listed
-                } + orders.map { it.signedAt to Listed(rows.orderRow(it), it.end?.placedAt, pending = it.live) }
-            ).sortedByDescending { it.first }.map { it.second }
-            if (transfers == null) return ActivityUiState.Shown(sent.map { it.row }, COVERAGE)
+            // Built per change, for the amounts it says to follow the eye. A Safe transaction is said
+            // as what it does, in the units of the tokens known so far, and an execution or approval
+            // on chain by the request this device holds of it.
+            val rows = ActivityRows(
+                address,
+                account.network,
+                formatTime,
+                sentHere.hidden,
+                decodingTokens = ActivityRows.decodingTokens(tokens),
+                requests = ActivityRows.requestsIn(entries),
+            )
+            val waiting = sentHere.waiting.map { waitingStep(it, entries, tokens, rows) }
+            val safeEvents = (safe as? IndexedHistory.Read)?.events.orEmpty()
+            val tokenEvents = (transfers as? IndexedHistory.Read)?.events.orEmpty()
+            // When each block was produced, as the engine reported it with any event in it: what a
+            // transaction seen in that block goes by, before when a peer took it.
+            val allEvents: List<IndexedEvent> = safeEvents + tokenEvents
+            val blockTimes = allEvents.mapNotNull { event -> event.blockTimestamp?.let { event.blockNumber to it } }
+                .toMap()
+            // The CoW orders signed here among them: a live one waits for its end as a transaction
+            // waits for its block, a filled or cancelled one goes by the block of its fill or its
+            // cancellation, and one never filled by when it was signed (the block that proved it
+            // came later).
+            val sent = entries.map {
+                val block = it.outcome.blockNumberOrNull
+                Listed(
+                    rows.row(it, names),
+                    block,
+                    pending = it.outcome == SentOutcome.NotSeen,
+                    moment = block?.let(blockTimes::get) ?: it.transfer.sentAt,
+                )
+            } + orders.map {
+                val block = it.end?.placedAt
+                Listed(rows.orderRow(it), block, pending = it.live, moment = block?.let(blockTimes::get) ?: it.signedAt)
+            }
+            if (transfers == null) return ActivityUiState.Shown(merged(sent, emptyList()), COVERAGE, waiting = waiting)
             // Only a row that names its block says what its logs say: one no block was seen for (a
             // transaction mined while the app was closed) gets the verified log beside it.
             val seenInBlocks = entries.filter { it.outcome.blockNumberOrNull != null }.associateBy { it.transfer.hash }
@@ -118,11 +152,11 @@ class AccountActivity(
             // settlement can fill several of the account's orders, each of its own token.
             val fills = orders.filter { it.end is CowOrderEnd.Filled }
                 .groupBy { (it.end as CowOrderEnd.Filled).transactionHash.lowercase() }
-            val safeEvents = (safe as? IndexedHistory.Read)?.events.orEmpty()
+            val safeRows = safeEvents
                 .filterNot { it.transactionHash in seenInBlocks && it.event.saidBySentRow() }
                 .map { rows.eventRow(it, parties) to it }
             // Until the tokens are known, a transfer's amount cannot be said: none is listed yet.
-            val tokenEvents = (transfers as? IndexedHistory.Read)?.events.orEmpty()
+            val tokenRows = tokenEvents
                 .takeIf { tokens != null }.orEmpty()
                 .filterNot { it.transfer.movesNothing() }
                 .filterNot { event -> seenInBlocks[event.transactionHash]?.let { event.transfer.saidBy(it) } == true }
@@ -131,9 +165,16 @@ class AccountActivity(
                     fill.any { event.transfer.soldIn(it) || event.transfer.boughtIn(it) }
                 }
                 .map { rows.transferRow(it, parties, tokens.orEmpty()) to it }
-            val events = (safeEvents + tokenEvents)
-                .sortedWith(compareByDescending<Pair<ActivityRow, IndexedEvent>> { it.second.blockNumber }
-                    .thenByDescending { it.second.logIndex })
+            val events = (safeRows + tokenRows)
+                .sortedWith(
+                    compareByDescending<Pair<ActivityRow, IndexedEvent>> { it.second.blockNumber }
+                    .thenByDescending { it.second.logIndex },
+                )
+            // An event the engine dated goes by its time like a sent row; one it did not by its block.
+            val dated = events.mapNotNull { (row, event) ->
+                event.blockTimestamp?.let { Listed(row, event.blockNumber, pending = false, moment = it, event = true) }
+            }
+            val undated = events.filter { it.second.blockTimestamp == null }
                 .map { (row, event) -> row to event.blockNumber }
             val deployedHere = entries.any { (it.transfer.action as? SentAction.SafeDeployment)?.safe == address }
             val since = if (deployedHere) "when it was deployed from this device" else "when it was added here"
@@ -141,15 +182,80 @@ class AccountActivity(
             val covered = listOfNotNull(
                 "Transactions sent from this device.",
                 onChainCoverage(parts, since),
-                if (safe == null) NOT_LISTED_YET else null,
+                if (safe == null) notListedYet(account.network) else null,
             )
+            // Simple mode's words for the same, with no block number (docs/simple-ui.md, H5): every
+            // gap the detailed coverage names is named here too.
+            val histories = parts.map { it.second }
+            val sinceWhen = if (deployedHere) "since it was deployed from this device" else "since you added it"
+            val simple = listOfNotNull(
+                "Activity $sinceWhen.",
+                "Older activity is still being checked.".takeIf {
+                    histories.any { it is IndexedHistory.Checking || (it as? IndexedHistory.Read)?.complete == false }
+                },
+                "Activity on chain can't be read right now."
+                    .takeIf { histories.any { it == IndexedHistory.Unavailable } },
+                "Activity on chain is listed once the light client is synced."
+                    .takeIf { histories.any { it == IndexedHistory.NotFollowed } },
+                if (safe == null) notListedYet(account.network) else null,
+            ).joinToString(" ")
             return ActivityUiState.Shown(
-                rows = merged(sent, events),
+                rows = merged(sent + dated, undated),
                 coverage = covered.joinToString(" "),
                 empty = "Nothing listed yet.",
+                simpleCoverage = simple,
+                waiting = waiting,
             )
         }
+
+        /**
+         * [swap] as its card: what it swaps, once the tokens are known, and where it stands, from its
+         * approval's outcome in [entries]. Step 1 is said done only on a verified receipt that it succeeded.
+         */
+        private fun waitingStep(
+            swap: WaitingSwap,
+            entries: List<HistoryEntry>,
+            tokens: Map<Address, KnownToken>?,
+            rows: ActivityRows,
+        ) =
+            WaitingStep(
+                title = tokens?.get(swap.sell)?.token?.let { sold ->
+                    // Only no token bought is the network's currency: one no longer listed is not named.
+                    val bought = if (swap.buy == null) account.network.nativeSymbol else tokens[swap.buy]?.token?.symbol
+                    bought?.let { "Swap ${rows.figure(swap.amount, sold.decimals, sold.symbol)} → $it" }
+                } ?: "A swap",
+                message = waitingText(swap, entries.firstOrNull { it.transfer.hash.equals(swap.approval, true) }),
+                sell = swap.sell.hex,
+            )
+
+        private fun waitingText(swap: WaitingSwap, approval: HistoryEntry?): String {
+            val done = swap.step - 1
+            val succeeded = when (val outcome = approval?.outcome) {
+                is SentOutcome.Included -> outcome.succeeded
+                is SentOutcome.Finalized -> outcome.succeeded
+                SentOutcome.NotSeen -> return "Step $done, the approval, is on its way. Once a block has it, step " +
+                    "${swap.step} is yours to confirm."
+                SentOutcome.NonceUsed, null -> return "Step ${swap.step} is waiting for you. Continue checks " +
+                    "where step $done stands."
+            }
+            return if (succeeded) {
+                "Step $done done. Step ${swap.step} is waiting for you."
+            } else {
+                "Step $done, the approval, failed in its block: nothing was swapped. Continue quotes it again."
+            }
+        }
     }
+
+    /**
+     * What this device sent for the account: its [history], its CoW [orders], and its swaps [waiting]
+     * for a step; and whether amounts are [hidden].
+     */
+    private data class SentHere(
+        val history: HistoryList,
+        val orders: List<CowOrderRecord>,
+        val waiting: List<WaitingSwap>,
+        val hidden: Boolean,
+    )
 
     /**
      * What the sent row of a transaction that logged this event says once it names the block: its
@@ -179,25 +285,44 @@ class AccountActivity(
     }
 
     /**
-     * The sent rows (newest first) and the [events] (newest first) in one list, newest block
-     * first. A sent row still waiting for its block is newer than every block: it goes at the top.
-     * One with no block (a nonce used with no block seen, a CoW order never filled) goes with the
-     * newest row sent before it that has one, before the events of that row's block; when none
-     * has, just below the newest row sent after it that has one, and at the top when none has.
+     * Every row in one list, newest first: the [dated] rows by when each happened (a sent
+     * transaction by when its block was produced, where an event in that block says it, else by
+     * when a peer took it; a CoW order alike, by its fill's or cancellation's block, else by when
+     * it was signed; an event by when its block was produced), the sent ones before the events of
+     * the same moment; and the [undated] events (newest block first), from an engine that does not
+     * date a block, each among them by its block. A sent row still waiting for its block goes by
+     * when a peer took it (a CoW order that may still fill, by when it was signed), and counts as
+     * newer than every block: no undated event goes above it. One with no block that is not
+     * waiting (a nonce used with no block seen, a CoW order never filled) is dated by when it was
+     * sent, and for the undated events counts as just newer than the newest dated row below it
+     * that has a block (a sent row or an event), so it goes before the undated events of that
+     * row's block; when none has, it counts as the block of the nearest dated row above it that
+     * has one, and as newer than every block when none has.
      */
-    private fun merged(sent: List<Listed>, events: List<Pair<ActivityRow, Long>>): List<ActivityRow> {
-        val sentBlocks = ArrayList<Long>(sent.size)
-        for ((at, listed) in sent.withIndex()) {
-            sentBlocks += listed.block
+    private fun merged(dated: List<Listed>, undated: List<Pair<ActivityRow, Long>>): List<ActivityRow> {
+        val sorted = dated.sortedWith(
+            compareByDescending<Listed> { it.moment }
+                .thenBy { it.event }
+                .thenByDescending { it.block ?: Long.MAX_VALUE },
+        )
+        val blocks = ArrayList<Long>(sorted.size)
+        for ((at, listed) in sorted.withIndex()) {
+            blocks += listed.block
                 ?: Long.MAX_VALUE.takeIf { listed.pending }
-                ?: sent.drop(at + 1).firstNotNullOfOrNull { it.block }?.let { it + 1 }
+                ?: sorted.drop(at + 1).firstNotNullOfOrNull { it.block }?.let { it + 1 }
                 // None sent before it has a block: just below the newest sent after it that has one.
-                ?: sentBlocks.lastOrNull { it != Long.MAX_VALUE }
+                ?: blocks.lastOrNull { it != Long.MAX_VALUE }
                 ?: Long.MAX_VALUE
         }
-        val all = sent.mapIndexed { at, listed -> listed.row to sentBlocks[at] } + events
-        // Stable: rows of one block keep the order they came in, the sent ones first.
-        return all.sortedByDescending { it.second }.map { it.first }
+        val rows = ArrayList<ActivityRow>(sorted.size + undated.size)
+        var next = 0
+        for ((at, listed) in sorted.withIndex()) {
+            // The undated events of newer blocks than this row's go above it; of its own block, below.
+            while (next < undated.size && undated[next].second > blocks[at]) rows += undated[next++].first
+            rows += listed.row
+        }
+        while (next < undated.size) rows += undated[next++].first
+        return rows
     }
 
     /**
@@ -232,10 +357,18 @@ class AccountActivity(
     }
 
     /**
-     * A sent transaction's [row], the [block] it was seen in (null: none seen), and whether it is
-     * [pending]: no block seen yet, nor its nonce used.
+     * A row that is dated: a sent transaction's, the [block] it was seen in (null: none seen),
+     * whether it is [pending] (no block seen yet, nor its nonce used) and its [moment] (unix
+     * seconds), when its block was produced where that is known, else when a peer took it; or an
+     * [event]'s, in its block, dated by the engine.
      */
-    private class Listed(val row: ActivityRow, val block: Long?, val pending: Boolean)
+    private class Listed(
+        val row: ActivityRow,
+        val block: Long?,
+        val pending: Boolean,
+        val moment: Long,
+        val event: Boolean = false,
+    )
 
     /**
      * The block an ended order's row goes by: its fill's, or its cancellation's. One never filled has
@@ -262,7 +395,10 @@ class AccountActivity(
     }
 
     private companion object {
-        const val NOT_LISTED_YET = "ETH it received, and transactions sent from it elsewhere, are not listed yet."
+        /** What an account's Activity does not list yet: the network's own currency it received, among others. */
+        fun notListedYet(network: Network) =
+            "${network.nativeSymbol} it received, and transactions sent from it elsewhere, are not listed yet."
+
         const val COVERAGE = "Transactions sent from this device. Transactions received, and those sent " +
             "from this account elsewhere, are not listed yet."
         const val UNREADABLE = "The history of your transactions cannot be read right now. Serotine keeps trying."

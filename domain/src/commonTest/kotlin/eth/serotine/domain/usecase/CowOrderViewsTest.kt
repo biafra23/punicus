@@ -1,5 +1,6 @@
 package eth.serotine.domain.usecase
 
+import eth.serotine.domain.model.AccountId
 import eth.serotine.domain.model.Address
 import eth.serotine.domain.model.CowOrder
 import eth.serotine.domain.model.Network
@@ -51,7 +52,7 @@ class CowOrderViewsTest {
 
     @Test
     fun anOrderIsReadByItsUidWithItsEndAsProven() = runTest {
-        val observe = ObserveCowOrder(orders)
+        val observe = ObserveCowOrder(orders, Network.SEPOLIA)
         assertEquals(CowOrderReading.Found(second), observe(second.uid).first())
         val ended = second.copy(end = CowOrderEnd.Unfilled(120, cancelled = false))
         orders.orders.value = listOf(first, ended)
@@ -63,11 +64,11 @@ class CowOrderViewsTest {
 
     @Test
     fun anAccountsOrdersAreItsOwnNewestFirst() = runTest {
-        val observe = ObserveAccountCowOrders(orders, Network.SEPOLIA)
-        assertEquals(listOf(second, first), observe(alice).first())
-        assertEquals(listOf(bobs), observe(bob).first())
+        val observe = ObserveAccountCowOrders(orders)
+        assertEquals(listOf(second, first), observe(AccountId(Network.SEPOLIA, alice)).first())
+        assertEquals(listOf(bobs), observe(AccountId(Network.SEPOLIA, bob)).first())
         orders.unreadable = true
-        assertEquals(emptyList(), observe(alice).first())
+        assertEquals(emptyList(), observe(AccountId(Network.SEPOLIA, alice)).first())
     }
 
     @Test

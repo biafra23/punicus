@@ -1,5 +1,6 @@
 package eth.serotine.ui
 
+import eth.serotine.domain.model.AccountId
 import eth.serotine.domain.model.Address
 import eth.serotine.domain.model.CowOrder
 import eth.serotine.domain.model.CowOrderUid
@@ -48,20 +49,24 @@ import eth.serotine.domain.repository.SentTransferList
 import eth.serotine.domain.repository.SentTransfers
 import eth.serotine.domain.repository.SwapVenueSetting
 import eth.serotine.domain.repository.VenueChoice
+import eth.serotine.domain.repository.WaitingSwap
+import eth.serotine.domain.repository.WaitingSwaps
 import eth.serotine.domain.repository.prunable
 import eth.serotine.domain.repository.Signer
 import eth.serotine.domain.repository.Signing
 import eth.serotine.domain.repository.Simulation
 import eth.serotine.domain.repository.TransactionHistory
-import eth.serotine.domain.repository.yieldsTo
 import eth.serotine.domain.repository.TransactionInputs
 import eth.serotine.domain.repository.TransactionProgress
 import eth.serotine.domain.repository.Unlock
+import eth.serotine.domain.repository.prunable
+import eth.serotine.domain.repository.yieldsTo
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.update
 
 /** One gwei, in wei. */
 internal const val GWEI = 1_000_000_000L
@@ -90,12 +95,15 @@ internal class FakeTransactionInputs : TransactionInputs {
     /** What a run of a contract answers instead of [simulation]: a token's allowance, a router's swap. */
     val runs = mutableMapOf<Address, Simulation>()
 
+    /** What a run of one call answers, before [runs]: null where [runs] or [simulation] answer it. */
+    var runOf: (to: Address, data: ByteArray) -> Simulation? = { _, _ -> null }
+
     /** Each transfer estimated: from, to and value. */
     val estimated = mutableListOf<Triple<Address, Address, UInt256>>()
 
-    override suspend fun nonce(account: Address): NonceReading = NonceReading.Read(nonce)
+    override suspend fun nonce(network: Network, account: Address): NonceReading = NonceReading.Read(nonce)
 
-    override suspend fun minedNonce(account: Address): NonceReading = NonceReading.Read(mined)
+    override suspend fun minedNonce(network: Network, account: Address): NonceReading = NonceReading.Read(mined)
 
     /** While set, the fees and every run wait for it: a quote in flight, for as long as a test needs. */
     var gate: CompletableDeferred<Unit>? = null
@@ -103,20 +111,32 @@ internal class FakeTransactionInputs : TransactionInputs {
     /** How often the fees were asked. */
     var feeReads = 0
 
-    override suspend fun fees(): FeeReading {
+    override suspend fun fees(network: Network): FeeReading {
         feeReads++
         gate?.await()
         return fees
     }
 
-    override suspend fun estimateGas(from: Address, to: Address, value: UInt256, data: ByteArray): GasEstimate {
+    override suspend fun estimateGas(
+        network: Network,
+        from: Address,
+        to: Address,
+        value: UInt256,
+        data: ByteArray,
+    ): GasEstimate {
         estimated += Triple(from, to, value)
         return estimate
     }
 
-    override suspend fun simulate(from: Address, to: Address, value: UInt256, data: ByteArray): Simulation {
+    override suspend fun simulate(
+        network: Network,
+        from: Address,
+        to: Address,
+        value: UInt256,
+        data: ByteArray,
+    ): Simulation {
         gate?.await()
-        return runs[to] ?: simulation
+        return runOf(to, data) ?: runs[to] ?: simulation
     }
 }
 
@@ -153,7 +173,7 @@ internal class FakeBroadcaster : Broadcaster {
     val answers = ArrayDeque<Broadcast>()
     val sent = mutableListOf<ByteArray>()
 
-    override suspend fun send(raw: ByteArray): Broadcast {
+    override suspend fun send(network: Network, raw: ByteArray): Broadcast {
         sent += raw
         return answers.removeFirstOrNull() ?: Broadcast.Sent("0x" + "00".repeat(32))
     }
@@ -171,20 +191,30 @@ internal class MemorySentTransfers : SentTransfers {
     }
 
 
-    override suspend fun prune(account: Address, minedCount: Long, unlistedBefore: Long): Boolean {
+    override suspend fun prune(account: AccountId, minedCount: Long, unlistedBefore: Long): Boolean {
         transfers.value = transfers.value.filterNot { it.prunable(account, minedCount, unlistedBefore) }
         return true
     }
 }
 
-/** A [NameResolver] answering from [names], [NameResolution.NoAddress] otherwise; each name asked in [asked]. */
+/**
+ * A [NameResolver] answering from [on] for a name on one registry, else from [names], and
+ * [NameResolution.NoAddress] otherwise; each name asked in [asked].
+ */
 internal class FakeNames : NameResolver {
     val names = mutableMapOf<String, NameResolution>()
+
+    /** A registry's own answers, by its network and the name: where two registries differ. */
+    val on = mutableMapOf<Pair<Network, String>, NameResolution>()
     val asked = mutableListOf<String>()
 
-    override suspend fun resolve(name: String): NameResolution {
+    /** The network of each name asked, in order. */
+    val networks = mutableListOf<Network>()
+
+    override suspend fun resolve(network: Network, name: String): NameResolution {
         asked += name
-        return names[name] ?: NameResolution.NoAddress
+        networks += network
+        return on[network to name] ?: names[name] ?: NameResolution.NoAddress
     }
 }
 
@@ -194,7 +224,7 @@ internal class FakeReceipts : ReceiptTracker {
 
     fun of(hash: String) = progress.getOrPut(hash) { MutableStateFlow(TransactionProgress.Pending) }
 
-    override fun observe(hash: String): Flow<TransactionProgress> = of(hash)
+    override fun observe(network: Network, hash: String): Flow<TransactionProgress> = of(hash)
 }
 
 /** A [TransactionHistory] in memory, as the port's contract says one behaves; [unreadable] reads as such. */
@@ -224,20 +254,26 @@ internal class MemoryTransactionHistory : TransactionHistory {
 internal class MemoryHistoryStarts : HistoryStarts {
     val starts = MutableStateFlow<Map<Address, HistoryStart>>(emptyMap())
 
-    override fun observe(): Flow<HistoryStartList> = starts.map { HistoryStartList.Loaded(it) }
+    // One network's starts, by address: these tests are all Sepolia's.
+    override fun observe(): Flow<HistoryStartList> =
+        starts.map {
+            held -> HistoryStartList.Loaded(held.mapKeys { (address, _) -> AccountId(Network.SEPOLIA, address) }) }
 
-    override suspend fun note(address: Address, atSeconds: Long): Boolean {
+    override suspend fun note(id: AccountId, atSeconds: Long): Boolean {
+        val address = id.address
         starts.value += address to HistoryStart.Noted(atSeconds)
         return true
     }
 
-    override suspend fun fix(address: Address, block: Long): Boolean {
+    override suspend fun fix(id: AccountId, block: Long): Boolean {
+        val address = id.address
         if (starts.value[address] is HistoryStart.Fixed) return false
         starts.value += address to HistoryStart.Fixed(block)
         return true
     }
 
-    override suspend fun forget(address: Address, start: HistoryStart): Boolean {
+    override suspend fun forget(id: AccountId, start: HistoryStart): Boolean {
+        val address = id.address
         if (starts.value[address] == start) starts.value -= address
         return true
     }
@@ -248,12 +284,12 @@ internal class FakeLogIndex : LogIndex {
     val coverage = MutableStateFlow<LogCoverageReading>(LogCoverageReading.Unavailable)
     var logs: List<IndexedLog> = emptyList()
 
-    override suspend fun configure(watch: List<LogWatch>, unwatch: List<LogWatchKey>): Boolean = true
+    override suspend fun configure(network: Network, watch: List<LogWatch>, unwatch: List<LogWatchKey>): Boolean = true
 
-    override fun observeCoverage(): Flow<LogCoverageReading> = coverage
+    override fun observeCoverage(network: Network): Flow<LogCoverageReading> = coverage
 
     /** The [logs] in the query's range that it selects, as the engine selects them. */
-    override suspend fun logs(query: LogQuery): LogsReading = LogsReading.Logs(
+    override suspend fun logs(network: Network, query: LogQuery): LogsReading = LogsReading.Logs(
         logs.filter { log ->
             val topics = log.log.topics
             log.blockNumber in query.fromBlock..query.toBlock &&
@@ -303,7 +339,7 @@ internal class FakeCowChain : CowChain {
 
     override suspend fun venue(network: Network): CowVenueReading = venue
 
-    override suspend fun call(to: Address, data: ByteArray): Simulation =
+    override suspend fun call(network: Network, to: Address, data: ByteArray): Simulation =
         answers[to to data.joinToString("") { (it.toInt() and 0xff).toString(16).padStart(2, '0') }]
             ?: Simulation.Unavailable(ReadUnavailable.UNPROVEN)
 }
@@ -349,6 +385,23 @@ internal class FakeCowApi : CowApi {
     override suspend fun life(network: Network, uid: CowOrderUid): CowOrderLife {
         lives += uid
         return lifePending?.await() ?: life
+    }
+}
+
+/** The swaps whose next step waits, in memory: one per account and token sold, as the file keeps them. */
+internal class MemoryWaitingSwaps : WaitingSwaps {
+    val swaps = MutableStateFlow<List<WaitingSwap>>(emptyList())
+
+    override fun observe(): Flow<List<WaitingSwap>> = swaps
+
+    override suspend fun keep(swap: WaitingSwap): Boolean {
+        swaps.update { list -> list.filterNot { it.account == swap.account && it.sell == swap.sell } + swap }
+        return true
+    }
+
+    override suspend fun drop(account: AccountId, sell: Address): Boolean {
+        swaps.update { list -> list.filterNot { it.account == account && it.sell == sell } }
+        return true
     }
 }
 

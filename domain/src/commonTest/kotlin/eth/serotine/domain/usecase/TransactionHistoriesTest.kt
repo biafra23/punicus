@@ -1,6 +1,7 @@
 package eth.serotine.domain.usecase
 
 import eth.serotine.domain.model.Address
+import eth.serotine.domain.model.Network
 import eth.serotine.domain.model.SafeTx
 import eth.serotine.domain.model.SignedTransfer
 import eth.serotine.domain.model.TransferAsset
@@ -13,6 +14,9 @@ import eth.serotine.domain.repository.SentAction
 import eth.serotine.domain.repository.SentOutcome
 import eth.serotine.domain.repository.SentTransfer
 import eth.serotine.domain.repository.TransactionProgress
+import kotlin.test.Test
+import kotlin.test.assertEquals
+import kotlin.time.Duration.Companion.minutes
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -24,9 +28,6 @@ import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.advanceTimeBy
 import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
-import kotlin.test.Test
-import kotlin.test.assertEquals
-import kotlin.time.Duration.Companion.minutes
 
 /**
  * The history of sent transactions over fake ports: [HistoryRecordingSentTransfers],
@@ -41,6 +42,7 @@ class TransactionHistoriesTest {
     private var now = 1_800_000_100L
 
     private fun transfer(nonce: Long, sentAt: Long = 1_800_000_000, raw: Byte = nonce.toByte()) = SentTransfer(
+        network = Network.SEPOLIA,
         account = world.alice.address,
         nonce = nonce,
         signed = SignedTransfer(byteArrayOf(2, raw)),
@@ -53,7 +55,7 @@ class TransactionHistoriesTest {
     private val progress = mutableMapOf<String, MutableStateFlow<TransactionProgress>>()
     private val watching = mutableMapOf<String, Int>()
     private val receipts = object : ReceiptTracker {
-        override fun observe(hash: String): Flow<TransactionProgress> =
+        override fun observe(network: Network, hash: String): Flow<TransactionProgress> =
             progress.getOrPut(hash) { MutableStateFlow(TransactionProgress.Pending) }
                 .onStart { watching[hash] = (watching[hash] ?: 0) + 1 }
                 .onCompletion { watching[hash] = watching.getValue(hash) - 1 }
@@ -74,7 +76,7 @@ class TransactionHistoriesTest {
         val first = transfer(7)
 
         assertEquals(true, sent.record(first))
-        sent.prune(world.alice.address, minedCount = 8, unlistedBefore = 0)
+        sent.prune(world.alice.address.onSepolia, minedCount = 8, unlistedBefore = 0)
 
         assertEquals(emptyList(), world.sent.transfers.value, "the nonce guard forgets it")
         assertEquals(listOf(HistoryEntry(first)), history.entries.value, "the history keeps it")
@@ -200,13 +202,13 @@ class TransactionHistoriesTest {
         val elsewhere = transfer(1).copy(account = bob)
         listOf(transferred, executed, deployed, elsewhere).forEach { history.record(it) }
 
-        val alice = ObserveAccountHistory(history)(world.alice.address).first() as HistoryList.Loaded
-        val safe = ObserveAccountHistory(history)(world.safe).first() as HistoryList.Loaded
+        val alice = ObserveAccountHistory(history)(world.alice.address.onSepolia).first() as HistoryList.Loaded
+        val safe = ObserveAccountHistory(history)(world.safe.onSepolia).first() as HistoryList.Loaded
 
         assertEquals(listOf(executed, deployed, transferred), alice.entries.map { it.transfer })
         assertEquals(listOf(executed, deployed), safe.entries.map { it.transfer })
         history.readable.value = false
-        assertEquals(HistoryList.Unreadable, ObserveAccountHistory(history)(world.safe).first())
+        assertEquals(HistoryList.Unreadable, ObserveAccountHistory(history)(world.safe.onSepolia).first())
     }
 
     @Test
@@ -251,23 +253,26 @@ class TransactionHistoriesTest {
                 TransactionProgress.Included(120, succeeded = true),
                 outcome = SentOutcome.Included(120, succeeded = true),
             ),
-            observe(sent.hash).first(),
+            observe(Network.SEPOLIA, sent.hash).first(),
             "no receipt found any more: the block the history saw",
         )
 
         receipt(sent).value = TransactionProgress.Unavailable(ReadUnavailable.UNPROVEN)
         assertEquals(
             TransactionProgress.Included(120, succeeded = true),
-            observe(sent.hash).first().progress,
+            observe(Network.SEPOLIA, sent.hash).first().progress,
             "not verifiable right now: the block the history saw",
         )
 
         history.settle(sent.hash, SentOutcome.Finalized(120, succeeded = true))
         receipt(sent).value = TransactionProgress.Pending
-        assertEquals(TransactionProgress.Finalized(120, succeeded = true), observe(sent.hash).first().progress)
+        assertEquals(
+            TransactionProgress.Finalized(120, succeeded = true),
+            observe(Network.SEPOLIA, sent.hash).first().progress,
+        )
 
         history.entries.value = listOf(HistoryEntry(sent, SentOutcome.NonceUsed))
-        val used = observe(sent.hash).first()
+        val used = observe(Network.SEPOLIA, sent.hash).first()
         assertEquals(TransactionProgress.Pending, used.progress)
         assertEquals(SentOutcome.NonceUsed, used.outcome)
     }

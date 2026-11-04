@@ -7,10 +7,12 @@ import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
 import eth.serotine.domain.model.Account
 import eth.serotine.domain.model.AccountCustody
+import eth.serotine.domain.model.AccountId
 import eth.serotine.domain.model.AccountKind
 import eth.serotine.domain.model.Address
 import eth.serotine.domain.model.Mnemonic
 import eth.serotine.domain.model.MnemonicProblem
+import eth.serotine.domain.model.Network
 import eth.serotine.domain.model.WalletPassword
 import eth.serotine.domain.repository.AccountAdd
 import eth.serotine.domain.repository.AccountChange
@@ -18,6 +20,7 @@ import eth.serotine.domain.repository.AccountList
 import eth.serotine.domain.repository.AccountRepository
 import eth.serotine.domain.repository.BiometricChange
 import eth.serotine.domain.repository.KeyDeletion
+import eth.serotine.domain.repository.KeyDerivation
 import eth.serotine.domain.repository.KeyImport
 import eth.serotine.domain.repository.KeyProtection
 import eth.serotine.domain.repository.KeyStore
@@ -27,10 +30,22 @@ import eth.serotine.domain.repository.NewMnemonic
 import eth.serotine.domain.repository.PasswordCost
 import eth.serotine.domain.usecase.DescribeKeyStore
 import eth.serotine.domain.usecase.ImportMnemonicAccount
+import eth.serotine.domain.usecase.ObserveEnabledNetworks
+import eth.serotine.domain.usecase.SetNetworkEnabled
 import eth.serotine.domain.usecase.WalletChanges
+import eth.serotine.ui.MemoryNetworkSettings
 import eth.serotine.ui.components.PasswordStep
 import eth.serotine.ui.mnemonicimport.MnemonicImportUiState.Entering
 import eth.serotine.ui.mnemonicimport.MnemonicImportUiState.Imported
+import kotlin.test.AfterTest
+import kotlin.test.BeforeTest
+import kotlin.test.Test
+import kotlin.test.assertEquals
+import kotlin.test.assertFalse
+import kotlin.test.assertIs
+import kotlin.test.assertNull
+import kotlin.test.assertSame
+import kotlin.test.assertTrue
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -43,15 +58,6 @@ import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.test.setMain
-import kotlin.test.AfterTest
-import kotlin.test.BeforeTest
-import kotlin.test.Test
-import kotlin.test.assertEquals
-import kotlin.test.assertFalse
-import kotlin.test.assertIs
-import kotlin.test.assertNull
-import kotlin.test.assertSame
-import kotlin.test.assertTrue
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class MnemonicImportViewModelTest {
@@ -73,7 +79,12 @@ class MnemonicImportViewModelTest {
             factory = viewModelFactory {
                 initializer {
                     val import = ImportMnemonicAccount(keys, repository, WalletChanges())
-                    MnemonicImportViewModel(import, DescribeKeyStore(keys))
+                    MnemonicImportViewModel(
+                        import,
+                        DescribeKeyStore(keys),
+                        ObserveEnabledNetworks(networks),
+                        SetNetworkEnabled(networks),
+                    )
                 }
             },
         )[MnemonicImportViewModel::class]
@@ -83,7 +94,10 @@ class MnemonicImportViewModelTest {
     private fun typeWordsAndPassword() {
         viewModel.onPhraseChange(twelveWords)
         viewModel.onPasswordChange(password)
+        viewModel.onNetworkToggle(Network.SEPOLIA.chainId)
     }
+
+    private val networks = MemoryNetworkSettings()
 
     @BeforeTest
     fun routeMainThroughTheTestScheduler() = Dispatchers.setMain(UnconfinedTestDispatcher())
@@ -96,24 +110,26 @@ class MnemonicImportViewModelTest {
         val start = assertIs<Entering>(viewModel.uiState.value)
         assertEquals("", start.phrase.text)
         assertEquals(0, start.wordCount)
-        assertFalse(start.canImport)
+        assertFalse(start.wordsAndPasswordReady)
 
         viewModel.onPhraseChange("one two three four five six seven eight nine ten eleven")
         assertEquals(11, entering().wordCount)
-        assertFalse(entering().canImport)
+        assertFalse(entering().wordsAndPasswordReady)
 
         viewModel.onPhraseChange("$twelveWords ")
         assertEquals("$twelveWords ", entering().phrase.text, "the field shows back exactly what was typed")
         assertEquals(12, entering().wordCount)
-        assertFalse(entering().canImport, "not without the wallet password")
+        assertFalse(entering().wordsAndPasswordReady, "not without the wallet password")
 
         viewModel.onPasswordChange(password)
-        assertTrue(entering().canImport)
+        assertTrue(entering().wordsAndPasswordReady)
     }
 
     @Test
     fun theKeyOfAWatchedAccountIsAnImportThatSucceeded() = runTest {
-        repository.accounts.value = listOf(Account(address, AccountKind.EOA, "Savings", AccountCustody.Watched))
+        repository.accounts.value = listOf(
+        Account(Network.SEPOLIA, address, AccountKind.EOA, "Savings", AccountCustody.Watched),
+    )
         keys.next = CompletableDeferred(KeyImport.Stored(address, KeyProtection.HARDWARE))
         typeWordsAndPassword()
 
@@ -143,7 +159,7 @@ class MnemonicImportViewModelTest {
         assertEquals(Imported("Account 1"), viewModel.uiState.value)
         assertEquals(twelveWords, keys.received.single().text)
         assertEquals(
-            listOf(Account(address, AccountKind.EOA, "Account 1", AccountCustody.InKeyStore)),
+            listOf(Account(Network.SEPOLIA, address, AccountKind.EOA, "Account 1", AccountCustody.InKeyStore)),
             repository.accounts.value,
         )
     }
@@ -167,7 +183,9 @@ class MnemonicImportViewModelTest {
 
     @Test
     fun anAccountAlreadyInTheWalletIsAnError() = runTest {
-        repository.accounts.value = listOf(Account(address, AccountKind.EOA, "Daily", AccountCustody.InKeyStore))
+        repository.accounts.value = listOf(
+        Account(Network.SEPOLIA, address, AccountKind.EOA, "Daily", AccountCustody.InKeyStore),
+    )
         keys.next = CompletableDeferred(KeyImport.Stored(address, KeyProtection.HARDWARE))
         typeWordsAndPassword()
 
@@ -307,7 +325,7 @@ class MnemonicImportViewModelTest {
         // Half an import would leave a stored key without its account.
         assertEquals(Imported("Account 1"), viewModel.uiState.value)
         assertEquals(
-            listOf(Account(address, AccountKind.EOA, "Account 1", AccountCustody.InKeyStore)),
+            listOf(Account(Network.SEPOLIA, address, AccountKind.EOA, "Account 1", AccountCustody.InKeyStore)),
             repository.accounts.value,
         )
     }
@@ -337,6 +355,7 @@ class MnemonicImportViewModelTest {
         viewModel.onPhraseChange(twelveWords)
         viewModel.onPasswordChange(password)
         viewModel.onRepeatChange(password)
+        viewModel.onNetworkToggle(Network.SEPOLIA.chainId)
 
         viewModel.onImport()
         runCurrent()
@@ -398,11 +417,11 @@ class MnemonicImportViewModelTest {
         viewModel.onPasswordChange(password)
         viewModel.onRepeatChange("correct hors")
         assertEquals("The two passwords differ", entering().passwordHint)
-        assertFalse(entering().canImport)
+        assertFalse(entering().wordsAndPasswordReady)
 
         viewModel.onRepeatChange(password)
         assertEquals(null, entering().passwordHint)
-        assertTrue(entering().canImport)
+        assertTrue(entering().wordsAndPasswordReady)
     }
 
     @Test
@@ -463,6 +482,9 @@ class MnemonicImportViewModelTest {
         override suspend fun enableBiometrics(password: WalletPassword, confirmation: String): BiometricChange =
             BiometricChange.NotOnThisDevice
 
+        override suspend fun deriveAccount(from: Address, password: WalletPassword, held: Set<Address>) =
+            KeyDerivation.Unavailable
+
         override suspend fun disableBiometrics(): BiometricChange = BiometricChange.NotOnThisDevice
 
         var next = CompletableDeferred<KeyImport>()
@@ -497,12 +519,12 @@ class MnemonicImportViewModelTest {
             return if (added) AccountAdd.Added else AccountAdd.AlreadyPresent
         }
 
-        override suspend fun rename(address: Address, label: String): AccountChange = error("not used by this test")
+        override suspend fun rename(id: AccountId, label: String): AccountChange = error("not used by this test")
 
-        override suspend fun remove(address: Address): AccountChange = error("not used by this test")
+        override suspend fun remove(id: AccountId): AccountChange = error("not used by this test")
 
-        override suspend fun setCustody(address: Address, custody: AccountCustody): AccountChange {
-            accounts.update { list -> list.map { if (it.address == address) it.copy(custody = custody) else it } }
+        override suspend fun setCustody(id: AccountId, custody: AccountCustody): AccountChange {
+            accounts.update { list -> list.map { if (it.id == id) it.copy(custody = custody) else it } }
             return AccountChange.Changed
         }
     }

@@ -6,8 +6,9 @@ import kotlin.time.Duration
 import kotlin.time.TimeSource
 
 /**
- * Everything a node's adapters ask of its engine: the seam each platform's `MyotisNode` implements
- * over its engine handle, and which [SharedSnapshots] and [LoggedChain] wrap.
+ * Everything a node's adapters ask of its engine: the seam each platform's engine host (`MyotisHost`, on
+ * the JVM targets and on iOS) implements over each network's handle, and which [SharedSnapshots] and
+ * [LoggedChain] wrap.
  */
 internal interface EngineChain : TransactingChain, LogIndexChain
 
