@@ -418,18 +418,39 @@ internal class ActivityRows(
         }
     }
 
-    private companion object {
-        const val NATIVE_DECIMALS = 18
-        const val MAX_ID_DIGITS = 12
-        const val ON_CHAIN = "On chain, from the Safe's verified logs"
-        const val TOKEN_ON_CHAIN = "On chain, from the token's verified logs"
-        const val UNLISTED =
+    companion object {
+        /**
+         * The tokens a Safe transaction's transfer is said in the units of, from the tokens known
+         * ([tokens], by address; null until they are read): every one, hidden ones too, but no
+         * built-in entry its contract contradicts, as the queue decodes them.
+         */
+        fun decodingTokens(tokens: Map<Address, KnownToken>?): List<DecodingToken> = tokens?.values.orEmpty()
+            .filter { it.check !is BuiltInCheck.Disagrees }
+            .map { DecodingToken(it.token, it.sharesBuiltInSymbol) }
+
+        /** The Safe transactions the [entries] approve or execute, by hash: what an event on chain is decoded by. */
+        fun requestsIn(entries: List<HistoryEntry>): Map<Digest, SigningRequest> = entries.mapNotNull {
+            when (val action = it.transfer.action) {
+                is SentAction.SafeApproval -> action.request
+                is SentAction.SafeExecution -> action.request
+                else -> null
+            }
+        }.associateBy { it.hash }
+
+        private const val NATIVE_DECIMALS = 18
+        private const val MAX_ID_DIGITS = 12
+        private const val ON_CHAIN = "On chain, from the Safe's verified logs"
+        private const val TOKEN_ON_CHAIN = "On chain, from the token's verified logs"
+        private const val UNLISTED =
             "The claim of a contract the wallet does not list: open it to add it as a token and see what moved"
-        const val HIDDEN = "The claim of a token you hid: show it again in Settings → Tokens to see what moved"
-        const val CONTRADICTED = "The claim of a built-in token whose contract says otherwise: what moved is not shown"
-        const val FAILED_ON_CHAIN = "Failed on chain: its call reverted"
-        const val MODULE_WARNING = "A module can move this Safe's funds without its owners"
-        const val UNFAMILIAR_SENDER = "From an address you have not sent to: compare every character before you copy it"
-        const val HANDLER_WARNING = "Not the pinned fallback handler: it answers signature checks for this Safe"
+        private const val HIDDEN =
+            "The claim of a token you hid: show it again in Settings → Tokens to see what moved"
+        private const val CONTRADICTED =
+            "The claim of a built-in token whose contract says otherwise: what moved is not shown"
+        private const val FAILED_ON_CHAIN = "Failed on chain: its call reverted"
+        private const val MODULE_WARNING = "A module can move this Safe's funds without its owners"
+        private const val UNFAMILIAR_SENDER =
+            "From an address you have not sent to: compare every character before you copy it"
+        private const val HANDLER_WARNING = "Not the pinned fallback handler: it answers signature checks for this Safe"
     }
 }

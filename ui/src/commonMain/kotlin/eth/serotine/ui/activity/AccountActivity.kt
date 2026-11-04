@@ -13,7 +13,6 @@ import eth.serotine.domain.repository.HistoryList
 import eth.serotine.domain.repository.SentAction
 import eth.serotine.domain.repository.SentOutcome
 import eth.serotine.domain.repository.WaitingSwap
-import eth.serotine.domain.usecase.BuiltInCheck
 import eth.serotine.domain.usecase.IndexedEvent
 import eth.serotine.domain.usecase.IndexedHistory
 import eth.serotine.domain.usecase.KnownToken
@@ -27,7 +26,6 @@ import eth.serotine.domain.usecase.ObserveTokenTransfers
 import eth.serotine.domain.usecase.ObserveWaitingSwaps
 import eth.serotine.domain.usecase.SafeChainEvent
 import eth.serotine.domain.usecase.TokenTransferEvent
-import eth.serotine.ui.components.DecodingToken
 import eth.serotine.ui.components.grouped
 import eth.serotine.ui.platform.formatDateTime
 import kotlinx.coroutines.flow.Flow
@@ -113,14 +111,13 @@ class AccountActivity(
             // Built per change, for the amounts it says to follow the eye. A Safe transaction is said
             // as what it does, in the units of the tokens known so far, and an execution or approval
             // on chain by the request this device holds of it.
-            val requests = entries.mapNotNull { it.transfer.action.safeRequest() }.associateBy { it.hash }
             val rows = ActivityRows(
                 address,
                 account.network,
                 formatTime,
                 sentHere.hidden,
-                decodingTokens = tokens.forDecoding(),
-                requests = requests,
+                decodingTokens = ActivityRows.decodingTokens(tokens),
+                requests = ActivityRows.requestsIn(entries),
             )
             val waiting = sentHere.waiting.map { waitingStep(it, entries, tokens, rows) }
             val safeEvents = (safe as? IndexedHistory.Read)?.events.orEmpty()
@@ -371,22 +368,6 @@ class AccountActivity(
         val moment: Long,
         val event: Boolean = false,
     )
-
-    /** The Safe transaction this action approves or executes; null for any other. */
-    private fun SentAction.safeRequest() = when (this) {
-        is SentAction.SafeApproval -> request
-        is SentAction.SafeExecution -> request
-        else -> null
-    }
-
-    /**
-     * The tokens a Safe transaction's transfer is said in the units of: every one known so far,
-     * hidden ones too, but no built-in entry its contract contradicts (as the queue decodes them,
-     * `KnownTokenList.forDecoding`); none until they are read.
-     */
-    private fun Map<Address, KnownToken>?.forDecoding(): List<DecodingToken> = this?.values.orEmpty()
-        .filter { it.check !is BuiltInCheck.Disagrees }
-        .map { DecodingToken(it.token, it.sharesBuiltInSymbol) }
 
     /**
      * The block an ended order's row goes by: its fill's, or its cancellation's. One never filled has

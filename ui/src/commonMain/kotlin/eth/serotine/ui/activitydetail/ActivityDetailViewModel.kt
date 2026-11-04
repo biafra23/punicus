@@ -13,7 +13,6 @@ import eth.serotine.domain.repository.AccountList
 import eth.serotine.domain.repository.HistoryEntry
 import eth.serotine.domain.repository.HistoryList
 import eth.serotine.domain.repository.SentAction
-import eth.serotine.domain.usecase.BuiltInCheck
 import eth.serotine.domain.usecase.IndexedEvent
 import eth.serotine.domain.usecase.IndexedHistory
 import eth.serotine.domain.usecase.KnownToken
@@ -34,7 +33,6 @@ import eth.serotine.ui.activity.ActivitySources
 import eth.serotine.ui.activity.ActivityState
 import eth.serotine.ui.activity.Parties
 import eth.serotine.ui.activity.movesNothing
-import eth.serotine.ui.components.DecodingToken
 import eth.serotine.ui.components.Eip55
 import eth.serotine.ui.components.displaySymbol
 import eth.serotine.ui.components.grouped
@@ -94,16 +92,8 @@ class ActivityDetailViewModel(
             network,
             formatTime,
             hidden,
-            decodingTokens = tokens?.values.orEmpty()
-                .filter { it.check !is BuiltInCheck.Disagrees }
-                .map { DecodingToken(it.token, it.sharesBuiltInSymbol) },
-            requests = entries.mapNotNull {
-                when (val action = it.transfer.action) {
-                    is SentAction.SafeApproval -> action.request
-                    is SentAction.SafeExecution -> action.request
-                    else -> null
-                }
-            }.associateBy { it.hash },
+            decodingTokens = ActivityRows.decodingTokens(tokens),
+            requests = ActivityRows.requestsIn(entries),
         )
 
     private val sources = ActivitySources(
