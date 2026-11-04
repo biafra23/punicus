@@ -150,8 +150,13 @@ jobs:
           git log --oneline -1
 
       # The base's commit for the before images; HEAD, committed above or not, for the after images.
+      # Not when the render differs and could not be committed: HEAD would not show it, and the
+      # table would say nothing changed. The failing step below says what happened instead.
       - name: Write the before/after table into the PR description
-        if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository
+        if: >-
+          github.event_name == 'pull_request'
+          && github.event.pull_request.head.repo.full_name == github.repository
+          && (steps.changes.outputs.any == 'false' || env.HAS_DEPLOY_KEY == 'true')
         env:
           GH_TOKEN: ${{ github.token }}
           BASE_SHA: ${{ github.event.pull_request.base.sha }}
