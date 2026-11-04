@@ -92,7 +92,7 @@ abstract class AppVersionSource : ValueSource<String, AppVersionSource.Params> {
         // release candidate vX.Y.Z-rcN, a hotfix vX.Y.Z-hotfixN. The release guard lets any
         // -suffix through, but a throwaway tag such as its own test's v9.9.9-guardtest is no
         // release, so the shape is narrower here.
-        val shape = Regex("""^v\d+(\.\d+)*(-(rc|hotfix)\d*)?$""")
+        val shape = Regex("""^v\d+(\.\d+)*(-(rc|hotfix)\d+)?$""")
         val onHead = newestRelease(shape, "--points-at", "HEAD")
         if (onHead != null && !treeIsPatched()) return onHead
         // Keeping the qualifier on the fallback is load-bearing — see the table above.

@@ -68,7 +68,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           # Full history: :ui stamps the app's on-screen version from the nearest
-          # v* tag, and `git describe` needs HEAD's history to REACH that tag.
+          # v* tag, and `git tag --merged HEAD` needs HEAD's history to REACH that tag.
           #
           # KNOWN GAP on pull_request: checkout defaults to github.ref, which for
           # that event is the ephemeral refs/pull/<n>/merge commit — so a PR-built
