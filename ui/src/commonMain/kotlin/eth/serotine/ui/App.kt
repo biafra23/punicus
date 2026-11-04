@@ -21,6 +21,8 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.unit.dp
@@ -58,7 +60,13 @@ import eth.serotine.ui.coworder.CowOrderRoute
 import eth.serotine.ui.coworder.SwapAgain
 import eth.serotine.ui.createaccount.CreateAccountRoute
 import eth.serotine.ui.createsafe.CreateSafeRoute
+import eth.serotine.ui.connections.ConnectionsRoute
 import eth.serotine.ui.currency.CurrencyRoute
+import eth.serotine.ui.dappproposal.DappProposalRoute
+import eth.serotine.ui.dapprequest.DappRequestRoute
+import eth.serotine.ui.dapprequest.DappRequestsWaitingViewModel
+import eth.serotine.ui.dapptransaction.DappTransactionRoute
+import eth.serotine.ui.pairdapp.PairDappRoute
 import eth.serotine.ui.debug.DebugRoute
 import eth.serotine.ui.debug.DebugViewModel
 import eth.serotine.ui.deriveaccount.DeriveAccountRoute
@@ -87,6 +95,9 @@ import eth.serotine.ui.update.UpdateRequiredRoute
 import eth.serotine.ui.update.UpdateRequiredUiState
 import eth.serotine.ui.update.UpdateRequiredViewModel
 import eth.serotine.ui.watch.WatchRoute
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.map
 
 /**
  * The whole shared UI, identical on every host. A host renders this inside its own
@@ -130,6 +141,8 @@ private fun AppContent(graph: AppGraph, navController: NavHostController) {
         val debugShown by debugTab.shown.collectAsStateWithLifecycle()
         // The Debug screen's filter outlives its destination, which a tab switch pops: scoped to the host too.
         val debug = viewModel { graph.debugViewModel() }
+        // The requests to sign waiting, whose review the app opens as each arrives: scoped to the host too.
+        val dappRequests = viewModel { graph.dappRequestsWaitingViewModel() }
         val tabs = Tab.entries.filter { it != Tab.DEBUG || debugShown == true }
         val entry by navController.currentBackStackEntryAsState()
         val selected = entry?.destination?.hierarchy?.firstNotNullOfOrNull { destination ->
@@ -182,6 +195,7 @@ private fun AppContent(graph: AppGraph, navController: NavHostController) {
                         lightClient,
                         debugShown,
                         debug,
+                        dappRequests,
                         Modifier.padding(padding).consumeWindowInsets(padding).imePadding(),
                     )
                 }
@@ -219,6 +233,41 @@ private fun NavController.select(tab: Tab, current: Tab?) {
 }
 
 /**
+ * Opens the first route [wanted] names that is not [done] in the Settings tab, as a tap there would:
+ * over the screen shown when that is the Settings tab's, so nothing typed there is lost, else in that
+ * tab. Not while [enabled] is false (an update is required, and that screen replaces every other),
+ * nor while the screen shown is one of [waitOn], nor while a flow outside the tabs covers the bar (a
+ * key operation, a review being signed): it waits. Looked at again whenever the screen shown changes,
+ * so what waited opens once that screen is left, never stranded. [onOpen] is told what opens.
+ */
+@Composable
+private fun OpenInSettings(
+    navController: NavHostController,
+    enabled: Boolean,
+    wanted: Flow<List<String>>,
+    waitOn: Set<String>,
+    done: (String) -> Boolean = { false },
+    onOpen: (String) -> Unit = {},
+) {
+    val isDone by rememberUpdatedState(done)
+    val opening by rememberUpdatedState(onOpen)
+    LaunchedEffect(enabled, wanted) {
+        if (!enabled) return@LaunchedEffect
+        combine(wanted, navController.currentBackStackEntryFlow) { routes, entry -> routes to entry }
+            .collect { (routes, entry) ->
+                val next = routes.firstOrNull { !isDone(it) } ?: return@collect
+                if (entry.destination.route in waitOn) return@collect
+                val current = entry.destination.hierarchy.firstNotNullOfOrNull { route ->
+                    Tab.entries.firstOrNull { it.graph == route.route }
+                } ?: return@collect
+                opening(next)
+                if (current != Tab.SETTINGS) navController.select(Tab.SETTINGS, current)
+                navController.navigate(next) { launchSingleTop = true }
+            }
+    }
+}
+
+/**
  * The one [NavHost]. While [update] says an update is required, its screen replaces every
  * other: the one navigation no screen asks for (docs/architecture.md).
  */
@@ -230,6 +279,7 @@ private fun Destinations(
     lightClient: LightClientViewModel,
     debugShown: Boolean?,
     debug: DebugViewModel,
+    dappRequests: DappRequestsWaitingViewModel,
     modifier: Modifier = Modifier,
 ) {
     val updateState by update.uiState.collectAsStateWithLifecycle()
@@ -248,6 +298,35 @@ private fun Destinations(
             }
         }
     }
+    // A `wc:` link the platform opened the app with opens Connect a dApp in the Settings tab, as a tap
+    // there would, and the screen takes the link from there. Not while a Connect is under way there,
+    // nor over a request's review: the link waits, and is opened once that screen is left.
+    OpenInSettings(
+        navController,
+        enabled = !updateRequired,
+        wanted = remember(graph) {
+            graph.incomingDappLink.pending.map { link -> listOfNotNull(link?.let { Destination.PAIR_DAPP }) }
+        },
+        waitOn = setOf(Destination.PAIR_DAPP, DAPP_REQUEST_ROUTE, DAPP_TRANSACTION_ROUTE),
+    )
+    // A dApp's request to sign opens its review (screen D4) as it arrives, each one once in this run:
+    // one left unanswered stays in Connected dApps. Not over another request's review, nor over a dApp
+    // being connected (Connect a dApp, a connection request): it waits for that screen to be left.
+    OpenInSettings(
+        navController,
+        enabled = !updateRequired,
+        wanted = remember(dappRequests) {
+            dappRequests.waiting.map { waiting ->
+                waiting.map {
+                    "${if (it.transaction) Destination.DAPP_TRANSACTION else Destination.DAPP_REQUEST}/${it.key}"
+                }
+            }
+        },
+        waitOn = setOf(DAPP_REQUEST_ROUTE, DAPP_TRANSACTION_ROUTE, Destination.PAIR_DAPP, DAPP_PROPOSAL_ROUTE),
+        // The route names its screen, then the request: `dapprequest/topic/id`.
+        done = { route -> dappRequests.wasOpened(route.substringAfter('/')) },
+        onOpen = { route -> dappRequests.opened(route.substringAfter('/')) },
+    )
     // The Debug tab turned off while its screen is shown: that screen goes, back to Accounts, and
     // the filter typed goes with the log it was for. Not before the setting is read (null), so a
     // Debug screen the system restored stays.
@@ -382,7 +461,81 @@ private fun Destinations(
                     onCurrency = { navController.navigate(Destination.CURRENCY) { launchSingleTop = true } },
                     onTokens = { navController.navigate(Destination.TOKENS) { launchSingleTop = true } },
                     onSecurity = { navController.navigate(Destination.SECURITY) { launchSingleTop = true } },
+                    onConnections = { navController.navigate(Destination.CONNECTIONS) { launchSingleTop = true } },
+                    connectionsOff = graph.dappConnectionsOff,
                 )
+            }
+            composable(Destination.CONNECTIONS) {
+                ConnectionsRoute(
+                    viewModel { graph.connectionsViewModel() },
+                    onBack = { navController.leave(Destination.CONNECTIONS) },
+                    onPair = { navController.navigate(Destination.PAIR_DAPP) { launchSingleTop = true } },
+                    onProposal = { key ->
+                        navController.navigate("${Destination.DAPP_PROPOSAL}/$key") { launchSingleTop = true }
+                    },
+                    onRequest = { key ->
+                        navController.navigate("${Destination.DAPP_REQUEST}/$key") { launchSingleTop = true }
+                    },
+                    onTransaction = { key ->
+                        navController.navigate("${Destination.DAPP_TRANSACTION}/$key") { launchSingleTop = true }
+                    },
+                )
+            }
+            composable(Destination.PAIR_DAPP) {
+                PairDappRoute(
+                    viewModel { graph.pairDappViewModel() },
+                    onBack = { navController.leave(Destination.PAIR_DAPP) },
+                    onPaired = { navController.leave(Destination.PAIR_DAPP) },
+                )
+            }
+            composable(DAPP_PROPOSAL_ROUTE) { entry ->
+                val pairing = entry.savedStateHandle.get<String>(PAIRING)?.lowercase()?.takeIf(TOPIC::matches)
+                val id = entry.savedStateHandle.get<String>(PROPOSAL)?.toLongOrNull()
+                if (pairing != null && id != null) {
+                    DappProposalRoute(
+                        viewModel { graph.dappProposalViewModel("$pairing/$id") },
+                        onBack = { navController.popBackStack(DAPP_PROPOSAL_ROUTE, inclusive = true) },
+                        onDone = { navController.popBackStack(DAPP_PROPOSAL_ROUTE, inclusive = true) },
+                    )
+                } else {
+                    LaunchedEffect(Unit) { navController.popBackStack(DAPP_PROPOSAL_ROUTE, inclusive = true) }
+                }
+            }
+            composable(DAPP_REQUEST_ROUTE) { entry ->
+                val topic = entry.savedStateHandle.get<String>(DAPP_SESSION)?.lowercase()?.takeIf(TOPIC::matches)
+                val id = entry.savedStateHandle.get<String>(DAPP_REQUEST_ID)?.toLongOrNull()
+                if (topic != null && id != null) {
+                    DappRequestRoute(
+                        viewModel { graph.dappRequestViewModel("$topic/$id") },
+                        onBack = { navController.popBackStack(DAPP_REQUEST_ROUTE, inclusive = true) },
+                        onDone = { navController.popBackStack(DAPP_REQUEST_ROUTE, inclusive = true) },
+                    )
+                } else {
+                    LaunchedEffect(Unit) { navController.popBackStack(DAPP_REQUEST_ROUTE, inclusive = true) }
+                }
+            }
+            composable(DAPP_TRANSACTION_ROUTE) { entry ->
+                val topic = entry.savedStateHandle.get<String>(DAPP_SESSION)?.lowercase()?.takeIf(TOPIC::matches)
+                val id = entry.savedStateHandle.get<String>(DAPP_REQUEST_ID)?.toLongOrNull()
+                if (topic != null && id != null) {
+                    DappTransactionRoute(
+                        viewModel { graph.dappTransactionViewModel("$topic/$id") },
+                        onBack = { navController.popBackStack(DAPP_TRANSACTION_ROUTE, inclusive = true) },
+                        onDone = { navController.popBackStack(DAPP_TRANSACTION_ROUTE, inclusive = true) },
+                        // A Safe's transaction, signed and queued: its screen takes this one's place.
+                        onOpenSafeTx = { safe, hash ->
+                            Address.parse(safe)?.let { address ->
+                                navController.openSafeTx(
+                                    AccountId(Network.SEPOLIA, address),
+                                    hash,
+                                    replacing = DAPP_TRANSACTION_ROUTE,
+                                )
+                            }
+                        },
+                    )
+                } else {
+                    LaunchedEffect(Unit) { navController.popBackStack(DAPP_TRANSACTION_ROUTE, inclusive = true) }
+                }
             }
             composable(Destination.SECURITY) {
                 SecurityRoute(
@@ -928,6 +1081,11 @@ private fun WithAccount(
 
 private object Destination {
     const val ACCOUNTS = "accounts"
+    const val CONNECTIONS = "connections"
+    const val PAIR_DAPP = "pairdapp"
+    const val DAPP_PROPOSAL = "dappproposal"
+    const val DAPP_REQUEST = "dapprequest"
+    const val DAPP_TRANSACTION = "dapptransaction"
     const val ACCOUNT = "account"
     const val RECEIVE = "receive"
     const val ACTIVITY = "activity"
@@ -970,6 +1128,10 @@ private const val ASSET = "asset"
 
 /** The transfer status's, a Safe transaction's and an Activity detail's route argument: the transaction hash. */
 private const val HASH = "hash"
+private const val PAIRING = "pairing"
+private const val PROPOSAL = "proposal"
+private const val DAPP_SESSION = "session"
+private const val DAPP_REQUEST_ID = "request"
 
 /** An Activity detail's optional route argument: the log index of an event's log in its block. */
 private const val LOG = "log"
@@ -1017,6 +1179,18 @@ private val ORDER_UID = Regex("^0x[0-9a-f]{112}$")
 /** The detail of a row of an account's Activity: a transaction by its hash, an event by its log too. */
 private const val ACTIVITY_DETAIL_ROUTE =
     "${Destination.ACTIVITY}/{$CHAIN}/{$ADDRESS}/${Destination.ACTIVITY_DETAIL}/{$HASH}?$LOG={$LOG}"
+
+/** A dApp's session proposal, by its pairing's topic and its id there (docs/walletconnect.md, screen D3). */
+private const val DAPP_PROPOSAL_ROUTE = "${Destination.DAPP_PROPOSAL}/{$PAIRING}/{$PROPOSAL}"
+
+/** A dApp's request to sign, by its session's topic and its id there (docs/walletconnect.md, screen D4). */
+private const val DAPP_REQUEST_ROUTE = "${Destination.DAPP_REQUEST}/{$DAPP_SESSION}/{$DAPP_REQUEST_ID}"
+
+/** A dApp's transaction, by its session's topic and its id there (docs/walletconnect.md, screen D6). */
+private const val DAPP_TRANSACTION_ROUTE = "${Destination.DAPP_TRANSACTION}/{$DAPP_SESSION}/{$DAPP_REQUEST_ID}"
+
+/** A WalletConnect topic: 64 hex digits. */
+private val TOPIC = Regex("^[0-9a-f]{64}$")
 
 /** Where a transfer stands, by its network and its hash. */
 private const val TRANSFER_ROUTE = "${Destination.TRANSFER}/{$CHAIN}/{$HASH}"

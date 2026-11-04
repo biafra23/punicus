@@ -23,6 +23,8 @@ fun SimpleSettingsScreen(
     onCancelTurnOff: () -> Unit = {},
     onSyncPastStaleAnchor: (chainId: Long) -> Unit = {},
     onDetailedViewChange: (Boolean) -> Unit = {},
+    onConnections: () -> Unit = {},
+    connectionsOff: Boolean = false,
 ) = SettingsScreen(
     state.copy(networks = state.networks.map { it.copy(line = it.simpleLine) }),
     onCurrency,
@@ -36,4 +38,6 @@ fun SimpleSettingsScreen(
     onCancelTurnOff,
     onSyncPastStaleAnchor,
     onDetailedViewChange,
+    onConnections,
+    connectionsOff,
 )

@@ -232,6 +232,11 @@ class ActivityDetailViewModel(
                 fields += DetailField("CoW order", action.uid.hex, DetailKind.HASH)
                 fields += addressOf("Settlement contract", action.settlement, names)
             }
+            is SentAction.DappCall -> {
+                fields += addressOf("To", action.to, names)
+                fields += DetailField("Value", rows.amount(action.value, TransferAsset.Native))
+                fields += DetailField("For the dApp", "${action.dapp} (stated by the dApp, not verified)")
+            }
         }
         fields += DetailField("Transaction hash", transfer.hash, DetailKind.HASH)
         fields += DetailField("Nonce", transfer.nonce.toString())
@@ -327,7 +332,10 @@ class ActivityDetailViewModel(
         }
         val moved = when (transfer) {
             is TokenTransfer.Fungible ->
-                DetailField("Amount", rows.figure(transfer.amount, known.token.decimals, displaySymbol(known.token.symbol)))
+                DetailField(
+                    "Amount",
+                    rows.figure(transfer.amount, known.token.decimals, displaySymbol(known.token.symbol)),
+                )
             is TokenTransfer.Nft -> DetailField("Token id", transfer.tokenId.toDecimal())
         }
         val sides = listOf(addressOf("From", transfer.from, names), addressOf("To", transfer.to, names))

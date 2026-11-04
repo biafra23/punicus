@@ -3,6 +3,7 @@ package eth.serotine.ios
 import eth.serotine.data.account.FileAccountRepository
 import eth.serotine.data.cow.FileCowOrders
 import eth.serotine.data.cow.HttpCowApi
+import eth.serotine.data.walletconnect.WalletConnectDapps
 import eth.serotine.data.engine.MyotisHost
 import eth.serotine.data.history.FileHistoryStarts
 import eth.serotine.data.keys.EnvelopeKeyStore
@@ -28,6 +29,8 @@ import eth.serotine.data.transfers.FileTransactionHistory
 import eth.serotine.data.upgrade.FileKnownUpgradeStore
 import eth.serotine.domain.model.Network
 import eth.serotine.domain.usecase.FollowAccountLogs
+import eth.serotine.domain.usecase.AnswerDappRequestsAtOnce
+import eth.serotine.domain.usecase.FollowDappAccounts
 import eth.serotine.domain.usecase.FollowDebugScreen
 import eth.serotine.domain.usecase.FollowInterfaceMode
 import eth.serotine.domain.usecase.FollowNetworks
@@ -155,6 +158,15 @@ class SerotineWallet {
     @OptIn(ExperimentalNativeApi::class)
     private val networkSettings =
         FileNetworkSettings("$dataDir/networks.json", defaultOn = { it.testnet == Platform.isDebugBinary })
+    /**
+     * dApp sessions over WalletConnect (docs/walletconnect.md), with this binary's project ID: the
+     * debug one's or the release one's; off without one. Their state is in a directory of its own,
+     * which the store keeps owner-only and out of iCloud and computer backups (ruling 8).
+     */
+    @OptIn(ExperimentalNativeApi::class)
+    private val dappProjectId = WalletConnectDapps.projectIdFor(debug = Platform.isDebugBinary)
+    private val dapps = WalletConnectDapps("$dataDir/walletconnect/state.json", dappProjectId)
+
     /** Each network's notifications, apart: held here, as the first one is the notification center's delegate. */
     private val notifiers = Network.entries.associateWith(::IosUpgradeNotifier)
 
@@ -244,6 +256,9 @@ class SerotineWallet {
             screenCaptureDebugSwitch = null,
             networkDemand = networkDemand,
             networkSettings = networkSettings,
+            dappSessions = dapps,
+            dappRequests = dapps.requests,
+            dappConnectionsOff = dappProjectId.isEmpty(),
         )
     }
 
@@ -346,6 +361,22 @@ class SerotineWallet {
                         accounts,
                         ListDeployedSafe(kinds, WatchAddress(accounts, kinds)),
                     )()
+                }
+            },
+            scope.launch {
+                // The relay connection while the app is in front: dApp messages arrive while it is open.
+                reportingFailure("the WalletConnect relay connection") { dapps.run() }
+            },
+            scope.launch {
+                // Each session's accounts kept to those still in the wallet (accountsChanged).
+                reportingFailure("following the dApp sessions' accounts") {
+                    FollowDappAccounts(dapps, accounts, networkSettings)()
+                }
+            },
+            scope.launch {
+                // The requests that need no one's decision, answered at once.
+                reportingFailure("answering the dApps' requests") {
+                    AnswerDappRequestsAtOnce(dapps.requests, sentTransfers, transactionHistory)()
                 }
             },
             scope.launch {

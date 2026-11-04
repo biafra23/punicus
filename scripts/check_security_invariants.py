@@ -472,9 +472,9 @@ def check_architecture(c: Checker) -> None:
         for m in re.finditer(r"https://([A-Za-z0-9.-]+)", text):
             if m.group(1) not in ALLOWED_HTTPS_HOSTS:
                 c.fail("NET-ENDPOINTS", f"{rel}:{m.group(1)}", f"{rel}: HTTPS host {m.group(1)} is not in the allow-list")
-        found = RPC_WORDS.search(text)
-        if found:
-            c.fail("NET-ENDPOINTS", f"{rel}:rpc", f"{rel}: mentions `{found.group(0)}`, a chain-data source that is not the engine")
+        # Keyed by the word, each word once: a baseline entry accepting one word never covers another.
+        for word in sorted({found.group(0).lower() for found in RPC_WORDS.finditer(text)}):
+            c.fail("NET-ENDPOINTS", f"{rel}:rpc:{word}", f"{rel}: mentions `{word}`, a chain-data source that is not the engine")
     c.ran("NET-ENDPOINTS")
 
 

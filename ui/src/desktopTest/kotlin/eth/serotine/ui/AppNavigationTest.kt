@@ -186,6 +186,15 @@ import org.junit.Rule
 import org.junit.Test
 import org.junit.rules.TestWatcher
 import org.junit.runner.Description
+import eth.serotine.domain.model.PersonalMessage
+import eth.serotine.domain.model.DappTransactionRequest
+import eth.serotine.domain.repository.DappAsk
+import eth.serotine.domain.repository.DappMetadata
+import eth.serotine.domain.repository.DappRequest
+import eth.serotine.domain.repository.DappRequestError
+import eth.serotine.domain.repository.DappRequestId
+import eth.serotine.domain.repository.DappSessionId
+import eth.serotine.ui.dapprequest.DAPP_REQUEST_REFUSE_TAG
 
 /**
  * The shared [App] end to end, over fake ports: the tabs, the account screens and their dialogs,
@@ -282,6 +291,17 @@ class AppNavigationTest {
     private val debugScreen = MemoryDebugScreen()
     // These tests were written for the detailed screens; simple mode's are tested on their own.
     private val interfaceMode = MemoryInterfaceMode(InterfaceMode.DETAILED)
+
+    private val dappRequests = FakeDappRequests()
+
+    private fun signInRequest(id: Long) = DappRequest(
+        DappRequestId(DappSessionId("c".repeat(64)), id),
+        DappMetadata("Example dApp", "https://app.example.org", ""),
+        listOf(Address.of("0x" + "0".repeat(39) + "1")),
+        "eip155:11155111",
+        DappAsk.PersonalSign(Address.of("0x" + "0".repeat(39) + "1"), PersonalMessage.of("Hello".encodeToByteArray())!!),
+        Long.MAX_VALUE / 2,
+    )
 
     private val graph = AppGraph(
         accounts = accountRepository,
@@ -398,6 +418,9 @@ class AppNavigationTest {
         screenCaptureDebugSwitch = null,
         networkDemand = NetworkDemand(),
         networkSettings = MemoryNetworkSettings(),
+        dappSessions = OffDappSessions,
+        dappRequests = dappRequests,
+        dappConnectionsOff = true,
     )
 
     private val daily = Account(
@@ -457,6 +480,125 @@ class AppNavigationTest {
             if (navController.isEmpty()) navController += controller
             App(graph, controller)
         }
+    }
+
+    @Test
+    fun aWalletConnectLinkTheAppWasOpenedWithLandsOnConnectADappFilledIn() {
+        showApp()
+        val link = "wc:" + "a".repeat(64) + "@2?relay-protocol=irn&symKey=" + "b".repeat(64)
+        graph.incomingDappLink.offer(link)
+        rule.waitForIdle()
+        rule.onNodeWithTag(eth.serotine.ui.pairdapp.PAIR_DAPP_FIELD_TAG).assertIsDisplayed()
+        rule.onNodeWithText(link).assertExists()
+        // Taken: nothing waits for the next screen to open.
+        kotlin.test.assertNull(graph.incomingDappLink.pending.value)
+    }
+
+    @Test
+    fun aLinkStillWaitingOpensConnectADappAgainOnceTheUserIsElsewhere() {
+        showApp()
+        val first = "wc:" + "a".repeat(64) + "@2?relay-protocol=irn&symKey=" + "b".repeat(64)
+        graph.incomingDappLink.offer(first)
+        rule.waitForIdle()
+        rule.onNodeWithTag(eth.serotine.ui.pairdapp.PAIR_DAPP_FIELD_TAG).assertIsDisplayed()
+        rule.onNodeWithContentDescription("Back").performClick()
+        rule.waitForIdle()
+        // A link left waiting, as one is while a Connect is under way: the next screen shown opens it.
+        val second = "wc:" + "c".repeat(64) + "@2?relay-protocol=irn&symKey=" + "d".repeat(64)
+        graph.incomingDappLink.offer(second)
+        rule.waitForIdle()
+        rule.onNodeWithText(second).assertExists()
+        kotlin.test.assertNull(graph.incomingDappLink.pending.value)
+    }
+
+    @Test
+    fun aWalletConnectLinkWaitsWhileAnUpdateIsRequired() {
+        showApp()
+        report.value = NetworkUpgrade(NetworkUpgrade.Phase.ACTIVE, activationTime = null, forkId = null, 4)
+        rule.waitUntil { rule.onAllNodesWithTag(UPDATE_REQUIRED_TAG).fetchSemanticsNodes().isNotEmpty() }
+        val link = "wc:" + "a".repeat(64) + "@2?relay-protocol=irn&symKey=" + "b".repeat(64)
+        graph.incomingDappLink.offer(link)
+        rule.waitForIdle()
+        // The update screen stays the only one, and the link waits for it to go.
+        assertEquals(listOf("update-required"), screens())
+        assertEquals(link, graph.incomingDappLink.pending.value)
+
+        // The update screen goes: the link that waited lands on Connect a dApp.
+        status.value = LightClientStatus.Synced(headBlock = 100, headTimestamp = null, finalized = null)
+        rule.waitUntil { rule.onAllNodesWithText(link).fetchSemanticsNodes().isNotEmpty() }
+        kotlin.test.assertNull(graph.incomingDappLink.pending.value)
+    }
+
+    @Test
+    fun aWalletConnectLinkWaitsWhileAFlowCoversTheTabBar() {
+        showApp()
+        rule.onNodeWithContentDescription("Add account").performClick()
+        rule.onNodeWithText("Import recovery phrase").performClick()
+        rule.onNodeWithTag(MNEMONIC_FIELD_TAG).assertIsDisplayed()
+        val link = "wc:" + "a".repeat(64) + "@2?relay-protocol=irn&symKey=" + "b".repeat(64)
+        graph.incomingDappLink.offer(link)
+        rule.waitForIdle()
+        // The key operation stays in front, and the link waits for it to end.
+        rule.onNodeWithTag(MNEMONIC_FIELD_TAG).assertIsDisplayed()
+        assertEquals(link, graph.incomingDappLink.pending.value)
+    }
+
+    @Test
+    fun aDappsRequestToSignOpensItsReviewAsItArrivesAndOnlyOnce() {
+        showApp()
+        dappRequests.waiting.value = listOf(signInRequest(1))
+        rule.waitUntil { rule.onAllNodesWithText("Message to sign").fetchSemanticsNodes().isNotEmpty() }
+        rule.onNodeWithText("Example dApp").assertIsDisplayed()
+        // Back leaves it unanswered: it stays in Connected dApps, and is not opened again.
+        rule.onNodeWithContentDescription("Back").performClick()
+        rule.waitForIdle()
+        rule.onNodeWithText("Message to sign").assertDoesNotExist()
+        dappRequests.waiting.value = listOf(signInRequest(1), signInRequest(2))
+        rule.waitUntil { rule.onAllNodesWithText("Message to sign").fetchSemanticsNodes().isNotEmpty() }
+        rule.onNodeWithTag(DAPP_REQUEST_REFUSE_TAG).performScrollTo().performClick()
+        rule.waitUntil { dappRequests.refusals.isNotEmpty() }
+        assertEquals(DappRequestError.UNAUTHORIZED, dappRequests.refusals.single().second)
+        rule.waitUntil { rule.onAllNodesWithText("Message to sign").fetchSemanticsNodes().isEmpty() }
+    }
+
+    @Test
+    fun aDappsRequestToSignOpensOverTheSettingsScreenShownAndBackReturnsToIt() {
+        showApp()
+        rule.onNodeWithText("Settings").performClick()
+        rule.onNodeWithText("Wallet password · Biometric unlock").performClick()
+        rule.onNodeWithText("Biometric unlock").assertIsDisplayed()
+        dappRequests.waiting.value = listOf(signInRequest(1))
+        rule.waitUntil { rule.onAllNodesWithText("Message to sign").fetchSemanticsNodes().isNotEmpty() }
+        rule.onNodeWithContentDescription("Back").performClick()
+        // Security is still there, as the user left it: the request opened over it, not in its place.
+        rule.onNodeWithText("Biometric unlock").assertIsDisplayed()
+    }
+
+    @Test
+    fun aDappsTransactionOpensItsOwnReview() {
+        showApp()
+        val transaction = DappTransactionRequest(
+            Address.of("0x" + "0".repeat(39) + "1"),
+            Address.of("0x" + "0".repeat(39) + "2"),
+            UInt256.ZERO,
+            ByteArray(0),
+            null,
+        )
+        dappRequests.waiting.value = listOf(signInRequest(5).copy(ask = DappAsk.SendTransaction(transaction)))
+        rule.waitUntil { rule.onAllNodesWithText("Transaction request").fetchSemanticsNodes().isNotEmpty() }
+        rule.onNodeWithText("Message to sign").assertDoesNotExist()
+    }
+
+    @Test
+    fun aDappsRequestToSignWaitsWhileAFlowCoversTheTabBar() {
+        showApp()
+        rule.onNodeWithContentDescription("Add account").performClick()
+        rule.onNodeWithText("Import recovery phrase").performClick()
+        rule.onNodeWithTag(MNEMONIC_FIELD_TAG).assertIsDisplayed()
+        dappRequests.waiting.value = listOf(signInRequest(1))
+        rule.waitForIdle()
+        rule.onNodeWithTag(MNEMONIC_FIELD_TAG).assertIsDisplayed()
+        rule.onNodeWithText("Message to sign").assertDoesNotExist()
     }
 
     @Test

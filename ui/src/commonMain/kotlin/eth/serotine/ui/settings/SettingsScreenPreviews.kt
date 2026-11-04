@@ -33,7 +33,7 @@ private val synced = SettingsUiState(
 )
 
 @Composable
-private fun SettingsPreview(state: SettingsUiState, darkTheme: Boolean = false) {
+private fun SettingsPreview(state: SettingsUiState, darkTheme: Boolean = false, connectionsOff: Boolean = false) {
     SerotineTheme(darkTheme = darkTheme) {
         SettingsScreen(
             state = state,
@@ -43,6 +43,7 @@ private fun SettingsPreview(state: SettingsUiState, darkTheme: Boolean = false) 
             onScreenCaptureChange = {},
             onDebugScreenChange = {},
             onDetailedViewChange = {},
+            connectionsOff = connectionsOff,
         )
     }
 }
@@ -194,6 +195,11 @@ private fun SettingsStaleAnchorPreview() = SettingsPreview(
     ),
 )
 
+/** A build without a WalletConnect project ID: Connected dApps greyed out, a tap saying why. */
+@Preview
+@Composable
+private fun SettingsConnectionsOffPreview() = SettingsPreview(synced, connectionsOff = true)
+
 /** Every preview above, which SettingsScreenPreviewsTest renders: a new preview goes in here too. */
 internal val settingsScreenPreviews: List<@Composable () -> Unit> = listOf(
     { SettingsSyncedPreview() },
@@ -212,4 +218,5 @@ internal val settingsScreenPreviews: List<@Composable () -> Unit> = listOf(
     { SettingsStaleAnchorPreview() },
     { SettingsDetailedViewPreview() },
     { SettingsDetailedViewNotSavedPreview() },
+    { SettingsConnectionsOffPreview() },
 )

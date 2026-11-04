@@ -14,7 +14,22 @@ import eth.serotine.domain.repository.CowChain
 import eth.serotine.domain.repository.CowOrders
 import eth.serotine.domain.repository.DebugLog
 import eth.serotine.domain.repository.DebugScreenSetting
+import eth.serotine.domain.repository.DappRequests
+import eth.serotine.domain.repository.DappSessions
 import eth.serotine.domain.repository.DisplayCurrencySetting
+import eth.serotine.domain.usecase.ApproveDappProposal
+import eth.serotine.domain.usecase.DisconnectDapp
+import eth.serotine.domain.usecase.ExtendDappSession
+import eth.serotine.domain.usecase.ObserveDappConnections
+import eth.serotine.domain.usecase.ObserveDappMessages
+import eth.serotine.domain.usecase.PairDapp
+import eth.serotine.domain.usecase.ProposeDappSafeTx
+import eth.serotine.domain.usecase.SignDappSafeTx
+import eth.serotine.domain.usecase.QuoteDappTransaction
+import eth.serotine.domain.usecase.RefuseDappRequest
+import eth.serotine.domain.usecase.SendDappTransaction
+import eth.serotine.domain.usecase.RejectDappProposal
+import eth.serotine.domain.usecase.SignDappMessage
 import eth.serotine.domain.repository.HistoryStarts
 import eth.serotine.domain.repository.InterfaceModeSetting
 import eth.serotine.domain.repository.KeyStore
@@ -151,7 +166,14 @@ import eth.serotine.ui.addtoken.AddTokenViewModel
 import eth.serotine.ui.coworder.CowOrderViewModel
 import eth.serotine.ui.createaccount.CreateAccountViewModel
 import eth.serotine.ui.createsafe.CreateSafeViewModel
+import eth.serotine.ui.connections.ConnectionsViewModel
 import eth.serotine.ui.currency.CurrencyViewModel
+import eth.serotine.ui.dappproposal.DappProposalViewModel
+import eth.serotine.ui.dapprequest.DappRequestViewModel
+import eth.serotine.ui.dapptransaction.DappTransactionViewModel
+import eth.serotine.ui.dapprequest.DappRequestsWaitingViewModel
+import eth.serotine.ui.pairdapp.IncomingDappLink
+import eth.serotine.ui.pairdapp.PairDappViewModel
 import eth.serotine.ui.debug.DebugTabViewModel
 import eth.serotine.ui.debug.DebugViewModel
 import eth.serotine.ui.deriveaccount.DeriveAccountViewModel
@@ -296,6 +318,15 @@ class AppGraph(
     private val networkDemand: NetworkDemand,
     /** Which networks are on: the host's one instance, which its `FollowNetworks` follows. */
     private val networkSettings: NetworkSettings,
+    /** dApp sessions over WalletConnect (docs/walletconnect.md): the host's one instance, whose relay it runs. */
+    private val dappSessions: DappSessions,
+    /** The requests dApps send over those sessions: the same adapter's. */
+    private val dappRequests: DappRequests,
+    /**
+     * Whether this build carries no WalletConnect project ID, so that dApp connections are switched
+     * off and Settings shows Connected dApps greyed out (ruling 2).
+     */
+    val dappConnectionsOff: Boolean,
 ) {
     /** The one [WalletChanges] of the app: imports and removals never interleave. */
     private val walletChanges = WalletChanges()
@@ -667,6 +698,82 @@ class AppGraph(
     /** The Debug tab: the debug log. */
     fun debugViewModel(): DebugViewModel =
         DebugViewModel(ObserveDebugLog(debugLog), SetDebugLogLevel(debugLog), ClearDebugLog(debugLog))
+
+    private fun observeDappConnections() = ObserveDappConnections(dappSessions, accounts, networkSettings)
+
+    private fun observeDappMessages() = ObserveDappMessages(dappRequests, accounts, networkSettings, tokenCatalog)
+
+    fun connectionsViewModel(): ConnectionsViewModel = ConnectionsViewModel(
+        observeDappConnections(),
+        observeDappMessages(),
+        DisconnectDapp(dappSessions),
+        ExtendDappSession(dappSessions),
+    )
+
+    /** The requests to sign waiting, which the app opens their review for as each arrives. */
+    fun dappRequestsWaitingViewModel(): DappRequestsWaitingViewModel =
+        DappRequestsWaitingViewModel(observeDappMessages())
+
+    /** The review of the transaction [requestKey] names (`topic/id`, as its route carries it): screen D6. */
+    fun dappTransactionViewModel(requestKey: String): DappTransactionViewModel = DappTransactionViewModel(
+        requestKey,
+        observeDappMessages(),
+        QuoteDappTransaction(
+            dappRequests,
+            accounts,
+            networkSettings,
+            tokenCatalog,
+            nativeBalances,
+            transactionInputs,
+            sentTransfers,
+            transactionHistory,
+        ),
+        SendDappTransaction(
+            dappRequests,
+            accounts,
+            networkSettings,
+            signer,
+            broadcaster,
+            sentTransfers,
+            transactionHistory,
+            receipts,
+        ),
+        ProposeDappSafeTx(
+            dappRequests,
+            accounts,
+            networkSettings,
+            tokenCatalog,
+            observeSafe(),
+            nativeBalances,
+            transactionInputs,
+            safeTxQueue,
+        ),
+        SignDappSafeTx(dappRequests, signSafeTx(Network.SEPOLIA)),
+        RefuseDappRequest(dappRequests, accounts, networkSettings),
+        DescribeKeyStore(keys),
+    )
+
+    /** The review of the request [requestKey] names (`topic/id`, as its route carries it): screen D4. */
+    fun dappRequestViewModel(requestKey: String): DappRequestViewModel = DappRequestViewModel(
+        requestKey,
+        observeDappMessages(),
+        SignDappMessage(dappRequests, accounts, networkSettings, signer),
+        RefuseDappRequest(dappRequests, accounts, networkSettings),
+        DescribeKeyStore(keys),
+    )
+
+    /** The `wc:` link the platform opened the app with, which the host offers and Connect a dApp takes. */
+    val incomingDappLink: IncomingDappLink = IncomingDappLink()
+
+    fun pairDappViewModel(): PairDappViewModel = PairDappViewModel(PairDapp(dappSessions), incomingDappLink)
+
+    /** The review of the proposal [proposalKey] names (`pairing/id`, as its route carries it). */
+    fun dappProposalViewModel(proposalKey: String): DappProposalViewModel = DappProposalViewModel(
+        proposalKey,
+        observeDappConnections(),
+        ApproveDappProposal(dappSessions, accounts, networkSettings),
+        RejectDappProposal(dappSessions),
+    )
 
     fun currencyViewModel(): CurrencyViewModel =
         CurrencyViewModel(displayCurrencies(), SetDisplayCurrency(priceFeeds, displayCurrency, accounts))
