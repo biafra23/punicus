@@ -371,7 +371,7 @@ class SwapViewModelTest {
         assertNotNull(estimate.simpleNote).let { assertFalse("block" in it) }
 
         viewModel.onToleranceChange("1")
-        assertEquals("At least 0.01584 ETH at 1.00 % tolerance", viewModel.compose.estimate?.minimum)
+        assertEquals("At least 0.01584 ETH at 1 % tolerance", viewModel.compose.estimate?.minimum)
         viewModel.onToleranceChange("9")
         assertNull(viewModel.compose.estimate?.minimum, "no tolerance, no minimum")
         assertEquals("≈ 0.016 ETH", viewModel.compose.estimate?.receive, "the tolerance asks for no new quote")
