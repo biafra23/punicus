@@ -23,11 +23,9 @@ from __future__ import annotations
 
 import argparse
 import json
-import os
 import re
 import subprocess
 import sys
-import tempfile
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -93,7 +91,7 @@ def table(changes: list[Change], repo: str, base_sha: str, head_sha: str, max_ro
     summary = ", ".join(f"{n} {STATUS_WORD[s]}" for s, n in counts.items() if n)
     folder_url = f"https://github.com/{repo}/tree/{head_sha}/{FOLDER}"
     lines.append(
-        f"{len(changes)} screenshot{'s' if len(changes) != 1 else ''} {summary} "
+        f"{len(changes)} screenshot{'s' if len(changes) != 1 else ''}: {summary} "
         f"([`{FOLDER}/`]({folder_url}), CI render of {head_sha[:7]}; the before images are {base_sha[:7]}'s)."
     )
     lines.append("")
@@ -128,7 +126,8 @@ def splice(body: str, block: str) -> str:
         insert = heading + 1
         while insert < len(lines) and not lines[insert].strip():
             insert += 1
-        return "\n".join(lines[:insert] + ["", block, ""] + lines[insert:]).replace("\n\n\n", "\n\n")
+        # The heading is followed by its blank line and the block by one, as written by hand.
+        return "\n".join(lines[: heading + 1] + ["", block, ""] + lines[insert:])
     session = next((i for i in range(len(lines) - 1, -1, -1) if lines[i].startswith("Session:")), None)
     if session is not None:
         return "\n".join(lines[:session] + ["## Screenshots", "", block, ""] + lines[session:])
@@ -145,13 +144,7 @@ def update_description(repo: str, pr: int, block: str, dry_run: bool) -> str:
     if dry_run:
         return new
     if new != current:
-        with tempfile.NamedTemporaryFile("w", suffix=".json", delete=False, encoding="utf-8") as f:
-            json.dump({"body": new}, f)
-            payload = f.name
-        try:
-            gh("api", "-X", "PATCH", f"repos/{repo}/pulls/{pr}", "--input", payload)
-        finally:
-            os.unlink(payload)
+        gh("api", "-X", "PATCH", f"repos/{repo}/pulls/{pr}", "--input", "-", stdin=json.dumps({"body": new}))
     return new
 
 

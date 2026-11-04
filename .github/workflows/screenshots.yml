@@ -129,11 +129,22 @@ jobs:
         env:
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}
         run: |
+          # The head is this workflow's own commit, and the render still differs: a preview draws
+          # something else on every run (a clock, randomness). Committing again would loop forever.
+          if [ "$(git log -1 --format=%an)" = "github-actions[bot]" ]; then
+            echo "::error::the render differs from the screenshots this workflow committed one run ago" \
+                 "(listed above): a preview is not deterministic. Give it fixed sample data."
+            exit 1
+          fi
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add -A -- docs/screenshots
-          summary=$(git diff --cached --name-status --no-renames -- docs/screenshots | grep '\.png$' \
-            | awk '{ c[$1]++ } END { printf "%d added, %d changed, %d removed", c["A"], c["M"], c["D"] }')
+          summary=$(git diff --cached --name-status --no-renames -- docs/screenshots | awk '
+            $2 ~ /\.png$/ { c[$1]++; n++ }
+            END {
+              if (n) printf "%d added, %d changed, %d removed", c["A"], c["M"], c["D"]
+              else printf "the overview pages"
+            }')
           git commit -q -m "Screenshots: $summary" \
             -m "Rendered by the Screenshots workflow from $HEAD_SHA. Every other screen draws the same pixels."
           git log --oneline -1
@@ -146,7 +157,9 @@ jobs:
           BASE_SHA: ${{ github.event.pull_request.base.sha }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
         run: |
-          git fetch -q origin "$BASE_SHA" || true
+          set -o pipefail
+          # Fails the step, rather than an empty diff reading as "no screenshot changed".
+          git cat-file -e "$BASE_SHA^{commit}" 2>/dev/null || git fetch -q origin "$BASE_SHA"
           git diff --name-status --no-renames "$BASE_SHA" HEAD -- docs/screenshots \
             | python3 scripts/screenshots.py table --repo "$GITHUB_REPOSITORY" --pr "$PR_NUMBER" \
                 --base-sha "$BASE_SHA" --head-sha "$(git rev-parse HEAD)"

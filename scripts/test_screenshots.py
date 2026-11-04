@@ -43,7 +43,7 @@ class TableTest(unittest.TestCase):
     def test_one_row_per_change_with_the_images_of_both_commits(self):
         block = screenshots.table(screenshots.parse_changes(DIFF), REPO, BASE, HEAD)
         self.assertTrue(block.startswith(screenshots.START) and block.endswith(screenshots.END))
-        self.assertIn("3 screenshots 1 added, 1 changed, 1 removed", block)
+        self.assertIn("3 screenshots: 1 added, 1 changed, 1 removed", block)
         self.assertIn(f"https://raw.githubusercontent.com/{REPO}/{BASE}/docs/screenshots/send/compose-empty.png", block)
         self.assertIn(f"https://raw.githubusercontent.com/{REPO}/{HEAD}/docs/screenshots/send/compose-empty.png", block)
         rows = [line for line in block.splitlines() if line.startswith("| `")]
@@ -94,6 +94,11 @@ class SpliceTest(unittest.TestCase):
         new = screenshots.splice("Intro\n", self.block)
         self.assertTrue(new.startswith("Intro\n\n## Screenshots\n\n"))
         self.assertTrue(new.rstrip("\n").endswith(screenshots.END))
+
+    def test_spacing_elsewhere_is_left_alone(self):
+        body = "Intro\n\n\n```\na\n\n\nb\n```\n\n## Screenshots\n\nNo UI change.\n\nSession: `x`\n"
+        new = screenshots.splice(body, self.block)
+        self.assertTrue(new.startswith("Intro\n\n\n```\na\n\n\nb\n```\n"))
 
     def test_crlf_bodies_are_normalized(self):
         new = screenshots.splice("Intro\r\n\r\n## Screenshots\r\n\r\nSession: `x`\r\n", self.block)

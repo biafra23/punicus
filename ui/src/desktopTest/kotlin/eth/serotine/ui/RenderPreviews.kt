@@ -64,13 +64,16 @@ internal fun renderEach(screen: Screen) {
 /**
  * Whether two PNGs draw the same picture, whatever their bytes: CI's optimizer rewrites a file
  * without changing a pixel, and a render that changed nothing must not undo that. A file that does
- * not decode counts as different, so it is written afresh.
+ * not decode, unreadable or damaged, counts as different, so it is written afresh.
  */
 private fun samePixels(a: ByteArray, b: ByteArray): Boolean {
-    val x = ImageIO.read(ByteArrayInputStream(a)) ?: return false
-    val y = ImageIO.read(ByteArrayInputStream(b)) ?: return false
+    val x = decode(a) ?: return false
+    val y = decode(b) ?: return false
     if (x.width != y.width || x.height != y.height) return false
     val xs = x.getRGB(0, 0, x.width, x.height, null, 0, x.width)
     val ys = y.getRGB(0, 0, y.width, y.height, null, 0, y.width)
     return xs.contentEquals(ys)
 }
+
+/** The image, or null where ImageIO has no reader for it or it is damaged (ImageIO then throws). */
+private fun decode(bytes: ByteArray) = runCatching { ImageIO.read(ByteArrayInputStream(bytes)) }.getOrNull()
