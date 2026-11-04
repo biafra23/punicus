@@ -83,6 +83,7 @@ import eth.serotine.ui.MemoryTransactionHistory
 import eth.serotine.ui.MemoryUserTokens
 import eth.serotine.ui.MemoryWaitingSwaps
 import eth.serotine.ui.activity.AccountActivity
+import eth.serotine.ui.activity.ActivityOrder
 import eth.serotine.ui.activity.ActivityUiState
 import eth.serotine.ui.components.AMOUNT_MASK
 import eth.serotine.ui.components.Control
@@ -756,6 +757,24 @@ class AccountDetailViewModelTest {
         advanceTimeBy(5_001)
         runCurrent()
         assertFalse(reading(), "5 s after its tab was left, the history is no longer read")
+    }
+
+    @Test
+    fun theActivityRunsNewestFirstUntilTheUserTurnsItRound() = runTest {
+        Dispatchers.setMain(UnconfinedTestDispatcher(testScheduler))
+        val viewModel = viewModel()
+        backgroundScope.launch { viewModel.uiState.collect {} }
+        viewModel.show(DetailSegment.ACTIVITY)
+        runCurrent()
+        fun ready() = viewModel.uiState.value as AccountDetailUiState.Ready
+
+        assertEquals(ActivityOrder.NEWEST_FIRST, ready().activityOrder)
+        assertIs<ActivityUiState.Shown>(ready().activity)
+
+        viewModel.orderActivity(ActivityOrder.OLDEST_FIRST)
+        runCurrent()
+        assertEquals(ActivityOrder.OLDEST_FIRST, ready().activityOrder)
+        assertIs<ActivityUiState.Shown>(ready().activity)
     }
 
     @Test

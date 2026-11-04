@@ -20,7 +20,7 @@ import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.onStart
 import kotlinx.coroutines.flow.transformLatest
 
-/** One event of an account's history read from the log index: where it is on chain. */
+/** One event of an account's history read from the log index: where it is on chain, and when. */
 interface IndexedEvent {
     /** The block it is in. */
     val blockNumber: Long
@@ -30,6 +30,13 @@ interface IndexedEvent {
 
     /** Its log's place in the block. */
     val logIndex: Int
+
+    /**
+     * When its block was produced (unix seconds), from the block's verified header, which the
+     * engine reports with the log ([eth.serotine.domain.repository.IndexedLog.blockTimestamp]);
+     * null from an engine that does not, when only the block dates the event.
+     */
+    val blockTimestamp: Long?
 }
 
 /** An account's history as the log index holds it (issue #85): its events, or why there are none. */

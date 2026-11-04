@@ -9,6 +9,7 @@ import eth.serotine.ui.components.NotSentItem
 import eth.serotine.ui.components.RouteStep
 import eth.serotine.ui.components.SendFrom
 import eth.serotine.ui.components.SpenderItem
+import eth.serotine.ui.components.SwapEstimateItem
 import eth.serotine.ui.components.SwapForm
 import eth.serotine.ui.components.UnlockStep
 import eth.serotine.ui.ScreenPreview
@@ -54,6 +55,17 @@ private val composed = SwapUiState.Compose(
         amountHint = "≈ €92.10",
         canMax = true,
         canReview = true,
+        // The detailed note names its block; simple mode draws simpleNote in its place.
+        estimate = SwapEstimateItem(
+            label = "You receive",
+            receive = "≈ 7.183 LINK",
+            minimum = "At least 7.147 LINK at 0.5 % tolerance",
+            rate = "1 USDC ≈ 0.07183 LINK",
+            inverseRate = "1 LINK ≈ 13.921 USDC",
+            note = "Uniswap's verified quote at block 23,614,079. The review quotes the swap again, with its " +
+                "network fee, before anything is signed.",
+            simpleNote = "Checked on chain. The review checks it again before you confirm.",
+        ),
     ),
     fee = FeeLevel.NORMAL,
     venue = VenueItem(SwapVenue.UNISWAP),
@@ -169,10 +181,15 @@ private fun SimpleSwapPreview(state: SwapUiState, darkTheme: Boolean = false) {
     }
 }
 
-/** W1: the form, Uniswap chosen. */
+/** W1: the form, Uniswap chosen, with what the swap would return and the rate. */
 @Preview
 @Composable
 private fun SimpleSwapComposePreview() = SimpleSwapPreview(composed)
+
+/** W1 in the dark theme. */
+@Preview
+@Composable
+private fun SimpleSwapComposeDarkPreview() = SimpleSwapPreview(composed, darkTheme = true)
 
 /** W2: step 1 of 2, the approval, for this swap only. */
 @Preview
@@ -250,6 +267,7 @@ private fun SimpleSwapNotSentPreview() = SimpleSwapPreview(
 /** Every preview above, which SimpleSwapScreenPreviewsTest renders: a new preview goes in here too. */
 internal val simpleSwapScreenPreviews: List<ScreenPreview> = listOf(
     ScreenPreview("compose") { SimpleSwapComposePreview() },
+    ScreenPreview("compose-dark") { SimpleSwapComposeDarkPreview() },
     ScreenPreview("approval") { SimpleSwapApprovalPreview() },
     ScreenPreview("approval-dark") { SimpleSwapApprovalDarkPreview() },
     ScreenPreview("pending") { SimpleSwapPendingPreview() },

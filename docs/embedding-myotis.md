@@ -120,10 +120,15 @@ consumer developed against an unreleased engine, Myotis's
   its window closes. Android pauses every running light client's networking
   30 s after nothing holds the engine any more (a visible activity, the daily
   network-upgrade check) and resumes them with the next hold;
-  `AndroidDnsServers` supplies the active network's resolvers. The iOS
-  `MyotisHost` follows networks on and off the same way (`FollowNetworks`),
-  pauses every running light client when the app goes to the background and
-  resumes them when it comes back.
+  `AndroidDnsServers` supplies the active network's resolvers. After the last
+  visible activity it waits 60 s instead, so a quick switch to another app
+  (to copy an address, say) comes back to synced light clients: an expedited
+  job (`GracePeriodJob`, Android 12 and later) holds the engine for that
+  minute, since Android 14 and later freeze a cached process about 10 s in,
+  and its end pauses at once. The iOS `MyotisHost` follows networks on and
+  off the same way (`FollowNetworks`); the iOS host pauses every running light
+  client 25 s after the app goes to the background, within the background
+  task iOS limits to about 30 s, and resumes them when it comes back.
 - **Readiness, as Myotis reads it.** The adapters read `ChainHandle.status()`,
   a snapshot that never blocks, the way Myotis's own readiness ladder does:
   `SYNCING` is the checkpoint bootstrap; `CATCHING_UP` walks sync-committee
@@ -532,6 +537,16 @@ answered with an empty list.
   - Logs are taken only when every one is what the query selects, inside its
     range; anything else is no answer. A query names both ends of its range:
     the answer does not say which range it read.
+  - A log's `blockTimestamp` (unix seconds: a quantity as the JSON-RPC log
+    shape has it, or a number as the engine's other verified-read shapes
+    carry theirs), when the engine reports it from the walk that verified
+    the block's header, dates the event (`IndexedLog.blockTimestamp`); the
+    Activity dates and orders its rows by it. From an engine that does not
+    report it (none did as of Myotis 0.1.20) the event is dated by its block
+    alone, never by a time counted back from the head: a block's time is
+    verified or not shown. Reading a block's header for it instead is no
+    answer: `getBlockByNumber` serves one header window anchored at the
+    head (512 blocks), and a history reaches further back.
   - The engine takes an entry's `fromBlock` as saying nothing of it comes
     before that block, and answers a range reaching below it from there on.
     For an account not created here that is not so, so the adapter reads the

@@ -210,7 +210,7 @@ class AccountActivityTest {
             listOf(
                 ActivityRow(
                     execution.hash,
-                    "Executed a Safe transaction",
+                    "Executed: Send 0.000000000000000001 ETH",
                     "Safe nonce 4 · Treasury · 0xfB69…d359",
                     "0xfB6916095ca1df60bB79Ce92cE3Ea74c37c5d359",
                     "at 500",
@@ -270,6 +270,13 @@ class AccountActivityTest {
 
         val masked = assertIs<ActivityUiState.Shown>(activity.value)
         assertEquals(listOf("Sent $AMOUNT_MASK ETH", "Sent $AMOUNT_MASK USDC"), masked.rows.map { it.title })
+        history.entries.value += HistoryEntry(execution)
+        assertEquals(
+            "Executed: Send $AMOUNT_MASK ETH",
+            assertIs<ActivityUiState.Shown>(activity.value).rows.first().title,
+            "what a Safe transaction does is masked too",
+        )
+        history.entries.value = history.entries.value.dropLast(1)
         assertEquals("Swap $AMOUNT_MASK USDC → ETH", masked.waiting.single().title)
         // Only the amounts: who, when and how each ended stay.
         assertEquals("To Treasury · 0xfB69…d359", masked.rows.first().detail)
@@ -287,7 +294,7 @@ class AccountActivityTest {
 
         val shown = assertIs<ActivityUiState.Shown>(activity(treasury.address).value)
 
-        assertEquals(listOf("Executed transaction 4"), shown.rows.map { it.title })
+        assertEquals(listOf("Executed transaction 4: Send 0.000000000000000001 ETH"), shown.rows.map { it.title })
         assertEquals("By Alice · 0x8f3A…91c2", shown.rows.single().detail)
     }
 
@@ -584,7 +591,11 @@ class AccountActivityTest {
         val shown = assertIs<ActivityUiState.Shown>(activity(treasury.address).value)
 
         assertEquals(
-            listOf("Received 0.000000000000000001 ETH", "Executed transaction 4", "Received 1 ETH"),
+            listOf(
+                "Received 0.000000000000000001 ETH",
+                "Executed transaction 4: Send 0.000000000000000001 ETH",
+                "Received 1 ETH",
+            ),
             shown.rows.map { it.title },
         )
         val event = shown.rows.last()
@@ -608,7 +619,7 @@ class AccountActivityTest {
 
         val rows = assertIs<ActivityUiState.Shown>(activity(treasury.address).value).rows
 
-        assertEquals(listOf("Executed transaction 4"), rows.map { it.title })
+        assertEquals(listOf("Executed transaction 4: Send 0.000000000000000001 ETH"), rows.map { it.title })
     }
 
     @Test
@@ -621,8 +632,12 @@ class AccountActivityTest {
 
         val rows = assertIs<ActivityUiState.Shown>(activity(treasury.address).value).rows
 
-        assertEquals(listOf("Executed transaction 4", "Executed a Safe transaction"), rows.map { it.title })
+        assertEquals(
+            listOf("Executed transaction 4: Send 0.000000000000000001 ETH", "Executed a Safe transaction"),
+            rows.map { it.title },
+        )
         assertEquals("Block 9,410,000", rows.last().time)
+        assertEquals(null, rows.last().simpleTime, "dated by its block alone")
     }
 
     @Test
@@ -660,7 +675,12 @@ class AccountActivityTest {
         val rows = assertIs<ActivityUiState.Shown>(activity(treasury.address).value).rows
 
         assertEquals(
-            listOf("Threshold changed", "Module enabled", "Executed transaction 4", "A Safe transaction failed"),
+            listOf(
+                "Threshold changed",
+                "Module enabled",
+                "Executed transaction 4: Send 0.000000000000000001 ETH",
+                "A Safe transaction failed",
+            ),
             rows.map { it.title },
         )
         assertEquals("1 owner must sign now", rows[0].detail)
@@ -733,7 +753,11 @@ class AccountActivityTest {
         val rows = assertIs<ActivityUiState.Shown>(activity(treasury.address).value).rows
 
         assertEquals(
-            listOf("Executed transaction 4", "Received 0.000000000000000001 ETH", "Executed transaction 3"),
+            listOf(
+                "Executed transaction 4: Send 0.000000000000000001 ETH",
+                "Received 0.000000000000000001 ETH",
+                "Executed transaction 3: Send 0.000000000000000001 ETH",
+            ),
             rows.map { it.title },
         )
     }
@@ -904,5 +928,87 @@ class AccountActivityTest {
             rows.map { it.status },
         )
     }
-}
 
+    @Test
+    fun anEventTheEngineDatedGoesByItsTimeAmongTheSentRowsAndSaysIt() = runTest {
+        // Mined at block 9,410,000: by date, where any event in that block puts it.
+        history.entries.value = listOf(HistoryEntry(native, SentOutcome.Included(9_410_000, succeeded = true)))
+        starts.starts.value = mapOf(alice.address to HistoryStart.Fixed(9_400_000))
+        index.coverage.value = LogCoverageReading.Read(
+            mapOf(LogWatchKey.Mention(alice.address) to LogCoverage(9_400_000, 9_400_000L..9_420_000L)),
+        )
+        index.logs = listOf(
+            tokenLog(usdc.address, 9_409_000, bob, alice.address, word("f4240"), "0x" + "e1".repeat(32))
+                .copy(blockTimestamp = 395),
+            tokenLog(usdc.address, 9_410_000, bob, alice.address, word("1e8480"), "0x" + "e2".repeat(32))
+                .copy(blockTimestamp = 405),
+            tokenLog(usdc.address, 9_412_000, bob, alice.address, word("2dc6c0"), "0x" + "e3".repeat(32))
+                .copy(blockTimestamp = 420),
+        )
+
+        val rows = assertIs<ActivityUiState.Shown>(activity().value).rows
+
+        // The sent row goes by its block's time, before the events of that block, though a peer took it at 400.
+        assertEquals(
+            listOf("Received 3 USDC", "Sent 0.25 ETH", "Received 2 USDC", "Received 1 USDC"),
+            rows.map { it.title },
+        )
+        assertEquals(listOf("at 420", "at 400", "at 405", "at 395"), rows.map { it.time }, "each dated as it says")
+        assertEquals("at 420", rows.first().simpleTime, "a dated event keeps its time in simple mode")
+    }
+
+    @Test
+    fun anEventTheEngineDidNotDateGoesByItsBlockAmongTheDatedRows() = runTest {
+        history.entries.value = listOf(HistoryEntry(native, SentOutcome.Included(9_410_000, succeeded = true)))
+        starts.starts.value = mapOf(alice.address to HistoryStart.Fixed(9_400_000))
+        index.coverage.value = LogCoverageReading.Read(
+            mapOf(LogWatchKey.Mention(alice.address) to LogCoverage(9_400_000, 9_400_000L..9_420_000L)),
+        )
+        index.logs = listOf(
+            tokenLog(usdc.address, 9_415_000, bob, alice.address, word("f4240"), "0x" + "e1".repeat(32))
+                .copy(blockTimestamp = 500),
+            tokenLog(usdc.address, 9_412_000, bob, alice.address, word("1e8480"), "0x" + "e2".repeat(32)),
+            tokenLog(usdc.address, 9_405_000, bob, alice.address, word("2dc6c0"), "0x" + "e3".repeat(32)),
+        )
+
+        val rows = assertIs<ActivityUiState.Shown>(activity().value).rows
+
+        assertEquals(
+            listOf("Received 1 USDC", "Received 2 USDC", "Sent 0.25 ETH", "Received 3 USDC"),
+            rows.map { it.title },
+        )
+        assertEquals(listOf("at 500", "Block 9,412,000", "at 400", "Block 9,405,000"), rows.map { it.time })
+    }
+
+    @Test
+    fun anExecutionOnChainOfATransactionThisDeviceApprovedSaysWhatItDid() = runTest {
+        val request = (execution.action as SentAction.SafeExecution).request
+        val approval = sent(10, SentAction.SafeApproval(request), 450)
+        // Approved from here, executed by another owner elsewhere.
+        history.entries.value = listOf(HistoryEntry(approval, SentOutcome.Included(9_405_000, succeeded = true)))
+        treasuryIndexed(9_400_000L..9_420_000L)
+        val topics = listOf(executionSuccess, "0x${request.hash.hex}")
+        index.logs = listOf(
+            safeLog(9_410_000, topics, "0x" + "0".repeat(64), tx = "0x" + "dd".repeat(32)),
+            safeLog(
+                9_411_000,
+                listOf(executionSuccess, "0x" + "ab".repeat(32)),
+                "0x" + "0".repeat(64),
+                tx = "0x" + "de".repeat(32),
+            ),
+        )
+
+        val rows = assertIs<ActivityUiState.Shown>(activity(treasury.address).value).rows
+
+        assertEquals(
+            listOf(
+                "Executed a Safe transaction",
+                "Executed: Send 0.000000000000000001 ETH",
+                "Approved transaction 4: Send 0.000000000000000001 ETH",
+            ),
+            rows.map { it.title },
+            "one this device holds no request of is still a Safe transaction",
+        )
+        assertEquals("Safe transaction 0x${request.hash.hex.take(4)}…${request.hash.hex.takeLast(4)}", rows[1].detail)
+    }
+}

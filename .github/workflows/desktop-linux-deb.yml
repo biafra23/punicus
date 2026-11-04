@@ -54,7 +54,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           # Full history: :ui stamps the app's on-screen version from the nearest
-          # v* tag, and `git describe` needs HEAD's history to REACH that tag.
+          # v* tag, and `git tag --merged HEAD` needs HEAD's history to REACH that tag.
           fetch-depth: 0
 
       - name: Set up JDK 21
@@ -74,6 +74,13 @@ jobs:
       # `sudo apt install ./Serotine-v<version>-<arch>.deb` or dpkg -i.
       # Retry to ride out transient repo-resolution blips.
       - name: Build Linux .deb (${{ matrix.arch }})
+        # The Reown project IDs (docs/walletconnect.md, *Setting up the project ID*), which :data
+        # compiles into the app: the installers are release builds, so the release ID alone. Scoped
+        # to this step, the one that needs them, so no other step's action can read them.
+        # Without the secrets the build has WalletConnect switched off, as a local build without
+        # them does.
+        env:
+          ORG_GRADLE_PROJECT_walletConnectProjectIdRelease: ${{ secrets.WALLETCONNECT_PROJECT_ID_RELEASE }}
         run: |
           for attempt in 1 2 3; do
             ./gradlew :desktop-app:packageDeb --stacktrace && exit 0

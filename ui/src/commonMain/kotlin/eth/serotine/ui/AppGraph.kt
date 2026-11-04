@@ -75,6 +75,7 @@ import eth.serotine.domain.usecase.DropWaitingSwap
 import eth.serotine.domain.usecase.EnableBiometricUnlock
 import eth.serotine.domain.usecase.EncodeSigningRequest
 import eth.serotine.domain.usecase.ExecuteSafeTx
+import eth.serotine.domain.usecase.EstimateSwap
 import eth.serotine.domain.usecase.FindUniswapRoute
 import eth.serotine.domain.usecase.FindWaitingSwap
 import eth.serotine.domain.usecase.HasSwapVenue
@@ -139,6 +140,7 @@ import eth.serotine.domain.usecase.RemoveAccount
 import eth.serotine.domain.usecase.RemoveQueuedSafeTx
 import eth.serotine.domain.usecase.RemoveToken
 import eth.serotine.domain.usecase.RenameAccount
+import eth.serotine.domain.usecase.RouteRanking
 import eth.serotine.domain.usecase.ResolveRecipient
 import eth.serotine.domain.usecase.SendCowCancellation
 import eth.serotine.domain.usecase.SendSwap
@@ -535,6 +537,7 @@ class AppGraph(
             lightClient,
             from.network,
         ),
+        EstimateSwap(FindUniswapRoute(uniswap, transactionInputs), RouteRanking.NET_OF_FEES),
         SendSwap(transactionInputs, signer, broadcaster, sentTransfers),
         QuoteTokenApproval(transactionInputs, nativeBalances, sentTransfers, from.network),
         SendTokenApproval(signer, broadcaster, sentTransfers),

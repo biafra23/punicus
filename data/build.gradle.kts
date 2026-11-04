@@ -24,8 +24,9 @@ plugins {
 // and says so. An ID is letters and digits: anything else fails the build rather than reach the code.
 val generateWalletConnectBuildInfo by tasks.registering {
     val outDir = layout.buildDirectory.dir("generated/walletConnect/kotlin")
-    val debugId = providers.gradleProperty("walletConnectProjectIdDebug").orElse("")
-    val releaseId = providers.gradleProperty("walletConnectProjectIdRelease").orElse("")
+    // Trimmed: a secret pasted with a trailing newline or space is still the same ID.
+    val debugId = providers.gradleProperty("walletConnectProjectIdDebug").map { it.trim() }.orElse("")
+    val releaseId = providers.gradleProperty("walletConnectProjectIdRelease").map { it.trim() }.orElse("")
     inputs.property("debugId", debugId)
     inputs.property("releaseId", releaseId)
     outputs.dir(outDir)

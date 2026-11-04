@@ -25,16 +25,20 @@ class ObserveSafeHistory(private val index: LogIndex, private val starts: Histor
         },
         decode = { log ->
             SafeEvents.decode(log.log.topics, log.log.data)?.let {
-                SafeChainEvent(it, log.blockNumber, log.transactionHash, log.logIndex)
+                SafeChainEvent(it, log.blockNumber, log.transactionHash, log.logIndex, log.blockTimestamp)
             }
         },
     ).observe()
 }
 
-/** A Safe's [event], in block [blockNumber], logged by transaction [transactionHash] at [logIndex] in the block. */
+/**
+ * A Safe's [event], in block [blockNumber], logged by transaction [transactionHash] at [logIndex]
+ * in the block, which was produced at [blockTimestamp] (unix seconds; null when the engine did not say).
+ */
 data class SafeChainEvent(
     val event: SafeEvent,
     override val blockNumber: Long,
     override val transactionHash: String,
     override val logIndex: Int,
+    override val blockTimestamp: Long? = null,
 ) : IndexedEvent

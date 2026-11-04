@@ -72,6 +72,7 @@ import eth.serotine.ui.accounts.deriveBlockedReason
 import eth.serotine.domain.model.InterfaceMode
 import eth.serotine.ui.accounts.UnreachableNetwork
 import eth.serotine.ui.activity.ActivityKey
+import eth.serotine.ui.activity.ActivityOrder
 import eth.serotine.ui.activity.ActivityUiState
 import eth.serotine.ui.activity.activityItems
 import eth.serotine.ui.components.AccountAvatar
@@ -201,6 +202,7 @@ fun AccountDetailRoute(
             onDismissWaiting = viewModel::dismissWaiting,
             onDerive = onDerive,
             onToggleAmounts = viewModel::toggleAmounts,
+            onOrderActivity = viewModel::orderActivity,
         )
         // The strip is collected only where it is drawn: shared while subscribed, it stays idle otherwise.
         InterfaceMode.DETAILED -> AccountDetailScreen(
@@ -228,6 +230,7 @@ fun AccountDetailRoute(
             onDismissWaiting = viewModel::dismissWaiting,
             onDerive = onDerive,
             onToggleAmounts = viewModel::toggleAmounts,
+            onOrderActivity = viewModel::orderActivity,
         )
     }
 }
@@ -237,7 +240,9 @@ fun AccountDetailRoute(
  * balance, address and control, Send (where it can send), Swap and Receive as buttons, and Copy,
  * Rename and Remove in the top bar's menu, so none of them depends on the long press of the
  * account list; while the asset rows are shown, the menu also sorts them the other way
- * ([onSort]). Under the buttons are its tabs, Assets | Activity and a Safe's Owners | Queue.
+ * ([onSort]), and while the Activity is shown, runs its rows the other way ([onOrderActivity]:
+ * "Oldest first", then "Newest first" back). Under the buttons are its tabs, Assets | Activity
+ * and a Safe's Owners | Queue.
  * [onSend] opens Send with the token at a contract chosen, or the network's currency (null). The
  * Activity tab's rows open their detail through [onOpenActivity]; a swap waiting there for its next
  * step opens Swap through [onContinueSwap], or goes through [onDismissWaiting]. A Safe's Queue opens a
@@ -278,6 +283,7 @@ fun AccountDetailScreen(
     onDismissWaiting: (sell: String) -> Unit = {},
     onDerive: () -> Unit = {},
     onToggleAmounts: () -> Unit = {},
+    onOrderActivity: (ActivityOrder) -> Unit = {},
 ) {
     val snackbar = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
@@ -362,13 +368,23 @@ fun AccountDetailScreen(
                         IconButton(onClick = { menu = true }) {
                             Icon(Icons.Filled.MoreVert, contentDescription = "More actions")
                         }
-                        // The order of the rows, offered while they are shown: the other order than the current one.
-                        val sort = if (!state.showsAssets) {
-                            null
-                        } else if (state.sort == AssetSort.VALUE) {
-                            MenuAction("Sort by name", SerotineIcons.Sort) { onSort(AssetSort.NAME) }
-                        } else {
-                            MenuAction("Sort by value", SerotineIcons.Sort) { onSort(AssetSort.VALUE) }
+                        // The order of the rows, offered while they are shown: the other order than the
+                        // current one. The Activity's run by date, and turn round the same way.
+                        val onActivity = state.segment == DetailSegment.ACTIVITY
+                        val sort = when {
+                            state.showsAssets && state.sort == AssetSort.VALUE ->
+                                MenuAction("Sort by name", SerotineIcons.Sort) { onSort(AssetSort.NAME) }
+                            state.showsAssets ->
+                                MenuAction("Sort by value", SerotineIcons.Sort) { onSort(AssetSort.VALUE) }
+                            onActivity && state.activityOrder == ActivityOrder.NEWEST_FIRST ->
+                                MenuAction("Oldest first", SerotineIcons.Sort) {
+                                    onOrderActivity(ActivityOrder.OLDEST_FIRST)
+                                }
+                            onActivity ->
+                                MenuAction("Newest first", SerotineIcons.Sort) {
+                                    onOrderActivity(ActivityOrder.NEWEST_FIRST)
+                                }
+                            else -> null
                         }
                         ActionDropdown(
                             actions = listOfNotNull(

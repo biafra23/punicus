@@ -173,6 +173,26 @@ class EngineLogIndexTest {
     }
 
     @Test
+    fun aLogsBlockTimeIsTakenAsAQuantityOrANumberAndIsNullWithoutOne() = runTest {
+        val query = LogQuery(LogWatchKey.Mention(alice), 100, 200, listOf(transfer), position = 2)
+        fun log(timestamp: String?) =
+            """{"address":"${token.hex}","topics":["$transfer","0x${"22".repeat(32)}","$alicesTopic"],""" +
+                """"data":"0x01","blockNumber":"0x96","blockHash":"0x${"ab".repeat(32)}",""" +
+                """"transactionHash":"0x${"cd".repeat(32)}","transactionIndex":"0x0","logIndex":"0x3",""" +
+                (timestamp?.let { """"blockTimestamp":$it,""" } ?: "") + """"removed":false}"""
+        suspend fun timestampOf(json: String?): Long? {
+            chain.answer = "[${log(json)}]"
+            return assertIs<LogsReading.Logs>(index().logs(Network.SEPOLIA, query)).logs.single().blockTimestamp
+        }
+
+        assertEquals(1_761_686_208, timestampOf("\"0x690132c0\""), "the JSON-RPC quantity")
+        assertEquals(1_761_686_208, timestampOf("1761686208"), "a plain number, as the engine's other shapes")
+        assertEquals(null, timestampOf(null), "an engine that does not report it")
+        assertEquals(null, timestampOf("\"soon\""), "malformed: no time, never a guess")
+        assertEquals(null, timestampOf("-5"))
+    }
+
+    @Test
     fun aRangeBelowTheEntrysBlockOrOfAnEntryNotFollowedIsNotAskedOfTheEngine() = runTest {
         val belowAlices = LogQuery(LogWatchKey.Mention(alice), 99, 200, position = 1)
         assertEquals(LogsReading.BeforeStart(100), index().logs(Network.SEPOLIA, belowAlices))
