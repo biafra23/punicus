@@ -27,6 +27,7 @@ plugins {
 //   clean checkout of a v* tag  ->  "0.1.0"                  a real release build
 //   ... of a pre-release tag    ->  "0.1.0-rc1"              the tag as cut (v0.1.0-rc1)
 //   any other commit            ->  "0.1.0-fbf551"           last release + 6 sha digits
+//   ... after a pre-release     ->  "0.1.0-rc1-fbf551"       a pre-release counts as one
 //   dirty tree on a v* tag      ->  "0.1.0-fbf551"           NOT what shipped — a dev build
 //   git but no tags reachable   ->  "0.1.0-SNAPSHOT-fbf551"  see below
 //   no git at all (src tarball) ->  "0.1.0-SNAPSHOT"         project.version verbatim
@@ -67,12 +68,16 @@ abstract class AppVersionSource : ValueSource<String, AppVersionSource.Params> {
     private fun treeIsPatched(): Boolean =
         git("status", "--porcelain", "--untracked-files=no").isNotEmpty()
 
-    /** Newest RELEASED version reachable from HEAD, or null when none is. */
+    /**
+     * Newest RELEASED version reachable from HEAD, a pre-release (v0.3.0-rc1) included, or null
+     * when none is. `versionsort.suffix=-` sorts a pre-release below its final release, so
+     * v0.3.0 wins over v0.3.0-rc1 once both are tagged.
+     */
     private fun lastRelease(shape: Regex): String? =
         // Not `describe --abbrev=0`: that returns exactly ONE tag, the nearest, so a single
-        // off-shape tag on the release line (v0.2.0-rc1) would fail the shape check and
-        // silently demote every descendant commit to the project.version fallback.
-        git("tag", "--list", "v[0-9]*", "--merged", "HEAD", "--sort=-v:refname")
+        // off-shape tag on the release line would fail the shape check and silently demote
+        // every descendant commit to the project.version fallback.
+        git("-c", "versionsort.suffix=-", "tag", "--list", "v[0-9]*", "--merged", "HEAD", "--sort=-v:refname")
             .lineSequence().map { it.trim() }
             .firstOrNull { shape.matches(it) }?.removePrefix("v")
 
@@ -80,14 +85,13 @@ abstract class AppVersionSource : ValueSource<String, AppVersionSource.Params> {
         val projectVersion = parameters.projectVersion.get()
         val sha = git("rev-parse", "--short=6", "HEAD")
         if (sha.isEmpty()) return projectVersion // no git, not a repo, or no commits yet
-        val shape = Regex("""^v\d+(\.\d+)*$""")
-        // A build exactly on a tag shows that tag, a pre-release's included: the shapes the
-        // release guard accepts (release-version-guard.yml), vX.Y.Z and vX.Y.Z-<suffix>.
-        val tagged = Regex("""^v\d+(\.\d+)*(-[0-9A-Za-z][0-9A-Za-z.]*)?$""")
+        // A release is a tag of the shapes the release guard accepts (release-version-guard.yml):
+        // vX.Y.Z, and a pre-release's vX.Y.Z-<suffix> (v0.3.0-rc1).
+        val shape = Regex("""^v\d+(\.\d+)*(-[0-9A-Za-z][0-9A-Za-z.]*)?$""")
         // --match confines this to the release line: without it describe picks by tag
         // RECENCY, so a `nightly-*` laid down later would be read as this build's release.
         val exactTag = git("describe", "--tags", "--exact-match", "--match", "v[0-9]*")
-        if (tagged.matches(exactTag) && !treeIsPatched()) return exactTag.removePrefix("v")
+        if (shape.matches(exactTag) && !treeIsPatched()) return exactTag.removePrefix("v")
         // Keeping the qualifier on the fallback is load-bearing — see the table above.
         return "${lastRelease(shape) ?: projectVersion}-$sha"
     }
