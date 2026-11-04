@@ -13,10 +13,11 @@ import eth.serotine.domain.repository.ReadUnavailable
  * for selling exactly an amount of one asset for another, with the rate it comes to, both ways.
  *
  * It is [FindUniswapRoute] and nothing more: chain data read with verified calls, never a price,
- * and it signs nothing. It is not the review's quote either: no balance, allowance, fee or earlier
- * transaction is read, the swap is not run from the account, and the review quotes everything
- * again (screen 23). The route is ranked as [ranking] says, as the review ranks it: net of fees
- * for an account's swap, gross for a Safe's.
+ * and it signs nothing. It is not the review's quote either: no balance, allowance or earlier
+ * transaction of the account is read, the swap is not run from it, and the review quotes
+ * everything again (screen 23). The route is ranked as [ranking] says, as the review ranks it: net
+ * of fees for an account's swap, which reads the fee market to rank the routes, as the review
+ * does; gross for a Safe's.
  */
 class EstimateSwap(
     private val findRoute: FindUniswapRoute,

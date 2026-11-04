@@ -437,6 +437,25 @@ class SwapViewModelTest {
     }
 
     @Test
+    fun figuresOlderThanTheRefreshAreReadAnewNotShownAsCurrent() = runTest {
+        val viewModel = viewModel(sell = usdc.address)
+        viewModel.onBuyChange(null)
+        viewModel.onAmountChange("40")
+        advanceTimeBy(1.seconds)
+        runCurrent()
+        assertNotNull(viewModel.compose.estimate?.receive)
+        // The balance cannot be read: Review stays on the compose step, a minute after the figures were read.
+        balances.of(daily.address).value = BalanceReading.Syncing
+        clock += 1.minutes
+        viewModel.review()
+        runCurrent()
+
+        val shown = assertNotNull(viewModel.compose.estimate)
+        assertTrue(shown.checking, "a minute-old estimate is read anew")
+        assertNull(shown.receive)
+    }
+
+    @Test
     fun onCowTheEstimateSaysItIsUniswaps() = runTest {
         val viewModel = viewModel(sell = usdc.address)
         viewModel.onBuyChange(null)

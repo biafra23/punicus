@@ -306,10 +306,14 @@ would return and its rate, before the review.
   amount, not at every keystroke, and again every 30 seconds while nothing
   changes. A tolerance edited asks for nothing new. It is read only on the
   compose step: never under a review, and not while Review quotes the swap,
-  when the last figures stay.
-- **It signs nothing and decides nothing.** No balance, allowance, fee or
-  earlier transaction is read, and the swap is not run from the account.
-  The review quotes everything again (23), and only what it shows is signed.
+  when the last figures stay. Figures older than 30 seconds, as when the
+  screen is shown again after a while, are never shown as current: they
+  are read anew.
+- **It signs nothing and decides nothing.** No balance, allowance or earlier
+  transaction of the account is read, and the swap is not run from it.
+  Ranked net of fees, the fee market is read to rank the routes, as the
+  review reads it. The review quotes everything again (23), and only what
+  it shows is signed.
 - **With CoW chosen, the figures are Uniswap's, and say so** ("On Uniswap,
   you would receive"). CoW is asked for its own estimate only at the review:
   it is contacted only for a swap the user sends to it (owner ruling,

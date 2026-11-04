@@ -397,8 +397,12 @@ class SwapViewModel(
             null,
         )
 
-    /** The last estimate read, kept on screen while the review is quoted and read again after. */
-    private var lastEstimate: Estimate? = null
+    /**
+     * The last estimate read and when ([timeSource]): kept on screen while Review quotes the swap,
+     * and after a refused Review until it is due again. One older than [ESTIMATE_REFRESH] (the
+     * screen shown again after a while) is never shown as current: it is read anew.
+     */
+    private var lastEstimate: Pair<Estimate, TimeMark>? = null
 
     /**
      * The compose step's estimate: read [ESTIMATE_DELAY] after the pair or the amount last changed,
@@ -418,7 +422,9 @@ class SwapViewModel(
                     emit(null)
                     return@transformLatest
                 }
-                val last = lastEstimate?.takeIf { it.key == key }
+                val last = lastEstimate
+                    ?.takeIf { (estimate, readAt) -> estimate.key == key && readAt.elapsedNow() < ESTIMATE_REFRESH }
+                    ?.first
                 if (quoting) {
                     emit(last ?: Estimate(key, estimating = null))
                     return@transformLatest
@@ -433,7 +439,7 @@ class SwapViewModel(
                 }
                 while (true) {
                     val read = Estimate(key, estimate(key))
-                    lastEstimate = read
+                    lastEstimate = read to timeSource.markNow()
                     emit(read)
                     delay(ESTIMATE_REFRESH)
                 }
