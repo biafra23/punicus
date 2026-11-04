@@ -120,10 +120,15 @@ consumer developed against an unreleased engine, Myotis's
   its window closes. Android pauses every running light client's networking
   30 s after nothing holds the engine any more (a visible activity, the daily
   network-upgrade check) and resumes them with the next hold;
-  `AndroidDnsServers` supplies the active network's resolvers. The iOS
-  `MyotisHost` follows networks on and off the same way (`FollowNetworks`),
-  pauses every running light client when the app goes to the background and
-  resumes them when it comes back.
+  `AndroidDnsServers` supplies the active network's resolvers. After the last
+  visible activity it waits 60 s instead, so a quick switch to another app
+  (to copy an address, say) comes back to synced light clients: an expedited
+  job (`GracePeriodJob`, Android 12 and later) holds the engine for that
+  minute, since Android 14 and later freeze a cached process about 10 s in,
+  and its end pauses at once. The iOS `MyotisHost` follows networks on and
+  off the same way (`FollowNetworks`); the iOS host pauses every running light
+  client 25 s after the app goes to the background, within the background
+  task iOS limits to about 30 s, and resumes them when it comes back.
 - **Readiness, as Myotis reads it.** The adapters read `ChainHandle.status()`,
   a snapshot that never blocks, the way Myotis's own readiness ladder does:
   `SYNCING` is the checkpoint bootstrap; `CATCHING_UP` walks sync-committee

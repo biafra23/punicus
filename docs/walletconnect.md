@@ -454,7 +454,7 @@ everything on the chain side: the verified `call`, `estimateGasDetailed`,
   about it is kept but its address and its session.
 - **The hosts own the relay connection's lifecycle**, like the engine's. On
   Android, opening another wallet sends Serotine to the background, where the
-  socket may drop and the engine pauses after 30 s. On resume Serotine
+  socket may drop and the engine pauses after 60 s. On resume Serotine
   resubscribes and picks up the answer, which the relay holds for its TTL.
   The relay connection runs while the app is in front (Android, iOS) or open
   (the desktop), beside `FollowDappAccounts`, which keeps each session's
