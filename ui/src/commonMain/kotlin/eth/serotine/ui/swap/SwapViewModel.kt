@@ -1282,9 +1282,9 @@ class SwapViewModel(
             simpleError = composing.simpleError,
             info = composing.info,
             canReview = !composing.quoting && requestOf(model) != null,
-            // Without figures, an estimate that only says what the refused Review already says is left out.
+            // Without figures, an estimate's reason is left out while a refused Review says why, in its own words.
             estimate = estimateItem(model, estimate)?.takeUnless {
-                it.receive == null && !it.checking && it.note == composing.error
+                it.receive == null && !it.checking && composing.error != null
             },
         )
         return SwapUiState.Compose(

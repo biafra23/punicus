@@ -418,6 +418,23 @@ class SwapViewModelTest {
     }
 
     @Test
+    fun anEstimateWithoutFiguresIsLeftOutWhileARefusedReviewSaysWhyInOtherWords() = runTest {
+        val viewModel = viewModel(sell = usdc.address)
+        viewModel.onBuyChange(null)
+        viewModel.onAmountChange("40")
+        uniswap.unavailable = true
+        advanceTimeBy(1.seconds)
+        runCurrent()
+        val reason = assertNotNull(viewModel.compose.estimate)
+        assertNull(reason.receive)
+
+        viewModel.review()
+        runCurrent()
+        assertNotNull(viewModel.compose.error)
+        assertNull(viewModel.compose.estimate, "the refused Review says why, once")
+    }
+
+    @Test
     fun theEstimateStaysAndIsNotReadAgainWhileReviewQuotes() = runTest {
         val viewModel = viewModel(sell = usdc.address)
         viewModel.onBuyChange(null)
@@ -1348,7 +1365,11 @@ class SwapViewModelTest {
         val answers = mutableMapOf<Pair<Address, String>, String>()
         var quotes = 0
 
-        override suspend fun venue(network: Network): VenueReading = VenueReading.Verified(deployment)
+        /** While true, the deployment's code cannot be proven right now: the light client is syncing. */
+        var unavailable = false
+
+        override suspend fun venue(network: Network): VenueReading =
+            if (unavailable) VenueReading.Unavailable(ReadUnavailable.SYNCING) else VenueReading.Verified(deployment)
 
         override suspend fun call(network: Network, to: Address, data: ByteArray): Simulation {
             if (to == deployment.quoterV2) quotes++
