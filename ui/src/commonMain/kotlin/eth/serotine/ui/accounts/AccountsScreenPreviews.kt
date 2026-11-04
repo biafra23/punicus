@@ -20,6 +20,7 @@ import eth.serotine.ui.components.StaleAnchorWarning
 import eth.serotine.ui.components.UnavailableDialog
 import eth.serotine.ui.components.UnavailableFix
 import eth.serotine.ui.components.UnavailableNotice
+import eth.serotine.ui.ScreenPreview
 import eth.serotine.ui.theme.SerotineTheme
 import eth.serotine.ui.update.UpgradeBannerItem
 import org.jetbrains.compose.ui.tooling.preview.Preview
@@ -598,37 +599,37 @@ private fun AccountsSendNeedsNetworkPreview() = SerotineTheme {
 }
 
 /** Every preview above, which AccountsScreenPreviewsTest renders: a new preview goes in here too. */
-internal val accountsScreenPreviews: List<@Composable () -> Unit> = listOf(
-    { AccountsAccountsPreview() },
-    { AccountsAccountsDarkPreview() },
-    { AccountsCatchingUpPreview() },
-    { AccountsHeadTooOldPreview() },
-    { AccountsHeadTooOldDarkPreview() },
-    { AccountsNoAccountsPreview() },
-    { AccountsCreateSafeGreyedOutPreview() },
-    { AccountsCreateSafeReasonPreview() },
-    { AccountsSendReasonPreview() },
-    { AccountsLoadingPreview() },
-    { AccountsLoadingCreateSafeGreyedOutPreview() },
-    { AccountsListSetAsidePreview() },
-    { AccountsUpgradeAheadPreview() },
-    { AccountsUpgradeActivatedDarkPreview() },
-    { AccountsListUnavailablePreview() },
-    { AccountsCatchingUpDarkPreview() },
-    { AccountsNarrowPreview() },
-    { AccountsEnsNamesPreview() },
-    { AccountsThreeNetworksPreview() },
-    { AccountsThreeNetworksDarkPreview() },
-    { AccountsOneNetworkCatchingUpPreview() },
-    { AccountsNetworkOffPreview() },
-    { AccountsNetworkOffDarkPreview() },
-    { AccountsSendNeedsNetworkPreview() },
-    { AccountsNetworkBlockedPreview() },
-    { AccountsNoRateOnANetworkPreview() },
-    { AccountsNetworkBlockedDarkPreview() },
-    { AccountsStaleAnchorPreview() },
-    { AccountsStaleAnchorDarkPreview() },
-    { AccountsStaleAnchorDialogPreview() },
-    { AccountsHiddenPreview() },
-    { AccountsHiddenDarkPreview() },
+internal val accountsScreenPreviews: List<ScreenPreview> = listOf(
+    ScreenPreview("accounts") { AccountsAccountsPreview() },
+    ScreenPreview("accounts-dark") { AccountsAccountsDarkPreview() },
+    ScreenPreview("catching-up") { AccountsCatchingUpPreview() },
+    ScreenPreview("head-too-old") { AccountsHeadTooOldPreview() },
+    ScreenPreview("head-too-old-dark") { AccountsHeadTooOldDarkPreview() },
+    ScreenPreview("no-accounts") { AccountsNoAccountsPreview() },
+    ScreenPreview("create-safe-greyed-out") { AccountsCreateSafeGreyedOutPreview() },
+    ScreenPreview("create-safe-reason") { AccountsCreateSafeReasonPreview() },
+    ScreenPreview("send-reason") { AccountsSendReasonPreview() },
+    ScreenPreview("loading") { AccountsLoadingPreview() },
+    ScreenPreview("loading-create-safe-greyed-out") { AccountsLoadingCreateSafeGreyedOutPreview() },
+    ScreenPreview("list-set-aside") { AccountsListSetAsidePreview() },
+    ScreenPreview("upgrade-ahead") { AccountsUpgradeAheadPreview() },
+    ScreenPreview("upgrade-activated-dark") { AccountsUpgradeActivatedDarkPreview() },
+    ScreenPreview("list-unavailable") { AccountsListUnavailablePreview() },
+    ScreenPreview("catching-up-dark") { AccountsCatchingUpDarkPreview() },
+    ScreenPreview("narrow") { AccountsNarrowPreview() },
+    ScreenPreview("ens-names") { AccountsEnsNamesPreview() },
+    ScreenPreview("three-networks") { AccountsThreeNetworksPreview() },
+    ScreenPreview("three-networks-dark") { AccountsThreeNetworksDarkPreview() },
+    ScreenPreview("one-network-catching-up") { AccountsOneNetworkCatchingUpPreview() },
+    ScreenPreview("network-off") { AccountsNetworkOffPreview() },
+    ScreenPreview("network-off-dark") { AccountsNetworkOffDarkPreview() },
+    ScreenPreview("send-needs-network") { AccountsSendNeedsNetworkPreview() },
+    ScreenPreview("network-blocked") { AccountsNetworkBlockedPreview() },
+    ScreenPreview("no-rate-on-a-network") { AccountsNoRateOnANetworkPreview() },
+    ScreenPreview("network-blocked-dark") { AccountsNetworkBlockedDarkPreview() },
+    ScreenPreview("stale-anchor") { AccountsStaleAnchorPreview() },
+    ScreenPreview("stale-anchor-dark") { AccountsStaleAnchorDarkPreview() },
+    ScreenPreview("stale-anchor-dialog") { AccountsStaleAnchorDialogPreview() },
+    ScreenPreview("hidden") { AccountsHiddenPreview() },
+    ScreenPreview("hidden-dark") { AccountsHiddenDarkPreview() },
 )

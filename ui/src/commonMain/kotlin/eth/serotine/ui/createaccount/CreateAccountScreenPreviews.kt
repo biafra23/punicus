@@ -8,6 +8,7 @@ import eth.serotine.ui.components.NetworkChoice
 import eth.serotine.ui.components.PasswordStep
 import eth.serotine.ui.components.STEPPED_DOWN_TEXT
 import eth.serotine.ui.components.protectionText
+import eth.serotine.ui.ScreenPreview
 import eth.serotine.ui.theme.SerotineTheme
 import org.jetbrains.compose.ui.tooling.preview.Preview
 
@@ -154,21 +155,21 @@ private fun CreateAccountKeyStoreUnavailablePreview() = CreateAccountPreview(Cre
 private fun CreateAccountNoNetworkPreview() = CreateAccountPreview(securing.copy(networks = networks))
 
 /** Every preview above, which CreateAccountScreenPreviewsTest renders: a new preview goes in here too. */
-internal val createAccountScreenPreviews: List<@Composable () -> Unit> = listOf(
-    { CreateAccountPreparingPreview() },
-    { CreateAccountShowingPreview() },
-    { CreateAccountShowingDarkPreview() },
-    { CreateAccountCheckingPreview() },
-    { CreateAccountCheckedWrongPreview() },
-    { CreateAccountNewPasswordPreview() },
-    { CreateAccountPasswordHintPreview() },
-    { CreateAccountWrongPasswordPreview() },
-    { CreateAccountCreatingPreview() },
-    { CreateAccountKeyStoreStoppedPreview() },
-    { CreateAccountCreatedPreview() },
-    { CreateAccountCreatedSteppedDownPreview() },
-    { CreateAccountRestartPreview() },
-    { CreateAccountNotListedPreview() },
-    { CreateAccountKeyStoreUnavailablePreview() },
-    { CreateAccountNoNetworkPreview() },
+internal val createAccountScreenPreviews: List<ScreenPreview> = listOf(
+    ScreenPreview("preparing") { CreateAccountPreparingPreview() },
+    ScreenPreview("showing") { CreateAccountShowingPreview() },
+    ScreenPreview("showing-dark") { CreateAccountShowingDarkPreview() },
+    ScreenPreview("checking") { CreateAccountCheckingPreview() },
+    ScreenPreview("checked-wrong") { CreateAccountCheckedWrongPreview() },
+    ScreenPreview("new-password") { CreateAccountNewPasswordPreview() },
+    ScreenPreview("password-hint") { CreateAccountPasswordHintPreview() },
+    ScreenPreview("wrong-password") { CreateAccountWrongPasswordPreview() },
+    ScreenPreview("creating") { CreateAccountCreatingPreview() },
+    ScreenPreview("key-store-stopped") { CreateAccountKeyStoreStoppedPreview() },
+    ScreenPreview("created") { CreateAccountCreatedPreview() },
+    ScreenPreview("created-stepped-down") { CreateAccountCreatedSteppedDownPreview() },
+    ScreenPreview("restart") { CreateAccountRestartPreview() },
+    ScreenPreview("not-listed") { CreateAccountNotListedPreview() },
+    ScreenPreview("key-store-unavailable") { CreateAccountKeyStoreUnavailablePreview() },
+    ScreenPreview("no-network") { CreateAccountNoNetworkPreview() },
 )

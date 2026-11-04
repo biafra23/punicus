@@ -11,6 +11,7 @@ import eth.serotine.ui.components.NetworkLabel
 import eth.serotine.ui.components.NotSentItem
 import eth.serotine.ui.components.UnlockStep
 import eth.serotine.ui.components.verifiedStripSample
+import eth.serotine.ui.ScreenPreview
 import eth.serotine.ui.theme.SerotineTheme
 import org.jetbrains.compose.ui.tooling.preview.Preview
 
@@ -273,24 +274,24 @@ private fun CreateSafeNetworksPreview() = CreateSafePreview(
 private fun CreateSafeLoadingPreview() = CreateSafePreview(CreateSafeUiState.Loading("Sepolia"))
 
 /** Every preview above, which CreateSafeScreenPreviewsTest renders: a new preview goes in here too. */
-internal val createSafeScreenPreviews: List<@Composable () -> Unit> = listOf(
-    { CreateSafeOwnersPreview() },
-    { CreateSafeOwnersDarkPreview() },
-    { CreateSafeTypingAnOwnerPreview() },
-    { CreateSafeOwnersRefusedPreview() },
-    { CreateSafeThresholdPreview() },
-    { CreateSafeThresholdDarkPreview() },
-    { CreateSafeThresholdRefusedPreview() },
-    { CreateSafeReviewPreview() },
-    { CreateSafeReviewDarkPreview() },
-    { CreateSafeReviewTypedPreview() },
-    { CreateSafeReviewQuotingPreview() },
-    { CreateSafeReviewRefusedPreview() },
-    { CreateSafeReviewBiometricsPreview() },
-    { CreateSafeNotSentPreview() },
-    { CreateSafeReviewSigningPreview() },
-    { CreateSafeSentPreview() },
-    { CreateSafeCannotCreatePreview() },
-    { CreateSafeLoadingPreview() },
-    { CreateSafeNetworksPreview() },
+internal val createSafeScreenPreviews: List<ScreenPreview> = listOf(
+    ScreenPreview("owners") { CreateSafeOwnersPreview() },
+    ScreenPreview("owners-dark") { CreateSafeOwnersDarkPreview() },
+    ScreenPreview("typing-an-owner") { CreateSafeTypingAnOwnerPreview() },
+    ScreenPreview("owners-refused") { CreateSafeOwnersRefusedPreview() },
+    ScreenPreview("threshold") { CreateSafeThresholdPreview() },
+    ScreenPreview("threshold-dark") { CreateSafeThresholdDarkPreview() },
+    ScreenPreview("threshold-refused") { CreateSafeThresholdRefusedPreview() },
+    ScreenPreview("review") { CreateSafeReviewPreview() },
+    ScreenPreview("review-dark") { CreateSafeReviewDarkPreview() },
+    ScreenPreview("review-typed") { CreateSafeReviewTypedPreview() },
+    ScreenPreview("review-quoting") { CreateSafeReviewQuotingPreview() },
+    ScreenPreview("review-refused") { CreateSafeReviewRefusedPreview() },
+    ScreenPreview("review-biometrics") { CreateSafeReviewBiometricsPreview() },
+    ScreenPreview("not-sent") { CreateSafeNotSentPreview() },
+    ScreenPreview("review-signing") { CreateSafeReviewSigningPreview() },
+    ScreenPreview("sent") { CreateSafeSentPreview() },
+    ScreenPreview("cannot-create") { CreateSafeCannotCreatePreview() },
+    ScreenPreview("loading") { CreateSafeLoadingPreview() },
+    ScreenPreview("networks") { CreateSafeNetworksPreview() },
 )

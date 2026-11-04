@@ -11,6 +11,7 @@ import eth.serotine.ui.components.RecipientItem
 import eth.serotine.ui.components.SendFrom
 import eth.serotine.ui.components.TransferForm
 import eth.serotine.ui.components.UnlockStep
+import eth.serotine.ui.ScreenPreview
 import eth.serotine.ui.theme.SerotineTheme
 import org.jetbrains.compose.ui.tooling.preview.Preview
 
@@ -167,10 +168,10 @@ private fun SimpleSendSyncingPreview() = SimpleSendPreview(
 )
 
 /** Every preview above, which SimpleSendScreenPreviewsTest renders: a new preview goes in here too. */
-internal val simpleSendScreenPreviews: List<@Composable () -> Unit> = listOf(
-    { SimpleSendComposePreview() },
-    { SimpleSendSyncingPreview() },
-    { SimpleSendReviewPreview() },
-    { SimpleSendReviewDarkPreview() },
-    { SimpleSendComposeRefusedPreview() },
+internal val simpleSendScreenPreviews: List<ScreenPreview> = listOf(
+    ScreenPreview("compose") { SimpleSendComposePreview() },
+    ScreenPreview("syncing") { SimpleSendSyncingPreview() },
+    ScreenPreview("review") { SimpleSendReviewPreview() },
+    ScreenPreview("review-dark") { SimpleSendReviewDarkPreview() },
+    ScreenPreview("compose-refused") { SimpleSendComposeRefusedPreview() },
 )

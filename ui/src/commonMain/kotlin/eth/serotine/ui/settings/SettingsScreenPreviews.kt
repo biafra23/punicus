@@ -8,6 +8,7 @@ import eth.serotine.ui.components.LightClientHealth.NOT_VERIFIED
 import eth.serotine.ui.components.LightClientHealth.STALE
 import eth.serotine.ui.components.LightClientHealth.VERIFIED
 import eth.serotine.ui.components.StaleAnchorWarning
+import eth.serotine.ui.ScreenPreview
 import eth.serotine.ui.theme.SerotineTheme
 import org.jetbrains.compose.ui.tooling.preview.Preview
 
@@ -201,22 +202,22 @@ private fun SettingsStaleAnchorPreview() = SettingsPreview(
 private fun SettingsConnectionsOffPreview() = SettingsPreview(synced, connectionsOff = true)
 
 /** Every preview above, which SettingsScreenPreviewsTest renders: a new preview goes in here too. */
-internal val settingsScreenPreviews: List<@Composable () -> Unit> = listOf(
-    { SettingsSyncedPreview() },
-    { SettingsSyncedDarkPreview() },
-    { SettingsStartingPreview() },
-    { SettingsUnreadablePreview() },
-    { SettingsHeadTooOldPreview() },
-    { SettingsHeadTooOldDarkPreview() },
-    { SettingsDebugBuildPreview() },
-    { SettingsDebugBuildCaptureAllowedPreview() },
-    { SettingsDebugScreenPreview() },
-    { SettingsDebugScreenNotSavedPreview() },
-    { SettingsIdlePreview() },
-    { SettingsNetworkNotSavedPreview() },
-    { SettingsTurnOffPreview() },
-    { SettingsStaleAnchorPreview() },
-    { SettingsDetailedViewPreview() },
-    { SettingsDetailedViewNotSavedPreview() },
-    { SettingsConnectionsOffPreview() },
+internal val settingsScreenPreviews: List<ScreenPreview> = listOf(
+    ScreenPreview("synced") { SettingsSyncedPreview() },
+    ScreenPreview("synced-dark") { SettingsSyncedDarkPreview() },
+    ScreenPreview("starting") { SettingsStartingPreview() },
+    ScreenPreview("unreadable") { SettingsUnreadablePreview() },
+    ScreenPreview("head-too-old") { SettingsHeadTooOldPreview() },
+    ScreenPreview("head-too-old-dark") { SettingsHeadTooOldDarkPreview() },
+    ScreenPreview("debug-build") { SettingsDebugBuildPreview() },
+    ScreenPreview("debug-build-capture-allowed") { SettingsDebugBuildCaptureAllowedPreview() },
+    ScreenPreview("debug-screen") { SettingsDebugScreenPreview() },
+    ScreenPreview("debug-screen-not-saved") { SettingsDebugScreenNotSavedPreview() },
+    ScreenPreview("idle") { SettingsIdlePreview() },
+    ScreenPreview("network-not-saved") { SettingsNetworkNotSavedPreview() },
+    ScreenPreview("turn-off") { SettingsTurnOffPreview() },
+    ScreenPreview("stale-anchor") { SettingsStaleAnchorPreview() },
+    ScreenPreview("detailed-view") { SettingsDetailedViewPreview() },
+    ScreenPreview("detailed-view-not-saved") { SettingsDetailedViewNotSavedPreview() },
+    ScreenPreview("connections-off") { SettingsConnectionsOffPreview() },
 )

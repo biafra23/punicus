@@ -1,6 +1,7 @@
 package eth.serotine.ui.connections
 
 import androidx.compose.runtime.Composable
+import eth.serotine.ui.ScreenPreview
 import eth.serotine.ui.theme.SerotineTheme
 import org.jetbrains.compose.ui.tooling.preview.Preview
 
@@ -76,11 +77,11 @@ private fun ConnectionsOffPreview() = ConnectionsPreview(ConnectionsUiState(load
 private fun ConnectionsLoadingPreview() = ConnectionsPreview(ConnectionsUiState())
 
 /** Every preview above, which ConnectionsScreenPreviewsTest renders: a new preview goes in here too. */
-internal val connectionsScreenPreviews: List<@Composable () -> Unit> = listOf(
-    { ConnectionsConnectedPreview() },
-    { ConnectionsConnectedDarkPreview() },
-    { ConnectionsNoneYetPreview() },
-    { ConnectionsNotSavedPreview() },
-    { ConnectionsOffPreview() },
-    { ConnectionsLoadingPreview() },
+internal val connectionsScreenPreviews: List<ScreenPreview> = listOf(
+    ScreenPreview("connected") { ConnectionsConnectedPreview() },
+    ScreenPreview("connected-dark") { ConnectionsConnectedDarkPreview() },
+    ScreenPreview("none-yet") { ConnectionsNoneYetPreview() },
+    ScreenPreview("not-saved") { ConnectionsNotSavedPreview() },
+    ScreenPreview("off") { ConnectionsOffPreview() },
+    ScreenPreview("loading") { ConnectionsLoadingPreview() },
 )

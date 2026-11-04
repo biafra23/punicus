@@ -11,6 +11,7 @@ import eth.serotine.ui.components.SendFrom
 import eth.serotine.ui.components.SpenderItem
 import eth.serotine.ui.components.SwapForm
 import eth.serotine.ui.components.UnlockStep
+import eth.serotine.ui.ScreenPreview
 import eth.serotine.ui.theme.SerotineTheme
 import org.jetbrains.compose.ui.tooling.preview.Preview
 
@@ -124,9 +125,9 @@ private fun SimpleSafeSwapRefusedPreview() = SimpleSafeSwapPreview(
 )
 
 /** Every preview above, which SimpleSafeSwapScreenPreviewsTest renders: a new preview goes in here too. */
-internal val simpleSafeSwapScreenPreviews: List<@Composable () -> Unit> = listOf(
-    { SimpleSafeSwapComposePreview() },
-    { SimpleSafeSwapRefusedPreview() },
-    { SimpleSafeSwapReviewPreview() },
-    { SimpleSafeSwapReviewDarkPreview() },
+internal val simpleSafeSwapScreenPreviews: List<ScreenPreview> = listOf(
+    ScreenPreview("compose") { SimpleSafeSwapComposePreview() },
+    ScreenPreview("refused") { SimpleSafeSwapRefusedPreview() },
+    ScreenPreview("review") { SimpleSafeSwapReviewPreview() },
+    ScreenPreview("review-dark") { SimpleSafeSwapReviewDarkPreview() },
 )

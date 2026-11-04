@@ -1,6 +1,7 @@
 package eth.serotine.ui.removeaccount
 
 import androidx.compose.runtime.Composable
+import eth.serotine.ui.ScreenPreview
 import eth.serotine.ui.theme.SerotineTheme
 import org.jetbrains.compose.ui.tooling.preview.Preview
 
@@ -58,12 +59,12 @@ private fun RemoveAccountKeyStaysPreview() = RemoveAccountPreview(
 )
 
 /** Every preview above, which RemoveAccountDialogPreviewsTest renders: a new preview goes in here too. */
-internal val removeAccountDialogPreviews: List<@Composable () -> Unit> = listOf(
-    { RemoveAccountKeyedPreview() },
-    { RemoveAccountKeyedDarkPreview() },
-    { RemoveAccountWatchedPreview() },
-    { RemoveAccountRemovingPreview() },
-    { RemoveAccountKeyKeptPreview() },
-    { RemoveAccountLoadingPreview() },
-    { RemoveAccountKeyStaysPreview() },
+internal val removeAccountDialogPreviews: List<ScreenPreview> = listOf(
+    ScreenPreview("keyed") { RemoveAccountKeyedPreview() },
+    ScreenPreview("keyed-dark") { RemoveAccountKeyedDarkPreview() },
+    ScreenPreview("watched") { RemoveAccountWatchedPreview() },
+    ScreenPreview("removing") { RemoveAccountRemovingPreview() },
+    ScreenPreview("key-kept") { RemoveAccountKeyKeptPreview() },
+    ScreenPreview("loading") { RemoveAccountLoadingPreview() },
+    ScreenPreview("key-stays") { RemoveAccountKeyStaysPreview() },
 )

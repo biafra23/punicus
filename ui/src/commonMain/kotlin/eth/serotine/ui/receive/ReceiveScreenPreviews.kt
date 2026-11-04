@@ -3,6 +3,7 @@ package eth.serotine.ui.receive
 import androidx.compose.runtime.Composable
 import eth.serotine.domain.model.Network
 import eth.serotine.ui.components.NetworkLabel
+import eth.serotine.ui.ScreenPreview
 import eth.serotine.ui.theme.SerotineTheme
 import org.jetbrains.compose.ui.tooling.preview.Preview
 
@@ -81,12 +82,12 @@ private fun ReceiveNetworkOffPreview() = ReceivePreview(
 )
 
 /** Every preview above, which ReceiveScreenPreviewsTest renders: a new preview goes in here too. */
-internal val receiveScreenPreviews: List<@Composable () -> Unit> = listOf(
-    { ReceiveAccountPreview() },
-    { ReceiveAccountDarkPreview() },
-    { ReceiveSafeWithoutSharePreview() },
-    { ReceiveLoadingPreview() },
-    { ReceiveListUnavailablePreview() },
-    { ReceiveGnosisPreview() },
-    { ReceiveNetworkOffPreview() },
+internal val receiveScreenPreviews: List<ScreenPreview> = listOf(
+    ScreenPreview("account") { ReceiveAccountPreview() },
+    ScreenPreview("account-dark") { ReceiveAccountDarkPreview() },
+    ScreenPreview("safe-without-share") { ReceiveSafeWithoutSharePreview() },
+    ScreenPreview("loading") { ReceiveLoadingPreview() },
+    ScreenPreview("list-unavailable") { ReceiveListUnavailablePreview() },
+    ScreenPreview("gnosis") { ReceiveGnosisPreview() },
+    ScreenPreview("network-off") { ReceiveNetworkOffPreview() },
 )

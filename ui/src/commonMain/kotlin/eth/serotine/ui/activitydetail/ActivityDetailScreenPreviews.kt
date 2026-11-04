@@ -4,6 +4,7 @@ import androidx.compose.runtime.Composable
 import eth.serotine.ui.activity.ActivityState
 import eth.serotine.ui.components.AMOUNT_MASK
 import eth.serotine.ui.components.verifiedStripSample
+import eth.serotine.ui.ScreenPreview
 import eth.serotine.ui.theme.SerotineTheme
 import org.jetbrains.compose.ui.tooling.preview.Preview
 
@@ -170,15 +171,15 @@ private fun ActivityDetailUnavailablePreview() = ActivityDetailPreview(
 )
 
 /** Every preview above, which ActivityDetailScreenPreviewsTest renders: a new preview goes in here too. */
-internal val activityDetailScreenPreviews: List<@Composable () -> Unit> = listOf(
-    { ActivityDetailSentPreview() },
-    { ActivityDetailSentDarkPreview() },
-    { ActivityDetailUnconfirmedPreview() },
-    { ActivityDetailUnlistedTokenPreview() },
-    { ActivityDetailSafeEventPreview() },
-    { ActivityDetailLoadingPreview() },
-    { ActivityDetailUnavailablePreview() },
-    { ActivityDetailUnfamiliarSenderPreview() },
-    { ActivityDetailHiddenPreview() },
-    { ActivityDetailHiddenDarkPreview() },
+internal val activityDetailScreenPreviews: List<ScreenPreview> = listOf(
+    ScreenPreview("sent") { ActivityDetailSentPreview() },
+    ScreenPreview("sent-dark") { ActivityDetailSentDarkPreview() },
+    ScreenPreview("unconfirmed") { ActivityDetailUnconfirmedPreview() },
+    ScreenPreview("unlisted-token") { ActivityDetailUnlistedTokenPreview() },
+    ScreenPreview("safe-event") { ActivityDetailSafeEventPreview() },
+    ScreenPreview("loading") { ActivityDetailLoadingPreview() },
+    ScreenPreview("unavailable") { ActivityDetailUnavailablePreview() },
+    ScreenPreview("unfamiliar-sender") { ActivityDetailUnfamiliarSenderPreview() },
+    ScreenPreview("hidden") { ActivityDetailHiddenPreview() },
+    ScreenPreview("hidden-dark") { ActivityDetailHiddenDarkPreview() },
 )
