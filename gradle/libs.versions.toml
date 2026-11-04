@@ -56,7 +56,7 @@ jna = "5.18.1"
 # repository in settings.gradle.kts. One version for the engine and the desktop's
 # eth.myotis:myotis-engine-natives-<platform> (desktop-app/build.gradle.kts): a host library
 # from another release would load and run that release's engine without a word.
-myotis = "0.1.19-rc2"
+myotis = "0.1.20-rc1"
 # KotlinCrypto: pure-Kotlin multiplatform digests and MACs (Keccak-256 for
 # addresses, SHA-256 for the BIP-39 checksum, HMAC-SHA512 for BIP-39/BIP-32).
 # 0.8.0 needs a Kotlin 2.2.20 stdlib, below our pin.

@@ -102,7 +102,11 @@ internal data class ProvenCode(val codeHex: String, val blockNumber: Long, val a
  */
 internal sealed interface ProofAnchor {
 
-    /** The proof's state root matched the attested beacon slot [slot]. */
+    /**
+     * The state root of the account's block is the one the beacon slot [slot] attests: a proof
+     * matched it, or (Myotis 0.1.20's `blockAccessList`) verified block access lists carried an
+     * earlier proof's state to that block.
+     */
     data class Attested(val slot: Long) : ProofAnchor
 
     /**

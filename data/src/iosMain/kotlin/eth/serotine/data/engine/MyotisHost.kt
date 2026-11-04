@@ -622,7 +622,9 @@ class MyotisHost private constructor(
             private fun handle(): ChainHandle? = (state as? ChainState.Running)?.handle
 
             // requestAccount: it returns the verdict and the block the proof anchors to, so a
-            // reading is labelled with where it was proven.
+            // reading is labelled with where it was proven. A watched account may be answered from
+            // verified block access lists instead of a proof (`blockAccessList`), up to 2 blocks
+            // below the head: its block number says which.
             override fun proveBalance(address: Address): ProvenBalance? {
                 val result = handle()?.requestAccount(address.hex) ?: return null
                 if (result.failReason != null || result.verifyMethod == null) return null

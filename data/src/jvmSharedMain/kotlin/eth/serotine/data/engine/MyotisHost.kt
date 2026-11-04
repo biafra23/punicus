@@ -625,7 +625,9 @@ class MyotisHost private constructor(
 
             // requestAccount, not VerifiedReads.getBalance: it returns the verdict and the block
             // the proof anchors to, so a reading is labelled with where it was proven. (A block
-            // number passed to getBalance is answered from the current head anyway.)
+            // number passed to getBalance is answered from the current head anyway.) A watched
+            // account may be answered from verified block access lists instead of a proof
+            // (`blockAccessList`), up to 2 blocks below the head: its block number says which.
             override fun proveBalance(address: Address): ProvenBalance? {
                 val handle = (state as? ChainState.Running)?.handle ?: return null
                 val result = handle.requestAccount(address.hex)

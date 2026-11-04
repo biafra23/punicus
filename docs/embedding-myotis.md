@@ -133,7 +133,13 @@ consumer developed against an unreleased engine, Myotis's
   balance through `ChainHandle.requestAccount` whenever the verified head has
   moved. It is accepted only with no `failReason` and a `verifyMethod`, and is
   labelled with the block the proof anchors to: `VerifiedReads.getBalance`
-  answers a block number from the current head, so it cannot be labelled. While
+  answers a block number from the current head, so it cannot be labelled. From
+  Myotis 0.1.20 a watched account on a chain with block access lists may be
+  answered with no proof fetched (`verifyMethod` `blockAccessList`: an earlier
+  proof carried forward by verified BALs, Myotis's docs/address-activity.md),
+  labelled with the block it answers at, up to 2 below the head; its
+  `matchedBeaconSlot` attests that block's state root, so a code read anchors
+  to it as to a `stateRootMatch` (`accountProofAnchor`). While
   reads cannot be verified, the row shows why ("Syncing…", "Sync refused", "Not
   verified", "No light client"), with one exception: while there is no head
   to read at (not synced, asleep, a stale head, no proof peer), a balance
