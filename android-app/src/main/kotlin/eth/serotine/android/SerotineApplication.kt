@@ -9,6 +9,7 @@ import android.net.NetworkCapabilities
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
+import android.os.SystemClock
 import android.util.Log
 import android.widget.Toast
 import eth.serotine.android.keys.ForegroundActivity
@@ -574,9 +575,9 @@ class SerotineApplication : Application() {
         node.resume()
     }
 
-    /** Ends a [wakeEngine]: [PAUSE_DELAY_MS] after the last hold of any kind, networking goes off. Main thread. */
-    private fun sleepEngine() {
-        if (--holds == 0) handler.postDelayed(sleep, PAUSE_DELAY_MS)
+    /** Ends a [wakeEngine]: [pauseAfterMs] after the last hold of any kind, networking goes off. Main thread. */
+    private fun sleepEngine(pauseAfterMs: Long = PAUSE_DELAY_MS) {
+        if (--holds == 0) handler.postDelayed(sleep, pauseAfterMs)
     }
 
     /**
@@ -940,15 +941,17 @@ class SerotineApplication : Application() {
     }
 
     /**
-     * Ends a [holdEngine]. [PAUSE_DELAY_MS] after the last one, neither the reports nor the
+     * Ends a [holdEngine]. [pauseAfterMs] after the last one, neither the reports nor the
      * deployments are followed (the reminder alarm covers the reports until the next hold, and
      * a deployment's record keeps it for the next), whatever else still holds the engine, and
      * once nothing does, networking goes off (a backgrounded wallet keeps no sockets or timers
-     * open). The delay keeps a rotation or a quick app switch from pausing at all. Main thread.
+     * open). The delay keeps a rotation from pausing at all; the last screen's release waits
+     * [GRACE_PERIOD_MS] instead, so a quick app switch does not either ([GracePeriodJob]). A
+     * hold whose end leaves nothing to keep the process from being frozen passes 0. Main thread.
      */
-    fun releaseEngine() {
-        if (--appHolds == 0) handler.postDelayed(stopAppWork, PAUSE_DELAY_MS)
-        sleepEngine()
+    fun releaseEngine(pauseAfterMs: Long = PAUSE_DELAY_MS) {
+        if (--appHolds == 0) handler.postDelayed(stopAppWork, pauseAfterMs)
+        sleepEngine(pauseAfterMs)
     }
 
     /**
@@ -974,11 +977,15 @@ class SerotineApplication : Application() {
         }
     }
 
-    /** Holds the engine, and follows a placed widget's rate, while any activity is visible. */
+    /**
+     * Holds the engine, and follows a placed widget's rate, while any activity is visible, and the
+     * engine for [GRACE_PERIOD_MS] more once none is: the last one stopped, except for a
+     * configuration change, starts a [GracePeriodJob], and the next one started cancels it.
+     */
     private inner class HoldWhileVisible : ActivityLifecycleCallbacks {
         override fun onActivityStarted(activity: Activity) {
-            visible++
             holdEngine()
+            if (visible++ == 0) scope.launch(jobScheduling) { GracePeriodJob.cancel(this@SerotineApplication) }
             followRateForWidgets()
         }
 
@@ -986,8 +993,12 @@ class SerotineApplication : Application() {
             if (--visible == 0) {
                 rateFollowing?.cancel()
                 rateFollowing = null
+                if (!activity.isChangingConfigurations) {
+                    val until = SystemClock.elapsedRealtime() + GRACE_PERIOD_MS
+                    scope.launch(jobScheduling) { GracePeriodJob.start(this@SerotineApplication, until) }
+                }
             }
-            releaseEngine()
+            releaseEngine(pauseAfterMs = GRACE_PERIOD_MS)
         }
 
         override fun onActivityCreated(activity: Activity, savedInstanceState: Bundle?) = Unit
@@ -999,6 +1010,12 @@ class SerotineApplication : Application() {
 
     private companion object {
         const val PAUSE_DELAY_MS = 30_000L
+
+        /**
+         * How long the networking stays on after the app's last screen left the foreground: a
+         * quick switch to another app, to copy an address say, comes back to synced light clients.
+         */
+        const val GRACE_PERIOD_MS = 60_000L
 
         /** How old the widget's rate may be while the app is open before it is read again. */
         const val RATE_MAX_AGE_MINUTES = 30L

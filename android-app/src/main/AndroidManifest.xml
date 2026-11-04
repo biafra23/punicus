@@ -57,6 +57,12 @@
             android:exported="false"
             android:permission="android.permission.BIND_JOB_SERVICE" />
 
+        <!-- The networking kept on for a minute after the app's last screen left the foreground. -->
+        <service
+            android:name=".GracePeriodJob"
+            android:exported="false"
+            android:permission="android.permission.BIND_JOB_SERVICE" />
+
         <!-- The exchange-rate widget. Not exported: the system's widget host reaches it anyway,
              and no other app may make it draw. -->
         <receiver
