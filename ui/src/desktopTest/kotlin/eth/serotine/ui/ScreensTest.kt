@@ -35,14 +35,16 @@ class ScreensTest {
         assertEquals(lists.distinct().size, lists.size, "a previews list is registered under two screens")
         // A previews file is `<Feature>ScreenPreviews.kt` or `<Feature>DialogPreviews.kt` (.claude/rules/ui.md,
         // "Every screen has previews"). ui/build.gradle.kts hands the source directory over, whatever the
-        // working directory is.
+        // working directory is. This compares counts, since a slug names a screen and not its file: it catches
+        // a screen added or removed on its own, and a change that adds one and drops another balances out.
         val sources = File(checkNotNull(System.getProperty("serotine.ui.sources")) { "serotine.ui.sources is not set" })
         assertTrue(sources.isDirectory, "${sources.absolutePath} is not a directory")
         val previewsFiles = sources.walkTopDown().filter { it.isFile && it.name.endsWith("Previews.kt") }.count()
         assertEquals(
             previewsFiles,
             Screens.all.size,
-            "$previewsFiles previews files but ${Screens.all.size} screens in Screens.kt: register the new screen",
+            "$previewsFiles previews files but ${Screens.all.size} screens in Screens.kt (counts): register the new " +
+                "screen, or remove the previews file of a screen taken out of the map",
         )
     }
 

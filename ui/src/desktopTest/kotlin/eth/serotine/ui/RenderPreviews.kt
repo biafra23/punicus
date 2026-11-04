@@ -21,9 +21,10 @@ internal fun screenshotPath(screen: Screen, preview: ScreenPreview): String = "$
 /**
  * Composes and draws each preview of [screen] headless, at a phone's size: a preview that throws
  * fails the test, so a broken one shows up in the build rather than in Android Studio. With a
- * [screenshotDir], each is also saved as `<slug>/<name>.png` there, after the screen's folder is
- * emptied: a list that shrank leaves no stale state behind. Two previews with one name would
- * overwrite each other, so that fails here too, not only in `ScreensTest`.
+ * [screenshotDir], each is also saved as `<slug>/<name>.png` there, after the PNGs already in the
+ * screen's folder are removed: a list that shrank leaves no stale state behind, and anything that
+ * is not a PNG is left alone, as [ScreenshotIndex.write] leaves it. Two previews with one name
+ * would overwrite each other, so that fails here too, not only in `ScreensTest`.
  */
 internal fun renderEach(screen: Screen) {
     assertTrue(screen.previews.isNotEmpty(), "${screen.slug}: no previews to render")
@@ -32,7 +33,7 @@ internal fun renderEach(screen: Screen) {
     val folder = screenshotDir?.let { File(it, screen.slug) }
     folder?.let { dir ->
         dir.mkdirs()
-        dir.listFiles { file -> file.isFile }?.forEach { it.delete() }
+        dir.listFiles { file -> file.isFile && file.extension == "png" }?.forEach { it.delete() }
     }
     screen.previews.forEach { preview ->
         val scene = ImageComposeScene(width = 412, height = 892) { preview.content() }
