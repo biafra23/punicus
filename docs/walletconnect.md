@@ -485,17 +485,21 @@ the first thing that does.
 4. **The two IDs as GitHub Actions secrets** on the repository, named
    `WALLETCONNECT_PROJECT_ID_DEBUG` and `WALLETCONNECT_PROJECT_ID_RELEASE`
    (Settings → Secrets and variables → Actions → New repository secret).
-   - The jobs that build what users install pass them to Gradle as the
+   - The steps that build what users install pass them to Gradle as the
      properties `walletConnectProjectIdDebug` and
      `walletConnectProjectIdRelease`, through the environment variables
      `ORG_GRADLE_PROJECT_walletConnectProjectIdDebug` and
-     `ORG_GRADLE_PROJECT_walletConnectProjectIdRelease`. Those jobs are the
-     APKs (`android-apk.yml`), the macOS dmg, the Linux deb and the Windows
-     msi. Build and Test and the iOS compile jobs need neither.
-   - `:data` writes them into a generated, uncommitted source file. An ID
-     that is not letters and digits fails the build.
-   - Until the secrets exist, and on a pull request from a fork, which gets
-     no secrets, CI builds with WalletConnect switched off.
+     `ORG_GRADLE_PROJECT_walletConnectProjectIdRelease`, each in that step
+     alone. The APK build (`android-apk.yml`) passes both, since it builds
+     the debug and the release app. The macOS dmg, the Linux deb and the
+     Windows msi are release builds, and get the release ID alone. Build and
+     Test and the iOS compile jobs need neither.
+   - `:data` writes them into a generated, uncommitted source file, trimmed
+     of spaces and line breaks. An ID that is not letters and digits fails
+     the build.
+   - Until the secrets exist, CI builds with WalletConnect switched off. So
+     does a pull request from a fork or from Dependabot, which gets no
+     secrets.
 5. **For a local build**, the debug ID goes in `~/.gradle/gradle.properties`
    as `walletConnectProjectIdDebug=<id>`, never in a file of the repository.
    Which ID a build uses: the Android debug app, a desktop development run

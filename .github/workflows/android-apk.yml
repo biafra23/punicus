@@ -62,12 +62,6 @@ jobs:
       # 'true' when the tree pins a release certificate. On a tag, sign-release
       # runs only then; without a pin the tag publishes the debug APK alone.
       release-cert: ${{ steps.cert.outputs.present }}
-    env:
-      # The Reown project IDs (docs/walletconnect.md, *Setting up the project ID*), which :data
-      # compiles into the app. A pull request from a fork gets no secrets: its build has them
-      # empty, and so WalletConnect switched off, as a local build without them does.
-      ORG_GRADLE_PROJECT_walletConnectProjectIdDebug: ${{ secrets.WALLETCONNECT_PROJECT_ID_DEBUG }}
-      ORG_GRADLE_PROJECT_walletConnectProjectIdRelease: ${{ secrets.WALLETCONNECT_PROJECT_ID_RELEASE }}
 
     steps:
       - name: Checkout
@@ -101,6 +95,14 @@ jobs:
       # Retry to ride out transient external-repo resolution blips. NOT --offline:
       # offline turns a single cache miss into a hard failure.
       - name: Build the debug + unsigned release APKs
+        # The Reown project IDs (docs/walletconnect.md, *Setting up the project ID*), which :data
+        # compiles into the app: this step builds the debug and the release APK, so both. Scoped
+        # to this step, the one that needs them, so no other step's action can read them.
+        # A pull request from a fork or Dependabot gets no secrets: its build has them empty, and so
+        # WalletConnect switched off, as a local build without them does.
+        env:
+          ORG_GRADLE_PROJECT_walletConnectProjectIdDebug: ${{ secrets.WALLETCONNECT_PROJECT_ID_DEBUG }}
+          ORG_GRADLE_PROJECT_walletConnectProjectIdRelease: ${{ secrets.WALLETCONNECT_PROJECT_ID_RELEASE }}
         run: |
           for attempt in 1 2 3; do
             ./gradlew :android-app:assembleDebug :android-app:assembleRelease --stacktrace && exit 0
