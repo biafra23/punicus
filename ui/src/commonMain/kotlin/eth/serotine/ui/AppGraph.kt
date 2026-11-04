@@ -1,25 +1,45 @@
 package eth.serotine.ui
 
+import eth.serotine.domain.model.AccountId
 import eth.serotine.domain.model.Address
 import eth.serotine.domain.model.CowOrderUid
 import eth.serotine.domain.model.Digest
 import eth.serotine.domain.model.Network
 import eth.serotine.domain.repository.AccountRepository
 import eth.serotine.domain.repository.AddressKinds
+import eth.serotine.domain.repository.AmountsHiddenSetting
 import eth.serotine.domain.repository.Broadcaster
 import eth.serotine.domain.repository.CowApi
 import eth.serotine.domain.repository.CowChain
 import eth.serotine.domain.repository.CowOrders
 import eth.serotine.domain.repository.DebugLog
 import eth.serotine.domain.repository.DebugScreenSetting
+import eth.serotine.domain.repository.DappRequests
+import eth.serotine.domain.repository.DappSessions
 import eth.serotine.domain.repository.DisplayCurrencySetting
+import eth.serotine.domain.usecase.ApproveDappProposal
+import eth.serotine.domain.usecase.DisconnectDapp
+import eth.serotine.domain.usecase.ExtendDappSession
+import eth.serotine.domain.usecase.ObserveDappConnections
+import eth.serotine.domain.usecase.ObserveDappMessages
+import eth.serotine.domain.usecase.PairDapp
+import eth.serotine.domain.usecase.ProposeDappSafeTx
+import eth.serotine.domain.usecase.SignDappSafeTx
+import eth.serotine.domain.usecase.QuoteDappTransaction
+import eth.serotine.domain.usecase.RefuseDappRequest
+import eth.serotine.domain.usecase.SendDappTransaction
+import eth.serotine.domain.usecase.RejectDappProposal
+import eth.serotine.domain.usecase.SignDappMessage
 import eth.serotine.domain.repository.HistoryStarts
+import eth.serotine.domain.repository.InterfaceModeSetting
 import eth.serotine.domain.repository.KeyStore
 import eth.serotine.domain.repository.KnownUpgradeStore
 import eth.serotine.domain.repository.LightClient
 import eth.serotine.domain.repository.LogIndex
 import eth.serotine.domain.repository.NameResolver
 import eth.serotine.domain.repository.NativeBalances
+import eth.serotine.domain.repository.NetworkFreshness
+import eth.serotine.domain.repository.NetworkSettings
 import eth.serotine.domain.repository.NetworkUpgrades
 import eth.serotine.domain.repository.PriceFeeds
 import eth.serotine.domain.repository.ReceiptTracker
@@ -30,7 +50,9 @@ import eth.serotine.domain.repository.SentTransfers
 import eth.serotine.domain.repository.SignatureRecovery
 import eth.serotine.domain.repository.Signer
 import eth.serotine.domain.repository.SigningRequestCodec
+import eth.serotine.domain.repository.StaleAnchorConsent
 import eth.serotine.domain.repository.SwapVenueSetting
+import eth.serotine.domain.repository.WaitingSwaps
 import eth.serotine.domain.repository.TokenBalances
 import eth.serotine.domain.repository.TokenCatalog
 import eth.serotine.domain.repository.TokenMetadata
@@ -38,6 +60,7 @@ import eth.serotine.domain.repository.TransactionHistory
 import eth.serotine.domain.repository.TransactionInputs
 import eth.serotine.domain.repository.UniswapV3Chain
 import eth.serotine.domain.repository.UserTokens
+import eth.serotine.domain.usecase.AddOnNetworks
 import eth.serotine.domain.usecase.AddToken
 import eth.serotine.domain.usecase.ApproveSafeTxOnChain
 import eth.serotine.domain.usecase.CheckSafeSwap
@@ -45,30 +68,43 @@ import eth.serotine.domain.usecase.ChooseSwapVenue
 import eth.serotine.domain.usecase.ClearDebugLog
 import eth.serotine.domain.usecase.CowOfferedOnThisDevice
 import eth.serotine.domain.usecase.DeploySafe
+import eth.serotine.domain.usecase.DeriveAccount
 import eth.serotine.domain.usecase.DescribeKeyStore
 import eth.serotine.domain.usecase.DisableBiometricUnlock
+import eth.serotine.domain.usecase.DropWaitingSwap
 import eth.serotine.domain.usecase.EnableBiometricUnlock
 import eth.serotine.domain.usecase.EncodeSigningRequest
 import eth.serotine.domain.usecase.ExecuteSafeTx
 import eth.serotine.domain.usecase.FindUniswapRoute
+import eth.serotine.domain.usecase.FindWaitingSwap
+import eth.serotine.domain.usecase.HasSwapVenue
+import eth.serotine.domain.usecase.HoldNetwork
 import eth.serotine.domain.usecase.ImportMnemonicAccount
 import eth.serotine.domain.usecase.ImportSigningRequest
+import eth.serotine.domain.usecase.KeepWaitingSwap
+import eth.serotine.domain.usecase.NetworkDemand
 import eth.serotine.domain.usecase.NewRecoveryPhrase
 import eth.serotine.domain.usecase.ObserveAccount
 import eth.serotine.domain.usecase.ObserveAccountCowOrders
-import eth.serotine.domain.usecase.ObserveAccountValue
 import eth.serotine.domain.usecase.ObserveAccountHistory
+import eth.serotine.domain.usecase.ObserveAccountValue
 import eth.serotine.domain.usecase.ObserveAccounts
 import eth.serotine.domain.usecase.ObserveAddressKind
+import eth.serotine.domain.usecase.ObserveAmountsHidden
 import eth.serotine.domain.usecase.ObserveCowOrder
 import eth.serotine.domain.usecase.ObserveCowOrderLife
 import eth.serotine.domain.usecase.ObserveDebugLog
 import eth.serotine.domain.usecase.ObserveDebugScreen
+import eth.serotine.domain.usecase.ObserveDebugTab
 import eth.serotine.domain.usecase.ObserveDisplayCurrencies
+import eth.serotine.domain.usecase.ObserveEnabledNetworks
 import eth.serotine.domain.usecase.ObserveEnsNames
+import eth.serotine.domain.usecase.ObserveInterfaceMode
 import eth.serotine.domain.usecase.ObserveKnownTokens
 import eth.serotine.domain.usecase.ObserveLightClient
 import eth.serotine.domain.usecase.ObserveNativeBalance
+import eth.serotine.domain.usecase.ObserveNetworkLive
+import eth.serotine.domain.usecase.ObserveNetworkOverview
 import eth.serotine.domain.usecase.ObservePortfolio
 import eth.serotine.domain.usecase.ObserveSafe
 import eth.serotine.domain.usecase.ObserveSafeHistory
@@ -80,10 +116,12 @@ import eth.serotine.domain.usecase.ObserveSwapVenue
 import eth.serotine.domain.usecase.ObserveTokenHoldings
 import eth.serotine.domain.usecase.ObserveTokenMetadata
 import eth.serotine.domain.usecase.ObserveTokenTransfers
-import eth.serotine.domain.usecase.ObserveUpgradeWarning
+import eth.serotine.domain.usecase.ObserveUpgradeWarnings
 import eth.serotine.domain.usecase.ObserveUsdPrice
+import eth.serotine.domain.usecase.ObserveWaitingSwaps
 import eth.serotine.domain.usecase.PlaceCowOrder
 import eth.serotine.domain.usecase.PlanSafe
+import eth.serotine.domain.usecase.ProposeSafeSettingsChange
 import eth.serotine.domain.usecase.ProposeSafeSwap
 import eth.serotine.domain.usecase.ProposeSafeTx
 import eth.serotine.domain.usecase.QuoteCowCancellation
@@ -96,6 +134,7 @@ import eth.serotine.domain.usecase.QuoteTokenApproval
 import eth.serotine.domain.usecase.QuoteTransfer
 import eth.serotine.domain.usecase.ReadSafeTxOwners
 import eth.serotine.domain.usecase.RebroadcastTransfer
+import eth.serotine.domain.usecase.RefreshNetworkData
 import eth.serotine.domain.usecase.RemoveAccount
 import eth.serotine.domain.usecase.RemoveQueuedSafeTx
 import eth.serotine.domain.usecase.RemoveToken
@@ -108,8 +147,12 @@ import eth.serotine.domain.usecase.SendTransfer
 import eth.serotine.domain.usecase.SetDebugLogLevel
 import eth.serotine.domain.usecase.SetDebugScreen
 import eth.serotine.domain.usecase.SetDisplayCurrency
+import eth.serotine.domain.usecase.SetInterfaceMode
+import eth.serotine.domain.usecase.SetNetworkEnabled
 import eth.serotine.domain.usecase.SetTokenHidden
 import eth.serotine.domain.usecase.SignSafeTx
+import eth.serotine.domain.usecase.SyncPastStaleAnchor
+import eth.serotine.domain.usecase.ToggleAmountsHidden
 import eth.serotine.domain.usecase.WalletChanges
 import eth.serotine.domain.usecase.WarmFeeHistory
 import eth.serotine.domain.usecase.WatchAddress
@@ -118,21 +161,32 @@ import eth.serotine.ui.accounts.AccountsViewModel
 import eth.serotine.ui.activity.AccountActivity
 import eth.serotine.ui.activity.ActivityKey
 import eth.serotine.ui.activitydetail.ActivityDetailViewModel
+import eth.serotine.ui.addnetwork.AddOnNetworksViewModel
 import eth.serotine.ui.addtoken.AddTokenViewModel
 import eth.serotine.ui.coworder.CowOrderViewModel
 import eth.serotine.ui.createaccount.CreateAccountViewModel
 import eth.serotine.ui.createsafe.CreateSafeViewModel
+import eth.serotine.ui.connections.ConnectionsViewModel
 import eth.serotine.ui.currency.CurrencyViewModel
+import eth.serotine.ui.dappproposal.DappProposalViewModel
+import eth.serotine.ui.dapprequest.DappRequestViewModel
+import eth.serotine.ui.dapptransaction.DappTransactionViewModel
+import eth.serotine.ui.dapprequest.DappRequestsWaitingViewModel
+import eth.serotine.ui.pairdapp.IncomingDappLink
+import eth.serotine.ui.pairdapp.PairDappViewModel
 import eth.serotine.ui.debug.DebugTabViewModel
 import eth.serotine.ui.debug.DebugViewModel
+import eth.serotine.ui.deriveaccount.DeriveAccountViewModel
 import eth.serotine.ui.lightclient.LightClientViewModel
 import eth.serotine.ui.mnemonicimport.MnemonicImportViewModel
+import eth.serotine.ui.mode.InterfaceModeViewModel
 import eth.serotine.ui.platform.ScreenCaptureDebugSwitch
 import eth.serotine.ui.receive.ReceiveViewModel
 import eth.serotine.ui.removeaccount.RemoveAccountViewModel
 import eth.serotine.ui.renameaccount.RenameAccountViewModel
 import eth.serotine.ui.safeimport.SafeImportViewModel
 import eth.serotine.ui.safepropose.SafeProposeViewModel
+import eth.serotine.ui.safesettings.SafeSettingsViewModel
 import eth.serotine.ui.safeswap.SafeSwapViewModel
 import eth.serotine.ui.safetx.SafeTxViewModel
 import eth.serotine.ui.security.SecurityViewModel
@@ -160,9 +214,9 @@ class AppGraph(
     private val accounts: AccountRepository,
     /** Where imported seeds are kept: the key adapter's store, behind its port. */
     private val keys: KeyStore,
-    /** Balances verified by the embedded light client of [network]. */
+    /** Balances verified by each network's embedded light client. */
     private val nativeBalances: NativeBalances,
-    /** The tokens the wallet knows on [network]. */
+    /** The built-in tokens of each network. */
     private val tokenCatalog: TokenCatalog,
     /** Token balances verified by that light client. */
     private val tokenBalances: TokenBalances,
@@ -178,6 +232,8 @@ class AppGraph(
     private val addressKinds: AddressKinds,
     /** That light client's own state. */
     private val lightClient: LightClient,
+    /** The user's consent to a light client catching up from a stale checkpoint, for this run. */
+    private val staleAnchorConsent: StaleAnchorConsent,
     /** Network upgrades this version does not support, as peers report them to that light client. */
     private val networkUpgrades: NetworkUpgrades,
     /**
@@ -211,17 +267,17 @@ class AppGraph(
     private val logIndex: LogIndex,
     /** The Safe transactions waiting for their owners, kept on this device across restarts. */
     private val safeTxQueue: SafeTxQueue,
-    /** The text a Safe's signing request travels in between devices, for [network]. */
+    /** The text a Safe's signing request travels in between devices, for every network the app knows. */
     private val signingRequests: SigningRequestCodec,
     /** Who made a secp256k1 signature: what a co-signer's signature is checked with. */
     private val signatureRecovery: SignatureRecovery,
     /** Owners' approvals of Safe transactions on chain, verified by that light client. */
     private val safeApprovals: SafeApprovals,
-    /** The Safe release a new Safe on [network] is created from: pinned singleton, factory and proxy code. */
+    /** The Safe release a new Safe on a network is created from: pinned singleton, factory and proxy code. */
     private val safeReleases: SafeReleases,
-    /** Uniswap v3 on [network]: its pinned contracts, proven by their code, and verified calls of them. */
+    /** Uniswap v3 on each network: its pinned contracts, proven by their code, and verified calls of them. */
     private val uniswap: UniswapV3Chain,
-    /** CoW Protocol's settlement contracts on [network], proven by their code, and verified calls of them. */
+    /** CoW Protocol's settlement contracts on each network, proven by their code, and verified calls of them. */
     private val cowChain: CowChain,
     /**
      * CoW Protocol's order API, an off-chain service, used only for a swap the user sends to CoW
@@ -232,8 +288,8 @@ class AppGraph(
     private val cowOrders: CowOrders,
     /** The venue the user last chose on Swap, compose, which the next swap starts at. */
     private val swapVenue: SwapVenueSetting,
-    /** The network the app works on: [Network.SEPOLIA], the only one (CLAUDE.md, *Data sources*). */
-    private val network: Network,
+    /** The swaps whose next step waits for the user, which the account's Activity offers with Continue. */
+    private val waitingSwaps: WaitingSwaps,
     /**
      * The app's debug log, which the Debug tab shows: the host's one instance, which the engine's
      * node writes each request into.
@@ -244,16 +300,43 @@ class AppGraph(
      * `FollowDebugScreen` keeps [debugLog] to.
      */
     private val debugScreen: DebugScreenSetting,
+    /** The view the user chose in Settings, simple mode or Detailed view (docs/simple-ui.md). */
+    private val interfaceMode: InterfaceModeSetting,
+    /** Whether the user hides amounts with the eye of the screens that show them (docs/wallet-ux.md). */
+    private val amountsHidden: AmountsHiddenSetting,
+    /** How fresh each network's values are kept: live, or proven on demand in simple mode (docs/simple-ui.md). */
+    private val networkFreshness: NetworkFreshness,
     /**
      * The debug build's switch that allows screen recordings of the protected screens; null in a
      * release build, and on a host whose screens block nothing (docs/keys-and-signing.md, rule 8).
      */
     internal val screenCaptureDebugSwitch: ScreenCaptureDebugSwitch?,
+    /**
+     * The screens' holds on a network's light client, with no account on it yet (Watch, Add
+     * token): the host's one instance, which its `FollowNetworks` follows.
+     */
+    private val networkDemand: NetworkDemand,
+    /** Which networks are on: the host's one instance, which its `FollowNetworks` follows. */
+    private val networkSettings: NetworkSettings,
+    /** dApp sessions over WalletConnect (docs/walletconnect.md): the host's one instance, whose relay it runs. */
+    private val dappSessions: DappSessions,
+    /** The requests dApps send over those sessions: the same adapter's. */
+    private val dappRequests: DappRequests,
+    /**
+     * Whether this build carries no WalletConnect project ID, so that dApp connections are switched
+     * off and Settings shows Connected dApps greyed out (ruling 2).
+     */
+    val dappConnectionsOff: Boolean,
 ) {
     /** The one [WalletChanges] of the app: imports and removals never interleave. */
     private val walletChanges = WalletChanges()
 
-    private fun observeUpgradeWarning() = ObserveUpgradeWarning(networkUpgrades, knownUpgrades, lightClient)
+    /** The one toggle of the eye for every screen: its taps take turns app-wide, not only within a screen. */
+    private val toggleAmountsHidden = ToggleAmountsHidden(amountsHidden)
+
+    /** Every network's upgrade warning, and whether the update screen replaces the app (docs/networks.md). */
+    private fun observeUpgradeWarnings() =
+        ObserveUpgradeWarnings(networkUpgrades, knownUpgrades, lightClient, networkSettings, accounts)
 
     fun accountsViewModel(): AccountsViewModel =
         AccountsViewModel(
@@ -261,42 +344,57 @@ class AppGraph(
             ObserveSafes(accounts, observeSafe()),
             ObserveEnsNames(accounts, names),
             ObserveLightClient(lightClient),
-            observeUpgradeWarning(),
-            network,
+            ObserveEnabledNetworks(networkSettings),
+            SetNetworkEnabled(networkSettings),
+            observeUpgradeWarnings(),
+            SyncPastStaleAnchor(lightClient, staleAnchorConsent),
+            RefreshNetworkData(networkFreshness),
+            ObserveNetworkLive(networkFreshness),
+            ObserveAmountsHidden(amountsHidden),
+            toggleAmountsHidden,
         )
 
-    /** The light client's status strip of the screens that depend on it: one for the app, in the host's scope. */
+    /** The light clients' status strips of the screens that depend on them: one for the app, in the host's scope. */
     fun lightClientViewModel(): LightClientViewModel = LightClientViewModel(ObserveLightClient(lightClient))
 
-    fun accountDetailViewModel(address: Address): AccountDetailViewModel =
+    fun accountDetailViewModel(account: AccountId): AccountDetailViewModel =
         AccountDetailViewModel(
-            address,
+            account,
             ObserveAccount(accounts),
             accountValue(),
             observeSafe(),
-            observeSafeTxQueue(),
+            observeSafeTxQueue(account.network),
             knownTokens(),
             SetTokenHidden(userTokens),
-            network,
             ObserveEnsNames(accounts, names),
             accountActivity(),
+            ObserveEnabledNetworks(networkSettings),
+            SetNetworkEnabled(networkSettings),
+            observeUpgradeWarnings(),
+            HasSwapVenue(uniswap),
+            RefreshNetworkData(networkFreshness),
+            ObserveNetworkLive(networkFreshness),
+            ObserveLightClient(lightClient),
+            DropWaitingSwap(waitingSwaps),
+            ObserveAmountsHidden(amountsHidden),
+            toggleAmountsHidden,
         )
 
     /**
      * The Safe transaction [hash] of the Safe at [safe] (docs/wallet-ux.md, screen 17); [imported]
      * when an import has just queued it, which its overview says first.
      */
-    fun safeTxViewModel(safe: Address, hash: Digest, imported: Boolean = false): SafeTxViewModel = SafeTxViewModel(
+    fun safeTxViewModel(safe: AccountId, hash: Digest, imported: Boolean = false): SafeTxViewModel = SafeTxViewModel(
         safe,
         hash,
         ObserveAccounts(accounts),
-        observeSafeTxQueue(),
+        observeSafeTxQueue(safe.network),
         knownTokens(),
-        ReadSafeTxOwners(observeSafe(), signatureRecovery, safeApprovals, network),
+        ReadSafeTxOwners(observeSafe(), signatureRecovery, safeApprovals, safe.network),
         EncodeSigningRequest(signingRequests),
         DescribeKeyStore(keys),
-        signSafeTx(),
-        QuoteSafeApproval(observeSafe(), safeApprovals, nativeBalances, transactionInputs, sentTransfers, network),
+        signSafeTx(safe.network),
+        QuoteSafeApproval(observeSafe(), safeApprovals, nativeBalances, transactionInputs, sentTransfers, safe.network),
         ApproveSafeTxOnChain(signer, broadcaster, sentTransfers),
         QuoteSafeExecution(
             observeSafe(),
@@ -305,19 +403,18 @@ class AppGraph(
             nativeBalances,
             transactionInputs,
             sentTransfers,
-            network,
+            safe.network,
         ),
         ExecuteSafeTx(signer, broadcaster, sentTransfers),
         RebroadcastTransfer(broadcaster, sentTransfers, receipts),
         RemoveQueuedSafeTx(safeTxQueue),
         WarmFeeHistory(transactionInputs),
-        CheckSafeSwap(uniswap, lightClient, network),
-        network,
+        CheckSafeSwap(uniswap, lightClient, safe.network),
         imported = imported,
     )
 
     /** Send from the Safe at [safe], with the token at [asset] chosen (null: the network's currency). */
-    fun safeProposeViewModel(safe: Address, asset: Address?): SafeProposeViewModel = SafeProposeViewModel(
+    fun safeProposeViewModel(safe: AccountId, asset: Address?): SafeProposeViewModel = SafeProposeViewModel(
         safe,
         asset,
         ObserveAccounts(accounts),
@@ -325,24 +422,23 @@ class AppGraph(
         observeSafe(),
         DescribeKeyStore(keys),
         ResolveRecipient(names),
-        ProposeSafeTx(observeSafe(), nativeBalances, tokenBalances, transactionInputs, safeTxQueue, network),
-        signSafeTx(),
+        ProposeSafeTx(observeSafe(), nativeBalances, tokenBalances, transactionInputs, safeTxQueue, safe.network),
+        signSafeTx(safe.network),
         EncodeSigningRequest(signingRequests),
-        network,
     )
 
     /**
      * Swap from the Safe at [safe], with the token at [asset] sold (null: the network's currency); or,
      * with [replacing], the swap queued under that hash proposed again in its place.
      */
-    fun safeSwapViewModel(safe: Address, asset: Address?, replacing: Digest?): SafeSwapViewModel = SafeSwapViewModel(
+    fun safeSwapViewModel(safe: AccountId, asset: Address?, replacing: Digest?): SafeSwapViewModel = SafeSwapViewModel(
         safe,
         asset,
         replacing,
         ObserveAccounts(accounts),
         accountValue(),
         observeSafe(),
-        observeSafeTxQueue(),
+        observeSafeTxQueue(safe.network),
         DescribeKeyStore(keys),
         ProposeSafeSwap(
             observeSafe(),
@@ -353,28 +449,44 @@ class AppGraph(
             transactionInputs,
             safeTxQueue,
             lightClient,
-            network,
+            safe.network,
         ),
-        signSafeTx(),
-        network,
+        signSafeTx(safe.network),
+    )
+
+    /** The settings of the Safe at [safe], and the changes of them its owners held here propose. */
+    fun safeSettingsViewModel(safe: AccountId): SafeSettingsViewModel = SafeSettingsViewModel(
+        safe,
+        ObserveAccounts(accounts),
+        observeSafe(),
+        DescribeKeyStore(keys),
+        ProposeSafeSettingsChange(observeSafe(), transactionInputs, safeTxQueue, safe.network),
+        signSafeTx(safe.network),
+        EncodeSigningRequest(signingRequests),
     )
 
     /** Import a signing request for the Safe at [safe]. */
-    fun safeImportViewModel(safe: Address): SafeImportViewModel = SafeImportViewModel(
+    fun safeImportViewModel(safe: AccountId): SafeImportViewModel = SafeImportViewModel(
         safe,
         ObserveAccount(accounts),
         ImportSigningRequest(signingRequests, observeSafe(), signatureRecovery, safeTxQueue),
-        network,
     )
 
     private fun observeSafe() = ObserveSafe(addressKinds, accounts)
 
-    private fun observeSafeTxQueue() = ObserveSafeTxQueue(safeTxQueue, observeSafe(), signatureRecovery, network)
+    private fun observeSafeTxQueue(network: Network) =
+        ObserveSafeTxQueue(safeTxQueue, observeSafe(), signatureRecovery, network)
 
-    private fun signSafeTx() = SignSafeTx(signer, observeSafe(), signatureRecovery, safeTxQueue, network)
+    private fun signSafeTx(network: Network) = SignSafeTx(
+        signer,
+        observeSafe(),
+        signatureRecovery,
+        safeTxQueue,
+        network,
+    )
 
     /** Send from the account at [from], with the token at [asset] chosen (null: the network's currency). */
-    fun sendViewModel(from: Address, asset: Address?): SendViewModel = SendViewModel(
+    fun sendViewModel(from: AccountId, asset: Address?): SendViewModel = SendViewModel(
         from,
         asset,
         ObserveAccounts(accounts),
@@ -389,19 +501,24 @@ class AppGraph(
             cowOrders,
             cowChain,
             lightClient,
-            network,
+            from.network,
         ),
         SendTransfer(signer, broadcaster, sentTransfers),
         RebroadcastTransfer(broadcaster, sentTransfers, receipts),
         WarmFeeHistory(transactionInputs),
-        network,
     )
 
     /**
      * Swap from the account at [from], selling the token at [sell] (null: the network's currency),
-     * opened with [fill] filled in when given: the same swap again.
+     * opened with [fill] filled in when given: the same swap again; [continuing] the swap of it whose
+     * next step waits, quoted again.
      */
-    fun swapViewModel(from: Address, sell: Address?, fill: SwapFill? = null): SwapViewModel = SwapViewModel(
+    fun swapViewModel(
+        from: AccountId,
+        sell: Address?,
+        fill: SwapFill? = null,
+        continuing: Boolean = false,
+    ): SwapViewModel = SwapViewModel(
         from,
         sell,
         ObserveAccounts(accounts),
@@ -416,10 +533,10 @@ class AppGraph(
             cowOrders,
             cowChain,
             lightClient,
-            network,
+            from.network,
         ),
         SendSwap(transactionInputs, signer, broadcaster, sentTransfers),
-        QuoteTokenApproval(transactionInputs, nativeBalances, sentTransfers, network),
+        QuoteTokenApproval(transactionInputs, nativeBalances, sentTransfers, from.network),
         SendTokenApproval(signer, broadcaster, sentTransfers),
         RebroadcastTransfer(broadcaster, sentTransfers, receipts),
         WarmFeeHistory(transactionInputs),
@@ -436,20 +553,23 @@ class AppGraph(
             cowOrders,
             historyStarts,
             lightClient,
-            network,
+            from.network,
         ),
         PlaceCowOrder(FindUniswapRoute(uniswap, transactionInputs), signer, cowOrders, cowApi, lightClient),
-        network,
+        KeepWaitingSwap(waitingSwaps),
+        DropWaitingSwap(waitingSwaps),
+        FindWaitingSwap(waitingSwaps),
         fill = fill,
+        continuing = continuing,
     )
 
     /**
-     * Where the CoW order [uid] signed here stands: its end as the chain proves it, CoW's word on it
-     * while it may fill, and its cancellation on chain.
+     * Where the CoW order [uid] signed here on [network] stands: its end as the chain proves it, CoW's
+     * word on it while it may fill, and its cancellation on chain.
      */
-    fun cowOrderViewModel(uid: CowOrderUid): CowOrderViewModel = CowOrderViewModel(
+    fun cowOrderViewModel(network: Network, uid: CowOrderUid): CowOrderViewModel = CowOrderViewModel(
         uid,
-        ObserveCowOrder(cowOrders),
+        ObserveCowOrder(cowOrders, network),
         ObserveCowOrderLife(cowApi, network),
         ObserveAccounts(accounts),
         DescribeKeyStore(keys),
@@ -459,8 +579,8 @@ class AppGraph(
         network,
     )
 
-    /** Where the transfer [hash] stands, and for a Safe it deployed, where its listing does. */
-    fun transferStatusViewModel(hash: String): TransferStatusViewModel = TransferStatusViewModel(
+    /** Where the transfer [hash] on [network] stands, and for a Safe it deployed, where its listing does. */
+    fun transferStatusViewModel(network: Network, hash: String): TransferStatusViewModel = TransferStatusViewModel(
         hash,
         ObserveSentTransfer(sentTransfers, receipts, transactionHistory),
         ObserveAccounts(accounts),
@@ -479,16 +599,19 @@ class AppGraph(
         ObserveTokenTransfers(logIndex, historyStarts),
         knownTokens(),
         ObserveSentToAddresses(transactionHistory),
-        ObserveAccountCowOrders(cowOrders, network),
-        network,
+        ObserveAccountCowOrders(cowOrders),
+        ObserveWaitingSwaps(waitingSwaps),
     )
 
     /**
-     * The detail of the row [key] of the Activity of the account at [address] (docs/wallet-ux.md,
-     * screen 26), read from what its Activity is read from.
+     * The detail of the row [key] of the Activity of the [account] (docs/wallet-ux.md, screen 26),
+     * read from what its Activity is read from.
      */
-    fun activityDetailViewModel(address: Address, key: ActivityKey): ActivityDetailViewModel = ActivityDetailViewModel(
-        address,
+    fun activityDetailViewModel(
+        account: AccountId,
+        key: ActivityKey,
+    ): ActivityDetailViewModel = ActivityDetailViewModel(
+        account,
         key,
         ObserveAccountHistory(transactionHistory),
         ObserveAccounts(accounts),
@@ -496,7 +619,8 @@ class AppGraph(
         ObserveTokenTransfers(logIndex, historyStarts),
         knownTokens(),
         ObserveSentToAddresses(transactionHistory),
-        network,
+        ObserveAmountsHidden(amountsHidden),
+        toggleAmountsHidden,
     )
 
     /** Create Safe (docs/wallet-ux.md, screens 13 to 15). */
@@ -504,86 +628,202 @@ class AppGraph(
         ObserveAccounts(accounts),
         DescribeKeyStore(keys),
         ResolveRecipient(names),
-        PlanSafe(safeReleases, network),
-        QuoteSafeDeployment(addressKinds, nativeBalances, transactionInputs, sentTransfers, network),
+        PlanSafe(safeReleases),
+        QuoteSafeDeployment(addressKinds, nativeBalances, transactionInputs, sentTransfers),
         DeploySafe(signer, broadcaster, sentTransfers),
         RebroadcastTransfer(broadcaster, sentTransfers, receipts),
         WarmFeeHistory(transactionInputs),
-        network,
+        ObserveEnabledNetworks(networkSettings),
+        SetNetworkEnabled(networkSettings),
     )
 
-    fun receiveViewModel(address: Address): ReceiveViewModel =
-        ReceiveViewModel(address, ObserveAccount(accounts), network)
+    /** Add on another network (docs/networks.md, N6), for the EOA [account]. */
+    fun addOnNetworksViewModel(account: AccountId): AddOnNetworksViewModel =
+        AddOnNetworksViewModel(
+            account,
+            ObserveAccounts(accounts),
+            ObserveEnabledNetworks(networkSettings),
+            SetNetworkEnabled(networkSettings),
+            AddOnNetworks(accounts, walletChanges),
+        )
 
-    fun renameAccountViewModel(address: Address): RenameAccountViewModel =
-        RenameAccountViewModel(address, ObserveAccount(accounts), RenameAccount(accounts))
+    fun deriveAccountViewModel(account: AccountId): DeriveAccountViewModel =
+        DeriveAccountViewModel(account, ObserveAccount(accounts), DeriveAccount(keys, accounts, walletChanges))
 
-    fun removeAccountViewModel(address: Address): RemoveAccountViewModel =
-        RemoveAccountViewModel(address, ObserveAccount(accounts), RemoveAccount(accounts, keys, walletChanges))
+    fun receiveViewModel(account: AccountId): ReceiveViewModel =
+        ReceiveViewModel(account, ObserveAccount(accounts), ObserveEnabledNetworks(networkSettings))
+
+    fun renameAccountViewModel(account: AccountId): RenameAccountViewModel =
+        RenameAccountViewModel(account, ObserveAccount(accounts), RenameAccount(accounts))
+
+    fun removeAccountViewModel(account: AccountId): RemoveAccountViewModel =
+        RemoveAccountViewModel(
+            account,
+            ObserveAccount(accounts),
+            ObserveAccounts(accounts),
+            RemoveAccount(accounts, keys, walletChanges),
+        )
 
     fun watchViewModel(): WatchViewModel = WatchViewModel(
         ObserveAddressKind(addressKinds),
         ObserveAccounts(accounts),
         WatchAddress(accounts, addressKinds),
         ResolveRecipient(names),
+        ObserveEnabledNetworks(networkSettings),
+        SetNetworkEnabled(networkSettings),
+        HoldNetwork(networkDemand),
     )
 
     fun settingsViewModel(): SettingsViewModel =
         SettingsViewModel(
-            ObserveLightClient(lightClient),
+            ObserveNetworkOverview(networkSettings, accounts, lightClient, transactionHistory),
+            SetNetworkEnabled(networkSettings),
             knownTokens(),
             displayCurrencies(),
-            network,
             screenCaptureDebugSwitch,
             ObserveDebugScreen(debugScreen),
             SetDebugScreen(debugScreen),
+            SyncPastStaleAnchor(lightClient, staleAnchorConsent),
+            ObserveInterfaceMode(interfaceMode),
+            SetInterfaceMode(interfaceMode),
+            ObserveNetworkLive(networkFreshness),
         )
 
     /** Whether the bottom bar shows the Debug tab: one for the app, in the host's scope. */
-    fun debugTabViewModel(): DebugTabViewModel = DebugTabViewModel(ObserveDebugScreen(debugScreen))
+    fun debugTabViewModel(): DebugTabViewModel = DebugTabViewModel(ObserveDebugTab(debugScreen, interfaceMode))
+
+    /** The view the screens are drawn in: one for the app, in the host's scope. */
+    fun interfaceModeViewModel(): InterfaceModeViewModel = InterfaceModeViewModel(ObserveInterfaceMode(interfaceMode))
 
     /** The Debug tab: the debug log. */
     fun debugViewModel(): DebugViewModel =
         DebugViewModel(ObserveDebugLog(debugLog), SetDebugLogLevel(debugLog), ClearDebugLog(debugLog))
 
+    private fun observeDappConnections() = ObserveDappConnections(dappSessions, accounts, networkSettings)
+
+    private fun observeDappMessages() = ObserveDappMessages(dappRequests, accounts, networkSettings, tokenCatalog)
+
+    fun connectionsViewModel(): ConnectionsViewModel = ConnectionsViewModel(
+        observeDappConnections(),
+        observeDappMessages(),
+        DisconnectDapp(dappSessions),
+        ExtendDappSession(dappSessions),
+    )
+
+    /** The requests to sign waiting, which the app opens their review for as each arrives. */
+    fun dappRequestsWaitingViewModel(): DappRequestsWaitingViewModel =
+        DappRequestsWaitingViewModel(observeDappMessages())
+
+    /** The review of the transaction [requestKey] names (`topic/id`, as its route carries it): screen D6. */
+    fun dappTransactionViewModel(requestKey: String): DappTransactionViewModel = DappTransactionViewModel(
+        requestKey,
+        observeDappMessages(),
+        QuoteDappTransaction(
+            dappRequests,
+            accounts,
+            networkSettings,
+            tokenCatalog,
+            nativeBalances,
+            transactionInputs,
+            sentTransfers,
+            transactionHistory,
+        ),
+        SendDappTransaction(
+            dappRequests,
+            accounts,
+            networkSettings,
+            signer,
+            broadcaster,
+            sentTransfers,
+            transactionHistory,
+            receipts,
+        ),
+        ProposeDappSafeTx(
+            dappRequests,
+            accounts,
+            networkSettings,
+            tokenCatalog,
+            observeSafe(),
+            nativeBalances,
+            transactionInputs,
+            safeTxQueue,
+        ),
+        SignDappSafeTx(dappRequests, signSafeTx(Network.SEPOLIA)),
+        RefuseDappRequest(dappRequests, accounts, networkSettings),
+        DescribeKeyStore(keys),
+    )
+
+    /** The review of the request [requestKey] names (`topic/id`, as its route carries it): screen D4. */
+    fun dappRequestViewModel(requestKey: String): DappRequestViewModel = DappRequestViewModel(
+        requestKey,
+        observeDappMessages(),
+        SignDappMessage(dappRequests, accounts, networkSettings, signer),
+        RefuseDappRequest(dappRequests, accounts, networkSettings),
+        DescribeKeyStore(keys),
+    )
+
+    /** The `wc:` link the platform opened the app with, which the host offers and Connect a dApp takes. */
+    val incomingDappLink: IncomingDappLink = IncomingDappLink()
+
+    fun pairDappViewModel(): PairDappViewModel = PairDappViewModel(PairDapp(dappSessions), incomingDappLink)
+
+    /** The review of the proposal [proposalKey] names (`pairing/id`, as its route carries it). */
+    fun dappProposalViewModel(proposalKey: String): DappProposalViewModel = DappProposalViewModel(
+        proposalKey,
+        observeDappConnections(),
+        ApproveDappProposal(dappSessions, accounts, networkSettings),
+        RejectDappProposal(dappSessions),
+    )
+
     fun currencyViewModel(): CurrencyViewModel =
-        CurrencyViewModel(displayCurrencies(), SetDisplayCurrency(priceFeeds, displayCurrency))
+        CurrencyViewModel(displayCurrencies(), SetDisplayCurrency(priceFeeds, displayCurrency, accounts))
 
     fun tokensViewModel(): TokensViewModel =
         TokensViewModel(knownTokens(), SetTokenHidden(userTokens), RemoveToken(userTokens))
 
     /** Add token by address (docs/wallet-ux.md, screen 20), its field starting with [address]. */
-    fun addTokenViewModel(address: String = ""): AddTokenViewModel =
+    fun addTokenViewModel(address: String = "", network: Network? = null): AddTokenViewModel =
         AddTokenViewModel(
             knownTokens(),
             ObserveTokenMetadata(tokenMetadata),
             AddToken(userTokens, tokenMetadata, knownTokens()),
+            ObserveEnabledNetworks(networkSettings),
+            SetNetworkEnabled(networkSettings),
+            HoldNetwork(networkDemand),
             address,
+            network,
         )
 
     private fun knownTokens() = ObserveKnownTokens(tokenCatalog, userTokens, tokenMetadata)
 
-    private fun displayCurrencies() = ObserveDisplayCurrencies(priceFeeds, displayCurrency)
+    private fun displayCurrencies() = ObserveDisplayCurrencies(priceFeeds, displayCurrency, accounts)
 
     private fun accountValue() = ObserveAccountValue(
         ObserveNativeBalance(nativeBalances),
         ObserveTokenHoldings(knownTokens(), tokenBalances),
         ObserveUsdPrice(priceFeeds),
         displayCurrencies(),
-        network,
     )
 
     fun createAccountViewModel(): CreateAccountViewModel = CreateAccountViewModel(
         NewRecoveryPhrase(keys),
         ImportMnemonicAccount(keys, accounts, walletChanges),
         DescribeKeyStore(keys),
+        ObserveEnabledNetworks(networkSettings),
+        SetNetworkEnabled(networkSettings),
     )
 
-    fun updateRequiredViewModel(): UpdateRequiredViewModel = UpdateRequiredViewModel(observeUpgradeWarning(), network)
+    fun updateRequiredViewModel(): UpdateRequiredViewModel =
+        UpdateRequiredViewModel(observeUpgradeWarnings())
 
     fun securityViewModel(): SecurityViewModel =
         SecurityViewModel(DescribeKeyStore(keys), EnableBiometricUnlock(keys), DisableBiometricUnlock(keys))
 
     fun mnemonicImportViewModel(): MnemonicImportViewModel =
-        MnemonicImportViewModel(ImportMnemonicAccount(keys, accounts, walletChanges), DescribeKeyStore(keys))
+        MnemonicImportViewModel(
+            ImportMnemonicAccount(keys, accounts, walletChanges),
+            DescribeKeyStore(keys),
+            ObserveEnabledNetworks(networkSettings),
+            SetNetworkEnabled(networkSettings),
+        )
 }

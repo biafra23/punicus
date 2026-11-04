@@ -77,7 +77,7 @@ class SendScreenTest {
         SerotineTheme {
             SendScreen(
                 state = state,
-                lightClient = verifiedStripSample,
+                chrome = SendChrome.Strip(verifiedStripSample),
                 onAssetChange = { events += "asset $it" },
                 onToChange = { events += "to $it" },
                 onPickAccount = { events += "pick $it" },
@@ -220,6 +220,9 @@ class SendScreenTest {
     fun theReviewShowsTheQuoteAndSignsWithThePassword() {
         show(review.copy(unlock = UnlockStep(WalletPassword("made-up test password"))))
 
+        // The network first, and in the button that signs (docs/networks.md, N14).
+        rule.onNodeWithTag(SEND_NETWORK_TAG).assertTextEquals("On ${review.network}")
+        rule.onNodeWithTag(SEND_SIGN_TAG).assertTextEquals("Sign and send on ${review.network}")
         rule.onNodeWithTag(SEND_AMOUNT_REVIEWED_TAG).assertTextEquals("0.1 ETH")
         rule.onNodeWithTag(SEND_RECIPIENT_TAG).assertTextEquals(savings)
         rule.onNodeWithText("At most 0.000462 ETH").assertIsDisplayed()

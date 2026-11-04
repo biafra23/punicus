@@ -1,5 +1,6 @@
 package eth.serotine.domain.usecase
 
+import eth.serotine.domain.model.Network
 import eth.serotine.domain.model.NetworkUpgrade
 import eth.serotine.domain.model.UpgradeNotice
 import eth.serotine.domain.repository.KnownUpgrade
@@ -19,7 +20,7 @@ internal const val DAY = 24 * 60 * 60L
 
 internal class FakeNetworkUpgrades : NetworkUpgrades {
     val report = MutableStateFlow<NetworkUpgrade?>(null)
-    override fun observeUpgrade(): Flow<NetworkUpgrade?> = report
+    override fun observeUpgrade(network: Network): Flow<NetworkUpgrade?> = report
 }
 
 internal class FakeKnownUpgradeStore : KnownUpgradeStore {
@@ -35,9 +36,9 @@ internal class FakeKnownUpgradeStore : KnownUpgradeStore {
      */
     var cancelledDuringSave = false
 
-    override fun observe(): Flow<KnownUpgrade?> = record
+    override fun observe(network: Network): Flow<KnownUpgrade?> = record
 
-    override suspend fun save(record: KnownUpgrade): Boolean {
+    override suspend fun save(network: Network, record: KnownUpgrade): Boolean {
         if (failing) return false
         saves++
         this.record.value = record
@@ -49,7 +50,7 @@ internal class FakeKnownUpgradeStore : KnownUpgradeStore {
 internal class FakeLightClient : LightClient {
     val status = MutableStateFlow<LightClientStatus>(LightClientStatus.Starting)
     override var datesFinalizedBlocks: Boolean = true
-    override fun observeStatus(): Flow<LightClientStatus> = status
+    override fun observeStatus(network: Network): Flow<LightClientStatus> = status
 }
 
 internal class FakeNotifier : UpgradeNotifier {

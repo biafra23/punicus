@@ -15,7 +15,7 @@ plugins {
 
 allprojects {
     group = "eth.serotine"
-    version = "0.1.0-SNAPSHOT"
+    version = "0.2.0-SNAPSHOT"
 }
 
 // The release version — project.version minus the -SNAPSHOT suffix — and the

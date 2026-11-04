@@ -68,6 +68,7 @@ import kotlin.test.assertTrue
 class CowOrderViewModelTest {
 
     private val daily = Account(
+        Network.SEPOLIA,
         Address.of("0x8f3a2c71e5b9d04a6f1e3c2ba7d90e5f4c6b91c2"),
         AccountKind.EOA,
         "Daily",
@@ -112,7 +113,7 @@ class CowOrderViewModelTest {
     )
     private val light = object : LightClient {
         override val datesFinalizedBlocks = true
-        override fun observeStatus(): Flow<LightClientStatus> = status
+        override fun observeStatus(network: Network): Flow<LightClientStatus> = status
     }
     private var now = validTo - 200
 
@@ -131,7 +132,7 @@ class CowOrderViewModelTest {
         Dispatchers.setMain(UnconfinedTestDispatcher(testScheduler))
         val viewModel = CowOrderViewModel(
             record.uid,
-            ObserveCowOrder(orders),
+            ObserveCowOrder(orders, Network.SEPOLIA),
             ObserveCowOrderLife(cowApi, Network.SEPOLIA),
             ObserveAccounts(accounts),
             DescribeKeyStore(FakeKeys()),
@@ -195,6 +196,7 @@ class CowOrderViewModelTest {
         assertEquals(OrderState.FILLED, shown.state)
         assertEquals("0.0161 ETH", shown.bought)
         assertTrue(shown.end.startsWith("Filled in block 9,412,100: it bought 0.0161 ETH"), shown.end)
+        assertEquals("Filled: it bought 0.0161 ETH, as this account's verified logs say.", shown.simpleEnd, "no block")
         assertNull(shown.cow)
         assertTrue(cowApi.lives.isEmpty(), "CoW is not asked of an order whose end is proven")
         assertTrue(!shown.canCancel)

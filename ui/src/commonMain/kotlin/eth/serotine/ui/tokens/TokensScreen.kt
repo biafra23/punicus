@@ -1,11 +1,13 @@
 package eth.serotine.ui.tokens
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
@@ -35,61 +37,84 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import eth.serotine.domain.model.InterfaceMode
 import eth.serotine.ui.components.ActionDropdown
-import eth.serotine.ui.components.LightClientItem
+import eth.serotine.ui.components.HiddenDetails
 import eth.serotine.ui.components.MenuAction
+import eth.serotine.ui.components.NetworkMark
+import eth.serotine.ui.components.Note
 import eth.serotine.ui.components.SerotineIcons
 import eth.serotine.ui.components.TokenIcon
-import eth.serotine.ui.components.UnderLightClientStrip
 import eth.serotine.ui.components.shortAddress
-import eth.serotine.ui.lightclient.LightClientViewModel
+import eth.serotine.ui.mode.LocalInterfaceMode
 import eth.serotine.ui.platform.rememberCopyText
 import kotlinx.coroutines.launch
 
 /** Test tag of each token row, for UI tests. */
 const val TOKENS_ROW_TAG = "tokens-row"
 
+/** Test tag of the *Details* that keep the blocks in simple mode, for UI tests. */
+const val TOKENS_DETAILS_TAG = "tokens-details"
+
+/** Test tag prefix of a network's section header, followed by its chain id, for UI tests. */
+const val TOKENS_SECTION_TAG = "tokens-section-"
+
 /** Binds [TokensScreen] to its ViewModel; Copy is done here, on the platform's clipboard. */
 @Composable
 fun TokensRoute(
     viewModel: TokensViewModel,
-    lightClient: LightClientViewModel,
     onBack: () -> Unit,
     onAddToken: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
-    val strip by lightClient.item.collectAsStateWithLifecycle()
-    TokensScreen(
-        state,
-        strip,
-        onBack = onBack,
-        onAddToken = onAddToken,
-        onCopy = rememberCopyText(),
-        onSetHidden = viewModel::setHidden,
-        onRemove = viewModel::remove,
-        modifier = modifier,
-    )
+    val copy = rememberCopyText()
+    // The same state in the view the user chose (docs/simple-ui.md).
+    when (LocalInterfaceMode.current) {
+        InterfaceMode.SIMPLE -> SimpleTokensScreen(
+            state,
+            onBack = onBack,
+            onAddToken = onAddToken,
+            onCopy = copy,
+            onSetHidden = viewModel::setHidden,
+            onRemove = viewModel::remove,
+            modifier = modifier,
+        )
+        InterfaceMode.DETAILED -> TokensScreen(
+            state,
+            onBack = onBack,
+            onAddToken = onAddToken,
+            onCopy = copy,
+            onSetHidden = viewModel::setHidden,
+            onRemove = viewModel::remove,
+            modifier = modifier,
+        )
+    }
 }
 
 /**
- * Settings → Tokens as a pure function of [state]: every known token, each with what its
- * check says and a menu (Copy contract, Hide or Show, Remove for an added one) behind a
- * visible button, and Add token.
+ * Settings → Tokens as a pure function of [state]: every known token under its network's mark,
+ * each with what its check says (which names the block it was checked at, so no light-client
+ * strip: the tokens are several networks') and a menu (Copy contract, Hide or Show, Remove for an
+ * added one) behind a visible button, and Add token. [onSetHidden] and [onRemove] get the token's
+ * network's chain id and its address. Simple mode ([SimpleTokensScreen]) keeps the blocks behind
+ * *Details* ([details]).
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun TokensScreen(
     state: TokensUiState,
-    lightClient: LightClientItem,
     onBack: () -> Unit,
     onAddToken: () -> Unit,
     onCopy: (String) -> Unit,
-    onSetHidden: (String, Boolean) -> Unit,
-    onRemove: (String) -> Unit,
+    onSetHidden: (chainId: Long, address: String, hidden: Boolean) -> Unit,
+    onRemove: (chainId: Long, address: String) -> Unit,
     modifier: Modifier = Modifier,
+    details: List<String> = emptyList(),
 ) {
     val snackbar = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
@@ -119,12 +144,21 @@ fun TokensScreen(
             }
         },
     ) { padding ->
-        UnderLightClientStrip(lightClient, Modifier.padding(padding)) {
-            Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState())) {
-                state.notice?.let {
-                    Text(it, Modifier.padding(16.dp), color = MaterialTheme.colorScheme.error)
-                }
-                state.items.forEach { item ->
+        Column(Modifier.padding(padding).fillMaxSize().verticalScroll(rememberScrollState())) {
+            state.notice?.let {
+                Text(it, Modifier.padding(16.dp), color = MaterialTheme.colorScheme.error)
+            }
+            state.sections.forEach { section ->
+                NetworkMark(
+                    section.network,
+                    Modifier.fillMaxWidth()
+                        .background(MaterialTheme.colorScheme.surfaceContainerLow)
+                        .padding(horizontal = 16.dp, vertical = 10.dp)
+                        .semantics { heading() }
+                        .testTag(TOKENS_SECTION_TAG + section.network.chainId),
+                )
+                val chainId = section.network.chainId
+                section.items.forEach { item ->
                     TokenRow(
                         item,
                         canChange = state.canChange,
@@ -132,19 +166,24 @@ fun TokensScreen(
                             onCopy(item.address)
                             scope.launch { snackbar.showSnackbar("Contract address copied") }
                         },
-                        onSetHidden = { onSetHidden(item.address, it) },
-                        onRemove = { onRemove(item.address) },
+                        onSetHidden = { onSetHidden(chainId, item.address, it) },
+                        onRemove = { onRemove(chainId, item.address) },
                     )
                 }
-                Text(
-                    "A token is known by its contract address. Added tokens are described as their " +
-                        "contracts describe themselves; nothing is fetched from a token list.",
-                    // Room under it for the floating button, which would cover the last row's menu.
-                    Modifier.padding(start = 16.dp, top = 16.dp, end = 16.dp, bottom = 96.dp),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
             }
+            if (details.isNotEmpty()) {
+                Column(Modifier.padding(horizontal = 16.dp)) {
+                    HiddenDetails(TOKENS_DETAILS_TAG) { details.forEach { Note(it) } }
+                }
+            }
+            Text(
+                "A token is known by its contract address. Added tokens are described as their " +
+                    "contracts describe themselves; nothing is fetched from a token list.",
+                // Room under it for the floating button, which would cover the last row's menu.
+                Modifier.padding(start = 16.dp, top = 16.dp, end = 16.dp, bottom = 96.dp),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
         }
     }
 }

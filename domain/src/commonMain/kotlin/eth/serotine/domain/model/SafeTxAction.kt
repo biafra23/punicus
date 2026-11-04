@@ -1,7 +1,5 @@
 package eth.serotine.domain.model
 
-import eth.serotine.domain.model.AbiWords.selector
-
 /**
  * What a [SafeTx] does, decoded here from its raw fields (docs/wallet-ux.md, screen 17), never
  * from a description that came with it. Decoding is strict: a call is read as a transfer, an
@@ -62,15 +60,6 @@ sealed interface SafeTxAction {
     data class DelegateCall(val to: Address, val selector: String?, val dataSize: Int) : SafeTxAction
 
     companion object {
-        private val ADD_OWNER = selector("addOwnerWithThreshold(address,uint256)")
-        private val REMOVE_OWNER = selector("removeOwner(address,address,uint256)")
-        private val SWAP_OWNER = selector("swapOwner(address,address,address)")
-        private val CHANGE_THRESHOLD = selector("changeThreshold(uint256)")
-        private val ENABLE_MODULE = selector("enableModule(address)")
-        private val DISABLE_MODULE = selector("disableModule(address,address)")
-        private val SET_GUARD = selector("setGuard(address)")
-        private val SET_FALLBACK_HANDLER = selector("setFallbackHandler(address)")
-
         /** What [tx], a transaction of the Safe at [safe], does. */
         fun of(safe: Address, tx: SafeTx): SafeTxAction {
             val data = tx.data
@@ -100,28 +89,28 @@ sealed interface SafeTxAction {
             fun address(word: ByteArray) = AbiWords.address(word)
             fun count(word: ByteArray) = AbiWords.uint(word).toLongOrNull()
 
-            args(ADD_OWNER, 2)?.let { (owner, threshold) ->
+            args(SafeSettingsCalls.ADD_OWNER, 2)?.let { (owner, threshold) ->
                 return SafeSettingsChange.OwnerAdded(address(owner) ?: return null, count(threshold) ?: return null)
             }
-            args(REMOVE_OWNER, 3)?.let { (_, owner, threshold) ->
+            args(SafeSettingsCalls.REMOVE_OWNER, 3)?.let { (_, owner, threshold) ->
                 return SafeSettingsChange.OwnerRemoved(address(owner) ?: return null, count(threshold) ?: return null)
             }
-            args(SWAP_OWNER, 3)?.let { (_, old, new) ->
+            args(SafeSettingsCalls.SWAP_OWNER, 3)?.let { (_, old, new) ->
                 return SafeSettingsChange.OwnerSwapped(address(old) ?: return null, address(new) ?: return null)
             }
-            args(CHANGE_THRESHOLD, 1)?.let { (threshold) ->
+            args(SafeSettingsCalls.CHANGE_THRESHOLD, 1)?.let { (threshold) ->
                 return SafeSettingsChange.ThresholdChanged(count(threshold) ?: return null)
             }
-            args(ENABLE_MODULE, 1)?.let { (module) ->
+            args(SafeSettingsCalls.ENABLE_MODULE, 1)?.let { (module) ->
                 return SafeSettingsChange.ModuleEnabled(address(module) ?: return null)
             }
-            args(DISABLE_MODULE, 2)?.let { (_, module) ->
+            args(SafeSettingsCalls.DISABLE_MODULE, 2)?.let { (_, module) ->
                 return SafeSettingsChange.ModuleDisabled(address(module) ?: return null)
             }
-            args(SET_GUARD, 1)?.let { (guard) ->
+            args(SafeSettingsCalls.SET_GUARD, 1)?.let { (guard) ->
                 return SafeSettingsChange.GuardSet((address(guard) ?: return null).orNone())
             }
-            args(SET_FALLBACK_HANDLER, 1)?.let { (handler) ->
+            args(SafeSettingsCalls.SET_FALLBACK_HANDLER, 1)?.let { (handler) ->
                 return SafeSettingsChange.FallbackHandlerSet((address(handler) ?: return null).orNone())
             }
             return null

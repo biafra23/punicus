@@ -1,8 +1,11 @@
 package eth.serotine.domain.usecase
 
+import eth.serotine.domain.model.Network
 import eth.serotine.domain.model.NetworkUpgrade.Phase
 import eth.serotine.domain.repository.KnownUpgrade
 import eth.serotine.domain.repository.LightClientStatus
+import kotlin.test.Test
+import kotlin.test.assertEquals
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
@@ -10,8 +13,6 @@ import kotlinx.coroutines.test.advanceTimeBy
 import kotlinx.coroutines.test.currentTime
 import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
-import kotlin.test.Test
-import kotlin.test.assertEquals
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class ObserveUpgradeWarningTest {
@@ -23,7 +24,7 @@ class ObserveUpgradeWarningTest {
     private val beforeIt = glamsterdam.activationTime!! - DAY
     private val afterIt = glamsterdam.activationTime!! + DAY
 
-    private fun observe(now: Long) = ObserveUpgradeWarning(upgrades, known, lightClient) { now }()
+    private fun observe(now: Long) = ObserveUpgradeWarning(Network.SEPOLIA, upgrades, known, lightClient) { now }()
 
     @Test
     fun nothingReportedOrRecordedIsNoWarning() = runTest {
@@ -126,7 +127,12 @@ class ObserveUpgradeWarningTest {
         val start = glamsterdam.activationTime!! - 60
         val seen = mutableListOf<UpgradeWarning>()
         backgroundScope.launch {
-            ObserveUpgradeWarning(upgrades, known, lightClient) { start + currentTime / 1_000 }().collect { seen += it }
+            ObserveUpgradeWarning(
+                Network.SEPOLIA,
+                upgrades,
+                known,
+                lightClient,
+            ) { start + currentTime / 1_000 }().collect { seen += it }
         }
         runCurrent()
         assertEquals(listOf<UpgradeWarning>(UpgradeWarning.Ahead(glamsterdam)), seen)

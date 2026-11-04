@@ -55,9 +55,9 @@ class IosUpgradeNotifier(private val network: Network) : UpgradeNotifier {
         try {
             val text = UpgradeNotificationText.from(notice, network)
             // The reminder that stood for this notice is said now, with its own words.
-            center.removeDeliveredNotificationsWithIdentifiers(listOf(REMINDER_ID))
-            // One identifier: a newer notice replaces the one before.
-            post(NOTICE_ID, text.title, text.text, trigger = null)
+            center.removeDeliveredNotificationsWithIdentifiers(listOf(reminderId))
+            // One identifier per network: a newer notice of the network replaces the one before.
+            post(noticeId, text.title, text.text, trigger = null)
         } catch (e: Exception) {
             // A notice that cannot be put into words or posted: the app's screens still say it.
             println("Serotine: no upgrade notification (${e::class.simpleName})")
@@ -65,14 +65,14 @@ class IosUpgradeNotifier(private val network: Network) : UpgradeNotifier {
     }
 
     override fun remindAt(at: Long?) {
-        center.removePendingNotificationRequestsWithIdentifiers(listOf(REMINDER_ID))
+        center.removePendingNotificationRequestsWithIdentifiers(listOf(reminderId))
         if (at == null) return
         // Due already, or within the second: the app is running, and its next check shows it.
         val seconds = at - NSDate().timeIntervalSince1970.toLong()
         if (seconds <= 0) return
         val name = network.displayName
         post(
-            REMINDER_ID,
+            reminderId,
             title = "Network upgrade reminder",
             body = "Peers announced a $name network upgrade that this version of Serotine does not support, and " +
                 "a reminder about it is due. Open Serotine to see where it stands.",
@@ -109,8 +109,17 @@ class IosUpgradeNotifier(private val network: Network) : UpgradeNotifier {
         }
     }
 
+    /** This network's notice: Sepolia keeps the identifier its notices had before there were networks. */
+    private val noticeId: String = when (network) {
+        Network.SEPOLIA -> NOTICE_ID
+        Network.ETHEREUM, Network.GNOSIS -> "$NOTICE_ID-${network.chainId}"
+    }
+
+    /** This network's reminder, kept apart as [noticeId] is. */
+    private val reminderId: String = "$noticeId$REMINDER_SUFFIX"
+
     private companion object {
         const val NOTICE_ID = "network-upgrade"
-        const val REMINDER_ID = "network-upgrade-reminder"
+        const val REMINDER_SUFFIX = "-reminder"
     }
 }

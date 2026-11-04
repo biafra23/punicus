@@ -1,13 +1,19 @@
 package eth.serotine.domain.repository
 
+import eth.serotine.domain.model.Network
+
 /**
  * The port that hands a signed transaction to the network: the embedded engine gossips it to
  * its peers (it never signs). :data implements it over the Myotis engine. Blocks on the
  * engine, bounded by it; never throws.
  */
 interface Broadcaster {
-    /** Gossips [raw], a signed transaction's bytes as `eth_sendRawTransaction` takes them. */
-    suspend fun send(raw: ByteArray): Broadcast
+    /**
+     * Gossips [raw], a signed transaction's bytes as `eth_sendRawTransaction` takes them, to
+     * [network]'s peers. Bytes signed for another chain are no transaction of [network]'s, and
+     * a network no adapter serves here is not sent to ([Broadcast.Unavailable]).
+     */
+    suspend fun send(network: Network, raw: ByteArray): Broadcast
 }
 
 /** The outcome of [Broadcaster.send]. */

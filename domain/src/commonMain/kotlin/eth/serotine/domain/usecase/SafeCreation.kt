@@ -5,6 +5,7 @@ import eth.serotine.domain.model.Address
 import eth.serotine.domain.model.Network
 import eth.serotine.domain.model.SafeCreation
 import eth.serotine.domain.model.SafeRelease
+import eth.serotine.domain.model.SafeSettingsCalls
 import eth.serotine.domain.model.UInt256
 import eth.serotine.domain.repository.AddressKind
 import eth.serotine.domain.repository.AddressKinds
@@ -129,17 +130,17 @@ data class SafePlan internal constructor(
  * will have. A device's hardware key is never the only owner; a threshold equal to the number of
  * owners above one (2 of 2, 3 of 3, …) needs a recovery module beside it, and this wallet pins
  * none, so it is refused: the reasoning the keys doc gives for 2 of 2 holds for every such
- * threshold. The Safe is of the release pinned for [network] ([SafeReleases]), with no module, no
- * payment and the release's fallback handler, and a fresh salt nonce from [saltNonces] each time,
- * so two plans of the same owners get two addresses. Refusals are typed; nothing throws.
+ * threshold. The Safe is of the release pinned for the network it is planned on ([SafeReleases]),
+ * with no module, no payment and the release's fallback handler, and a fresh salt nonce from
+ * [saltNonces] each time, so two plans of the same owners get two addresses. Refusals are typed;
+ * nothing throws.
  */
 class PlanSafe(
     private val releases: SafeReleases,
-    private val network: Network,
     private val saltNonces: () -> UInt256 = ::randomSaltNonce,
 ) {
-    /** [owners] (in their order) at [threshold], to be listed as [label] once deployed. */
-    operator fun invoke(owners: List<PlannedOwner>, threshold: Int, label: String): SafePlanning {
+    /** [owners] (in their order) at [threshold] on [network], to be listed as [label] once deployed. */
+    operator fun invoke(network: Network, owners: List<PlannedOwner>, threshold: Int, label: String): SafePlanning {
         val name = label.trim()
         if (name.length > RenameAccount.MAX_LABEL_LENGTH) return SafePlanning.Refused(SafePlanRefusal.NameTooLong)
         val release = releases.forCreation(network) ?: return SafePlanning.Refused(SafePlanRefusal.NoRelease)
@@ -148,18 +149,18 @@ class PlanSafe(
         return SafePlanning.Planned(plan)
     }
 
-    /** Whether a Safe release to create one from is pinned for the network at all. */
-    fun hasRelease(): Boolean = releases.forCreation(network) != null
+    /** Whether a Safe release to create one from is pinned for [network] at all. */
+    fun hasRelease(network: Network): Boolean = releases.forCreation(network) != null
 
-    /** Why [owners] cannot own a Safe at any threshold (the owner step), or null when they can. */
-    fun ownersRefusal(owners: List<PlannedOwner>): SafePlanRefusal? =
-        if (hasRelease()) ownerListRefusal(owners) else SafePlanRefusal.NoRelease
+    /** Why [owners] cannot own a Safe on [network] at any threshold (the owner step), or null when they can. */
+    fun ownersRefusal(network: Network, owners: List<PlannedOwner>): SafePlanRefusal? =
+        if (hasRelease(network)) ownerListRefusal(owners) else SafePlanRefusal.NoRelease
 
     /** Why [owners] cannot own a Safe at any threshold, the release aside. */
     private fun ownerListRefusal(owners: List<PlannedOwner>): SafePlanRefusal? {
         if (owners.isEmpty()) return SafePlanRefusal.NoOwners
         if (owners.size > MAX_OWNERS) return SafePlanRefusal.TooManyOwners(MAX_OWNERS)
-        owners.firstOrNull { it.address == Address.ZERO || it.address == SENTINEL }?.let {
+        owners.firstOrNull { it.address == Address.ZERO || it.address == SafeSettingsCalls.SENTINEL }?.let {
             return SafePlanRefusal.ReservedAddress(it.address)
         }
         val seen = HashSet<Address>()
@@ -178,9 +179,6 @@ class PlanSafe(
     companion object {
         /** The most owners a Safe created here has. */
         const val MAX_OWNERS = 20
-
-        /** The sentinel the Safe's owner and module lists are linked from (`SENTINEL_OWNERS`). */
-        private val SENTINEL = Address.of("0x" + "0".repeat(39) + "1")
     }
 }
 
@@ -222,8 +220,6 @@ data class SafeDeploymentQuote internal constructor(
 /** Why a Safe's deployment was not quoted; nothing is signed. */
 sealed interface SafeDeploymentRefusal {
 
-    /** The plan is for another network than this wallet's. */
-    data class WrongNetwork(val network: Network) : SafeDeploymentRefusal
 
     /**
      * The address the Safe would get holds code already ([kind]: a Safe deployed there before, or
@@ -272,27 +268,26 @@ sealed interface SafeDeploymentRefusal {
  * execution: the run at the head passes while the first is on its way, and the second reverts once
  * it is mined), and one of a Safe with the same owners, in their order, and the same threshold that
  * no block has yet either: planned again, it has another salt and so another address, and would
- * make a second Safe. On [network] only; [clock] is in unix seconds.
+ * make a second Safe. On the network the Safe is planned on, the payer's there; [clock] is in unix
+ * seconds.
  */
 class QuoteSafeDeployment(
     private val kinds: AddressKinds,
     private val nativeBalances: NativeBalances,
     private val inputs: TransactionInputs,
     private val sentTransfers: SentTransfers,
-    private val network: Network,
     private val clock: () -> Long = ::epochSecondsNow,
 ) {
-    private val quoter = CallQuoter(inputs, sentTransfers, network, clock)
-
     suspend operator fun invoke(plan: SafePlan, payer: Address, level: FeeLevel): SafeDeploymentQuoting {
         fun refused(refusal: SafeDeploymentRefusal) = SafeDeploymentQuoting.Refused(refusal)
-        if (plan.network != network) return refused(SafeDeploymentRefusal.WrongNetwork(plan.network))
+        val network = plan.network
+        val quoter = CallQuoter(inputs, sentTransfers, network, clock)
         // A deployment of this Safe, or of one like it, sent and not mined is said as such first, even
         // the payer's own maybe sent: both read the record, and the engine only when a record matches.
         sentAndUnmined(plan)?.let { return refused(it) }
         // Another transaction of the payer's maybe still on its way: refused before anything else is read.
         quoter.heldBack(payer)?.let { return refused(SafeDeploymentRefusal.NotQuoted(it)) }
-        val codelessAt = when (val reading = kinds.observeKind(plan.address).first()) {
+        val codelessAt = when (val reading = kinds.observeKind(network, plan.address).first()) {
             KindReading.Syncing -> return refused(SafeDeploymentRefusal.Syncing)
             is KindReading.Unavailable -> return refused(SafeDeploymentRefusal.Unavailable(reading.reason))
             is KindReading.Verified -> when (val kind = reading.kind) {
@@ -300,7 +295,7 @@ class QuoteSafeDeployment(
                 else -> return refused(SafeDeploymentRefusal.AlreadyDeployed(kind))
             }
         }
-        val native = when (val read = NativeRead.of(nativeBalances.observeBalance(payer).first())) {
+        val native = when (val read = NativeRead.of(nativeBalances.observeBalance(network, payer).first())) {
             is NativeRead.Before -> read
             is NativeRead.NotRead -> return refused(SafeDeploymentRefusal.NotQuoted(read.refusal))
         }
@@ -336,13 +331,13 @@ class QuoteSafeDeployment(
     private suspend fun sentAndUnmined(plan: SafePlan): SafeDeploymentRefusal? {
         val since = clock() - RECORD_LIFETIME_SECONDS
         val sent = (sentTransfers.observe().first() as? SentTransferList.Loaded)?.transfers.orEmpty()
-            .filter { it.sentAt >= since }
+            .filter { it.network == plan.network && it.sentAt >= since }
             .mapNotNull { record -> (record.action as? SentAction.SafeDeployment)?.let { record to it } }
             .filter { (_, action) ->
                 action.safe == plan.address || (action.owners == plan.owners && action.threshold == plan.threshold)
             }
         for ((record, action) in sent) {
-            when (val mined = inputs.minedNonce(record.account)) {
+            when (val mined = inputs.minedNonce(plan.network, record.account)) {
                 is NonceReading.Read -> if (record.nonce >= mined.nonce) {
                     return if (action.safe == plan.address) {
                         SafeDeploymentRefusal.AlreadySent
@@ -386,6 +381,7 @@ class DeploySafe(
             signer,
             broadcaster,
             sentTransfers,
+            plan.network,
             quote.call,
             SentAction.SafeDeployment(plan.address, plan.owners, plan.threshold, plan.release.version, plan.label),
             clock,
@@ -415,13 +411,13 @@ class ListDeployedSafe(
     private val watchAddress: WatchAddress,
     private val retryDelay: Duration = 12.seconds,
 ) {
-    suspend operator fun invoke(deployment: SentAction.SafeDeployment): DeployedSafeListing {
+    suspend operator fun invoke(network: Network, deployment: SentAction.SafeDeployment): DeployedSafeListing {
         while (true) {
             // Codeless until the head the light client verifies includes the deployment's block.
-            val reading = kinds.observeKind(deployment.safe)
+            val reading = kinds.observeKind(network, deployment.safe)
                 .first { it is KindReading.Verified && it.kind != AddressKind.Eoa } as KindReading.Verified
             if (!isThePlannedSafe(reading.kind, deployment)) return DeployedSafeListing.NotTheSafe
-            when (val watched = watch(deployment)) {
+            when (val watched = watch(network, deployment)) {
                 // Proven a moment ago, not now (a head moved past the proof, the light client stalled).
                 null -> delay(retryDelay)
                 else -> return watched
@@ -435,15 +431,15 @@ class ListDeployedSafe(
      * [DeployedSafeListing.NoSafe], or [DeployedSafeListing.NotVerified] when the address cannot be
      * read verified right now. It never waits.
      */
-    suspend fun afterRevert(deployment: SentAction.SafeDeployment): DeployedSafeListing {
-        val kind = when (val reading = kinds.observeKind(deployment.safe).first()) {
+    suspend fun afterRevert(network: Network, deployment: SentAction.SafeDeployment): DeployedSafeListing {
+        val kind = when (val reading = kinds.observeKind(network, deployment.safe).first()) {
             KindReading.Syncing -> return DeployedSafeListing.NotVerified(null)
             is KindReading.Unavailable -> return DeployedSafeListing.NotVerified(reading.reason)
             is KindReading.Verified -> reading.kind
         }
         if (kind == AddressKind.Eoa) return DeployedSafeListing.NoSafe
         if (!isThePlannedSafe(kind, deployment)) return DeployedSafeListing.NotTheSafe
-        return watch(deployment) ?: DeployedSafeListing.NotVerified(null)
+        return watch(network, deployment) ?: DeployedSafeListing.NotVerified(null)
     }
 
     /** Whether [kind] is a Safe with [deployment]'s owners, in their order (the Safe keeps it), and threshold. */
@@ -453,8 +449,8 @@ class ListDeployedSafe(
     }
 
     /** The Safe watched under its name, or null when its kind cannot be verified again right now. */
-    private suspend fun watch(deployment: SentAction.SafeDeployment): DeployedSafeListing? =
-        when (val watch = watchAddress(deployment.safe, deployment.label)) {
+    private suspend fun watch(network: Network, deployment: SentAction.SafeDeployment): DeployedSafeListing? =
+        when (val watch = watchAddress(network, deployment.safe, deployment.label)) {
             is AddressWatch.Added -> DeployedSafeListing.Listed(watch.account)
             is AddressWatch.AlreadyInWallet -> DeployedSafeListing.AlreadyInWallet(watch.account)
             AddressWatch.Contract -> DeployedSafeListing.NotTheSafe

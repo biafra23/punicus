@@ -5,7 +5,8 @@ import eth.serotine.domain.model.LogLevel
 /**
  * Everything the Debug tab renders: the debug log's [level], the [filter] typed, the [lines]
  * that match it, newest first, and how many records the log holds at that level ([recorded]),
- * so the screen can tell an empty log from a filter that matches nothing.
+ * so the screen can tell an empty log from a filter that matches nothing. [DebugRoute] shows
+ * `DebugViewModel.filterText` in place of [filter], which is made off the main thread and lags the typing.
  */
 data class DebugUiState(
     val level: LogLevel = LogLevel.INFO,

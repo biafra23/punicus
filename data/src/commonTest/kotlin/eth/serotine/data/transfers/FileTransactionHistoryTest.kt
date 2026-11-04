@@ -1,6 +1,7 @@
 package eth.serotine.data.transfers
 
 import eth.serotine.domain.model.Address
+import eth.serotine.domain.model.Network
 import eth.serotine.domain.model.SignedTransfer
 import eth.serotine.domain.model.Token
 import eth.serotine.domain.model.TransferAsset
@@ -10,6 +11,12 @@ import eth.serotine.domain.repository.HistoryList
 import eth.serotine.domain.repository.SentAction
 import eth.serotine.domain.repository.SentOutcome
 import eth.serotine.domain.repository.SentTransfer
+import kotlin.random.Random
+import kotlin.test.AfterTest
+import kotlin.test.Test
+import kotlin.test.assertEquals
+import kotlin.test.assertFalse
+import kotlin.test.assertTrue
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.StandardTestDispatcher
@@ -21,12 +28,6 @@ import kotlinx.io.files.SystemFileSystem
 import kotlinx.io.files.SystemTemporaryDirectory
 import kotlinx.io.readString
 import kotlinx.io.writeString
-import kotlin.random.Random
-import kotlin.test.AfterTest
-import kotlin.test.Test
-import kotlin.test.assertEquals
-import kotlin.test.assertFalse
-import kotlin.test.assertTrue
 
 /** [FileTransactionHistory] against the port's contract, across restarts. */
 @OptIn(ExperimentalCoroutinesApi::class)
@@ -41,6 +42,7 @@ class FileTransactionHistoryTest {
     private fun TestScope.history() = FileTransactionHistory(file.toString(), StandardTestDispatcher(testScheduler))
 
     private fun transfer(nonce: Long, asset: TransferAsset = TransferAsset.Native) = SentTransfer(
+        network = Network.SEPOLIA,
         account = alice,
         nonce = nonce,
         signed = SignedTransfer(byteArrayOf(2, nonce.toByte(), -1)),
@@ -134,7 +136,7 @@ class FileTransactionHistoryTest {
     @Test
     fun aHistoryOfANewerFormatIsUnreadableAndLeftAlone() = runTest {
         SystemFileSystem.createDirectories(directory)
-        SystemFileSystem.sink(file).buffered().use { it.writeString("""{"version":2,"entries":[]}""") }
+        SystemFileSystem.sink(file).buffered().use { it.writeString("""{"version":3,"entries":[]}""") }
 
         assertEquals(HistoryList.Unreadable, history().observe().first())
         assertFalse(history().record(transfer(7)))

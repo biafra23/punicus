@@ -1,5 +1,6 @@
 package eth.serotine.data.engine
 
+import eth.serotine.domain.model.Network
 import eth.serotine.data.files.VersionedJsonFile
 import eth.serotine.data.files.VersionedJsonFile.Decision
 import kotlinx.coroutines.CancellationException
@@ -23,6 +24,10 @@ import kotlinx.serialization.json.Json
  * keeps and shows nothing; a damaged one is set aside as every [VersionedJsonFile] is. File work
  * runs on [dispatcher], and every write is flushed to the disk (twice: the file, then its
  * directory).
+ *
+ * Each entry's id starts with its network's chain id (`11155111:native:0x…`): a balance is an
+ * address's on one network. Format 1 wrote ids without one, when Serotine worked on Sepolia
+ * alone, so they read as Sepolia's (docs/networks.md, *Files*).
  */
 internal class LastBalancesFile(
     path: String,
@@ -39,8 +44,12 @@ internal class LastBalancesFile(
         what = "last verified balances",
         formatVersion = FORMAT_VERSION,
         empty = Kept(emptyMap()),
-        decode = { _, text ->
-            Kept(JSON.decodeFromString(StoredBalances.serializer(), text).balances.associateBy { it.id })
+        decode = { version, text ->
+            val stored = JSON.decodeFromString(StoredBalances.serializer(), text).balances
+            val migrated = if (version < 2) stored.map { it.copy(
+                    id = "${Network.SEPOLIA.chainId}:${it.id}",
+                ) } else stored
+            Kept(migrated.associateBy { it.id })
         },
         encode = { kept ->
             JSON.encodeToString(StoredBalances.serializer(), StoredBalances(FORMAT_VERSION, kept.byId.values.toList()))
@@ -100,10 +109,11 @@ internal class LastBalancesFile(
 
     /** One balance: [units] in the smallest unit, proven at [block], at a head produced at [asOf] (unix seconds). */
     @Serializable
-    private class StoredBalance(val id: String, val units: String, val block: Long, val asOf: Long?)
+    private data class StoredBalance(val id: String, val units: String, val block: Long, val asOf: Long?)
 
     internal companion object {
-        const val FORMAT_VERSION = 1
+        /** 2 since networks: each id starts with its chain id. */
+        const val FORMAT_VERSION = 2
 
         /** Entries kept: far more than the accounts and tokens a wallet shows. */
         const val MAX_KEPT = 256

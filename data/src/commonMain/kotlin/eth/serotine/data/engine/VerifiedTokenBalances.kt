@@ -1,14 +1,16 @@
 package eth.serotine.data.engine
 
 import eth.serotine.domain.model.Address
+import eth.serotine.domain.model.Network
 import eth.serotine.domain.model.TokenUnits
 import eth.serotine.domain.repository.ReadUnavailable
 import eth.serotine.domain.repository.TokenBalanceReading
 import eth.serotine.domain.repository.TokenBalances
+import kotlin.time.Duration
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
-import kotlin.time.Duration
 
 /**
  * [TokenBalances] over a verified light client: the token contract's `balanceOf(holder)` run
@@ -28,6 +30,7 @@ import kotlin.time.Duration
  * is [TokenBalanceReading.LastKnown].
  */
 class VerifiedTokenBalances internal constructor(
+    private val served: Network,
     chain: VerifiedChain?,
     dispatcher: CoroutineDispatcher,
     pollInterval: Duration,
@@ -37,6 +40,8 @@ class VerifiedTokenBalances internal constructor(
     activity: AddressActivity? = null,
     /** The tokens whose balances [activity] may vouch for: the network's plain, built-in ones. */
     gated: Set<Address> = emptySet(),
+    /** When its balances are proven again: at every head when null; on demand in simple mode ([ProofSchedule]). */
+    schedule: ProofSchedule? = null,
 ) : TokenBalances {
 
     /** One holder's balance of one token. */
@@ -48,10 +53,11 @@ class VerifiedTokenBalances internal constructor(
         dispatcher,
         pollInterval,
         kept = lastBalances?.kept<Key, TokenUnits?>(
-            id = { "token:${it.holder.hex}:${it.token.hex}" },
+            id = { "${served.chainId}:token:${it.holder.hex}:${it.token.hex}" },
             units = { it?.decimal },
             parse = TokenUnits::parse,
         ) ?: KeptProofs.none(),
+        offersLastKnownWhenStopped = true,
         // A call whose block the engine did not name (UNKNOWN_BLOCK, negative) is never vouched for.
         unchangedSince = { key, provenAt, provenHash, head ->
             key.token in gated &&
@@ -59,6 +65,7 @@ class VerifiedTokenBalances internal constructor(
         },
         // A kept "not a token" is asked again: only an amount stands between heads.
         atHead = { _, value, _ -> value },
+        schedule = schedule,
     ) { verified, key ->
         when (val outcome = verified.call(key.token, Abi.balanceOf(key.holder))) {
             is CallOutcome.Returned -> EngineReading.Proven(
@@ -72,12 +79,13 @@ class VerifiedTokenBalances internal constructor(
         }
     }
 
-    override fun observeBalance(holder: Address, token: Address): Flow<TokenBalanceReading> =
-        reads.observe(Key(holder, token)).map { reading ->
+    override fun observeBalance(network: Network, holder: Address, token: Address): Flow<TokenBalanceReading> {
+        if (network != served) return flowOf(TokenBalanceReading.Unavailable(ReadUnavailable.NO_ENGINE))
+        return reads.observe(Key(holder, token)).map { reading ->
             when (reading) {
                 EngineReading.Syncing -> TokenBalanceReading.Syncing
                 is EngineReading.Proven -> reading.value?.let {
-                    TokenBalanceReading.Verified(it, named(reading.blockNumber))
+                    TokenBalanceReading.Verified(it, named(reading.blockNumber), reading.provenAt)
                 } ?: TokenBalanceReading.NotAToken
                 // Only an amount is offered as last known: an older "not a token" is not repeated.
                 is EngineReading.LastKnown -> reading.value?.let {
@@ -86,6 +94,7 @@ class VerifiedTokenBalances internal constructor(
                 is EngineReading.Unavailable -> TokenBalanceReading.Unavailable(reading.reason)
             }
         }
+    }
 
     /** [block], or null for [UNKNOWN_BLOCK]. */
     private fun named(block: Long): Long? = block.takeIf { it != UNKNOWN_BLOCK }

@@ -12,7 +12,11 @@ import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 
-/** The display currency screen's ViewModel: the currencies offered, and choosing one ([choose]). */
+/**
+ * The display currency screen's ViewModel: the currencies offered, one choice for the whole wallet
+ * (those any network with accounts can price; docs/networks.md, *Values*), and choosing one
+ * ([choose]).
+ */
 class CurrencyViewModel(
     observeDisplayCurrencies: ObserveDisplayCurrencies,
     private val setDisplayCurrency: SetDisplayCurrency,
@@ -22,7 +26,10 @@ class CurrencyViewModel(
 
     private val outcome = MutableStateFlow(Outcome())
 
-    val uiState: StateFlow<CurrencyUiState> = combine(observeDisplayCurrencies(), outcome) { currencies, outcome ->
+    val uiState: StateFlow<CurrencyUiState> = combine(
+        observeDisplayCurrencies(),
+        outcome,
+    ) { currencies, outcome ->
         CurrencyUiState(
             options = currencies.offered.map { CurrencyOption(it.code, nameOf(it), chosen = it == currencies.chosen) },
             notice = when {
@@ -43,16 +50,6 @@ class CurrencyViewModel(
         viewModelScope.launch {
             outcome.value = if (setDisplayCurrency(currency)) Outcome(done = true) else Outcome(error = NOT_SAVED)
         }
-    }
-
-    private fun nameOf(currency: DisplayCurrency): String = when (currency) {
-        DisplayCurrency.USD -> "US dollar"
-        DisplayCurrency.EUR -> "Euro"
-        DisplayCurrency.GBP -> "Pound sterling"
-        DisplayCurrency.CHF -> "Swiss franc"
-        DisplayCurrency.JPY -> "Japanese yen"
-        DisplayCurrency.ETH -> "Ether"
-        DisplayCurrency.BTC -> "Bitcoin"
     }
 
     private companion object {

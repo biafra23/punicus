@@ -59,6 +59,23 @@ private fun SafeImportRefusedPreview() = SafeImportPreview(
 private fun SafeImportImportedPreview() =
     SafeImportPreview(SafeImportUiState.Imported("Sepolia", "0x" + "3c".repeat(32)))
 
+/**
+ * Docs/networks.md's N15: a request for the same address on Ethereum, brought to the Safe on Gnosis
+ * Chain, refused with both networks named. The networks come with parts 4 and 5.
+ */
+@Preview
+@Composable
+private fun SafeImportWrongNetworkPreview() = SafeImportPreview(
+    SafeImportUiState.Entering(
+        "Gnosis Chain",
+        label = "Club Safe",
+        address = TREASURY,
+        text = TEXT.replace("11155111", "1"),
+        error = "This request is for the Safe at this address on Ethereum. This account is the Safe on Gnosis " +
+            "Chain: a different Safe, with its own owners and nonce. Watch the Safe on Ethereum to sign it there.",
+    ),
+)
+
 /** Every preview above, which SafeImportScreenPreviewsTest renders: a new preview goes in here too. */
 internal val safeImportScreenPreviews: List<@Composable () -> Unit> = listOf(
     { SafeImportEmptyPreview() },
@@ -67,4 +84,5 @@ internal val safeImportScreenPreviews: List<@Composable () -> Unit> = listOf(
     { SafeImportCheckingPreview() },
     { SafeImportRefusedPreview() },
     { SafeImportImportedPreview() },
+    { SafeImportWrongNetworkPreview() },
 )

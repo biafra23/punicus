@@ -141,6 +141,16 @@ class SafeSwapScreenTest {
     }
 
     @Test
+    fun aReviewOfThreeTransactionsSignsAllThree() {
+        val reset = review.transactions.first().copy(nonce = "Safe nonce 3")
+        show(review.copy(transactions = listOf(reset) + review.transactions))
+
+        rule.onAllNodesWithTag(SAFE_SWAP_TRANSACTION_TAG).assertCountEquals(3)
+        rule.onNodeWithTag(SAFE_SWAP_SIGN_TAG).performScrollTo().assertTextEquals("Sign all three and queue")
+        rule.onNodeWithText("All three are signed", substring = true).assertExists()
+    }
+
+    @Test
     fun whileSigningItSaysWhichTransaction() {
         show(review.copy(signing = true, progress = "Transaction 2 of 2"))
 

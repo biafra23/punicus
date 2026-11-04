@@ -5,6 +5,7 @@ import eth.serotine.domain.model.Mnemonic
 import eth.serotine.domain.model.WalletPassword
 import eth.serotine.domain.repository.KeyProtection
 import eth.serotine.ui.components.NOT_ENOUGH_MEMORY_TO_PROTECT
+import eth.serotine.ui.components.NetworkChoice
 import eth.serotine.ui.components.PasswordStep
 import eth.serotine.ui.components.STEPPED_DOWN_TEXT
 import eth.serotine.ui.components.protectionText
@@ -23,11 +24,25 @@ private const val WORDS = "one two three four five six seven eight nine ten elev
 // What the screen says under the password on a device with secure hardware, from the one source.
 private val HARDWARE = KeyProtection.HARDWARE.protectionText
 
+/**
+ * Docs/networks.md's N8 and N9: a release build's defaults, Sepolia off; Ethereum and Gnosis Chain
+ * come with parts 4 and 5.
+ */
+private val networks = listOf(
+    NetworkChoice(1, "Ethereum", testnet = false, on = true, line = "Real funds"),
+    NetworkChoice(100, "Gnosis Chain", testnet = false, on = true, line = "Real funds, fees in xDAI"),
+    NetworkChoice(11_155_111, "Sepolia", testnet = true, on = false, line = "Testnet: test ether only"),
+)
+
+/** [networks] with Ethereum ticked. */
+private val ethereumTicked = networks.mapIndexed { i, it -> if (i == 0) it.copy(chosen = true) else it }
+
 private val typed = MnemonicImportUiState.Entering(
     Mnemonic(WORDS),
     password = WalletPassword("made-up preview password"),
     repeat = WalletPassword("made-up preview password"),
     step = PasswordStep.New(HARDWARE),
+    networks = ethereumTicked,
 )
 
 @Composable
@@ -103,6 +118,11 @@ private fun MnemonicImportImportedPreview() = MnemonicImportPreview(MnemonicImpo
 private fun MnemonicImportImportedSteppedDownPreview() =
     MnemonicImportPreview(MnemonicImportUiState.Imported("Account 1", STEPPED_DOWN_TEXT))
 
+/** N9 before a network is ticked: the button greyed out, a tap saying why. */
+@Preview
+@Composable
+private fun MnemonicImportNoNetworkPreview() = MnemonicImportPreview(typed.copy(networks = networks))
+
 /** Every preview above, which MnemonicImportScreenPreviewsTest renders: a new preview goes in here too. */
 internal val mnemonicImportScreenPreviews: List<@Composable () -> Unit> = listOf(
     { MnemonicImportCheckingPreview() },
@@ -116,4 +136,5 @@ internal val mnemonicImportScreenPreviews: List<@Composable () -> Unit> = listOf
     { MnemonicImportKeyStoreUnavailablePreview() },
     { MnemonicImportImportedPreview() },
     { MnemonicImportImportedSteppedDownPreview() },
+    { MnemonicImportNoNetworkPreview() },
 )

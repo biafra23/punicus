@@ -10,8 +10,8 @@ import eth.serotine.domain.model.Token
 import eth.serotine.domain.model.TransferAsset
 import eth.serotine.domain.model.UInt256
 import eth.serotine.domain.model.WalletPassword
-import eth.serotine.domain.model.toHex
 import eth.serotine.domain.model.Wei
+import eth.serotine.domain.model.toHex
 import eth.serotine.domain.repository.BalanceReading
 import eth.serotine.domain.repository.CowOrderEnd
 import eth.serotine.domain.repository.CowOrderRecord
@@ -22,11 +22,11 @@ import eth.serotine.domain.repository.SentAction
 import eth.serotine.domain.repository.SentTransfer
 import eth.serotine.domain.repository.Simulation
 import eth.serotine.domain.repository.Unlock
-import kotlinx.coroutines.test.runTest
 import kotlin.test.Test
 import kotlin.test.assertContentEquals
 import kotlin.test.assertEquals
 import kotlin.test.assertIs
+import kotlinx.coroutines.test.runTest
 
 class CowCancellationsTest {
     private val account = Address.of("0x" + "ac".repeat(20))
@@ -106,6 +106,7 @@ class CowCancellationsTest {
     @Test
     fun aCancellationSentAndNotMinedIsNotSentTwice() = runTest {
         val pending = SentTransfer(
+            network = Network.SEPOLIA,
             account = account,
             nonce = 7,
             signed = SignedTransfer(byteArrayOf(2, 7)),

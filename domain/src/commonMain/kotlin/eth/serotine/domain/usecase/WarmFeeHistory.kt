@@ -1,5 +1,6 @@
 package eth.serotine.domain.usecase
 
+import eth.serotine.domain.model.Network
 import eth.serotine.domain.repository.TransactionInputs
 
 /**
@@ -9,7 +10,7 @@ import eth.serotine.domain.repository.TransactionInputs
  * review quotes. Nothing is quoted, kept or shown from it, and it never throws.
  */
 class WarmFeeHistory(private val inputs: TransactionInputs) {
-    suspend operator fun invoke() {
-        inputs.fees()
+    suspend operator fun invoke(network: Network) {
+        inputs.fees(network)
     }
 }

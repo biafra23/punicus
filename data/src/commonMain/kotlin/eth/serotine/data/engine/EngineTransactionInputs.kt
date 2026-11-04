@@ -1,6 +1,7 @@
 package eth.serotine.data.engine
 
 import eth.serotine.domain.model.Address
+import eth.serotine.domain.model.Network
 import eth.serotine.domain.model.UInt256
 import eth.serotine.domain.repository.FeeReading
 import eth.serotine.domain.repository.GasEstimate
@@ -8,12 +9,12 @@ import eth.serotine.domain.repository.NonceReading
 import eth.serotine.domain.repository.ReadUnavailable
 import eth.serotine.domain.repository.Simulation
 import eth.serotine.domain.repository.TransactionInputs
-import kotlinx.coroutines.CoroutineDispatcher
-import kotlinx.coroutines.delay
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.milliseconds
 import kotlin.time.Duration.Companion.seconds
 import kotlin.time.TimeSource
+import kotlinx.coroutines.CoroutineDispatcher
+import kotlinx.coroutines.delay
 
 /**
  * [TransactionInputs] over the engine's verified reads ([TransactingChain]): asked only while
@@ -27,6 +28,7 @@ import kotlin.time.TimeSource
  * engine itself may take, measured on [timeSource].
  */
 class EngineTransactionInputs internal constructor(
+    private val served: Network,
     private val chain: TransactingChain?,
     private val dispatcher: CoroutineDispatcher,
     private val feeRetryInterval: Duration = 2_500.milliseconds,
@@ -35,12 +37,14 @@ class EngineTransactionInputs internal constructor(
     private val timeSource: TimeSource = TimeSource.Monotonic,
 ) : TransactionInputs {
 
-    override suspend fun nonce(account: Address): NonceReading = ask(NonceReading::Unavailable) { chain ->
+    override suspend fun nonce(network: Network, account: Address): NonceReading =
+        ask(network, NonceReading::Unavailable) { chain ->
         chain.pendingNonce(account)?.takeIf { it >= 0 }?.let(NonceReading::Read)
             ?: NonceReading.Unavailable(ReadUnavailable.UNPROVEN)
     }
 
-    override suspend fun minedNonce(account: Address): NonceReading = ask(NonceReading::Unavailable) { chain ->
+    override suspend fun minedNonce(network: Network, account: Address): NonceReading =
+        ask(network, NonceReading::Unavailable) { chain ->
         chain.minedNonce(account)?.takeIf { it >= 0 }?.let(NonceReading::Read)
             ?: NonceReading.Unavailable(ReadUnavailable.UNPROVEN)
     }
@@ -56,10 +60,10 @@ class EngineTransactionInputs internal constructor(
      * cancelled meanwhile stops at the next one. Only an engine that answered nothing is asked
      * again: one that cannot verify reads, or none at all, is said at once.
      */
-    override suspend fun fees(): FeeReading {
+    override suspend fun fees(network: Network): FeeReading {
         val started = timeSource.markNow()
         while (true) {
-            val reading = ask(FeeReading::Unavailable) { chain ->
+            val reading = ask(network, FeeReading::Unavailable) { chain ->
                 chain.feeHistory(FEE_BLOCKS, EngineJson.PERCENTILES)
                     ?.let(EngineJson::feeQuote)
                     ?.let(FeeReading::Quoted)
@@ -72,8 +76,14 @@ class EngineTransactionInputs internal constructor(
         }
     }
 
-    override suspend fun estimateGas(from: Address, to: Address, value: UInt256, data: ByteArray): GasEstimate =
-        ask(GasEstimate::Unavailable) { chain ->
+    override suspend fun estimateGas(
+        network: Network,
+        from: Address,
+        to: Address,
+        value: UInt256,
+        data: ByteArray,
+    ): GasEstimate =
+        ask(network, { GasEstimate.Unavailable(it) }) { chain ->
             when (val answer = chain.estimateGas(from, to, value.toDecimal(), data)) {
                 // No transaction takes no gas: a non-positive estimate is no answer.
                 is EstimateAnswer.Gas -> answer.gas.takeIf { it > 0 }?.let(GasEstimate::Estimated)
@@ -85,12 +95,30 @@ class EngineTransactionInputs internal constructor(
             }
         }
 
-    override suspend fun simulate(from: Address, to: Address, value: UInt256, data: ByteArray): Simulation =
-        ask(Simulation::Unavailable) { chain -> chain.callFrom(from, to, value.toDecimal(), data).toSimulation() }
+    override suspend fun simulate(
+        network: Network,
+        from: Address,
+        to: Address,
+        value: UInt256,
+        data: ByteArray,
+    ): Simulation =
+        ask(
+            network,
+            Simulation::Unavailable,
+        ) { chain -> chain.callFrom(from, to, value.toDecimal(), data).toSimulation() }
 
-    /** [read] on [dispatcher] while reads can be verified; otherwise, or when the engine fails, [unavailable]. */
-    private suspend fun <T> ask(unavailable: (ReadUnavailable) -> T, read: (TransactingChain) -> T): T =
-        chain.askVerified(dispatcher, unavailable, read)
+    /**
+     * [read] on [dispatcher] while reads can be verified; otherwise, or when the engine fails, [unavailable].
+     * A [network] this adapter does not serve is [ReadUnavailable.NO_ENGINE]: never read from another chain.
+     */
+    private suspend fun <T> ask(
+        network: Network,
+        unavailable: (ReadUnavailable) -> T,
+        read: (TransactingChain) -> T,
+    ): T =
+        if (network != served) unavailable(
+                ReadUnavailable.NO_ENGINE,
+            ) else chain.askVerified(dispatcher, unavailable, read)
 
     private companion object {
         /** The blocks the fee history covers: about two minutes of Sepolia. */

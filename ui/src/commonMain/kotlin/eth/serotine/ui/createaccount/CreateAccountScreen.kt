@@ -15,6 +15,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
@@ -28,6 +29,9 @@ import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
@@ -38,7 +42,12 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import eth.serotine.ui.components.NetworkChecklist
 import eth.serotine.ui.components.PasswordStep
+import eth.serotine.ui.components.Unavailable
+import eth.serotine.ui.components.UnavailableDialog
+import eth.serotine.ui.components.UnavailableNotice
+import eth.serotine.ui.components.unavailable
 import eth.serotine.ui.platform.KeepScreenOn
 import eth.serotine.ui.platform.OnStopUnlessConfigurationChange
 import eth.serotine.ui.platform.protectFromScreenCapture
@@ -84,6 +93,8 @@ fun CreateAccountRoute(
         onBack = onBack,
         onDone = onCreated,
         modifier = modifier,
+        onNetworkToggle = viewModel::onNetworkToggle,
+        onTurnOnNetwork = viewModel::onTurnOnNetwork,
     )
     // A note to read first keeps the screen until the user is done with it.
     val created = state as? CreateAccountUiState.Created
@@ -98,6 +109,8 @@ fun CreateAccountRoute(
  * window is kept out of screen capture where the platform allows ([protectFromScreenCapture]),
  * where it does not the screen says so, and the display is kept on ([KeepScreenOn]). Nothing
  * typed is saved: it lives in the ViewModel's state only. [onDone] once a creation's note is read.
+ * With the password, the networks to add the account to (docs/networks.md, N8), ticked through
+ * [onNetworkToggle], one that is off turned on through [onTurnOnNetwork].
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -114,6 +127,8 @@ fun CreateAccountScreen(
     onBack: () -> Unit,
     modifier: Modifier = Modifier,
     onDone: () -> Unit = {},
+    onNetworkToggle: (chainId: Long) -> Unit = {},
+    onTurnOnNetwork: (chainId: Long) -> Unit = {},
 ) {
     val captureBlocked = protectFromScreenCapture()
     if (state is CreateAccountUiState.Showing || state is CreateAccountUiState.Checking) KeepScreenOn()
@@ -140,7 +155,7 @@ fun CreateAccountScreen(
                 is CreateAccountUiState.Showing -> ShowingContent(state, onWrittenDown)
                 is CreateAccountUiState.Checking -> CheckingContent(state, onCheckedWordChange, onCheck, onShowAgain)
                 is CreateAccountUiState.Securing ->
-                    SecuringContent(state, onPasswordChange, onRepeatChange, onCreate)
+                    SecuringContent(state, onPasswordChange, onRepeatChange, onCreate, onNetworkToggle, onTurnOnNetwork)
                 is CreateAccountUiState.Created -> {
                     Text("${state.label} created")
                     state.note?.let { note ->
@@ -243,6 +258,8 @@ private fun SecuringContent(
     onPasswordChange: (String) -> Unit,
     onRepeatChange: (String) -> Unit,
     onCreate: () -> Unit,
+    onNetworkToggle: (Long) -> Unit,
+    onTurnOnNetwork: (Long) -> Unit,
 ) {
     val setting = state.step is PasswordStep.New
     when (val step = state.step) {
@@ -297,8 +314,25 @@ private fun SecuringContent(
             )
         }
     }
+    // The question is asked, not pre-answered: none ticked (docs/networks.md, N8).
+    if (state.step is PasswordStep.New || state.step is PasswordStep.Existing) {
+        Text("Add to which networks?", style = MaterialTheme.typography.titleSmall)
+        NetworkChecklist(state.networks, enabled = !state.creating, onNetworkToggle, onTurnOnNetwork)
+    }
     state.error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
-    Button(onClick = onCreate, enabled = state.canCreate, modifier = Modifier.fillMaxWidth()) {
+    // Greyed out while no network is ticked, a tap saying so (owner ruling, 2026-10-18, #55).
+    var unavailable by remember { mutableStateOf<UnavailableNotice?>(null) }
+    unavailable?.let { notice -> UnavailableDialog(notice, onDismiss = { unavailable = null }) }
+    val waitsForNetwork = state.passwordReady && state.networkReason != null
+    Button(
+        onClick = {
+            val reason = state.networkReason
+            if (reason == null) onCreate() else unavailable = UnavailableNotice("Create account", reason)
+        },
+        enabled = state.passwordReady,
+        modifier = Modifier.fillMaxWidth().unavailable(waitsForNetwork),
+        colors = if (waitsForNetwork) Unavailable.buttonColors() else ButtonDefaults.buttonColors(),
+    ) {
         if (state.creating) {
             CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp)
         } else {

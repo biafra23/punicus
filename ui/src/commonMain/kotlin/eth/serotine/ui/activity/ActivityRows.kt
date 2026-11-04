@@ -17,12 +17,14 @@ import eth.serotine.domain.usecase.BuiltInCheck
 import eth.serotine.domain.usecase.KnownToken
 import eth.serotine.domain.usecase.SafeChainEvent
 import eth.serotine.domain.usecase.TokenTransferEvent
+import eth.serotine.ui.components.AMOUNT_MASK
 import eth.serotine.ui.components.Eip55
 import eth.serotine.ui.components.FALLBACK_HANDLER_REMOVED
 import eth.serotine.ui.components.GUARD_REMOVED_WARNING
 import eth.serotine.ui.components.GUARD_SET_WARNING
 import eth.serotine.ui.components.MODULE_DISABLED_WARNING
 import eth.serotine.ui.components.displaySymbol
+import eth.serotine.ui.components.exactAmount
 import eth.serotine.ui.components.grouped
 import eth.serotine.ui.components.shortAddress
 
@@ -30,12 +32,14 @@ import eth.serotine.ui.components.shortAddress
  * What the account at [address] is told of each transaction and event of its history, in the
  * words the Activity screen lists it with and its detail screen heads it with (docs/wallet-ux.md,
  * screens 25 and 26): one place, so the two never say it differently. [network] names its
- * currency, [formatTime] dates a transaction a peer took.
+ * currency, [formatTime] dates a transaction a peer took. With [hideAmounts] every amount it says
+ * reads [AMOUNT_MASK] beside its unit (docs/wallet-ux.md, *Hiding amounts*).
  */
 internal class ActivityRows(
     private val address: Address,
     private val network: Network,
     private val formatTime: (Long) -> String,
+    private val hideAmounts: Boolean = false,
 ) {
 
     /**
@@ -68,6 +72,7 @@ internal class ActivityRows(
             detail = "",
             about = Eip55.format(transfer.token),
             time = "Block ${grouped(event.blockNumber)}",
+            simpleTime = null,
             status = TOKEN_ON_CHAIN,
             state = ActivityState.DONE,
             opens = ActivityKey(event.transactionHash, event.logIndex),
@@ -93,7 +98,7 @@ internal class ActivityRows(
         }
         val symbol = displaySymbol(known.token.symbol)
         val what = when (transfer) {
-            is TokenTransfer.Fungible -> "${transfer.amount.formatUnits(known.token.decimals)} $symbol"
+            is TokenTransfer.Fungible -> figure(transfer.amount, known.token.decimals, symbol)
             is TokenTransfer.Nft -> "$symbol NFT #${tokenId(transfer.tokenId)}"
         }
         val (title, other, detail) = when (direction) {
@@ -185,6 +190,7 @@ internal class ActivityRows(
             detail = detail,
             about = Eip55.format(other),
             time = "Block ${grouped(event.blockNumber)}",
+            simpleTime = null,
             status = status,
             state = state,
             opens = ActivityKey(event.transactionHash, event.logIndex),
@@ -238,7 +244,7 @@ internal class ActivityRows(
             is SentAction.Swap -> {
                 val (symbol, decimals) = shown(action.buy)
                 val title = "Swapped ${amount(action.amountIn, action.sell)} for at least " +
-                    "${action.minimumOut.formatUnits(decimals)} $symbol"
+                    figure(action.minimumOut, decimals, symbol)
                 Triple(title, action.router, "On Uniswap ·")
             }
             is SentAction.SafeApproval -> safeCall("Approved", transfer.account, action.request)
@@ -249,6 +255,8 @@ internal class ActivityRows(
                 Triple("Deployed", transfer.account, "Paid by")
             }
             is SentAction.CowCancellation -> Triple("Cancelled a CoW order on chain", action.settlement, "On CoW ·")
+            // The dApp's name is its own claim: said as such.
+            is SentAction.DappCall -> Triple("Sent for a dApp stating it is “${action.dapp}”", action.to, "To")
         }
         val (status, state) = statusOf(entry)
         return ActivityRow(
@@ -260,14 +268,19 @@ internal class ActivityRows(
             time = formatTime(transfer.sentAt),
             status = status,
             state = state,
+            simpleStatus = simpleStatusOf(entry),
         )
     }
 
     /** [units] of [asset] as screens say it: "0.25 ETH". */
     fun amount(units: UInt256, asset: TransferAsset): String {
         val (symbol, decimals) = shown(asset)
-        return "${units.formatUnits(decimals)} $symbol"
+        return figure(units, decimals, symbol)
     }
+
+    /** [units] at [decimals] in [symbol]: "0.25 ETH", or "•••• ETH" while amounts are hidden. */
+    fun figure(units: UInt256, decimals: Int, symbol: String): String =
+        if (hideAmounts) "$AMOUNT_MASK $symbol" else exactAmount(units, decimals, symbol)
 
     /**
      * A CoW order signed here as a row: what it sells and buys, and where it stands as the chain
@@ -276,6 +289,11 @@ internal class ActivityRows(
      */
     fun orderRow(order: CowOrderRecord): ActivityRow {
         val sells = amount(order.order.sellAmount, order.sell)
+        val simple = when (val end = order.end) {
+            is CowOrderEnd.Filled -> "Filled"
+            is CowOrderEnd.Unfilled -> if (end.cancelled) "Cancelled" else "Not filled: it expired"
+            else -> null
+        }
         val (title, status, state) = when (val end = order.end) {
             null -> Triple(
                 "CoW order: $sells for at least ${amount(order.order.buyAmount, order.buy)}",
@@ -306,6 +324,7 @@ internal class ActivityRows(
             status = status,
             state = state,
             opens = ActivityKey(order.uid.hex, cowOrder = true),
+            simpleStatus = simple,
         )
     }
 
@@ -325,6 +344,13 @@ internal class ActivityRows(
         } else {
             Triple("$verb transaction ${request.nonce}", sender, "By")
         }
+
+    /** What simple mode says instead of a sent transaction's block: null where [statusOf] names none. */
+    private fun simpleStatusOf(entry: HistoryEntry): String? = when (val outcome = entry.outcome) {
+        is SentOutcome.Finalized -> if (outcome.succeeded) "Final" else "Failed: its fee was paid, nothing else done"
+        is SentOutcome.Included -> if (outcome.succeeded) "Confirmed" else "Failed: its fee was paid, nothing else done"
+        else -> null
+    }
 
     /** How a sent transaction's row is marked: how it ended as this device saw it. */
     fun statusOf(entry: HistoryEntry): Pair<String, ActivityState> = when (val outcome = entry.outcome) {

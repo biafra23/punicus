@@ -24,11 +24,20 @@ sealed interface AccountCustody {
 }
 
 /**
- * An account Serotine manages, as the rest of the app sees it. The immutable snapshot a
- * repository emits; the key material behind an [AccountCustody.InKeyStore] account is
- * never part of it.
+ * What names one account of the wallet: an [address] on a [network] (docs/networks.md, *An
+ * account is an address on a network*). The same address on two networks is two accounts,
+ * with two entries, two names and two histories; they share one key when it is held here.
+ */
+data class AccountId(val network: Network, val address: Address)
+
+/**
+ * An account Serotine manages, as the rest of the app sees it: an [address] on one [network],
+ * identified by the two together ([id]). The immutable snapshot a repository emits; the key
+ * material behind an [AccountCustody.InKeyStore] account is never part of it.
  */
 data class Account(
+    /** The one chain the account belongs to: everything about it is read and sent there. */
+    val network: Network,
     val address: Address,
     val kind: AccountKind,
     /** The user-facing name, never blank; while the account follows [ensName], that name. */
@@ -42,6 +51,9 @@ data class Account(
      */
     val ensName: String? = null,
 ) {
+    /** What names this account: its [network] and [address]. */
+    val id: AccountId get() = AccountId(network, address)
+
     init {
         require(label.isNotBlank()) { "an account needs a label" }
         require(ensName == null || label == ensName) { "an account that follows an ENS name is named by it" }

@@ -1,8 +1,16 @@
 package eth.serotine.data.history
 
+import eth.serotine.domain.model.AccountId
 import eth.serotine.domain.model.Address
+import eth.serotine.domain.model.Network
 import eth.serotine.domain.repository.HistoryStart
 import eth.serotine.domain.repository.HistoryStartList
+import kotlin.random.Random
+import kotlin.test.AfterTest
+import kotlin.test.Test
+import kotlin.test.assertEquals
+import kotlin.test.assertFalse
+import kotlin.test.assertTrue
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.StandardTestDispatcher
@@ -14,12 +22,6 @@ import kotlinx.io.files.SystemFileSystem
 import kotlinx.io.files.SystemTemporaryDirectory
 import kotlinx.io.readString
 import kotlinx.io.writeString
-import kotlin.random.Random
-import kotlin.test.AfterTest
-import kotlin.test.Test
-import kotlin.test.assertEquals
-import kotlin.test.assertFalse
-import kotlin.test.assertTrue
 
 /** [FileHistoryStarts] against the [eth.serotine.domain.repository.HistoryStarts] contract. */
 @OptIn(ExperimentalCoroutinesApi::class)
@@ -27,8 +29,8 @@ class FileHistoryStartsTest {
 
     private val directory = Path(SystemTemporaryDirectory, "serotine-starts-${Random.nextLong().toULong()}")
     private val file = Path(directory, "history-starts.json")
-    private val alice = Address.of("0x" + "11".repeat(20))
-    private val vault = Address.of("0x" + "5a".repeat(20))
+    private val alice = AccountId(Network.SEPOLIA, Address.of("0x" + "11".repeat(20)))
+    private val vault = AccountId(Network.SEPOLIA, Address.of("0x" + "5a".repeat(20)))
 
     private fun TestScope.starts() = FileHistoryStarts(file.toString(), StandardTestDispatcher(testScheduler))
 
@@ -86,16 +88,16 @@ class FileHistoryStartsTest {
 
         val text = SystemFileSystem.source(file).buffered().use { it.readString() }
         assertEquals(
-            """{"version":1,"starts":[""" +
-                """{"address":"${alice.hex}","addedAt":1800000000},""" +
-                """{"address":"${vault.hex}","block":9400000}]}""",
+            """{"version":2,"starts":[""" +
+                """{"address":"${alice.address.hex}","addedAt":1800000000,"chain":11155111},""" +
+                """{"address":"${vault.address.hex}","block":9400000,"chain":11155111}]}""",
             text,
         )
     }
 
     @Test
     fun aStartThatIsBothOrNeitherDamagesTheFileWhichIsSetAside() = runTest {
-        write("""{"version":1,"starts":[{"address":"${alice.hex}","block":1,"addedAt":2}]}""")
+        write("""{"version":1,"starts":[{"address":"${alice.address.hex}","block":1,"addedAt":2}]}""")
 
         assertEquals(emptyMap(), starts().held())
         assertTrue(SystemFileSystem.list(directory).any { it.name.contains("damaged") })
@@ -103,10 +105,29 @@ class FileHistoryStartsTest {
 
     @Test
     fun aNewerFormatIsUnreadableAndNotWrittenOver() = runTest {
-        write("""{"version":2,"starts":[]}""")
+        write("""{"version":3,"starts":[]}""")
         val starts = starts()
 
         assertEquals(HistoryStartList.Unreadable, starts.observe().first())
         assertFalse(starts.note(alice, 1_800_000_000))
+    }
+
+    @Test
+    fun aStartOfAFileFromBeforeNetworksIsSepolias() = runTest {
+        write("""{"version":1,"starts":[{"address":"${alice.address.hex}","block":9400000}]}""")
+
+        assertEquals(mapOf(alice to HistoryStart.Fixed(9_400_000)), starts().held())
+    }
+
+    @Test
+    fun aStartOnANetworkThisVersionDoesNotKnowIsPassedOverAndKeptAside() = runTest {
+        write(
+            """{"version":2,"starts":[""" +
+                """{"address":"${alice.address.hex}","block":9400000,"chain":11155111},""" +
+                """{"address":"${vault.address.hex}","block":5,"chain":424242}]}""",
+        )
+
+        assertEquals(mapOf(alice to HistoryStart.Fixed(9_400_000)), starts().held())
+        assertTrue(SystemFileSystem.list(directory).any { it.name.contains("damaged") })
     }
 }

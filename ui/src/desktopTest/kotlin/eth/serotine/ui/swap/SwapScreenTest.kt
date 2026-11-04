@@ -93,7 +93,7 @@ class SwapScreenTest {
         SerotineTheme {
             SwapScreen(
                 state = state.value,
-                lightClient = verifiedStripSample,
+                chrome = SwapChrome.Strip(verifiedStripSample),
                 onSellChange = { events += "sell $it" },
                 onBuyChange = { events += "buy $it" },
                 onAmountChange = { events += "amount $it" },
@@ -327,6 +327,10 @@ class SwapScreenTest {
                 balance = BalanceChange("ETH balance, which pays the fee", "1.5 ETH", "at least 1.4994 ETH", "now"),
                 simulation = "The approval, run as a verified call, goes through.",
                 unlock = UnlockStep(),
+                step = "Step 1 of 2",
+                next = "Step 2, the swap.",
+                headline = "Allow Uniswap's SwapRouter02 to use 40 USDC",
+                scope = "Only this amount, for this swap.",
             ),
         )
 

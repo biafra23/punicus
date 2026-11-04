@@ -47,13 +47,14 @@ import kotlinx.coroutines.withContext
 /**
  * The recipient of a transfer as the user typed it (docs/wallet-ux.md, screen 7): an address,
  * whose EIP-55 checksum must hold when it has one, or an ENS name, which [NameResolver] resolves
- * against finalized state only. This is the one use case that takes the typed text, so the
- * checksum is checked here for every screen that sends.
+ * against finalized state only, on a network that has names ([Network.ensNames]). This is the
+ * one use case that takes the typed text, so the checksum is checked here for every screen that
+ * sends.
  */
 class ResolveRecipient(private val names: NameResolver) {
 
-    /** What [input] names, trimmed: an address as is, anything with a dot as an ENS name. */
-    suspend operator fun invoke(input: String): RecipientLookup {
+    /** What [input] names on [network], trimmed: an address as is, anything with a dot as an ENS name. */
+    suspend operator fun invoke(network: Network, input: String): RecipientLookup {
         val text = input.trim()
         Address.parse(text)?.let { address ->
             if (!hasValidChecksum(text)) return RecipientLookup.ChecksumMismatch
@@ -62,7 +63,8 @@ class ResolveRecipient(private val names: NameResolver) {
         }
         // A name before the 0x test: "0xfoo.eth" is a name.
         if ('.' !in text) return RecipientLookup.NotAnAddress
-        return when (val resolved = names.resolve(text)) {
+        if (!network.ensNames) return RecipientLookup.NoNamesOn(network)
+        return when (val resolved = names.resolve(network, text)) {
             // ENS's zero address is a name with no address set, not a recipient.
             is NameResolution.Resolved -> if (resolved.address == Address.ZERO) {
                 RecipientLookup.NoAddress
@@ -101,6 +103,9 @@ sealed interface RecipientLookup {
     /** An ENS name without an address. */
     data object NoAddress : RecipientLookup
 
+    /** A name typed on [network], where names are not resolved ([Network.ensNames]): refused, never asked. */
+    data class NoNamesOn(val network: Network) : RecipientLookup
+
     /** The name could not be resolved verified right now, for [reason]. */
     data class Unavailable(val reason: ReadUnavailable) : RecipientLookup
 }
@@ -124,6 +129,7 @@ sealed interface RecipientLookup {
  */
 @ConsistentCopyVisibility
 data class TransferQuote internal constructor(
+    val network: Network,
     val from: Address,
     val to: Address,
     val asset: TransferAsset,
@@ -209,8 +215,9 @@ class QuoteTransfer(
         val data = if (token == null) ByteArray(0) else Erc20.transferData(to, amount)
         // An earlier transfer maybe still on its way: refused before any balance is read.
         quoter.heldBack(from)?.let { return@cancellingReads it.asTransferQuoting() }
-        val native = async { nativeBalances.observeBalance(from).first() }
-        val tokenBalance = token?.let { async { tokenBalances.observeBalance(from, it.address).first() } }
+        val native = async { nativeBalances.observeBalance(network, from).first() }
+        val tokenBalance =
+            token?.let { async { tokenBalances.observeBalance(network, from, it.address).first() } }
 
         val nativeBefore = when (val read = NativeRead.of(native.await())) {
             is NativeRead.Before -> read
@@ -245,7 +252,7 @@ class QuoteTransfer(
         }
         val held = token?.let { sending ->
             val orders = (cowOrders.observe().first() as? CowOrderList.Loaded)?.orders.orEmpty()
-            val finalized = (lightClient.observeStatus().first() as? LightClientStatus.Synced)?.finalized
+            val finalized = (lightClient.observeStatus(network).first() as? LightClientStatus.Synced)?.finalized
             orders.holding(network, from, sending.address, finalized, cowChain)
                 ?: return@cancellingReads TransferQuoting.InsufficientToken
         }
@@ -259,6 +266,7 @@ class QuoteTransfer(
         }
         TransferQuoting.Quoted(
             TransferQuote(
+                network = network,
                 from = from,
                 to = to,
                 asset = asset,
@@ -381,6 +389,7 @@ class SendTransfer(
         signer,
         broadcaster,
         sentTransfers,
+        quote.network,
         quote.call,
         SentAction.Transfer(quote.to, quote.asset, quote.amount),
         clock,
@@ -413,9 +422,9 @@ class RebroadcastTransfer(
     private val clock: () -> Long = ::epochSecondsNow,
 ) {
     suspend operator fun invoke(transfer: SentTransfer): TransferSending = withContext(NonCancellable) {
-        when (val broadcast = broadcaster.send(transfer.signed.raw)) {
+        when (val broadcast = broadcaster.send(transfer.network, transfer.signed.raw)) {
             is Broadcast.Sent -> sent(sentTransfers, transfer, clock)
-            is Broadcast.Rejected -> when (receipts.observe(transfer.hash).first()) {
+            is Broadcast.Rejected -> when (receipts.observe(transfer.network, transfer.hash).first()) {
                 is TransactionProgress.Included, is TransactionProgress.Finalized ->
                     sent(sentTransfers, transfer, clock)
                 // No receipt at the head: turned away this time, its record kept as it was.
@@ -479,14 +488,14 @@ class ObserveSentTransfer(
     private val receipts: ReceiptTracker,
     private val history: TransactionHistory,
 ) {
-    operator fun invoke(hash: String): Flow<SentTransferStatus> = combine(
+    operator fun invoke(network: Network, hash: String): Flow<SentTransferStatus> = combine(
         sentTransfers.observe().map { list ->
             (list as? SentTransferList.Loaded)?.transfers?.lastOrNull { it.hash == hash }
         }.distinctUntilChanged(),
         history.observe().map { list ->
             (list as? HistoryList.Loaded)?.entries?.lastOrNull { it.transfer.hash == hash }
         }.distinctUntilChanged(),
-        receipts.observe(hash),
+        receipts.observe(network, hash),
     ) { record, recorded, read ->
         val transfer = record ?: recorded?.transfer
         val seen = seen(read, recorded?.outcome)

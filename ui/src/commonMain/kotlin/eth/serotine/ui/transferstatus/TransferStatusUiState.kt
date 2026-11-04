@@ -124,8 +124,18 @@ data class SwapSummary(
  */
 data class CancellationSummary(val title: String, val order: String, val settlement: String, val from: String)
 
-/** One step of a transfer: its [label] ("Included"), where it stands ([state]) and its [detail] (its block). */
-data class StatusStep(val label: String, val state: StepState, val detail: String?)
+/**
+ * One step of a transfer: its [label] ("Included"), where it stands ([state]) and its [detail] (its
+ * block). Simple mode says it without a block (docs/simple-ui.md, S3): [simpleLabel] ("Confirmed",
+ * "Final") and [simpleDetail], each null where it is the same as Detailed view's.
+ */
+data class StatusStep(
+    val label: String,
+    val state: StepState,
+    val detail: String?,
+    val simpleLabel: String? = null,
+    val simpleDetail: String? = null,
+)
 
 /** Where a [StatusStep] stands. */
 enum class StepState {

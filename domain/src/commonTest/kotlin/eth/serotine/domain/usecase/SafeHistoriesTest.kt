@@ -34,7 +34,7 @@ class SafeHistoriesTest {
     private val alicesTopic = "0x" + "00".repeat(12) + "11".repeat(20)
 
     private fun TestScope.observe() {
-        backgroundScope.launch { ObserveSafeHistory(index, starts)(vault).collect { seen += it } }
+        backgroundScope.launch { ObserveSafeHistory(index, starts)(vault.onSepolia).collect { seen += it } }
         runCurrent()
     }
 

@@ -23,10 +23,20 @@
         <activity
             android:name=".MainActivity"
             android:exported="true"
+            android:launchMode="singleTask"
             android:windowSoftInputMode="adjustResize">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+            <!-- A WalletConnect link a dApp or a browser opens (docs/walletconnect.md, part 1.2a): it
+                 lands on Connect a dApp, filled in, and pairs only on the user's Connect. singleTask,
+                 so that a link reaches the running app (onNewIntent) rather than a second one. -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="wc" />
             </intent-filter>
         </activity>
 
@@ -60,6 +70,18 @@
                 android:name="android.appwidget.provider"
                 android:resource="@xml/rate_widget_info" />
         </receiver>
+
+        <!-- The widget's configuration: which network's rate a widget being placed shows. Exported,
+             as the launcher opens it; it acts only on a widget id of this app's own RateWidget. -->
+        <activity
+            android:name=".widget.RateWidgetConfigureActivity"
+            android:exported="true"
+            android:excludeFromRecents="true"
+            android:label="@string/rate_widget_label">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_CONFIGURE" />
+            </intent-filter>
+        </activity>
 
         <!-- The widget's refresh while the app is closed: on an unmetered network only. -->
         <service

@@ -113,7 +113,7 @@ internal class FakeCowChain : CowChain {
 
     override suspend fun venue(network: Network): CowVenueReading = venue
 
-    override suspend fun call(to: Address, data: ByteArray): Simulation =
+    override suspend fun call(network: Network, to: Address, data: ByteArray): Simulation =
         answers[to to data.joinToString("") { (it.toInt() and 0xff).toString(16).padStart(2, '0') }]
             ?: Simulation.Reverted(120)
 }

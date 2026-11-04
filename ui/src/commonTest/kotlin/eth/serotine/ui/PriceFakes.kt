@@ -1,6 +1,7 @@
 package eth.serotine.ui
 
 import eth.serotine.domain.model.DisplayCurrency
+import eth.serotine.domain.model.Network
 import eth.serotine.domain.model.PriceId
 import eth.serotine.domain.repository.CurrencyChoice
 import eth.serotine.domain.repository.DisplayCurrencySetting
@@ -15,7 +16,9 @@ import kotlinx.coroutines.flow.flowOf
 internal val TEST_QUOTES = listOf("ETH", "USDC", "EUR", "JPY").associate { PriceId(it) to PriceId.USD }
 
 /** [PriceFeeds] with the feeds of [quotes], each answering what a test sets; Syncing until then. */
-internal class FakeFeeds(override val quotes: Map<PriceId, PriceId> = TEST_QUOTES) : PriceFeeds {
+internal class FakeFeeds(val quotesTable: Map<PriceId, PriceId> = TEST_QUOTES) : PriceFeeds {
+    override fun quotes(network: Network): Map<PriceId, PriceId> = quotesTable
+
     private val readings = mutableMapOf<PriceId, MutableStateFlow<FeedReading>>()
 
     fun of(id: String) = readings.getOrPut(PriceId(id)) { MutableStateFlow(FeedReading.Syncing) }
@@ -25,8 +28,8 @@ internal class FakeFeeds(override val quotes: Map<PriceId, PriceId> = TEST_QUOTE
         of(id).value = FeedReading.Verified(price, updatedAt = 1_000, ageSeconds, stale)
     }
 
-    override fun observe(priceId: PriceId): Flow<FeedReading> =
-        if (priceId in quotes) of(priceId.id) else flowOf(FeedReading.NoPrice(NoPriceReason.NO_FEED))
+    override fun observe(network: Network, priceId: PriceId): Flow<FeedReading> =
+        if (priceId in quotesTable) of(priceId.id) else flowOf(FeedReading.NoPrice(NoPriceReason.NO_FEED))
 }
 
 /** A [DisplayCurrencySetting] in memory; [failSaves] makes a choice fail. */

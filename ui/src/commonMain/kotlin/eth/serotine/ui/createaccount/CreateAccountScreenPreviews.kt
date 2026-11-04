@@ -4,6 +4,7 @@ import androidx.compose.runtime.Composable
 import eth.serotine.domain.model.Mnemonic
 import eth.serotine.domain.model.WalletPassword
 import eth.serotine.domain.repository.KeyProtection
+import eth.serotine.ui.components.NetworkChoice
 import eth.serotine.ui.components.PasswordStep
 import eth.serotine.ui.components.STEPPED_DOWN_TEXT
 import eth.serotine.ui.components.protectionText
@@ -27,11 +28,25 @@ private val phrase = Mnemonic(WORDS)
 
 private val asked = CreateAccountUiState.Checking(phrase, listOf(2, 7, 12), List(3) { Mnemonic.EMPTY })
 
+/**
+ * Docs/networks.md's N8 and N9: a release build's defaults, Sepolia off; Ethereum and Gnosis Chain
+ * come with parts 4 and 5.
+ */
+private val networks = listOf(
+    NetworkChoice(1, "Ethereum", testnet = false, on = true, line = "Real funds"),
+    NetworkChoice(100, "Gnosis Chain", testnet = false, on = true, line = "Real funds, fees in xDAI"),
+    NetworkChoice(11_155_111, "Sepolia", testnet = true, on = false, line = "Testnet: test ether only"),
+)
+
+/** [networks] with Ethereum ticked. */
+private val ethereumTicked = networks.mapIndexed { i, it -> if (i == 0) it.copy(chosen = true) else it }
+
 private val securing = CreateAccountUiState.Securing(
     phrase,
     step = PasswordStep.New(HARDWARE),
     password = WalletPassword(PASSWORD),
     repeat = WalletPassword(PASSWORD),
+    networks = ethereumTicked,
 )
 
 @Composable
@@ -133,6 +148,11 @@ private fun CreateAccountNotListedPreview() = CreateAccountPreview(CreateAccount
 @Composable
 private fun CreateAccountKeyStoreUnavailablePreview() = CreateAccountPreview(CreateAccountUiState.Unavailable)
 
+/** N8 before a network is ticked: Create greyed out, a tap saying why. */
+@Preview
+@Composable
+private fun CreateAccountNoNetworkPreview() = CreateAccountPreview(securing.copy(networks = networks))
+
 /** Every preview above, which CreateAccountScreenPreviewsTest renders: a new preview goes in here too. */
 internal val createAccountScreenPreviews: List<@Composable () -> Unit> = listOf(
     { CreateAccountPreparingPreview() },
@@ -150,4 +170,5 @@ internal val createAccountScreenPreviews: List<@Composable () -> Unit> = listOf(
     { CreateAccountRestartPreview() },
     { CreateAccountNotListedPreview() },
     { CreateAccountKeyStoreUnavailablePreview() },
+    { CreateAccountNoNetworkPreview() },
 )

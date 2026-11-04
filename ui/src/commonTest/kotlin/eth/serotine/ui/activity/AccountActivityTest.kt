@@ -2,6 +2,7 @@ package eth.serotine.ui.activity
 
 import eth.serotine.domain.model.Account
 import eth.serotine.domain.model.AccountCustody
+import eth.serotine.domain.model.AccountId
 import eth.serotine.domain.model.AccountKind
 import eth.serotine.domain.model.Address
 import eth.serotine.domain.model.CowOrder
@@ -11,6 +12,8 @@ import eth.serotine.domain.model.Network
 import eth.serotine.domain.model.SafeTx
 import eth.serotine.domain.model.Signature
 import eth.serotine.domain.model.SignedTransfer
+import eth.serotine.domain.model.SlippageTolerance
+import eth.serotine.domain.model.SwapVenue
 import eth.serotine.domain.model.SigningRequest
 import eth.serotine.domain.model.Token
 import eth.serotine.domain.model.TokenTransfers
@@ -29,6 +32,7 @@ import eth.serotine.domain.repository.SentAction
 import eth.serotine.domain.repository.SentOutcome
 import eth.serotine.domain.repository.SentTransfer
 import eth.serotine.domain.repository.TokenSettings
+import eth.serotine.domain.repository.WaitingSwap
 import eth.serotine.domain.usecase.ObserveAccountCowOrders
 import eth.serotine.domain.usecase.ObserveAccountHistory
 import eth.serotine.domain.usecase.ObserveAccounts
@@ -36,41 +40,49 @@ import eth.serotine.domain.usecase.ObserveKnownTokens
 import eth.serotine.domain.usecase.ObserveSafeHistory
 import eth.serotine.domain.usecase.ObserveSentToAddresses
 import eth.serotine.domain.usecase.ObserveTokenTransfers
+import eth.serotine.domain.usecase.ObserveWaitingSwaps
 import eth.serotine.ui.FakeAccounts
 import eth.serotine.ui.FakeLogIndex
 import eth.serotine.ui.FakeMetadata
 import eth.serotine.ui.ListCatalog
 import eth.serotine.ui.MemoryCowOrders
 import eth.serotine.ui.MemoryHistoryStarts
-import eth.serotine.ui.MemoryUserTokens
-import eth.serotine.ui.topicOf
 import eth.serotine.ui.MemoryTransactionHistory
+import eth.serotine.ui.MemoryUserTokens
+import eth.serotine.ui.MemoryWaitingSwaps
+import eth.serotine.ui.components.AMOUNT_MASK
 import eth.serotine.ui.components.GUARD_REMOVED_WARNING
 import eth.serotine.ui.components.GUARD_SET_WARNING
 import eth.serotine.ui.components.MODULE_DISABLED_WARNING
+import eth.serotine.ui.topicOf
+import kotlin.test.Test
+import kotlin.test.assertEquals
+import kotlin.test.assertIs
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.plus
 import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
-import kotlin.test.Test
-import kotlin.test.assertEquals
-import kotlin.test.assertIs
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class AccountActivityTest {
 
     private val alice = Account(
+        Network.SEPOLIA,
         Address.of("0x8f3a2c71e5b9d04a6f1e3c2ba7d90e5f4c6b91c2"),
         AccountKind.EOA,
         "Alice",
         AccountCustody.InKeyStore,
     )
     private val treasury = Account(
+        Network.SEPOLIA,
         Address.of("0xfb6916095ca1df60bb79ce92ce3ea74c37c5d359"),
         AccountKind.SAFE,
         "Treasury",
@@ -80,12 +92,14 @@ class AccountActivityTest {
     private val usdc = Token(Address.of("0x1c7d4b196cb0c7b01d743fbc6116a902379c7238"), "USDC", "USDC", 6, "usdc")
     private val history = MemoryTransactionHistory()
     private val cowOrders = MemoryCowOrders()
+    private val waitingSwaps = MemoryWaitingSwaps()
     private val accounts = FakeAccounts(alice, treasury)
     private val starts = MemoryHistoryStarts()
     private val index = FakeLogIndex()
     private val userTokens = MemoryUserTokens()
 
     private fun sent(nonce: Long, action: SentAction, sentAt: Long, maybeSent: Boolean = false) = SentTransfer(
+        network = Network.SEPOLIA,
         account = alice.address,
         nonce = nonce,
         signed = SignedTransfer(byteArrayOf(2, nonce.toByte())),
@@ -111,7 +125,10 @@ class AccountActivityTest {
     )
 
     /** The Activity of the account at [address], kept current as the tests change what it is read from. */
-    private fun TestScope.activity(address: Address = alice.address): StateFlow<ActivityUiState> =
+    private fun TestScope.activity(
+        address: Address = alice.address,
+        hidden: Flow<Boolean> = flowOf(false),
+    ): StateFlow<ActivityUiState> =
         AccountActivity(
             ObserveAccountHistory(history),
             ObserveAccounts(accounts),
@@ -119,10 +136,10 @@ class AccountActivityTest {
             ObserveTokenTransfers(index, starts),
             ObserveKnownTokens(ListCatalog(usdc), userTokens, FakeMetadata()),
             ObserveSentToAddresses(history),
-            ObserveAccountCowOrders(cowOrders, Network.SEPOLIA),
-            Network.SEPOLIA,
+            ObserveAccountCowOrders(cowOrders),
+            ObserveWaitingSwaps(waitingSwaps),
         ) { "at $it" }
-            .of(address)
+            .of(AccountId(Network.SEPOLIA, address), hidden)
             // Unconfined, so that what a test changes is listed before it reads the value.
             .stateIn(
                 backgroundScope + UnconfinedTestDispatcher(testScheduler),
@@ -130,6 +147,54 @@ class AccountActivityTest {
                 ActivityUiState.Loading,
             )
             .also { runCurrent() }
+
+    @Test
+    fun aSwapWhoseNextStepWaitsIsACardThatSaysWhereItsApprovalStands() = runTest {
+        val router = Address.of("0x" + "50".repeat(20))
+        val approval = sent(10, SentAction.TokenApproval(usdc, router, UInt256.of(40_000_000)), 600)
+        waitingSwaps.swaps.value = listOf(
+            WaitingSwap(
+                account = alice.id,
+                sell = usdc.address,
+                buy = null,
+                amount = UInt256.of(40_000_000),
+                tolerance = SlippageTolerance.DEFAULT,
+                venue = SwapVenue.UNISWAP,
+                approval = approval.hash,
+                step = 2,
+                steps = 2,
+            ),
+        )
+        val activity = activity()
+        fun card(outcome: SentOutcome?): WaitingStep {
+            history.entries.value = listOfNotNull(outcome?.let { HistoryEntry(approval, it) })
+            return assertIs<ActivityUiState.Shown>(activity.value).waiting.single()
+        }
+
+        val done = card(SentOutcome.Included(9_410_000, succeeded = true))
+        assertEquals(
+            WaitingStep("Swap 40 USDC → ETH", "Step 1 done. Step 2 is waiting for you.", usdc.address.hex),
+            done,
+        )
+        assertEquals(
+            "Step 1, the approval, is on its way. Once a block has it, step 2 is yours to confirm.",
+            card(SentOutcome.NotSeen).message,
+            "never said done before a verified receipt",
+        )
+        assertEquals(
+            "Step 1, the approval, failed in its block: nothing was swapped. Continue quotes it again.",
+            card(SentOutcome.Finalized(9_410_000, succeeded = false)).message,
+        )
+        val unsure = "Step 2 is waiting for you. Continue checks where step 1 stands."
+        assertEquals(unsure, card(SentOutcome.NonceUsed).message)
+        assertEquals(unsure, card(null).message)
+        val other = assertIs<ActivityUiState.Shown>(activity(treasury.address).value)
+        assertEquals(emptyList(), other.waiting, "another account's")
+
+        // A token bought that is no longer listed is not named, and never as the network's currency.
+        waitingSwaps.swaps.value = waitingSwaps.swaps.value.map { it.copy(buy = Address.of("0x" + "77".repeat(20))) }
+        assertEquals("A swap", assertIs<ActivityUiState.Shown>(activity.value).waiting.single().title)
+    }
 
     @Test
     fun eachTransactionNewestFirstWithWhatItDidAndHowItEnded() = runTest {
@@ -162,6 +227,7 @@ class AccountActivityTest {
                     "Finalized in block 9,412,118",
                     ActivityState.DONE,
                     ActivityKey(native.hash),
+                    simpleStatus = "Final",
                 ),
                 ActivityRow(
                     token.hash,
@@ -172,10 +238,47 @@ class AccountActivityTest {
                     "Reverted in block 9,401,220",
                     ActivityState.FAILED,
                     ActivityKey(token.hash),
+                    simpleStatus = "Failed: its fee was paid, nothing else done",
                 ),
             ),
             shown.rows,
         )
+    }
+
+    @Test
+    fun hiddenAmountsAreMaskedInEveryRowAndCardAndFollowTheEye() = runTest {
+        history.entries.value = listOf(
+            HistoryEntry(token, SentOutcome.Included(9_401_220, succeeded = false)),
+            HistoryEntry(native, SentOutcome.Finalized(9_412_118, succeeded = true)),
+        )
+        val router = Address.of("0x" + "50".repeat(20))
+        waitingSwaps.swaps.value = listOf(
+            WaitingSwap(
+                account = alice.id,
+                sell = usdc.address,
+                buy = null,
+                amount = UInt256.of(40_000_000),
+                tolerance = SlippageTolerance.DEFAULT,
+                venue = SwapVenue.UNISWAP,
+                approval = sent(10, SentAction.TokenApproval(usdc, router, UInt256.of(40_000_000)), 600).hash,
+                step = 2,
+                steps = 2,
+            ),
+        )
+        val hidden = MutableStateFlow(true)
+        val activity = activity(hidden = hidden)
+
+        val masked = assertIs<ActivityUiState.Shown>(activity.value)
+        assertEquals(listOf("Sent $AMOUNT_MASK ETH", "Sent $AMOUNT_MASK USDC"), masked.rows.map { it.title })
+        assertEquals("Swap $AMOUNT_MASK USDC → ETH", masked.waiting.single().title)
+        // Only the amounts: who, when and how each ended stay.
+        assertEquals("To Treasury · 0xfB69…d359", masked.rows.first().detail)
+        assertEquals("Finalized in block 9,412,118", masked.rows.first().status)
+
+        hidden.value = false
+        val shown = assertIs<ActivityUiState.Shown>(activity.value)
+        assertEquals(listOf("Sent 0.25 ETH", "Sent 40.5 USDC"), shown.rows.map { it.title })
+        assertEquals("Swap 40 USDC → ETH", shown.waiting.single().title)
     }
 
     @Test

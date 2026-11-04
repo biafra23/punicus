@@ -14,7 +14,8 @@ sealed interface SafeImportUiState {
     /**
      * The request being entered for the Safe at [address] (EIP-55), named [label] in the wallet
      * (null: not in it): [text] as pasted, [importing] while it is checked, and [error] why the
-     * last one was refused, or null.
+     * last one was refused, or null; [simpleError] that with no block, for simple mode, null where it
+     * is [error] itself.
      */
     data class Entering(
         override val network: String,
@@ -23,6 +24,7 @@ sealed interface SafeImportUiState {
         val text: String,
         val importing: Boolean = false,
         val error: String? = null,
+        val simpleError: String? = null,
     ) : SafeImportUiState {
 
         /** Something is pasted and nothing runs. */

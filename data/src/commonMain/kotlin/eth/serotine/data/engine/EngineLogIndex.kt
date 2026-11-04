@@ -1,6 +1,7 @@
 package eth.serotine.data.engine
 
 import eth.serotine.domain.model.Address
+import eth.serotine.domain.model.Network
 import eth.serotine.domain.repository.IndexedLog
 import eth.serotine.domain.repository.LogCoverage
 import eth.serotine.domain.repository.LogCoverageReading
@@ -11,6 +12,7 @@ import eth.serotine.domain.repository.LogWatchKey
 import eth.serotine.domain.repository.LogsReading
 import eth.serotine.domain.repository.ReadUnavailable
 import eth.serotine.domain.repository.ReceiptLog
+import kotlin.time.Duration
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.ensureActive
@@ -36,7 +38,6 @@ import kotlinx.serialization.json.intOrNull
 import kotlinx.serialization.json.longOrNull
 import kotlinx.serialization.json.put
 import kotlinx.serialization.json.putJsonArray
-import kotlin.time.Duration
 
 /**
  * What [EngineLogIndex] needs of the engine: its state, and its log index
@@ -73,14 +74,16 @@ internal interface LogIndexChain : VerifiedChain {
  * [ReadUnavailable.NO_ENGINE].
  */
 class EngineLogIndex internal constructor(
+    private val served: Network,
     private val chain: LogIndexChain?,
     private val dispatcher: CoroutineDispatcher,
     private val pollInterval: Duration,
 ) : LogIndex {
 
-    override suspend fun configure(watch: List<LogWatch>, unwatch: List<LogWatchKey>): Boolean {
+    override suspend fun configure(network: Network, watch: List<LogWatch>, unwatch: List<LogWatchKey>): Boolean {
         val keys = watch.map { it.key }.toSet()
         require(unwatch.none { it in keys }) { "an entry both watched and unwatched" }
+        if (network != served) return false
         if (watch.isEmpty() && unwatch.isEmpty()) return true
         val chain = chain ?: return false
         val config = buildJsonObject {
@@ -112,7 +115,8 @@ class EngineLogIndex internal constructor(
         }
     }
 
-    override fun observeCoverage(): Flow<LogCoverageReading> {
+    override fun observeCoverage(network: Network): Flow<LogCoverageReading> {
+        if (network != served) return flowOf(LogCoverageReading.Unavailable)
         val chain = chain ?: return flowOf(LogCoverageReading.Unavailable)
         return chain.snapshots(pollInterval).map { snapshot ->
             val running = snapshot as? EngineSnapshot.Running
@@ -131,8 +135,9 @@ class EngineLogIndex internal constructor(
 
     // The engine takes an entry's fromBlock as saying nothing comes before it, and answers a range
     // reaching below it from there on: asked first, so that such a range is refused, not cut short.
-    override suspend fun logs(query: LogQuery): LogsReading =
-        chain.askVerified(dispatcher, LogsReading::Unavailable) { chain ->
+    override suspend fun logs(network: Network, query: LogQuery): LogsReading {
+        if (network != served) return LogsReading.Unavailable(ReadUnavailable.NO_ENGINE)
+        return chain.askVerified(dispatcher, LogsReading::Unavailable) { chain ->
             val coverage = chain.logIndexStatus()?.let(::coverageOf) as? LogCoverageReading.Read
                 ?: return@askVerified LogsReading.Unavailable(ReadUnavailable.UNPROVEN)
             val start = coverage.entries[query.key]?.fromBlock ?: return@askVerified LogsReading.NotWatched
@@ -141,6 +146,7 @@ class EngineLogIndex internal constructor(
                 ?: return@askVerified LogsReading.Unavailable(ReadUnavailable.UNPROVEN)
             readingOf(answer, query)
         }
+    }
 
     /** The engine's filter for [query], both ends explicit. */
     private fun filterOf(query: LogQuery): String = buildJsonObject {

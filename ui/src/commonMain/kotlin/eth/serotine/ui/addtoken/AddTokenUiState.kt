@@ -1,11 +1,15 @@
 package eth.serotine.ui.addtoken
 
+import eth.serotine.ui.components.NetworkChip
+
 /**
  * Everything Add token renders (docs/wallet-ux.md, screen 20): the typed [address], why it
  * cannot be read ([addressError]), what the contract says about itself ([card], null until the
- * text is an address), and how adding went.
+ * text is an address), and how adding went. The network comes first ([networks]: docs/networks.md,
+ * N17): the contract is read on the one chosen, and the token added there.
  */
 data class AddTokenUiState(
+    val networks: List<NetworkChip> = emptyList(),
     val address: String = "",
     val addressError: String? = null,
     val card: TokenCard? = null,
@@ -27,7 +31,8 @@ sealed interface TokenCard {
 
     /**
      * What the contract at the EIP-55 [address] says: [symbol], [name] and [decimals], read
-     * [checkedAt]; [warning] when the symbol is a built-in token's, which this is not.
+     * [checkedAt]; [warning] when the symbol is a built-in token's, which this is not. [simpleCheckedAt]
+     * is [checkedAt] with no block, for simple mode (docs/simple-ui.md).
      */
     data class Claim(
         val address: String,
@@ -36,6 +41,7 @@ sealed interface TokenCard {
         val decimals: Int,
         val checkedAt: String,
         val warning: String?,
+        val simpleCheckedAt: String = checkedAt,
     ) : TokenCard
 
     /** The wallet knows the address already, as [symbol]. */

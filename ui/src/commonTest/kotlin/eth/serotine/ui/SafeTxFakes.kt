@@ -2,6 +2,7 @@ package eth.serotine.ui
 
 import eth.serotine.domain.model.Account
 import eth.serotine.domain.model.AccountCustody
+import eth.serotine.domain.model.AccountId
 import eth.serotine.domain.model.AccountKind
 import eth.serotine.domain.model.Address
 import eth.serotine.domain.model.Digest
@@ -70,8 +71,12 @@ internal class MemorySafeTxQueue : SafeTxQueue {
     /** While set, a removal waits for it. */
     var removeGate: CompletableDeferred<Unit>? = null
 
-    override fun observe(safe: Address): Flow<SafeTxQueueList> = combine(requests, unreadable) { list, broken ->
-        if (broken) SafeTxQueueList.Unreadable else SafeTxQueueList.Loaded(list.filter { it.safe == safe })
+    override fun observe(safe: AccountId): Flow<SafeTxQueueList> = combine(requests, unreadable) { list, broken ->
+        if (broken) {
+            SafeTxQueueList.Unreadable
+        } else {
+            SafeTxQueueList.Loaded(list.filter { it.network == safe.network && it.safe == safe.address })
+        }
     }
 
     override suspend fun save(request: SigningRequest): SigningRequest? {
@@ -93,9 +98,11 @@ internal class MemorySafeTxQueue : SafeTxQueue {
         return true
     }
 
-    override suspend fun prune(safe: Address, nonce: Long): Boolean {
+    override suspend fun prune(safe: AccountId, nonce: Long): Boolean {
         if (failSaves) return false
-        requests.value = requests.value.filterNot { it.safe == safe && it.nonce < nonce }
+        requests.value = requests.value.filterNot {
+            it.network == safe.network && it.safe == safe.address && it.nonce < nonce
+        }
         return true
     }
 }
@@ -104,7 +111,7 @@ internal class MemorySafeTxQueue : SafeTxQueue {
 internal class FakeApprovals : SafeApprovals {
     val approved = mutableMapOf<Address, ApprovalReading>()
 
-    override suspend fun approval(safe: Address, owner: Address, hash: Digest): ApprovalReading =
+    override suspend fun approval(network: Network, safe: Address, owner: Address, hash: Digest): ApprovalReading =
         approved[owner] ?: ApprovalReading.Read(approved = false, blockNumber = 120)
 }
 
@@ -129,11 +136,29 @@ internal class FakeCodec : SigningRequestCodec {
  */
 internal class SafeWorld {
     val safe = Address.of("0x" + "5a".repeat(20))
-    val alice = Account(Address.of("0x" + "11".repeat(20)), AccountKind.EOA, "Alice", AccountCustody.InKeyStore)
-    val bob = Account(Address.of("0x" + "22".repeat(20)), AccountKind.EOA, "Bob", AccountCustody.Watched)
+    val alice = Account(
+        Network.SEPOLIA,
+        Address.of("0x" + "11".repeat(20)),
+        AccountKind.EOA,
+        "Alice",
+        AccountCustody.InKeyStore,
+    )
+    val bob = Account(
+        Network.SEPOLIA,
+        Address.of("0x" + "22".repeat(20)),
+        AccountKind.EOA,
+        "Bob",
+        AccountCustody.Watched,
+    )
     val carol = Address.of("0x" + "33".repeat(20))
-    val dave = Account(Address.of("0x" + "44".repeat(20)), AccountKind.EOA, "Dave", AccountCustody.InKeyStore)
-    val treasury = Account(safe, AccountKind.SAFE, "Treasury", AccountCustody.Watched)
+    val dave = Account(
+        Network.SEPOLIA,
+        Address.of("0x" + "44".repeat(20)),
+        AccountKind.EOA,
+        "Dave",
+        AccountCustody.InKeyStore,
+    )
+    val treasury = Account(Network.SEPOLIA, safe, AccountKind.SAFE, "Treasury", AccountCustody.Watched)
 
     /** EIP-55's own example: 0xdbF03B407c01E7cD3CBea99509d93f8DDDC8C6FB. */
     val recipient = Address.of("0xdbf03b407c01e7cd3cbea99509d93f8dddc8c6fb")
@@ -148,7 +173,7 @@ internal class SafeWorld {
     /** While set, a reading of the Safe begun now waits for it: a fresh set of proofs on its way. */
     var kindGate: CompletableDeferred<Unit>? = null
     val kinds = object : AddressKinds {
-        override fun observeKind(address: Address): Flow<KindReading> = if (address == safe) {
+        override fun observeKind(network: Network, address: Address): Flow<KindReading> = if (address == safe) {
             flow {
                 kindGate?.await()
                 emitAll(kind)
@@ -186,7 +211,7 @@ internal class SafeWorld {
     val uniswap = object : UniswapV3Chain {
         override suspend fun venue(network: Network): VenueReading = VenueReading.Verified(uniswapDeployment)
 
-        override suspend fun call(to: Address, data: ByteArray): Simulation =
+        override suspend fun call(network: Network, to: Address, data: ByteArray): Simulation =
             quotes[data.joinToString("") { (it.toInt() and 0xff).toString(16).padStart(2, '0') }]
                 ?: Simulation.Reverted(100)
     }
@@ -197,7 +222,7 @@ internal class SafeWorld {
     )
     val lightClient = object : LightClient {
         override val datesFinalizedBlocks = true
-        override fun observeStatus(): Flow<LightClientStatus> = head
+        override fun observeStatus(network: Network): Flow<LightClientStatus> = head
     }
 
     /** USDC → ETH in the pinned router's 0.05 % pool, [amountIn] for at least [minimum] wei, paid to the Safe. */

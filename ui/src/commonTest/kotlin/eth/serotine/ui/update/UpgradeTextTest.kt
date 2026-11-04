@@ -24,7 +24,7 @@ class UpgradeTextTest {
     fun anUpgradeAheadIsAHeadsUpWithItsDateThatSaysPeersReportIt() {
         assertEquals(
             UpgradeBannerItem(
-                "Network upgrade ahead: update Serotine",
+                "Network upgrade ahead on Sepolia: update Serotine",
                 "Peers announce a Sepolia network upgrade on <1791294816> that this version of Serotine does not " +
                     "support. Update the app before it activates, or Serotine stops verifying at the upgrade.",
                 "Reported by peers in 5 networks, not verified · fork id 0x6c1d9423",
@@ -38,7 +38,7 @@ class UpgradeTextTest {
     fun anActivatedUpgradeTheLightClientDoesNotContradictIsNotUrgent() {
         assertEquals(
             UpgradeBannerItem(
-                "Network upgrade reported: update Serotine",
+                "Network upgrade reported on Sepolia: update Serotine",
                 "Peers report that Sepolia upgraded to rules this version of Serotine does not support. Update " +
                     "the app to keep using your wallet.",
                 "Reported by peers in 1 network, not verified · fork id unknown",
@@ -51,7 +51,7 @@ class UpgradeTextTest {
     @Test
     fun aTimeThatPassedOnTheClockIsNotSaidToBeAnUpgradePeersReport() {
         val due = banner(UpgradeWarning.Activated(glamsterdam))!!
-        assertEquals("Network upgrade due: update Serotine", due.title)
+        assertEquals("Network upgrade due on Sepolia: update Serotine", due.title)
         assertEquals(
             "Peers announced a Sepolia network upgrade on <1791294816> that this version of Serotine does not " +
                 "support, and that time has passed. Update the app to keep using your wallet.",

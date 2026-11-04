@@ -16,7 +16,7 @@ class SafeBudgetsTest {
     fun aOneShotCheckOutlastsOneReadsBudgetAndThePollAfterItWithRoomForAnotherRead() {
         // Room for a read after the poll: half of another budget, a dozen proofs that go through.
         val nextRead = 10.seconds
-        val needed = VerifiedAddressKinds.SAFE_READ_BUDGET + MyotisNode.POLL_INTERVAL + nextRead
+        val needed = VerifiedAddressKinds.SAFE_READ_BUDGET + MyotisHost.POLL_INTERVAL + nextRead
         assertTrue(
             SAFE_CHECK_BUDGET >= needed,
             "SAFE_CHECK_BUDGET $SAFE_CHECK_BUDGET must cover the read's budget, a poll and a next read: $needed",

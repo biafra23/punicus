@@ -7,6 +7,7 @@ import eth.serotine.domain.model.MnemonicProblem
 import eth.serotine.domain.model.Signature
 import eth.serotine.domain.model.WalletPassword
 import eth.serotine.domain.repository.KeyDeletion
+import eth.serotine.domain.repository.KeyDerivation
 import eth.serotine.domain.repository.KeyImport
 import eth.serotine.domain.repository.KeyProtection
 import eth.serotine.domain.repository.KeyStoreDescription
@@ -460,6 +461,81 @@ class EnvelopeKeyStoreTest {
         assertEquals(Signing.Unavailable, store.sign(hardhatAddress, digest, Unlock.WithPassword(password)))
         assertEquals(Signing.WrongPassword, store.sign(hardhatAddress, digest, notThePassword))
         assertIs<Signing.Signed>(store.sign(abandonAddress, digest, Unlock.WithPassword(password)))
+    }
+
+    // --- Further accounts of a stored seed.
+
+    // Hardhat's second and third accounts: m/44'/60'/0'/0/1 and /2 of its phrase.
+    private val hardhatSecond = Address.of("0x70997970C51812dc3A010C7d01b50e0d17dc79C8")
+    private val hardhatThird = Address.of("0x3C44CdDdB6a900fa2b585dd299e03d12FA4293BC")
+
+    @Test
+    fun furtherAccountsAreThoseOtherWalletsShowEachInAnEnvelopeOfItsOwnThatSigns() = runTest {
+        val store = store()
+        store.importMnemonic(hardhat, password)
+
+        assertEquals(
+            KeyDerivation.Stored(hardhatSecond, 1, KeyProtection.PASSWORD_ONLY),
+            store.deriveAccount(hardhatAddress, password, held = setOf(hardhatAddress)),
+        )
+        assertEquals(1, sealedIn(envelopeOf(hardhatSecond)).index)
+        assertEquals(
+            KeyDerivation.Stored(hardhatThird, 2, KeyProtection.PASSWORD_ONLY),
+            store.deriveAccount(hardhatSecond, password, held = setOf(hardhatAddress, hardhatSecond)),
+            "from any account of the phrase, the lowest index the wallet does not hold",
+        )
+        assertFalse("index" in envelopeOf(hardhatAddress).readText(), "the first account's envelope is as before")
+
+        val signed = store.sign(hardhatSecond, digest, Unlock.WithPassword(password))
+        assertIs<Signing.Signed>(signed)
+        assertTrue(signs(signed.signature, hardhatSecond))
+        // Each envelope stands alone: the first account's removal leaves the others signing.
+        store.delete(hardhatAddress)
+        assertIs<Signing.Signed>(store.sign(hardhatThird, digest, Unlock.WithPassword(password)))
+    }
+
+    @Test
+    fun aStoredEnvelopeWhoseAccountIsNotHeldIsNamedAgainNotSealedAgain() = runTest {
+        val store = store()
+        store.importMnemonic(hardhat, password)
+        store.deriveAccount(hardhatAddress, password, held = setOf(hardhatAddress))
+        val before = envelopeOf(hardhatSecond).readText()
+
+        // Its account never reached the list: the same account comes back, its envelope untouched.
+        assertEquals(
+            KeyDerivation.Stored(hardhatSecond, 1, KeyProtection.PASSWORD_ONLY),
+            store.deriveAccount(hardhatAddress, password, held = setOf(hardhatAddress)),
+        )
+        assertEquals(before, envelopeOf(hardhatSecond).readText())
+    }
+
+    @Test
+    fun aDerivationNeedsTheWalletPasswordAndAStoredKey() = runTest {
+        val store = store()
+        store.importMnemonic(hardhat, password)
+
+        assertEquals(
+            KeyDerivation.WrongPassword,
+            store.deriveAccount(hardhatAddress, WalletPassword("not the password"), setOf(hardhatAddress)),
+        )
+        assertEquals(KeyDerivation.NoKey, store.deriveAccount(abandonAddress, password, setOf(hardhatAddress)))
+        assertEquals(1, directory.list()!!.size, "nothing stored")
+    }
+
+    @Test
+    fun anIndexEditedOnDiskSignsNothing() = runTest {
+        val store = store()
+        store.importMnemonic(hardhat, password)
+        store.deriveAccount(hardhatAddress, password, held = setOf(hardhatAddress))
+        val sealed = sealedIn(envelopeOf(hardhatSecond))
+        val edited = SealedSeed(
+            sealed.version, sealed.address, sealed.hardware, sealed.salt, sealed.opsLimit, sealed.memLimitBytes,
+            sealed.dekNonce, sealed.dek, sealed.seedNonce, sealed.seed, index = 2,
+        )
+        envelopeOf(hardhatSecond).writeText(Json.encodeToString(SealedSeed.serializer(), edited))
+
+        assertEquals(Signing.Unavailable, store.sign(hardhatSecond, digest, Unlock.WithPassword(password)))
+        assertEquals(KeyDerivation.Unavailable, store.deriveAccount(hardhatSecond, password, setOf(hardhatAddress)))
     }
 
     @Test

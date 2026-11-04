@@ -32,7 +32,8 @@ Coverage that source-level checks miss:
     or for a lambda body every class that uses the lambda (through chains of
     synthetics too); only a synthetic nothing reaches stays its own referrer.
 
-This is the enforcement for the "minSdk 29 JDK-API budget" rule in CLAUDE.md.
+This is the enforcement for the "minSdk 29 JDK-API budget" rule in
+.claude/rules/platform.md (CLAUDE.md carries its short form).
 Known third-party residue lives in the allowlist next to this script, each
 entry with its reviewed rationale. A first-party referrer (eth/serotine/*,
 io/myotis/*) can NEVER be allowlisted: entries with such a prefix are refused,
@@ -605,8 +606,9 @@ def main():
             for ref in sorted(refs):
                 print(f"      referenced from {ref}")
         print(f"\nThese crash at runtime on devices below that API level (minSdk is "
-              f"{min_api}). Fix the call (see the minSdk API budget in CLAUDE.md "
-              f"— core Futures/Hex/BigIntegers, Paths.get, manual stream drains), or, "
+              f"{min_api}). Fix the call (see the minSdk API budget in "
+              f".claude/rules/platform.md — core Futures/Hex/BigIntegers, Paths.get, "
+              f"manual stream drains), or, "
               f"for a reviewed third-party case, add an entry to {args.allowlist}.")
         sys.exit(1)
     print(f"OK: no unexpected java/javax references above API {min_api} "

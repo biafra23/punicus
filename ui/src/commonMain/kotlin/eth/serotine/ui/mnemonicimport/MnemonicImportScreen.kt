@@ -14,6 +14,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
@@ -26,6 +27,9 @@ import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
@@ -35,7 +39,12 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import eth.serotine.ui.components.NetworkChecklist
 import eth.serotine.ui.components.PasswordStep
+import eth.serotine.ui.components.Unavailable
+import eth.serotine.ui.components.UnavailableDialog
+import eth.serotine.ui.components.UnavailableNotice
+import eth.serotine.ui.components.unavailable
 import eth.serotine.ui.platform.OnStopUnlessConfigurationChange
 import eth.serotine.ui.platform.protectFromScreenCapture
 import kotlinx.coroutines.Dispatchers
@@ -79,6 +88,8 @@ fun MnemonicImportRoute(
         onBack = onBack,
         onDone = onImported,
         modifier = modifier,
+        onNetworkToggle = viewModel::onNetworkToggle,
+        onTurnOnNetwork = viewModel::onTurnOnNetwork,
     )
     // A note to read first keeps the screen until the user is done with it.
     val imported = state as? MnemonicImportUiState.Imported
@@ -92,7 +103,9 @@ fun MnemonicImportRoute(
  * it is shown the window is kept
  * out of screen capture where the platform allows ([protectFromScreenCapture]); where it
  * does not, the screen says so. The field's text is never saved: it lives in the
- * ViewModel's state, not in `rememberSaveable`, so it never reaches a saved-state bundle.
+ * ViewModel's state, not in `rememberSaveable`, so it never reaches a saved-state bundle. The last
+ * thing asked is which networks to add the account to (docs/networks.md, N9), ticked through
+ * [onNetworkToggle], one that is off turned on through [onTurnOnNetwork].
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -105,6 +118,8 @@ fun MnemonicImportScreen(
     onBack: () -> Unit,
     modifier: Modifier = Modifier,
     onDone: () -> Unit = {},
+    onNetworkToggle: (chainId: Long) -> Unit = {},
+    onTurnOnNetwork: (chainId: Long) -> Unit = {},
 ) {
     val captureBlocked = protectFromScreenCapture()
     Scaffold(
@@ -128,6 +143,8 @@ fun MnemonicImportScreen(
                 onPasswordChange = onPasswordChange,
                 onRepeatChange = onRepeatChange,
                 onImport = onImport,
+                onNetworkToggle = onNetworkToggle,
+                onTurnOnNetwork = onTurnOnNetwork,
                 modifier = Modifier.padding(padding),
             )
             is MnemonicImportUiState.Imported -> if (state.note == null) {
@@ -156,6 +173,8 @@ private fun EnteringContent(
     onPasswordChange: (String) -> Unit,
     onRepeatChange: (String) -> Unit,
     onImport: () -> Unit,
+    onNetworkToggle: (Long) -> Unit,
+    onTurnOnNetwork: (Long) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     Column(
@@ -201,10 +220,23 @@ private fun EnteringContent(
                 onImport = onImport,
             )
         }
+        // The last thing asked before the import, none ticked (docs/networks.md, N9).
+        if (state.step is PasswordStep.New || state.step is PasswordStep.Existing) {
+            Text("Add to which networks?", style = MaterialTheme.typography.titleSmall)
+            NetworkChecklist(state.networks, enabled = !state.importing, onNetworkToggle, onTurnOnNetwork)
+        }
+        // Greyed out while no network is ticked, a tap saying so (owner ruling, 2026-10-18, #55).
+        var unavailable by remember { mutableStateOf<UnavailableNotice?>(null) }
+        unavailable?.let { notice -> UnavailableDialog(notice, onDismiss = { unavailable = null }) }
+        val waitsForNetwork = state.wordsAndPasswordReady && state.networkReason != null
         Button(
-            onClick = onImport,
-            enabled = state.canImport,
-            modifier = Modifier.fillMaxWidth().testTag(MNEMONIC_IMPORT_BUTTON_TAG),
+            onClick = {
+                val reason = state.networkReason
+                if (reason == null) onImport() else unavailable = UnavailableNotice("Add account", reason)
+            },
+            enabled = state.wordsAndPasswordReady,
+            modifier = Modifier.fillMaxWidth().testTag(MNEMONIC_IMPORT_BUTTON_TAG).unavailable(waitsForNetwork),
+            colors = if (waitsForNetwork) Unavailable.buttonColors() else ButtonDefaults.buttonColors(),
         ) {
             if (state.importing) {
                 CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp)

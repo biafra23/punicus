@@ -1,9 +1,11 @@
 package eth.serotine.data.upgrade
 
+import eth.serotine.domain.model.Network
 import eth.serotine.domain.model.NetworkUpgrade
 import eth.serotine.domain.model.UpgradeNotice
 import eth.serotine.domain.repository.KnownUpgrade
 import eth.serotine.domain.repository.KnownUpgradeStore
+import kotlin.random.Random
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
@@ -11,6 +13,7 @@ import kotlinx.coroutines.IO
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.onStart
@@ -24,10 +27,10 @@ import kotlinx.io.readString
 import kotlinx.io.writeString
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
-import kotlin.random.Random
 
 /**
- * [KnownUpgradeStore] kept in the file at [path], for the app version [appVersion]: a record
+ * [KnownUpgradeStore] kept in the file at [path], one record per network, for the app version
+ * [appVersion]: a record
  * another version wrote reads as none and is replaced by the next save, since updating the
  * app is what the record asks for, and an updated app hears from its own engine whether its
  * build supports the upgrade. Peer reports only (times, fork ids, what the user was told):
@@ -50,40 +53,59 @@ class FileKnownUpgradeStore(
     private val state = MutableStateFlow<Read?>(null)
     private val lock = Mutex()
 
-    /** What the file holds: [record], or none. */
-    private data class Read(val record: KnownUpgrade?)
+    /** What the file holds: each network's [records], none for a network without one. */
+    private data class Read(val records: Map<Network, KnownUpgrade>)
 
-    override fun observe(): Flow<KnownUpgrade?> = state
+    override fun observe(network: Network): Flow<KnownUpgrade?> = state
         .onStart { if (state.value == null) lock.withLock { if (state.value == null) state.value = Read(load()) } }
         .filterNotNull()
-        .map { it.record }
+        .map { it.records[network] }
+        .distinctUntilChanged()
 
-    override suspend fun save(record: KnownUpgrade): Boolean = lock.withLock {
-        // Not cancellable: a written record must also be what everyone observes.
+    override suspend fun save(network: Network, record: KnownUpgrade): Boolean = lock.withLock {
+        // Not cancellable: a written record must also be what everyone observes, and the other
+        // networks' records read first are part of what is written.
         withContext(NonCancellable) {
-            write(record).also { if (it) state.value = Read(record) }
+            val next = (state.value?.records ?: load()) + (network to record)
+            write(next).also { if (it) state.value = Read(next) }
         }
     }
 
-    private suspend fun load(): KnownUpgrade? = withContext(dispatcher) {
-        if (!SystemFileSystem.exists(file)) return@withContext null
+    /**
+     * Every network's record. A file of another format, or written by another app version,
+     * holds none: format 1, from before networks, too, since an update is what it asked for.
+     */
+    private suspend fun load(): Map<Network, KnownUpgrade> = withContext(dispatcher) {
+        if (!SystemFileSystem.exists(file)) return@withContext emptyMap()
         try {
             val text = SystemFileSystem.source(file).buffered().use { it.readString() }
-            val stored = JSON.decodeFromString(StoredRecord.serializer(), text)
-            if (stored.version != FORMAT_VERSION || stored.appVersion != appVersion) null else stored.toKnownUpgrade()
+            val stored = JSON.decodeFromString(StoredRecords.serializer(), text)
+            if (stored.version != FORMAT_VERSION || stored.appVersion != appVersion) {
+                emptyMap()
+            } else {
+                // A network this version does not know is left out, as is one record of a network twice.
+                stored.records.mapNotNull { record ->
+                    Network.ofChainId(record.chain)?.let { it to record.toKnownUpgrade() }
+                }.toMap()
+            }
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
             report("the upgrade record at $file cannot be used (${e::class.simpleName}); it is read as none")
-            null
+            emptyMap()
         }
     }
 
-    private suspend fun write(record: KnownUpgrade): Boolean = withContext(dispatcher) {
+    private suspend fun write(records: Map<Network, KnownUpgrade>): Boolean = withContext(dispatcher) {
         val temporary = Path("$file.${Random.nextLong().toULong().toString(16)}.tmp")
         try {
             file.parent?.let { SystemFileSystem.createDirectories(it) }
-            val text = JSON.encodeToString(StoredRecord.serializer(), StoredRecord(record, appVersion))
+            val stored = StoredRecords(
+                FORMAT_VERSION,
+                appVersion,
+                records.map { (network, record) -> StoredRecord(network, record) },
+            )
+            val text = JSON.encodeToString(StoredRecords.serializer(), stored)
             SystemFileSystem.sink(temporary).buffered().use { it.writeString(text) }
             SystemFileSystem.atomicMove(temporary, file)
             true
@@ -100,18 +122,20 @@ class FileKnownUpgradeStore(
 
     /** The file's layout. [version] is the format's, [appVersion] the app's that wrote it. */
     @Serializable
+    private class StoredRecords(val version: Int, val appVersion: String, val records: List<StoredRecord>)
+
+    /** One network's record: the network of [chain]'s. */
+    @Serializable
     private class StoredRecord(
-        val version: Int,
-        val appVersion: String,
+        val chain: Long,
         val phase: String,
         val activationTime: Long? = null,
         val forkId: String? = null,
         val reportingNetworks: Int,
         val shown: List<String>,
     ) {
-        constructor(record: KnownUpgrade, appVersion: String) : this(
-            version = FORMAT_VERSION,
-            appVersion = appVersion,
+        constructor(network: Network, record: KnownUpgrade) : this(
+            chain = network.chainId,
             phase = record.upgrade.phase.name,
             activationTime = record.upgrade.activationTime,
             forkId = record.upgrade.forkId,
@@ -127,7 +151,8 @@ class FileKnownUpgradeStore(
     }
 
     private companion object {
-        const val FORMAT_VERSION = 1
+        /** 2 since networks: one record per network, by its chain id. */
+        const val FORMAT_VERSION = 2
         val JSON = Json
 
         fun report(what: String) = println("Serotine: $what")

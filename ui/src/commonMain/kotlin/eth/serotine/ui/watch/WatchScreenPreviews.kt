@@ -3,6 +3,7 @@ package eth.serotine.ui.watch
 import androidx.compose.runtime.Composable
 import eth.serotine.ui.components.Control
 import eth.serotine.ui.components.LightClientItem
+import eth.serotine.ui.components.NetworkLabel
 import eth.serotine.ui.components.verifiedStripSample
 import eth.serotine.ui.theme.SerotineTheme
 import org.jetbrains.compose.ui.tooling.preview.Preview
@@ -21,6 +22,7 @@ private val account = WatchUiState(
     address = SAVINGS,
     name = "Savings",
     detection = Detection.Account(SAVINGS, CHECKED, delegate = null),
+    cardNetwork = NetworkLabel(1, "Ethereum", testnet = false),
 )
 
 @Composable
@@ -124,6 +126,18 @@ private fun WatchInvalidAddressPreview() = WatchPreview(
     ),
 )
 
+// Gnosis Chain alone on: it resolves no names, so the field takes an address and refuses a name.
+@Preview
+@Composable
+private fun WatchGnosisNoNamesPreview() = WatchPreview(
+    WatchUiState(
+        address = "friend-example.eth",
+        addressError = "Names are not resolved on Gnosis Chain yet: enter the address.",
+        addressLabel = "Address",
+        addressHint = "0x and 40 hexadecimal digits: names are not resolved on Gnosis Chain yet",
+    ),
+)
+
 @Preview
 @Composable
 private fun WatchNameTooLongPreview() = WatchPreview(
@@ -148,6 +162,32 @@ private fun WatchResolvingNamePreview() =
     WatchPreview(
         WatchUiState(address = "savings-example.eth", addressNote = "Resolving the name with verified calls…"),
     )
+
+/** A name on Sepolia's registry alone: each registry's answer named, the card on Sepolia alone. */
+@Preview
+@Composable
+private fun WatchNameOnOneRegistryPreview() = WatchPreview(
+    account.copy(
+        address = "savings-example.eth",
+        addressNote = "On Ethereum: no address\nOn Sepolia's test registry: resolves to $SAVINGS, verified at " +
+            "finalized block 8,412,240",
+        cardNetwork = NetworkLabel(11_155_111, "Sepolia", testnet = true),
+    ),
+)
+
+/** A name found on Ethereum's registry and not verified on Sepolia's: each said, Try again for Sepolia's. */
+@Preview
+@Composable
+private fun WatchNameUnverifiedOnOneRegistryPreview() = WatchPreview(
+    account.copy(
+        address = "savings-example.eth",
+        name = "",
+        addressNote = "On Ethereum: resolves to $SAVINGS, verified at finalized block 8,412,240\nOn Sepolia's test " +
+            "registry: the name could not be resolved with verified calls this time.",
+        canRetryLookup = true,
+        nameDefault = "savings-example.eth",
+    ),
+)
 
 @Preview
 @Composable
@@ -191,6 +231,78 @@ private fun WatchNameResolvedNoNamePreview() = WatchPreview(
     ),
 )
 
+private val ethereum = NetworkLabel(1, "Ethereum", testnet = false)
+private val gnosis = NetworkLabel(100, "Gnosis Chain", testnet = false)
+private val sepolia = NetworkLabel(11_155_111, "Sepolia", testnet = true)
+
+/** Docs/networks.md's N10: an address with no code on both networks that are on; Sepolia off. */
+private val everyNetwork = WatchUiState(
+    address = SAVINGS,
+    name = "Savings",
+    networks = listOf(
+        WatchNetwork(ethereum, Detection.Account(SAVINGS, "Checked at block 23,618,402", null), true, true),
+        WatchNetwork(gnosis, Detection.Account(SAVINGS, "Checked at block 42,907,115", null), true, true),
+    ),
+    question = "This address has no code. Watch it on Ethereum and Gnosis Chain?",
+    offNetworks = listOf(sepolia),
+)
+
+@Preview
+@Composable
+private fun WatchEveryNetworkPreview() = WatchPreview(everyNetwork)
+
+/** N10 after Choose networks: the rows as check boxes. */
+@Preview
+@Composable
+private fun WatchChooseNetworksPreview() = WatchPreview(
+    everyNetwork.copy(
+        choosing = true,
+        networks = everyNetwork.networks.mapIndexed { i, row -> if (i == 1) row.copy(chosen = false) else row },
+    ),
+)
+
+/** N11: a Safe on Ethereum, nothing at the address on Gnosis Chain: offered on Ethereum only. */
+@Preview
+@Composable
+private fun WatchSafeOnOneNetworkPreview() = WatchPreview(
+    WatchUiState(
+        address = TREASURY,
+        name = "Treasury",
+        networks = listOf(
+            WatchNetwork(
+                ethereum,
+                Detection.Safe(
+                    address = TREASURY,
+                    title = "Safe 1.4.1",
+                    signers = "2 of 3 owners",
+                    owners = listOf("0x5aAeb6053F3E94C9b9A09f33669435E7Ef1BeAed", SAVINGS),
+                    modules = emptyList(),
+                    guard = null,
+                    checkedAt = "Checked at block 23,618,402",
+                    control = Control.CO_SIGNER,
+                    threshold = "2/3",
+                ),
+                offered = true,
+                chosen = true,
+            ),
+            WatchNetwork(gnosis, Detection.Account(TREASURY, "Checked at block 42,907,115", null), false),
+        ),
+        offNetworks = listOf(sepolia),
+    ),
+)
+
+/** No network on: nothing can be checked. */
+@Preview
+@Composable
+private fun WatchNoNetworkPreview() = WatchPreview(
+    WatchUiState(
+        address = SAVINGS,
+        noNetwork = "No network is on in this wallet, so the address cannot be checked. Turn one on in Settings → " +
+            "Networks.",
+        offNetworks = listOf(ethereum, gnosis, sepolia),
+    ),
+)
+
 /** Every preview above, which WatchScreenPreviewsTest renders: a new preview goes in here too. */
 internal val watchScreenPreviews: List<@Composable () -> Unit> = listOf(
     { WatchEmptyPreview() },
@@ -204,11 +316,18 @@ internal val watchScreenPreviews: List<@Composable () -> Unit> = listOf(
     { WatchUnavailablePreview() },
     { WatchInvalidAddressPreview() },
     { WatchNameTooLongPreview() },
+    { WatchGnosisNoNamesPreview() },
     { WatchAddingPreview() },
     { WatchNotSavedPreview() },
     { WatchResolvingNamePreview() },
     { WatchNameResolvedPreview() },
+    { WatchNameOnOneRegistryPreview() },
+    { WatchNameUnverifiedOnOneRegistryPreview() },
     { WatchNameMovedPreview() },
     { WatchNameUnavailablePreview() },
     { WatchNameResolvedNoNamePreview() },
+    { WatchEveryNetworkPreview() },
+    { WatchChooseNetworksPreview() },
+    { WatchSafeOnOneNetworkPreview() },
+    { WatchNoNetworkPreview() },
 )

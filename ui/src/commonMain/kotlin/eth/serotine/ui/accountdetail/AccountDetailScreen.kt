@@ -2,6 +2,7 @@ package eth.serotine.ui.accountdetail
 
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -11,6 +12,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.rememberLazyListState
@@ -18,9 +20,11 @@ import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.Send
+import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -36,8 +40,10 @@ import androidx.compose.material3.SegmentedButtonDefaults
 import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -61,6 +67,10 @@ import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.compose.currentStateAsState
 import eth.serotine.domain.model.AccountKind
+import eth.serotine.ui.accounts.DERIVE_ACTION
+import eth.serotine.ui.accounts.deriveBlockedReason
+import eth.serotine.domain.model.InterfaceMode
+import eth.serotine.ui.accounts.UnreachableNetwork
 import eth.serotine.ui.activity.ActivityKey
 import eth.serotine.ui.activity.ActivityUiState
 import eth.serotine.ui.activity.activityItems
@@ -73,8 +83,10 @@ import eth.serotine.ui.components.GHOST_ROWS_UNKNOWN
 import eth.serotine.ui.components.GhostCircle
 import eth.serotine.ui.components.GhostLine
 import eth.serotine.ui.components.GhostRows
+import eth.serotine.ui.components.HideAmountsButton
 import eth.serotine.ui.components.LightClientItem
 import eth.serotine.ui.components.MenuAction
+import eth.serotine.ui.components.NetworkMark
 import eth.serotine.ui.components.SerotineIcons
 import eth.serotine.ui.components.TokenIcon
 import eth.serotine.ui.components.Unavailable
@@ -82,20 +94,32 @@ import eth.serotine.ui.components.UnavailableDialog
 import eth.serotine.ui.components.UnavailableNotice
 import eth.serotine.ui.components.UnderLightClientStrip
 import eth.serotine.ui.components.WithActionMenu
+import eth.serotine.ui.components.addOnNetworkOffReason
+import eth.serotine.ui.components.networkOffNotice
 import eth.serotine.ui.components.shortAddress
 import eth.serotine.ui.components.unavailable
-import eth.serotine.ui.lightclient.LightClientViewModel
+import eth.serotine.ui.mode.LocalInterfaceMode
 import eth.serotine.ui.platform.rememberCopyText
+import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
 
 /** Test tag of the account's total, for UI tests. */
 const val ACCOUNT_TOTAL_TAG = "account-total"
+
+/** Test tag of simple mode's freshness line, for UI tests. */
+const val ACCOUNT_FRESHNESS_TAG = "account-freshness"
+
+/** Test tag of simple mode's Refresh button, for UI tests. */
+const val ACCOUNT_REFRESH_TAG = "account-refresh"
 
 /** Test tag of the account's full address, for UI tests. */
 const val ACCOUNT_ADDRESS_TAG = "account-address"
 
 /** Test tag of a Safe's owners, for UI tests. */
 const val ACCOUNT_OWNERS_TAG = "account-owners"
+
+/** Test tag of a Safe's Safe settings button, for UI tests. */
+const val ACCOUNT_SAFE_SETTINGS_TAG = "account-safe-settings"
 
 /** Test tag of each asset row, for UI tests. */
 const val ACCOUNT_ASSET_TAG = "account-asset"
@@ -107,17 +131,18 @@ const val ACCOUNT_SWAP_TAG = "account-swap"
 const val ACCOUNT_QUEUE_ROW_TAG = "account-queue-row"
 
 /**
- * Binds [AccountDetailScreen] to its ViewModel; a row of its Activity opens its detail
- * ([onOpenActivity]). An account that leaves the wallet while the screen is shown (removed from
- * here or elsewhere) ends the screen through [onGone] — once the screen is the one in front:
- * under the remove dialog it waits, so the dialog can say how the removal went before both
- * close. Send is [onSend] from an account and [onPropose] from a Safe, whose transfers are Safe
- * transactions its owners sign; Swap likewise [onSwap] and [onSafeSwap].
+ * Binds [AccountDetailScreen], or in simple mode [SimpleAccountDetailScreen], to its ViewModel; a
+ * row of its Activity opens its detail ([onOpenActivity]). An account that leaves the wallet while
+ * the screen is shown (removed from here or elsewhere) ends the screen through [onGone] — once the
+ * screen is the one in front: under the remove dialog it waits, so the dialog can say how the
+ * removal went before both close. Send is [onSend] from an account and [onPropose] from a Safe,
+ * whose transfers are Safe transactions its owners sign; Swap likewise [onSwap] and [onSafeSwap].
  */
 @Composable
 fun AccountDetailRoute(
     viewModel: AccountDetailViewModel,
-    lightClient: LightClientViewModel,
+    /** The strip of the network this screen is about: its account's. */
+    lightClient: StateFlow<LightClientItem>,
     onBack: () -> Unit,
     onGone: () -> Unit,
     onSend: (contract: String?) -> Unit,
@@ -131,9 +156,12 @@ fun AccountDetailRoute(
     onImportRequest: () -> Unit,
     onOpenActivity: (ActivityKey) -> Unit,
     modifier: Modifier = Modifier,
+    onAddOnNetwork: () -> Unit = {},
+    onSafeSettings: () -> Unit = {},
+    onDerive: () -> Unit = {},
+    onContinueSwap: (sell: String) -> Unit = {},
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
-    val strip by lightClient.item.collectAsStateWithLifecycle()
     val gone by rememberUpdatedState(onGone)
     // A dialog destination over this one holds it at STARTED; it is RESUMED when in front.
     val inFront = LocalLifecycleOwner.current.lifecycle.currentStateAsState().value
@@ -143,25 +171,65 @@ fun AccountDetailRoute(
         if (leave) gone()
     }
     val isSafe = (state as? AccountDetailUiState.Ready)?.kind == AccountKind.SAFE
-    AccountDetailScreen(
-        state = state,
-        lightClient = strip,
-        onBack = onBack,
-        onSend = { contract -> if (isSafe) onPropose(contract) else onSend(contract) },
-        onSwap = { contract -> if (isSafe) onSafeSwap(contract) else onSwap(contract) },
-        onReceive = onReceive,
-        onCopy = rememberCopyText(),
-        onRename = onRename,
-        onRemove = onRemove,
-        onHideToken = viewModel::hideToken,
-        onMessageShown = viewModel::messageShown,
-        onSort = viewModel::sortBy,
-        onSegment = viewModel::show,
-        onOpenSafeTx = onOpenSafeTx,
-        onImportRequest = onImportRequest,
-        onOpenActivity = onOpenActivity,
-        modifier = modifier,
-    )
+    val send: (String?) -> Unit = { contract -> if (isSafe) onPropose(contract) else onSend(contract) }
+    val swap: (String?) -> Unit = { contract -> if (isSafe) onSafeSwap(contract) else onSwap(contract) }
+    val copy = rememberCopyText()
+    // The same state in the view the user chose (docs/simple-ui.md).
+    when (LocalInterfaceMode.current) {
+        InterfaceMode.SIMPLE -> SimpleAccountDetailScreen(
+            state = state,
+            onBack = onBack,
+            onSend = send,
+            onSwap = swap,
+            onReceive = onReceive,
+            onCopy = copy,
+            onRename = onRename,
+            onRemove = onRemove,
+            onHideToken = viewModel::hideToken,
+            onMessageShown = viewModel::messageShown,
+            onSort = viewModel::sortBy,
+            onSegment = viewModel::show,
+            onOpenSafeTx = onOpenSafeTx,
+            onImportRequest = onImportRequest,
+            onOpenActivity = onOpenActivity,
+            onRefresh = viewModel::refresh,
+            modifier = modifier,
+            onTurnOnNetwork = viewModel::turnOnNetwork,
+            onAddOnNetwork = onAddOnNetwork,
+            onSafeSettings = onSafeSettings,
+            onContinueSwap = onContinueSwap,
+            onDismissWaiting = viewModel::dismissWaiting,
+            onDerive = onDerive,
+            onToggleAmounts = viewModel::toggleAmounts,
+        )
+        // The strip is collected only where it is drawn: shared while subscribed, it stays idle otherwise.
+        InterfaceMode.DETAILED -> AccountDetailScreen(
+            state = state,
+            chrome = AccountChrome.Strip(lightClient.collectAsStateWithLifecycle().value),
+            onBack = onBack,
+            onSend = send,
+            onSwap = swap,
+            onReceive = onReceive,
+            onCopy = copy,
+            onRename = onRename,
+            onRemove = onRemove,
+            onHideToken = viewModel::hideToken,
+            onMessageShown = viewModel::messageShown,
+            onSort = viewModel::sortBy,
+            onSegment = viewModel::show,
+            onOpenSafeTx = onOpenSafeTx,
+            onImportRequest = onImportRequest,
+            onOpenActivity = onOpenActivity,
+            modifier = modifier,
+            onTurnOnNetwork = viewModel::turnOnNetwork,
+            onAddOnNetwork = onAddOnNetwork,
+            onSafeSettings = onSafeSettings,
+            onContinueSwap = onContinueSwap,
+            onDismissWaiting = viewModel::dismissWaiting,
+            onDerive = onDerive,
+            onToggleAmounts = viewModel::toggleAmounts,
+        )
+    }
 }
 
 /**
@@ -171,14 +239,23 @@ fun AccountDetailRoute(
  * account list; while the asset rows are shown, the menu also sorts them the other way
  * ([onSort]). Under the buttons are its tabs, Assets | Activity and a Safe's Owners | Queue.
  * [onSend] opens Send with the token at a contract chosen, or the network's currency (null). The
- * Activity tab's rows open their detail through [onOpenActivity]. A Safe's Queue opens a
- * transaction through [onOpenSafeTx] by its hash, and Import a request through [onImportRequest].
+ * Activity tab's rows open their detail through [onOpenActivity]; a swap waiting there for its next
+ * step opens Swap through [onContinueSwap], or goes through [onDismissWaiting]. A Safe's Queue opens a
+ * transaction through [onOpenSafeTx] by its hash, and Import a request through [onImportRequest];
+ * its Owners tab opens its settings through [onSafeSettings].
+ * The account's network is named beside its control (docs/networks.md, N3 and N4); while it is off,
+ * Send and Swap say so and offer to turn it on through [onTurnOnNetwork] (N19). An externally owned
+ * account's menu adds it on another network through [onAddOnNetwork] (N5), and the next account of
+ * its recovery phrase through [onDerive], greyed out while its key is not on this device.
+ * How the light client's state is shown is its [chrome]: Detailed view's strip under the top bar,
+ * or simple mode's ([SimpleAccountDetailScreen]) pull-to-refresh. Once the account is read, the eye
+ * beside Back hides or shows every amount ([onToggleAmounts]; docs/wallet-ux.md, *Hiding amounts*).
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun AccountDetailScreen(
     state: AccountDetailUiState,
-    lightClient: LightClientItem,
+    chrome: AccountChrome,
     onBack: () -> Unit,
     onSend: (contract: String?) -> Unit,
     onSwap: (contract: String?) -> Unit,
@@ -194,6 +271,13 @@ fun AccountDetailScreen(
     onImportRequest: () -> Unit,
     onOpenActivity: (ActivityKey) -> Unit,
     modifier: Modifier = Modifier,
+    onTurnOnNetwork: () -> Unit = {},
+    onAddOnNetwork: () -> Unit = {},
+    onSafeSettings: () -> Unit = {},
+    onContinueSwap: (sell: String) -> Unit = {},
+    onDismissWaiting: (sell: String) -> Unit = {},
+    onDerive: () -> Unit = {},
+    onToggleAmounts: () -> Unit = {},
 ) {
     val snackbar = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
@@ -212,13 +296,41 @@ fun AccountDetailScreen(
     // Send greyed out where it cannot be done: a tap says why (owner ruling, 2026-10-18, #55).
     var unavailable by remember { mutableStateOf<UnavailableNotice?>(null) }
     unavailable?.let { notice -> UnavailableDialog(notice, onDismiss = { unavailable = null }) }
+    // On a network that is off, the way to an action is to turn the network on (N19).
+    val notice: (String, String) -> UnavailableNotice = { action, reason ->
+        val ready = state as? AccountDetailUiState.Ready
+        if (ready != null && !ready.networkOn) {
+            val network = ready.network.name
+            networkOffNotice("$action needs $network", reason, network, onTurnOnNetwork)
+        } else {
+            UnavailableNotice(action, reason)
+        }
+    }
+    val safeSettings: () -> Unit = {
+        val reason = (state as? AccountDetailUiState.Ready)?.safeSettingsReason
+        if (reason == null) onSafeSettings() else unavailable = notice("Safe settings", reason)
+    }
     val send: (String?) -> Unit = { contract ->
         val reason = (state as? AccountDetailUiState.Ready)?.sendReason
-        if (reason == null) onSend(contract) else unavailable = UnavailableNotice("Send", reason)
+        if (reason == null) onSend(contract) else unavailable = notice("Send", reason)
     }
     val swap: (String?) -> Unit = { contract ->
         val reason = (state as? AccountDetailUiState.Ready)?.swapReason
-        if (reason == null) onSwap(contract) else unavailable = UnavailableNotice("Swap", reason)
+        if (reason == null) onSwap(contract) else unavailable = notice("Swap", reason)
+    }
+    // A waiting swap's Continue needs what Swap needs, and is greyed out with Swap's reason (#55).
+    val continueSwap: (String) -> Unit = { sell ->
+        val reason = (state as? AccountDetailUiState.Ready)?.swapReason
+        if (reason == null) onContinueSwap(sell) else unavailable = notice("Continue", reason)
+    }
+    // On a network that is off nothing is checked: Refresh is greyed out, with Turn on (#55).
+    val refresh: () -> Unit = {
+        val ready = state as? AccountDetailUiState.Ready
+        if (ready != null && !ready.networkOn) {
+            unavailable = notice("Refresh", refreshOffReason(ready.network.name))
+        } else {
+            (chrome as? AccountChrome.Refresh)?.onRefresh?.invoke()
+        }
     }
     Scaffold(
         modifier = modifier,
@@ -226,12 +338,25 @@ fun AccountDetailScreen(
         topBar = {
             TopAppBar(
                 navigationIcon = {
-                    IconButton(onClick = onBack) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
+                    Row {
+                        IconButton(onClick = onBack) {
+                            Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
+                        }
+                        // Top left, beside Back, while there are amounts to hide.
+                        (state as? AccountDetailUiState.Ready)?.let { HideAmountsButton(it.amountsHidden, onToggleAmounts) }
                     }
                 },
                 title = { Text((state as? AccountDetailUiState.Ready)?.label ?: "") },
                 actions = {
+                    // Pulling down is not the only way: a mouse, a screen reader, a keyboard get a button.
+                    if (chrome is AccountChrome.Refresh && state is AccountDetailUiState.Ready) {
+                        IconButton(
+                            onClick = refresh,
+                            Modifier.testTag(ACCOUNT_REFRESH_TAG).unavailable(!state.networkOn),
+                        ) {
+                            Icon(Icons.Filled.Refresh, contentDescription = "Refresh")
+                        }
+                    }
                     if (state is AccountDetailUiState.Ready) {
                         var menu by remember { mutableStateOf(false) }
                         IconButton(onClick = { menu = true }) {
@@ -250,6 +375,35 @@ fun AccountDetailScreen(
                                 sort,
                                 MenuAction("Copy address", SerotineIcons.ContentCopy) { copy(state.address) },
                                 MenuAction("Rename", Icons.Filled.Edit, onClick = onRename),
+                                // An EOA's address is the same account on every chain (N5); from a
+                                // network that is off, greyed out with Turn on (N18).
+                                MenuAction(
+                                    "Add on another network…",
+                                    Icons.Filled.Add,
+                                    unavailable = !state.networkOn,
+                                ) {
+                                    if (state.networkOn) {
+                                        onAddOnNetwork()
+                                    } else {
+                                        val network = state.network.name
+                                        unavailable = networkOffNotice(
+                                            "Add on another network",
+                                            addOnNetworkOffReason(network, state.label),
+                                            network,
+                                            onTurnOnNetwork,
+                                        )
+                                    }
+                                }.takeIf { state.kind == AccountKind.EOA },
+                                // The next account of its phrase; greyed out while its key is not here.
+                                deriveBlockedReason(state.control).let { reason ->
+                                    MenuAction("$DERIVE_ACTION…", SerotineIcons.Key, unavailable = reason != null) {
+                                        if (reason == null) {
+                                            onDerive()
+                                        } else {
+                                            unavailable = UnavailableNotice(DERIVE_ACTION, reason)
+                                        }
+                                    }
+                                }.takeIf { state.kind == AccountKind.EOA },
                                 MenuAction("Remove", Icons.Filled.Delete, destructive = true, onClick = onRemove),
                             ),
                             expanded = menu,
@@ -260,7 +414,7 @@ fun AccountDetailScreen(
             )
         },
     ) { padding ->
-        UnderLightClientStrip(lightClient, Modifier.padding(padding)) {
+        val body: @Composable BoxScope.() -> Unit = {
             when (state) {
                 AccountDetailUiState.Loading, AccountDetailUiState.Gone ->
                     CircularProgressIndicator(Modifier.align(Alignment.Center))
@@ -285,8 +439,21 @@ fun AccountDetailScreen(
                     onOpenSafeTx = onOpenSafeTx,
                     onImportRequest = onImportRequest,
                     onOpenActivity = onOpenActivity,
+                    onContinueSwap = continueSwap,
+                    onDismissWaiting = onDismissWaiting,
+                    onSafeSettings = safeSettings,
+                    simple = chrome is AccountChrome.Refresh,
                 )
             }
+        }
+        when (chrome) {
+            is AccountChrome.Strip -> UnderLightClientStrip(chrome.item, Modifier.padding(padding), body)
+            is AccountChrome.Refresh -> PullToRefreshBox(
+                isRefreshing = (state as? AccountDetailUiState.Ready)?.refreshing == true,
+                onRefresh = refresh,
+                modifier = Modifier.padding(padding).fillMaxSize(),
+                content = body,
+            )
         }
     }
 }
@@ -308,6 +475,11 @@ private fun Details(
     onOpenSafeTx: (String) -> Unit,
     onImportRequest: () -> Unit,
     onOpenActivity: (ActivityKey) -> Unit,
+    onContinueSwap: (String) -> Unit,
+    onDismissWaiting: (String) -> Unit,
+    onSafeSettings: () -> Unit,
+    /** Simple mode's chrome: the network on the blockie, the freshness line and the "can't check" banner. */
+    simple: Boolean,
 ) {
     // Each item ends with the space before the next, but an Activity's rows, which follow one another.
     val spaced = Modifier.padding(bottom = 16.dp)
@@ -321,13 +493,20 @@ private fun Details(
         state = if (reading) whileReading else position,
         contentPadding = PaddingValues(16.dp),
     ) {
+        // Simple mode, in place of the strip: the network cannot be checked right now.
+        state.cantCheck?.takeIf { simple }?.let { banner -> item { CantCheck(banner, spaced) } }
         item {
             Row(
                 spaced,
                 horizontalArrangement = Arrangement.spacedBy(16.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                AccountAvatar(state.address, size = 56.dp, threshold = state.threshold)
+                AccountAvatar(
+                    state.address,
+                    size = 56.dp,
+                    threshold = state.threshold,
+                    network = state.network.takeIf { simple },
+                )
                 Column {
                     Text(
                         state.total,
@@ -342,12 +521,31 @@ private fun Details(
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
                     }
+                    // Simple mode: how fresh the values are, in place of the strip's block.
+                    state.freshness?.takeIf { simple }?.let {
+                        Text(
+                            it,
+                            Modifier.testTag(ACCOUNT_FRESHNESS_TAG),
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
                     Row(
-                        horizontalArrangement = Arrangement.spacedBy(4.dp),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
+                        // The account's network beside its control (N3, N4): the same address on
+                        // another network is another account.
+                        NetworkMark(state.network, style = MaterialTheme.typography.labelMedium)
                         ControlBadge(state.control)
                         state.kindNote?.let { Text(it, style = MaterialTheme.typography.labelMedium) }
+                    }
+                    if (!state.networkOn) {
+                        Text(
+                            "${state.network.name} is off in this wallet: nothing is checked.",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.tertiary,
+                        )
                     }
                     // Why the title is the address: the ENS name it was named by no longer points here.
                     state.nameNote?.let {
@@ -385,8 +583,14 @@ private fun Details(
         // The same predicate as the top bar's sort entry, so the menu sorts exactly when the rows are shown.
         when {
             state.showsAssets -> item { Assets(state, onSend, onSwap, onCopyContract, onHideToken) }
-            state.segment == DetailSegment.ACTIVITY -> activityItems(state.activity, onOpenActivity)
-            state.segment == DetailSegment.OWNERS -> item { SafeOwners(checkNotNull(state.safe)) }
+            state.segment == DetailSegment.ACTIVITY -> activityItems(
+                state.activity,
+                onOpenActivity,
+                onContinue = onContinueSwap,
+                onDismiss = onDismissWaiting,
+                continueAvailable = state.canSwap,
+            )
+            state.segment == DetailSegment.OWNERS -> item { SafeOwners(checkNotNull(state.safe), state.safeSettingsReason == null, onSafeSettings) }
             else -> item { SafeQueueList(checkNotNull(state.queue), onOpenSafeTx, onImportRequest) }
         }
     }
@@ -647,11 +851,25 @@ private fun QueueItem(row: QueueRow, onClick: () -> Unit) {
 
 /**
  * A Safe's owners with their blockies, "this device" on the ones whose keys are held here, and
- * the threshold; the modules and the guard follow them (docs/wallet-ux.md, screen 16).
+ * the threshold; the modules and the guard follow them (docs/wallet-ux.md, screen 16). Safe
+ * settings, above them, opens the screen that shows and changes them ([onSafeSettings], screen 28),
+ * which says itself when they cannot be read or changed; greyed out unless [settingsAvailable]
+ * (the network off), a tap then saying why.
  */
 @Composable
-private fun SafeOwners(safe: SafeDetails) {
+private fun SafeOwners(safe: SafeDetails, settingsAvailable: Boolean, onSafeSettings: () -> Unit) {
     Column(Modifier.testTag(ACCOUNT_OWNERS_TAG), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        OutlinedButton(
+            onClick = onSafeSettings,
+            modifier = Modifier.testTag(ACCOUNT_SAFE_SETTINGS_TAG).unavailable(!settingsAvailable),
+            colors = if (settingsAvailable) {
+                ButtonDefaults.outlinedButtonColors()
+            } else {
+                ButtonDefaults.outlinedButtonColors(contentColor = Unavailable.contentColor())
+            },
+        ) {
+            Text("Safe settings")
+        }
         when (safe) {
             SafeDetails.Checking -> {
                 // The title and the threshold, then owners: as many as a Safe's are, until they are read.
@@ -742,7 +960,9 @@ private fun AssetItem(asset: AssetRow) {
             }
         },
         trailingContent = {
-            Column(horizontalAlignment = Alignment.End) {
+            // At most this wide, so a value with notes beside it ("€110.00 · Uniswap 30-min
+            // average") wraps under itself rather than squeezing the token's name.
+            Column(Modifier.widthIn(max = TRAILING_MAX_WIDTH), horizontalAlignment = Alignment.End) {
                 Text(
                     asset.amount,
                     style = MaterialTheme.typography.bodyLarge,
@@ -757,9 +977,46 @@ private fun AssetItem(asset: AssetRow) {
                         it,
                         style = MaterialTheme.typography.labelMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        textAlign = TextAlign.End,
                     )
                 }
             }
         },
     )
 }
+
+/**
+ * What the account screen shows of its network's light client: Detailed view's [Strip] of [Strip.item]
+ * under the top bar, or simple mode's [Refresh], pull-to-refresh and a Refresh button asking
+ * [Refresh.onRefresh], with the freshness line and the "can't check" banner in the strip's place.
+ */
+sealed interface AccountChrome {
+    /** Detailed view: the light client's strip. */
+    data class Strip(val item: LightClientItem) : AccountChrome
+
+    /** Simple mode: pull-to-refresh, its button, and how fresh the values are. */
+    data class Refresh(val onRefresh: () -> Unit) : AccountChrome
+}
+
+/** Why Refresh is greyed out on [network], which is off in this wallet. */
+private fun refreshOffReason(network: String): String =
+    "$network is off in this wallet, so nothing on it is checked. Turned on, it checks this account again."
+
+/** A network that cannot be checked right now (simple mode's banner in the strip's place). */
+@Composable
+private fun CantCheck(banner: UnreachableNetwork, modifier: Modifier) {
+    Surface(
+        modifier.fillMaxWidth(),
+        shape = MaterialTheme.shapes.medium,
+        color = MaterialTheme.colorScheme.tertiaryContainer,
+        contentColor = MaterialTheme.colorScheme.onTertiaryContainer,
+    ) {
+        Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+            Text(banner.title, style = MaterialTheme.typography.titleSmall)
+            Text(banner.text, style = MaterialTheme.typography.bodySmall)
+        }
+    }
+}
+
+/** The widest an asset row's amount and value may be. */
+private val TRAILING_MAX_WIDTH = 184.dp

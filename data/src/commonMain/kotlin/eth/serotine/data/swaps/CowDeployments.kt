@@ -37,6 +37,7 @@ internal object CowDeployments {
 
     /** The deployment pinned on [network], or null when none is. */
     fun of(network: Network): PinnedCow? = when (network) {
+        Network.ETHEREUM, Network.GNOSIS -> null
         Network.SEPOLIA -> SEPOLIA
     }
 

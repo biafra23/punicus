@@ -2,7 +2,7 @@ package eth.serotine.data.engine
 
 /**
  * How a storage proof the engine verified against the beacon chain is labelled, or null when it
- * may not be used: what `MyotisNode.proveSlot` reads off a `StorageProofResult`, over its plain
+ * may not be used: what `MyotisHost`'s `proveSlot` reads off a `StorageProofResult`, over its plain
  * values so that the decision is tested on its own. The label has two parts, each with its own
  * job ([ProofLabel]): the block a reading is shown with, and the verified anchor the proof is of,
  * which is what tells two proofs of one state from two of different states.

@@ -1,7 +1,9 @@
 package eth.serotine.ui.activity
 
+import eth.serotine.domain.model.AccountId
 import eth.serotine.domain.model.AccountKind
 import eth.serotine.domain.model.Address
+import eth.serotine.domain.model.Network
 import eth.serotine.domain.model.TokenTransfer
 import eth.serotine.domain.repository.AccountList
 import eth.serotine.domain.usecase.IndexedHistory
@@ -32,40 +34,45 @@ import kotlinx.coroutines.flow.onStart
  * the wallet sent to ([Parties.familiar]).
  */
 internal class ActivitySources(
-    private val address: Address,
+    private val account: AccountId,
     observeAccounts: ObserveAccounts,
     observeSafeHistory: ObserveSafeHistory,
     observeTokenTransfers: ObserveTokenTransfers,
     observeKnownTokens: ObserveKnownTokens,
     observeSentTo: ObserveSentToAddresses,
 ) {
+    private val address: Address = account.address
+
     private val accounts: Flow<AccountList> = observeAccounts()
 
     /** The wallet's accounts and the addresses it sent to: whom the rows name, and which senders they caution about. */
-    val parties: Flow<Parties> = combine(accounts, observeSentTo(), ::Parties)
+    val parties: Flow<Parties> = combine(
+        accounts,
+        observeSentTo(),
+    ) { list, sentTo -> Parties(list, sentTo, account.network) }
 
     /** The account's kind while it is in the wallet; null while it is not. */
     private val kind = accounts
-        .map { list -> (list as? AccountList.Loaded)?.accounts?.firstOrNull { it.address == address }?.kind }
+        .map { list -> (list as? AccountList.Loaded)?.accounts?.firstOrNull { it.id == account }?.kind }
         .distinctUntilChanged()
 
     /** The Safe's own events while the account is a Safe of the wallet; null for any other. */
     @OptIn(ExperimentalCoroutinesApi::class)
     val safeHistory: Flow<IndexedHistory<SafeChainEvent>?> = kind.flatMapLatest {
-        if (it == AccountKind.SAFE) observeSafeHistory(address) else flowOf(null)
+        if (it == AccountKind.SAFE) observeSafeHistory(account) else flowOf(null)
     }
 
     /** The account's token transfers while it is in the wallet; null while it is not. */
     @OptIn(ExperimentalCoroutinesApi::class)
     val transfers: Flow<IndexedHistory<TokenTransferEvent>?> =
-        kind.flatMapLatest { if (it != null) observeTokenTransfers(address) else flowOf(null) }
+        kind.flatMapLatest { if (it != null) observeTokenTransfers(account) else flowOf(null) }
 
     /**
      * The tokens the wallet knows, by address, shown or not (a row says why one it does not show
      * is not named); null until the list is read, so that the rows already known never wait for
      * the tokens' checks.
      */
-    val tokens: Flow<Map<Address, KnownToken>?> = observeKnownTokens()
+    val tokens: Flow<Map<Address, KnownToken>?> = observeKnownTokens(account.network)
         .map<KnownTokenList, Map<Address, KnownToken>?> { list -> list.tokens.associateBy { it.token.address } }
         .onStart { emit(null) }
 
@@ -86,13 +93,20 @@ internal fun TokenTransfer.movesNothing(): Boolean = this is TokenTransfer.Fungi
 
 /**
  * The wallet's accounts as [list] holds them, and the addresses it has sent to ([sentTo],
- * `ObserveSentToAddresses`): the names rows give addresses, and the senders they trust.
+ * `ObserveSentToAddresses`): the names rows of an account on [network] give addresses, and the
+ * senders they trust.
  */
-internal class Parties(val list: AccountList, private val sentTo: Set<Address>) {
+internal class Parties(val list: AccountList, private val sentTo: Set<Address>, network: Network) {
 
-    /** The wallet's names for addresses, by address; none while the accounts cannot be read. */
+    /**
+     * The wallet's names for addresses on [network], by address: an address is named by its
+     * account on the network the rows are about, never another network's; none while the
+     * accounts cannot be read.
+     */
     val names: Map<Address, String> =
-        (list as? AccountList.Loaded)?.accounts.orEmpty().associate { it.address to it.label }
+        (list as? AccountList.Loaded)?.accounts.orEmpty()
+            .filter { it.network == network }
+            .associate { it.address to it.label }
 
     /**
      * Whether a transfer from [sender] is from someone the user deals with: one of the wallet's

@@ -4,8 +4,10 @@ The screens Serotine is built towards, for externally owned accounts and Safe
 smart accounts, and the rules they follow. A screen PR is held to this page
 together with docs/architecture.md (how a screen is built) and
 docs/keys-and-signing.md (how a key is held and used). The rules here apply
-CLAUDE.md's *Trust* and *Data sources* sections to the screens; where this
-page and CLAUDE.md disagree, CLAUDE.md wins and this page is fixed.
+the *Trust* and *Data sources* rules to the screens (their short form in
+CLAUDE.md, their full text in `.claude/rules/trust.md` and
+`.claude/rules/data-sources.md`); where this page and those rules disagree,
+the rules win and this page is fixed.
 
 The mockups below (source: `wallet-ux-screens.html`, which opens in a
 browser) draw screens 1 to 20 with their numbers; Security (21) came later
@@ -19,17 +21,29 @@ the text wins.
 
 ## Rules every screen follows
 
-- **Sepolia only, and named.** The app works on Sepolia alone (owner ruling,
-  2026-10-15), so there is no network picker; a plain label says "Sepolia" on
-  the screens that matter for it (Accounts, Receive, Send review, Settings). Every
-  table this page mentions (tokens, price feeds, Safe singletons) is keyed by
-  `Network`, so another network is a data addition once the owner allows it.
+- **Two views** (owner's decisions, 2026-10-26, mockups approved
+  2026-10-27). Simple mode is the default in every build;
+  docs/simple-ui.md describes it, with its own mockups H1 to T1. The
+  screens on this page are Detailed view, which Settings → Advanced →
+  *Detailed view* turns on. Both views draw the same UiState, and every rule
+  below holds in both, except where a rule says what simple mode does
+  instead. A screen without a simple version draws its detailed one in both.
+
+- **Each account on its network, and named.** Ethereum and Gnosis Chain
+  beside Sepolia, one chain per account (owner ruling, 2026-10-22; it
+  replaces "Sepolia only" of 2026-10-15). There is no current network: a
+  screen takes its network from the account it shows and names it with the
+  network's mark, and the steps that add an account or create a Safe ask
+  for the network first. docs/networks.md is the plan this page follows for
+  networks, and its screens N1 to N20 add to the ones below. Every table this
+  page mentions (tokens, price feeds, Safe singletons) is kept per `Network`.
 - **Verified, or not available.** Every chain value comes from the embedded
   Myotis engine. When the engine cannot prove a value the screen says so
   ("not available", the light client's state); it never shows a guess, a
   value from another source, or an earlier value as if it were current. A
   value the user acts on (a balance on Send, a Safe's owners and threshold,
-  a receipt) names the block it was verified at.
+  a receipt) names the block it was verified at. In simple mode it names its
+  age instead ("Updated 2 min ago"), and the block is under *Details*.
 - **The light client's state is in sight wherever it decides something**
   (owner's request, 2026-10-20). Every screen whose content or actions
   depend on what the light client can verify draws its status strip (as on
@@ -40,7 +54,9 @@ the text wins.
   token list Settings opens and Add token (18, 20). A screen that needs
   nothing verified draws none: Receive (6), Rename and Remove, the recovery phrase screens (11, 12),
   Security (21) and Display currency (19). Settings itself (18) keeps its
-  own Light client row instead of the strip.
+  own Light client row instead of the strip. Simple mode draws no strip: a
+  freshness line, a banner when a network cannot be checked, and each
+  network's state in Settings take its place (docs/simple-ui.md).
 - **A balance last verified is shown as such** (owner's request,
   2026-10-19). While the light client has no head it can read at (asleep,
   catching up, its verified head too old, or no peer serving state proofs),
@@ -53,6 +69,16 @@ the text wins.
   as syncing. While the trust anchor is stale, a proof fails or the engine
   refuses, the row says that and shows no amount from before, and no other
   value (an address's kind, a Safe's owners, a price) is shown last known.
+- **In simple mode a balance may be read a while ago** (owner's decisions,
+  2026-10-26). On a network without block access lists (EIP-7928; Ethereum
+  and Gnosis Chain today), simple mode proves balances when a screen opens
+  and on pull-to-refresh, not at every head. While the light client
+  verifies, such a balance shows its age and counts in totals, at the price
+  read with it, for up to an hour; older, it is shown as last verified
+  (the rule above). A network with them (Sepolia) updates live. Nothing
+  acts on an aged balance: a quote, a review and a signature read fresh
+  state, and Send proves the balance it offers (Max included) when it
+  opens.
 - **Amounts are token units.** An amount is entered, reviewed and signed in
   the token's own units. Fiat values are display-only (owner ruling,
   2026-10-16, *Prices* below): a hint next to an amount, a total, a sort key,
@@ -64,7 +90,9 @@ the text wins.
 - **Every address has a blockie.** The ethereum/blockies identicon (seeded
   with the lowercase address) appears next to every address on screen: rows,
   headers, from and to, review, owners, detection, receive. A Safe's blockie
-  carries a `t/n` overlay: its threshold over its owner count. An address is
+  carries a `t/n` overlay: its threshold over its owner count. In simple
+  mode an account's blockie also carries its network's icon, the network
+  named in text beside it too (owner's request, 2026-10-27). An address is
   shown EIP-55 checksummed, shortened to `0x1234…abcd` where space is short
   and in full wherever the user confirms it.
 - **An address typed or pasted is checked at the input.** A mixed-case
@@ -123,6 +151,23 @@ the text wins.
   desktop) opens an item's menu; every action in it is also reachable from a
   visible control (the detail screen's buttons), and the menu has an
   accessibility label (`onLongClickLabel`).
+- **Hiding amounts** (owner's request, 2026-11-01; mockups approved the
+  same day). An eye at the top left of every screen that shows how much an
+  account holds or moved — Accounts (1), an account (4) with its Assets and
+  Activity (25), and an Activity row's detail (26) — hides the amounts: on
+  Accounts it stands where Back would, elsewhere right after Back. Open
+  while amounts show, closed and tinted while they are hidden; a tap
+  toggles it, and the choice is kept across restarts
+  (`AmountsHiddenSetting`, `FileAmountsHidden`). Hidden, every figure reads
+  `••••` beside its unit (`•••• ETH`, `€••••`), a sign and a "< " in front
+  of a tiny one included; what is held, names, addresses, networks, times
+  and statuses stay, and so does everything that is not an amount
+  ("Checking…", "No price"). Copy still copies what it copied. Send, Swap,
+  a CoW order, a Safe transaction and a transfer's status always show their
+  amounts: they are acted on, and a signature is never asked for blind. A
+  Safe's Queue rows are those transactions' and show theirs too. Both views
+  hide alike. The ViewModels mask, so the screens draw display-ready
+  strings as everywhere else (`components/HiddenAmounts.kt`).
 
 ## Navigation
 
@@ -181,13 +226,22 @@ upgrades*).
    as the ways to get one (owner ruling, 2026-10-18, #55).
 3. **Account menu**: Send (greyed out when watch-only, a tap saying why;
    for a Safe, usable once an owner of it is held here, and it opens the
-   proposal of a Safe transaction, 16) · Receive · Copy address · Rename · Remove. Removing an account the user
+   proposal of a Safe transaction, 16) · Receive · Copy address · Rename · New
+   account from the same phrase (an EOA's; greyed out when watch-only, a tap
+   saying why) · Remove. Removing an account the user
    holds a key for says that only its recovery phrase brings it back, and
    asks for a confirmation, not the wallet password (owner ruling,
    2026-10-18, #17). The key store keeps one envelope per account, under its
    address, so the removal deletes that account's envelope and its biometric
    wrap; with the last envelope the wallet password and the biometric path go
-   too (`EnvelopeKeyStore.delete`).
+   too (`EnvelopeKeyStore.delete`). New account from the same phrase is a
+   screen of its own, protected from screen capture while it takes the wallet
+   password: it adds an account of the recovery phrase the account comes from,
+   on the account's network (the first of the phrase's accounts whose key the
+   wallet does not hold there; one watched there becomes held), from the seed
+   stored here, without the words (docs/keys-and-signing.md, *Further accounts of a phrase*); then
+   it shows the account added, its name, address and number in the phrase.
+   The account detail's top-bar menu (4) offers it too.
 4. **Account detail**
    - Header: a large blockie, the account's total, the full address with
      Copy, the control badge.
@@ -414,7 +468,9 @@ upgrades*).
 16. **Safe detail**: as 4, with the tabs Assets | Activity | Owners |
     Queue (n). The owners are shown with blockies, a "this device" mark
     on the ones held here, and the threshold; the modules and guard
-    follow them.
+    follow them. Safe settings, above them, opens 28; it is greyed out
+    while the Safe's network is off (a tap offers Turn on) or this version
+    can no longer follow it, as Send is.
     - Queue lists this device's pending transactions in nonce order, from
       the Safe's verified nonce on: one whose nonce the Safe has passed is
       gone (`ObserveSafeTxQueue`), and the file drops it at the next
@@ -630,6 +686,53 @@ upgrades*).
       nonce passes it. One the Safe's nonce has passed says it ran, or that
       another transaction used its nonce.
 
+28. **Safe settings** (issue #183), from the Owners tab of 16: the Safe's
+    settings as its verified storage holds them, and the changes of them
+    an owner held here proposes, each a Safe transaction its owners sign
+    like any other (`ProposeSafeSettingsChange`).
+    - Shown: the owners (blockies, "This device" on the ones held here),
+      the threshold, the modules, the guard and, from 1.5.0, the module
+      guard, with the block they were verified at. Each owner offers
+      Replace and Remove; below them Add an owner, Change the threshold,
+      Disable for each module and Remove the guard where there is one.
+      While no owner of the Safe is held here every one of them is greyed
+      out, and a tap says why (owner ruling, 2026-10-18, #55). Enable a
+      module and Update the Safe's version are shown greyed out too, and a
+      tap says why they are never offered here: a module enabled is refused
+      (owner ruling, 2026-10-18, on #54), and a version update runs a
+      migration contract's code as the Safe, a delegate call, which this
+      wallet does not sign (#57) until a migration contract is pinned.
+    - Each change has its form: the owner it removes or replaces; the new
+      owner's address, typed or picked from the wallet's accounts on the
+      Safe's network that are not owners yet (an address only, no name); and
+      the threshold it leaves, a stepper from 1 to the owners the Safe then
+      has, starting at the Safe's own, or one below the owner count where
+      that would leave every owner needed. What is filled in is checked as
+      it is typed against the Safe as verified (`SafeSettingsChange.problem`):
+      an address that is no owner's (zero, the list sentinel `0x1`, the Safe
+      itself), an owner already, an owner or module no longer there, the
+      only owner removed, a threshold out of range or unchanged, and the
+      n-of-n above one the owner's ruling refuses (2026-10-18, #54; 17's
+      `NeedsRecoveryModule`), each said under it with Review greyed out.
+      Removing or replacing an owner held here says what it does to this
+      device's part: it signs with its other owners held here only, or,
+      with none left, the Safe becomes watch-only here. A module disabled
+      and the guard removed carry 17's warnings.
+    - Review proposes it from verified state: the Safe checked as a
+      one-shot check (17's wait), the change checked against it again, the
+      call the Safe's own function on itself with no ether, the entry before
+      an owner or module removed or replaced named from its verified list,
+      at the Safe's next nonce as 16's Send finds it, and run as a verified
+      call from the Safe to itself, which a revert stops. A change queued
+      before it on this device that changes the settings too is said: this
+      one is built against the lists as they are now, and its execution's
+      verified run says whether it still goes through. The review, its
+      minute, its refresh, the signature (the owner held here who signs,
+      the unlock of 8, the Safe checked again first) and a request the queue
+      cannot save follow 16's Send exactly; signed and queued, 17 opens for
+      it in place of the settings. The biometric prompt names the change in
+      full, its warning with it.
+
 ### Activity (issue #85)
 
 Screens 22 to 24 are the swap screens (docs/swaps.md).
@@ -754,9 +857,11 @@ Screens 22 to 24 are the swap screens (docs/swaps.md).
     (wallet password, biometric unlock; 21) · Network (Sepolia, the only one
     for now) · Light client (status) · Debug build (the debug Android app
     only: *Allow screen recording*, rule 8 of docs/keys-and-signing.md) ·
-    Developer (*Debug tab*, a switch in every build: 27; turning it off
-    empties the log) · About. Tokens opens the list of every token the
-    wallet knows, each with its check (*Tokens* below) and a visible ⋮ menu:
+    Advanced (*Detailed view*, off by default, docs/simple-ui.md; and under
+    it, only while it is on, *Debug tab*, a switch in every build: 27;
+    turning it off empties the log) · About. While Detailed view is off,
+    the screens are simple mode's and the Debug tab is hidden, its switch
+    kept. Tokens opens the list of every token the wallet knows, each with its check (*Tokens* below) and a visible ⋮ menu:
     Copy contract, Hide or Show, and Remove for an added one; Add token
     opens 20.
 19. **Display currency**: USD, EUR, GBP, CHF, JPY, ETH and BTC, limited to the
@@ -809,10 +914,16 @@ read through the light client. Applied:
 - **A feed table per network**: price id → feed address, the currency it
   quotes in, its decimals and its heartbeat, pinned in code from Chainlink's
   feed directory (`ChainlinkFeeds`). A token names its price id; a token
-  without one has no price. The pins say what is expected; the contract is
+  without one has no price. The pools that price what no feed does are a
+  table of their own (`UniswapPools`, below). The pins say what is expected; the contract is
   the source of truth. On Sepolia the table has ETH, BTC, LINK, USDC, EUR,
   GBP and JPY, each against USD; UNI has no Sepolia feed, so it has no price,
   and neither has a token the user adds.
+- **Where no feed is pinned, a pool's average** prices a token (owner
+  ruling, 2026-10-29, #205; .claude/rules/data-sources.md): a pinned Uniswap
+  pool's 30-minute average, today for COW and SAFE on Ethereum. Its value
+  reads "≈ $123.45 · Uniswap 30-min average", it counts in totals, and a
+  total that includes one says "includes Uniswap averages" under it.
 - **A price is a verified call** of `latestRoundData()` and `decimals()`,
   each at the verified head it is made at (two calls for now; one Multicall3
   call once its code hash is pinned, as for balances). The feed address is a
@@ -857,26 +968,63 @@ read through the light client. Applied:
 
 ## Home-screen widget
 
-An Android home-screen widget with one exchange rate: the network's native
-currency in the display currency (screen 19), in USD where that is ETH
-itself, or none is chosen, or the network does not offer the one stored (as
-the screens have it) — "ETH · EUR", "€2,046.20" — with its change over
-the 24 hours before it was read, "24h +2.31%" in green, "24h −1.05%" in red,
-"24h 0.00%" when it rounds to no move, and a line that dates it: "Verified
-Oct 21, 2:05 PM · may have changed since · testnet prices". A tap on the
-refresh button reads it now (below); a tap anywhere else opens the app. The desktop has no
-home screen, and iOS's widget (a WidgetKit extension) is still to come.
+An Android home-screen widget with one exchange rate, a pair chosen when it
+is placed (issue #178) in three steps:
+
+1. **The network**, among the networks that are on and have accounts (every
+   network that is on when none of those is).
+2. **The price**: the network's native currency first, then each price its
+   built-in tokens are priced by, each once and named with what it prices
+   ("ETH — Ether · WETH", "USDC — USDC · USDC.e" on Gnosis Chain, "EUR —
+   EURe"). Only a price with a feed pinned on that network, or a pool
+   pinned for the fallback (*Prices*), is offered: a token with no price, an
+   added one included, has no rate. A filter above the list narrows it as it
+   is typed into (owner's request, 2026-10-29, #207): a price stays when its
+   symbol or one of the names it prices holds the text, ignoring case ("usdc.e"
+   keeps "USDC — USDC · USDC.e"); a greyed-out token matches by its symbol and
+   stays greyed out. Nothing matched says "No price matches “…”". The filter
+   reads only the list on screen, so it starts no light client, and it empties
+   when another network is chosen.
+3. **The currency**: the display currency first, which the widget then
+   follows as the screens have it (screen 19; USD where that is the price
+   itself, none is chosen, or the network does not offer the one stored),
+   then USD and each display currency with a feed pinned on that network,
+   but the price itself.
+
+Choosing reads only the pinned tables, so it starts no light client. The
+widget shows the watched asset's bundled icon in its top-left corner (its
+network's own icon for a native currency, a built-in token's own otherwise;
+none where none is bundled), then the pair — "LINK · EUR", "€12.50" — with
+its change over the 24 hours before it was read, "24h +2.31%" in green,
+"24h −1.05%" in red, "24h 0.00%" when it rounds to no move, and a line that
+names its network and dates it: "Sepolia · Verified Oct 21, 2:05 PM · may
+have changed since · testnet prices". The choice is kept; another pair is
+another widget. One placed before pairs shows its network's native currency
+in the display currency, and one placed before networks shows Sepolia's. A
+widget of a network that is off keeps its last rate and says "Gnosis Chain
+is off" in place of "may have changed since", and nothing reads it until
+the network is on (docs/networks.md, *The widget*). A refresh reads only
+the pairs the placed widgets show, each network waking alone. A tap on the
+refresh button reads it now (below); a tap anywhere else opens the app.
+The desktop has no home screen, and iOS's widget (a WidgetKit extension) is
+still to come.
 
 - **Only verified rates, dated.** The rate is the price the screens show
-  (*Prices*, above), every check included; the change is the same path read
+  (*Prices*, above), every check included, or, where no feed is pinned, a
+  pool's 30-minute average (*Prices*, above); the change is the same path read
   from each feed's own round history, a day back by the head's own time:
   `getRoundData` calls of the feed's proxy at the verified head, never a
   call at a past block and never a rate the device kept, so both ends of the
-  change are what the light client proved. A day back with no verified,
-  fresh round on the path (a stale or unproven feed, an aggregator that took
-  over since) shows "24h —", never a change against something else. The
+  change are what the light client proved. A pool on the path is read a day
+  back the same way, by its own observations (`observe` at the verified
+  head). A day back with no verified, fresh round on the path (a stale or
+  unproven feed, an aggregator that took over since), or a pool whose
+  history does not reach that far, shows "24h —", never a change against
+  something else. A pool-sourced rate adds "Uniswap 30-min average" to the
+  line that names its network and dates it. The
   widget shows the last rate read, from a file of its own
-  (`last-exchange-rate.json`: a price and its times, public data only), with
+  (`last-exchange-rate.json`: a price and its times per pair, public data
+  only), with
   the date and time it was verified and marked as possibly changed since,
   as the one older answer CLAUDE.md's *Trust* allows is (a balance; a kept
   rate is not on that list, so this is for the owner to rule on); a stale
@@ -975,16 +1123,26 @@ address. Applied:
 - **Detection** (issue #10) reads only verified state, each value with its
   block: the proxy's code hash must be a pinned SafeProxy runtime hash; slot
   0 (the singleton) must be a pinned canonical singleton for the network
-  (1.3.0, 1.4.1 or 1.5.0, L1 or L2); the owners are the linked list in slot
-  2 walked from the sentinel `0x1` with storage proofs, the threshold is slot
-  4 and the nonce slot 5. The modules (slot 1's list), the guard and, from
-  1.5.0, the module guard are read too, because a module can move funds
-  without the owners' signatures.
+  (1.0.0, 1.1.1, 1.2.0, 1.3.0, 1.4.1 or 1.5.0, L1 or L2 where there is one);
+  the owners are the linked list in slot 2 walked from the sentinel `0x1`
+  with storage proofs, the threshold is slot 4 and the nonce slot 5. The
+  modules (slot 1's list), the guard and, from 1.5.0, the module guard are
+  read too, because a module can move funds without the owners' signatures;
+  a Safe older than 1.3.0 has neither guard, and is read as having none.
   Anything that does not match is "another contract", never a Safe. The
-  pins (`SafeDeployments`) cover 1.3.0, 1.4.1 and 1.5.0, L1 and L2, and the
-  SafeProxy runtime code of each factory. A Safe's control badge follows its
-  verified owners: as many held here as its threshold is full control, fewer
-  is co-signer, none is watch-only, and so is a Safe not read yet.
+  pins (`SafeDeployments`) cover 1.0.0, 1.1.1 and 1.2.0 (one proxy shared by
+  the last two) on Ethereum and Gnosis Chain, and, everywhere, 1.3.0, 1.4.1
+  and 1.5.0, L1 and L2, and the SafeProxy runtime code of each factory: a
+  pre-1.3.0 Safe whose owners moved it since to a pinned singleton
+  (`changeMasterCopy`) is recognised by its own older proxy pointing at that
+  pinned singleton, same as one still on its original singleton. Sepolia
+  pins 1.1.1 and 1.2.0 too (their singletons carry live code there) but not
+  1.0.0, whose Mainnet singleton predates Sepolia and has none there — a
+  recognised Safe always names a singleton proven to hold real Safe code on
+  that network, never merely an address this app expects one at. A Safe's
+  control badge follows its verified owners: as many held here as its
+  threshold is full control, fewer is co-signer, none is watch-only, and so
+  is a Safe not read yet.
   - The numbered slots carry the block they were proven at; the guards sit
     at hashed slots no storage proof names, so they are verified reads at the
     head, which may be a head newer than that block.
@@ -1084,12 +1242,14 @@ Still the owner's decisions (CLAUDE.md, docs/keys-and-signing.md and issue
 #11):
 
 - importing a raw private key (an EOA comes from a recovery phrase);
-- the synced-passkey owner tier and external signers;
+- the synced-passkey owner tier and hardware external signers (#42);
 - which recovery modules come (none is pinned, so none is offered when a
   Safe is created, screen 14), and how: still open (issues #54, #72);
-- the dApp connection protocol;
-- any network other than Sepolia (Ethereum and Gnosis Chain are planned in
-  docs/networks.md, which waits on the owner's rulings).
+- any network beyond Ethereum, Gnosis Chain and Sepolia (owner ruling,
+  2026-10-22; docs/networks.md).
 
 Swapping tokens has a page of its own, docs/swaps.md (issue #69). The swap
 screens there are numbered from 22.
+
+dApp connections have a page of their own too, docs/walletconnect.md (issue
+#22; owner rulings, 2026-11-03). Their screens there are numbered D1 to D8.

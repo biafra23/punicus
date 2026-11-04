@@ -2,6 +2,7 @@ package eth.serotine.domain.usecase
 
 import eth.serotine.domain.model.Account
 import eth.serotine.domain.model.AccountCustody
+import eth.serotine.domain.model.AccountId
 import eth.serotine.domain.model.AccountKind
 import eth.serotine.domain.model.Address
 import eth.serotine.domain.repository.AccountList
@@ -23,15 +24,22 @@ class ObserveSafe(
     private val kinds: AddressKinds,
     private val accounts: AccountRepository,
 ) {
-    operator fun invoke(address: Address): Flow<SafeReading> =
-        combine(kinds.observeKind(address), accounts.observeAccounts()) { reading, list ->
+    operator fun invoke(safe: AccountId): Flow<SafeReading> =
+        combine(kinds.observeKind(safe.network, safe.address), accounts.observeAccounts()) { reading, list ->
             when (reading) {
                 KindReading.Syncing -> SafeReading.Checking
                 is KindReading.Unavailable -> SafeReading.Unavailable(reading.reason)
                 is KindReading.Verified -> when (val kind = reading.kind) {
                     is AddressKind.Safe -> {
+                        // Owners held or watched anywhere in the wallet: an address is an owner on any chain,
+                        // and its key, held here on one network, signs on every one. One entry per owner:
+                        // the one held in the key store where there is one.
                         val inWallet = (list as? AccountList.Loaded)?.accounts.orEmpty()
                             .filter { it.address in kind.state.owners }
+                            .groupBy { it.address }
+                            .map { (_, entries) ->
+                                entries.firstOrNull { it.custody == AccountCustody.InKeyStore } ?: entries.first()
+                            }
                         SafeReading.Verified(kind.state, reading.blockNumber, inWallet)
                     }
                     else -> SafeReading.NotASafe
@@ -48,14 +56,14 @@ class ObserveSafes(
     private val accounts: AccountRepository,
     private val observeSafe: ObserveSafe,
 ) {
-    operator fun invoke(): Flow<Map<Address, SafeReading>> = accounts.observeAccounts()
+    operator fun invoke(): Flow<Map<AccountId, SafeReading>> = accounts.observeAccounts()
         .readEach(
             keys = { list ->
                 (list as? AccountList.Loaded)?.accounts.orEmpty()
                     .filter { it.kind == AccountKind.SAFE }
-                    .mapTo(LinkedHashSet()) { it.address }
+                    .mapTo(LinkedHashSet()) { it.id }
             },
-            read = { address -> observeSafe(address) },
+            read = { id -> observeSafe(id) },
         )
         .map { (_, read) -> read }
 }

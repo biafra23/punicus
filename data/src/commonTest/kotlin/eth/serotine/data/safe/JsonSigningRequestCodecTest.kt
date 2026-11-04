@@ -16,7 +16,7 @@ import kotlin.test.assertTrue
 
 class JsonSigningRequestCodecTest {
 
-    private val codec = JsonSigningRequestCodec(Network.SEPOLIA)
+    private val codec = JsonSigningRequestCodec()
     private val safe = Address.of("0x" + "5a".repeat(20))
     private val bob = Address.of("0x" + "bb".repeat(20))
     private val usdc = Address.of("0x1c7d4b196cb0c7b01d743fbc6116a902379c7238")
@@ -97,8 +97,9 @@ class JsonSigningRequestCodecTest {
         assertEquals(SigningRequestDecoding.UnknownVersion(2), decoded(text.replace("\"v\":1", "\"v\":2")))
         assertEquals(SigningRequestDecoding.UnknownVersion(2), decoded("{\"v\":2,\"anything\":true}"))
         assertEquals(
-            SigningRequestDecoding.WrongChain(1),
-            decoded(text.replace("\"chainId\":11155111", "\"chainId\":1")),
+            // Chain 10, OP Mainnet: no network of this wallet's.
+            SigningRequestDecoding.UnknownChain(10),
+            decoded(text.replace("\"chainId\":11155111", "\"chainId\":10")),
         )
     }
 

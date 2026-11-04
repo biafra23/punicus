@@ -34,6 +34,43 @@ internal object Sodium {
             memlimit: SizeT,
             alg: Int,
         ): Int
+
+        // WalletConnect's primitives (eth.serotine.data.walletconnect.WcCrypto). The lengths are
+        // unsigned long long, the length outputs pointers to one, passed as null where unused.
+
+        fun crypto_scalarmult_curve25519_base(q: Pointer, n: Pointer): Int
+
+        fun crypto_scalarmult_curve25519(q: Pointer, n: Pointer, p: Pointer): Int
+
+        fun crypto_aead_chacha20poly1305_ietf_encrypt(
+            c: Pointer,
+            clen: Pointer?,
+            m: Pointer?,
+            mlen: Long,
+            ad: Pointer?,
+            adlen: Long,
+            nsec: Pointer?,
+            npub: Pointer,
+            k: Pointer,
+        ): Int
+
+        fun crypto_aead_chacha20poly1305_ietf_decrypt(
+            m: Pointer?,
+            mlen: Pointer?,
+            nsec: Pointer?,
+            c: Pointer,
+            clen: Long,
+            ad: Pointer?,
+            adlen: Long,
+            npub: Pointer,
+            k: Pointer,
+        ): Int
+
+        fun crypto_sign_ed25519_seed_keypair(pk: Pointer, sk: Pointer, seed: Pointer): Int
+
+        fun crypto_sign_ed25519_detached(sig: Pointer, siglen: Pointer?, m: Pointer?, mlen: Long, sk: Pointer): Int
+
+        fun crypto_sign_ed25519_verify_detached(sig: Pointer, m: Pointer?, mlen: Long, pk: Pointer): Int
     }
 
     /** `size_t`, whatever its width on this platform (32 bits on 32-bit Android ABIs, 64 on Windows x64). */

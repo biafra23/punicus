@@ -1,5 +1,6 @@
 package eth.serotine.domain.usecase
 
+import eth.serotine.domain.model.Network
 import eth.serotine.domain.model.NetworkUpgrade
 import eth.serotine.domain.model.UpgradeNotice
 import eth.serotine.domain.model.UpgradeNotice.Kind
@@ -22,6 +23,7 @@ import kotlinx.coroutines.sync.withLock
  * [remind] while it does not. One instance per process: its calls take turns.
  */
 class UpgradeNotices(
+    private val network: Network,
     private val known: KnownUpgradeStore,
     private val notifier: UpgradeNotifier,
     private val clock: () -> Long = ::epochSecondsNow,
@@ -40,7 +42,7 @@ class UpgradeNotices(
      */
     suspend fun check(report: NetworkUpgrade?): Long? = lock.withLock {
         val now = clock()
-        val stored = known.observe().first()
+        val stored = known.observe(network).first()
         val (record, notice) = plan(stored, report, now)
         // Shown before the record says so: told twice beats never. Should the app die between
         // the two, the notice is shown again; a record that cannot be stored still has its
@@ -48,7 +50,7 @@ class UpgradeNotices(
         // save returns, the record already written.
         notice?.let(notifier::show)
         // Peers come and go, and with them the count of networks reporting: not worth a write.
-        if (record != null && record.ignoringCount() != stored?.ignoringCount()) known.save(record)
+        if (record != null && record.ignoringCount() != stored?.ignoringCount()) known.save(network, record)
         val next = record?.let { nextReminder(it, now) }
         if (armed != Reminder(next)) {
             notifier.remindAt(next)
@@ -66,7 +68,7 @@ class UpgradeNotices(
      * look for upgrades has nothing left to find. An activation told by the clock alone is not
      * enough: the fork may have moved, and the look is what hears its new time.
      */
-    suspend fun allSaid(): Boolean = known.observe().first()?.let {
+    suspend fun allSaid(): Boolean = known.observe(network).first()?.let {
         it.upgrade.phase == NetworkUpgrade.Phase.ACTIVE && Kind.ACTIVATED in it.shown
     } == true
 

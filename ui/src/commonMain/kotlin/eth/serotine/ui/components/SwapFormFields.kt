@@ -37,7 +37,8 @@ const val SWAP_TOLERANCE_TAG = "swap-tolerance"
  * ([toleranceError] why it is none). [note] says what holds the pair back, [quoting] while the
  * review is quoted, [error] why the last one was refused, [canReview] when it can be asked for.
  * [fixed] when the pair and the amount are set and only the tolerance may change: a Safe's swap
- * proposed again in place of one queued.
+ * proposed again in place of one queued. [simpleError] is [error] in simple mode's words, with no
+ * block, null where it is [error] itself.
  */
 data class SwapForm(
     val network: String,
@@ -58,6 +59,7 @@ data class SwapForm(
     val info: String? = null,
     val canReview: Boolean = false,
     val fixed: Boolean = false,
+    val simpleError: String? = null,
 )
 
 /**

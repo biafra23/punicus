@@ -60,22 +60,22 @@ class SafeCreationTest {
         override fun forCreation(network: Network): SafeRelease? = pinned
     }
     private var salts = 0L
-    private val planSafe = PlanSafe(releases, Network.SEPOLIA) { UInt256.of(++salts) }
+    private val planSafe = PlanSafe(releases) { UInt256.of(++salts) }
 
     /** What each address holds: codeless unless a test says otherwise. */
     private val kind = MutableStateFlow<KindReading>(KindReading.Verified(AddressKind.Eoa, 100))
     private val kinds = object : AddressKinds {
-        override fun observeKind(address: Address): Flow<KindReading> = kind
+        override fun observeKind(network: Network, address: Address): Flow<KindReading> = kind
     }
-    private val quote = QuoteSafeDeployment(kinds, world.nativeBalances, world.inputs, world.sent, Network.SEPOLIA) {
+    private val quote = QuoteSafeDeployment(kinds, world.nativeBalances, world.inputs, world.sent) {
         1_800_000_000
     }
 
     private fun plan(vararg owners: PlannedOwner, threshold: Int = 1, label: String = "Treasury"): SafePlan =
-        assertIs<SafePlanning.Planned>(planSafe(owners.toList(), threshold, label)).plan
+        assertIs<SafePlanning.Planned>(planSafe(Network.SEPOLIA, owners.toList(), threshold, label)).plan
 
     private fun refusal(vararg owners: PlannedOwner, threshold: Int = 1): SafePlanRefusal =
-        assertIs<SafePlanning.Refused>(planSafe(owners.toList(), threshold, "")).refusal
+        assertIs<SafePlanning.Refused>(planSafe(Network.SEPOLIA, owners.toList(), threshold, "")).refusal
 
     /** The factory's run returning [address], as `createProxyWithNonce` returns its proxy. */
     private fun returns(address: Address) {
@@ -110,9 +110,9 @@ class SafeCreationTest {
 
     @Test
     fun theDefaultSaltNoncesDiffer() {
-        val random = PlanSafe(releases, Network.SEPOLIA)
-        val first = assertIs<SafePlanning.Planned>(random(listOf(alice), 1, "")).plan
-        val second = assertIs<SafePlanning.Planned>(random(listOf(alice), 1, "")).plan
+        val random = PlanSafe(releases)
+        val first = assertIs<SafePlanning.Planned>(random(Network.SEPOLIA, listOf(alice), 1, "")).plan
+        val second = assertIs<SafePlanning.Planned>(random(Network.SEPOLIA, listOf(alice), 1, "")).plan
 
         assertNotEquals(first.saltNonce, second.saltNonce)
     }
@@ -163,20 +163,20 @@ class SafeCreationTest {
         val many = (1..21).map { PlannedOwner.Account(Address.of("0x" + it.toString(16).padStart(40, 'a'))) }
         assertEquals(
             SafePlanRefusal.TooManyOwners(PlanSafe.MAX_OWNERS),
-            assertIs<SafePlanning.Refused>(planSafe(many, 2, "")).refusal,
+            assertIs<SafePlanning.Refused>(planSafe(Network.SEPOLIA, many, 2, "")).refusal,
         )
-        assertIs<SafePlanning.Planned>(planSafe(many.take(20), 2, ""))
+        assertIs<SafePlanning.Planned>(planSafe(Network.SEPOLIA, many.take(20), 2, ""))
     }
 
     @Test
     fun aNameTooLongOrNoReleaseIsRefused() {
         assertEquals(
             SafePlanRefusal.NameTooLong,
-            assertIs<SafePlanning.Refused>(planSafe(listOf(alice), 1, "x".repeat(65))).refusal,
+            assertIs<SafePlanning.Refused>(planSafe(Network.SEPOLIA, listOf(alice), 1, "x".repeat(65))).refusal,
         )
         releases.pinned = null
         assertEquals(SafePlanRefusal.NoRelease, refusal(alice))
-        assertEquals(SafePlanRefusal.NoRelease, planSafe.ownersRefusal(listOf(alice)))
+        assertEquals(SafePlanRefusal.NoRelease, planSafe.ownersRefusal(Network.SEPOLIA, listOf(alice)))
     }
 
     @Test
@@ -342,7 +342,7 @@ class SafeCreationTest {
         val owners = listOf(world.alice.address, world.carol)
         val deployment = SentAction.SafeDeployment(world.safe, owners, 1, "1.4.1", "Vault")
 
-        val listing = async { list(deployment) }
+        val listing = async { list(Network.SEPOLIA, deployment) }
         runCurrent()
         assertFalse(listing.isCompleted, "codeless: the head does not have it yet")
 
@@ -350,7 +350,7 @@ class SafeCreationTest {
         kind.value = KindReading.Verified(AddressKind.Safe(state), 130)
 
         val listed = assertIs<DeployedSafeListing.Listed>(listing.await()).account
-        assertEquals(Account(world.safe, AccountKind.SAFE, "Vault", AccountCustody.Watched), listed)
+        assertEquals(Account(Network.SEPOLIA, world.safe, AccountKind.SAFE, "Vault", AccountCustody.Watched), listed)
         assertEquals(listOf(world.alice, listed), accounts.accounts.value)
     }
 
@@ -365,12 +365,12 @@ class SafeCreationTest {
         // Each read in turn: the detection, then the watch's own, which cannot be verified once.
         val answers = ArrayDeque(listOf(safe, KindReading.Unavailable(ReadUnavailable.UNPROVEN)))
         val flaky = object : AddressKinds {
-            override fun observeKind(address: Address): Flow<KindReading> =
+            override fun observeKind(network: Network, address: Address): Flow<KindReading> =
                 flowOf(answers.removeFirstOrNull() ?: safe)
         }
         val list = ListDeployedSafe(flaky, WatchAddress(accounts, flaky))
 
-        val listed = list(SentAction.SafeDeployment(world.safe, owners, 1, "1.4.1", "Vault"))
+        val listed = list(Network.SEPOLIA, SentAction.SafeDeployment(world.safe, owners, 1, "1.4.1", "Vault"))
 
         assertEquals("Vault", assertIs<DeployedSafeListing.Listed>(listed).account.label)
         assertEquals(listOf(world.alice, listed.account), accounts.accounts.value)
@@ -384,21 +384,28 @@ class SafeCreationTest {
         val deployment = SentAction.SafeDeployment(world.safe, owners, 1, "1.4.1", "Vault")
 
         // Codeless: nothing waits for code that will never come.
-        assertEquals(DeployedSafeListing.NoSafe, list.afterRevert(deployment))
+        assertEquals(DeployedSafeListing.NoSafe, list.afterRevert(Network.SEPOLIA, deployment))
         kind.value = KindReading.Unavailable(ReadUnavailable.STALE_ANCHOR)
-        assertEquals(DeployedSafeListing.NotVerified(ReadUnavailable.STALE_ANCHOR), list.afterRevert(deployment))
+        assertEquals(
+            DeployedSafeListing.NotVerified(ReadUnavailable.STALE_ANCHOR),
+            list.afterRevert(Network.SEPOLIA, deployment),
+        )
         kind.value = KindReading.Syncing
-        assertEquals(DeployedSafeListing.NotVerified(null), list.afterRevert(deployment))
+        assertEquals(DeployedSafeListing.NotVerified(null), list.afterRevert(Network.SEPOLIA, deployment))
         val reversed = SafeState("1.4.1", false, owners.reversed(), 1, 0, emptyList(), null)
         kind.value = KindReading.Verified(AddressKind.Safe(reversed), 130)
-        assertEquals(DeployedSafeListing.NotTheSafe, list.afterRevert(deployment), "the owners in another order")
+        assertEquals(
+            DeployedSafeListing.NotTheSafe,
+            list.afterRevert(Network.SEPOLIA, deployment),
+            "the owners in another order",
+        )
         assertEquals(listOf(world.alice), accounts.accounts.value)
 
         // Someone's copy of the same call was mined first: the very Safe planned.
         val state = SafeState("1.4.1", false, owners, 1, 0, emptyList(), null)
         kind.value = KindReading.Verified(AddressKind.Safe(state), 130)
-        val listed = assertIs<DeployedSafeListing.Listed>(list.afterRevert(deployment)).account
-        assertEquals(Account(world.safe, AccountKind.SAFE, "Vault", AccountCustody.Watched), listed)
+        val listed = assertIs<DeployedSafeListing.Listed>(list.afterRevert(Network.SEPOLIA, deployment)).account
+        assertEquals(Account(Network.SEPOLIA, world.safe, AccountKind.SAFE, "Vault", AccountCustody.Watched), listed)
     }
 
     @Test
@@ -410,15 +417,15 @@ class SafeCreationTest {
 
         assertEquals(
             DeployedSafeListing.NotTheSafe,
-            list(SentAction.SafeDeployment(world.safe, owners, 1, "1.4.1", "Vault")),
+            list(Network.SEPOLIA, SentAction.SafeDeployment(world.safe, owners, 1, "1.4.1", "Vault")),
         )
     }
 
     @Test
     fun whetherAReleaseIsPinnedIsAskedOnItsOwn() {
-        assertTrue(planSafe.hasRelease())
+        assertTrue(planSafe.hasRelease(Network.SEPOLIA))
         releases.pinned = null
-        assertFalse(planSafe.hasRelease())
+        assertFalse(planSafe.hasRelease(Network.SEPOLIA))
     }
 
     @Test
@@ -429,17 +436,18 @@ class SafeCreationTest {
         val deployment = SentAction.SafeDeployment(world.safe, owners, 1, "1.4.1", "")
 
         kind.value = KindReading.Verified(AddressKind.Contract, 130)
-        assertEquals(DeployedSafeListing.NotTheSafe, list(deployment))
+        assertEquals(DeployedSafeListing.NotTheSafe, list(Network.SEPOLIA, deployment))
         val other = SafeState("1.4.1", false, listOf(world.alice.address, world.bob.address), 1, 0, emptyList(), null)
         kind.value = KindReading.Verified(AddressKind.Safe(other), 130)
-        assertEquals(DeployedSafeListing.NotTheSafe, list(deployment), "other owners")
+        assertEquals(DeployedSafeListing.NotTheSafe, list(Network.SEPOLIA, deployment), "other owners")
         val raised = SafeState("1.4.1", false, listOf(world.alice.address, world.carol), 2, 0, emptyList(), null)
         kind.value = KindReading.Verified(AddressKind.Safe(raised), 130)
-        assertEquals(DeployedSafeListing.NotTheSafe, list(deployment), "another threshold")
+        assertEquals(DeployedSafeListing.NotTheSafe, list(Network.SEPOLIA, deployment), "another threshold")
         assertEquals(listOf(world.alice), accounts.accounts.value)
     }
 
     private fun deploymentRecord(plan: SafePlan, nonce: Long) = SentTransfer(
+        network = Network.SEPOLIA,
         account = world.alice.address,
         nonce = nonce,
         signed = SignedTransfer(byteArrayOf(2, nonce.toByte())),
@@ -453,9 +461,14 @@ class SafeCreationTest {
         val plan = plan(alice, bob)
         returns(plan.address)
         val other = SentTransfer(
-            world.alice.address, 7, SignedTransfer(byteArrayOf(2, 7)),
-            SentAction.Transfer(world.carol, TransferAsset.Native, UInt256.ONE), UInt256.ONE,
-            sentAt = 1_799_999_000, maybeSent = true,
+            Network.SEPOLIA,
+            world.alice.address,
+            7,
+            SignedTransfer(byteArrayOf(2, 7)),
+            SentAction.Transfer(world.carol, TransferAsset.Native, UInt256.ONE),
+            UInt256.ONE,
+            sentAt = 1_799_999_000,
+            maybeSent = true,
         )
         world.sent.transfers.value = listOf(other)
 

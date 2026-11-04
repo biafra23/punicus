@@ -4,9 +4,14 @@ import eth.serotine.domain.model.Account
 import eth.serotine.domain.model.AccountCustody
 import eth.serotine.domain.model.AccountKind
 import eth.serotine.domain.model.Address
+import eth.serotine.domain.model.Network
 import eth.serotine.domain.repository.NameResolution
 import eth.serotine.domain.repository.NameResolver
 import eth.serotine.domain.repository.ReadUnavailable
+import kotlin.test.Test
+import kotlin.test.assertEquals
+import kotlin.time.Duration.Companion.minutes
+import kotlin.time.Duration.Companion.seconds
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.launch
@@ -14,10 +19,6 @@ import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.advanceTimeBy
 import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
-import kotlin.test.Test
-import kotlin.test.assertEquals
-import kotlin.time.Duration.Companion.minutes
-import kotlin.time.Duration.Companion.seconds
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class ObserveEnsNamesTest {
@@ -25,14 +26,27 @@ class ObserveEnsNamesTest {
     private val savings = Address.of("0x" + "ab".repeat(20))
     private val elsewhere = Address.of("0x" + "cd".repeat(20))
     private val byName =
-        Account(savings, AccountKind.EOA, "savings.eth", AccountCustody.Watched, ensName = "savings.eth")
-    private val daily = Account(Address.of("0x" + "11".repeat(20)), AccountKind.EOA, "Daily", AccountCustody.Watched)
+        Account(
+            Network.SEPOLIA,
+            savings,
+            AccountKind.EOA,
+            "savings.eth",
+            AccountCustody.Watched,
+            ensName = "savings.eth",
+        )
+    private val daily = Account(
+        Network.SEPOLIA,
+        Address.of("0x" + "11".repeat(20)),
+        AccountKind.EOA,
+        "Daily",
+        AccountCustody.Watched,
+    )
 
     private val names = object : NameResolver {
         var answer: NameResolution = NameResolution.Resolved("savings.eth", savings, 100)
         val asked = mutableListOf<String>()
 
-        override suspend fun resolve(name: String): NameResolution {
+        override suspend fun resolve(network: Network, name: String): NameResolution {
             asked += name
             return answer
         }
@@ -52,48 +66,48 @@ class ObserveEnsNamesTest {
     fun onlyAnAccountThatFollowsANameIsCheckedAndItsNameVerified() = runTest {
         val checks = latest(observe())
 
-        assertEquals(mapOf(savings to EnsNameCheck.Verified(100)), checks())
+        assertEquals(mapOf(savings.onSepolia to EnsNameCheck.Verified(100)), checks())
         assertEquals(listOf("savings.eth"), names.asked)
     }
 
     @Test
     fun aNameThatPointsElsewhereOrNowhereHasMovedAndOneOnlyOffchainCannotBeVerified() = runTest {
         names.answer = NameResolution.Resolved("savings.eth", elsewhere, 100)
-        assertEquals(mapOf(savings to EnsNameCheck.Moved), latest(observe())())
+        assertEquals(mapOf(savings.onSepolia to EnsNameCheck.Moved), latest(observe())())
 
         names.answer = NameResolution.NoAddress
-        assertEquals(mapOf(savings to EnsNameCheck.Moved), latest(observe())())
+        assertEquals(mapOf(savings.onSepolia to EnsNameCheck.Moved), latest(observe())())
 
         names.answer = NameResolution.OffchainOnly
-        assertEquals(mapOf(savings to EnsNameCheck.Unverifiable), latest(observe())())
+        assertEquals(mapOf(savings.onSepolia to EnsNameCheck.Unverifiable), latest(observe())())
     }
 
     @Test
     fun theNameIsCheckedAgainAtTheIntervalAndSoonerWhileUnverified() = runTest {
         names.answer = NameResolution.Unavailable(ReadUnavailable.UNPROVEN)
         val checks = latest(observe())
-        assertEquals(mapOf(savings to EnsNameCheck.Unavailable(ReadUnavailable.UNPROVEN)), checks())
+        assertEquals(mapOf(savings.onSepolia to EnsNameCheck.Unavailable(ReadUnavailable.UNPROVEN)), checks())
 
         names.answer = NameResolution.Resolved("savings.eth", savings, 120)
         advanceTimeBy(30.seconds + 1.seconds)
-        assertEquals(mapOf(savings to EnsNameCheck.Verified(120)), checks())
+        assertEquals(mapOf(savings.onSepolia to EnsNameCheck.Verified(120)), checks())
 
         names.answer = NameResolution.Resolved("savings.eth", elsewhere, 160)
         advanceTimeBy(9.minutes)
-        assertEquals(mapOf(savings to EnsNameCheck.Verified(120)), checks(), "not before the interval")
+        assertEquals(mapOf(savings.onSepolia to EnsNameCheck.Verified(120)), checks(), "not before the interval")
         advanceTimeBy(1.minutes + 1.seconds)
-        assertEquals(mapOf(savings to EnsNameCheck.Moved), checks())
+        assertEquals(mapOf(savings.onSepolia to EnsNameCheck.Moved), checks())
     }
 
     @Test
     fun aVerifiedAnswerStandsWhileTheNextCheckCannotBeVerified() = runTest {
         names.answer = NameResolution.Resolved("savings.eth", elsewhere, 100)
         val checks = latest(observe())
-        assertEquals(mapOf(savings to EnsNameCheck.Moved), checks())
+        assertEquals(mapOf(savings.onSepolia to EnsNameCheck.Moved), checks())
 
         names.answer = NameResolution.Unavailable(ReadUnavailable.UNPROVEN)
         advanceTimeBy(10.minutes + 1.seconds)
-        assertEquals(mapOf(savings to EnsNameCheck.Moved), checks(), "not shown as the account's name again")
+        assertEquals(mapOf(savings.onSepolia to EnsNameCheck.Moved), checks(), "not shown as the account's name again")
         assertEquals(2, names.asked.size)
 
         // With an answer standing, an unverifiable check is retried at the interval, not sooner.
@@ -107,7 +121,7 @@ class ObserveEnsNamesTest {
     fun aRenamedAccountIsNoLongerChecked() = runTest {
         val checks = latest(observe())
 
-        repository.rename(savings, "Savings")
+        repository.rename(savings.onSepolia, "Savings")
         runCurrent()
 
         assertEquals(emptyMap(), checks())

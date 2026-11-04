@@ -281,7 +281,7 @@ private fun SafeTxGasTermsPreview() = SafeTxPreview(
                 "safeTxGas: 50,000",
                 "baseGas: 0",
                 "gasPrice: 1,000,000,000 wei",
-                "A refund is paid in ether",
+                "A refund is paid in ETH",
                 "A refund goes to the refund receiver",
             ),
             addresses = listOf(ActionAddress("Refund receiver", FRIEND)),

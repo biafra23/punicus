@@ -1,8 +1,9 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- The exchange-rate widget (RateWidget): the pair, its change over 24 hours and the button
-     that refreshes it now on the first line, the rate across the whole width under them, and the
-     line that dates it. The change has a view per direction, each with its colour from the
-     resources, so the launcher picks the light or dark one itself; the widget shows one. -->
+<!-- The exchange-rate widget (RateWidget): the watched asset's icon in the top-left corner, the
+     pair, its change over 24 hours and the button that refreshes it now on the first line, the
+     rate across the whole width under them, and the line that dates it. The change has a view
+     per direction, each with its colour from the resources, so the launcher picks the light or
+     dark one itself; the widget shows one. -->
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:id="@+id/widget_root"
     android:layout_width="match_parent"
@@ -72,13 +73,24 @@
                 android:textColor="@color/widget_text_secondary" />
         </LinearLayout>
 
+        <!-- The watched asset's bundled icon, top left; hidden where none is bundled for it. -->
+        <ImageView
+            android:id="@+id/widget_icon"
+            android:layout_width="16dp"
+            android:layout_height="16dp"
+            android:layout_alignParentStart="true"
+            android:layout_centerVertical="true"
+            android:layout_marginEnd="4dp"
+            android:contentDescription="@null"
+            android:visibility="gone" />
+
         <TextView
             android:id="@+id/widget_pair"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_alignParentStart="true"
             android:layout_centerVertical="true"
             android:layout_toStartOf="@id/widget_change"
+            android:layout_toEndOf="@id/widget_icon"
             android:ellipsize="end"
             android:maxLines="1"
             android:text="@string/rate_widget_placeholder_pair"

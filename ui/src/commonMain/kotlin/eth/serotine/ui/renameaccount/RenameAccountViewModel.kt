@@ -2,6 +2,7 @@ package eth.serotine.ui.renameaccount
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import eth.serotine.domain.model.AccountId
 import eth.serotine.domain.model.Address
 import eth.serotine.domain.usecase.AccountLookup
 import eth.serotine.domain.usecase.AccountRename
@@ -16,17 +17,20 @@ import kotlinx.coroutines.launch
 
 /** The rename dialog's ViewModel: the name of the account under [address], edited and saved. */
 class RenameAccountViewModel(
-    private val address: Address,
+    private val account: AccountId,
     observeAccount: ObserveAccount,
     private val renameAccount: RenameAccount,
 ) : ViewModel() {
+    /** The account this screen is about: its address, on its network. */
+    private val address: Address = account.address
+
 
     private val state = MutableStateFlow<RenameAccountUiState>(RenameAccountUiState.Loading)
     val uiState: StateFlow<RenameAccountUiState> = state.asStateFlow()
 
     init {
         viewModelScope.launch {
-            state.value = when (val lookup = observeAccount(address).first()) {
+            state.value = when (val lookup = observeAccount(account).first()) {
                 is AccountLookup.Found -> RenameAccountUiState.Editing(lookup.account.label)
                 AccountLookup.NotInList -> RenameAccountUiState.Gone
                 AccountLookup.ListUnavailable -> RenameAccountUiState.Unavailable(LIST_UNAVAILABLE)
@@ -49,7 +53,7 @@ class RenameAccountViewModel(
         if (editing.saving) return
         state.value = editing.copy(saving = true, error = null)
         viewModelScope.launch {
-            state.value = when (renameAccount(address, editing.name)) {
+            state.value = when (renameAccount(account, editing.name)) {
                 AccountRename.Renamed -> RenameAccountUiState.Done
                 AccountRename.NotFound -> RenameAccountUiState.Gone
                 AccountRename.Blank -> editing.copy(error = "Enter a name")

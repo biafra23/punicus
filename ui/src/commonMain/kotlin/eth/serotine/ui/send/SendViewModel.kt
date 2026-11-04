@@ -4,6 +4,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import eth.serotine.domain.model.Account
 import eth.serotine.domain.model.AccountCustody
+import eth.serotine.domain.model.AccountId
 import eth.serotine.domain.model.AccountKind
 import eth.serotine.domain.model.Address
 import eth.serotine.domain.model.DisplayCurrency
@@ -46,10 +47,12 @@ import eth.serotine.ui.components.SendFrom
 import eth.serotine.ui.components.TransferForm
 import eth.serotine.ui.components.UnlockStep
 import eth.serotine.ui.components.ZERO_ADDRESS
+import eth.serotine.ui.components.addressFieldLabel
 import eth.serotine.ui.components.amountHint
 import eth.serotine.ui.components.assetOptions
 import eth.serotine.ui.components.biometricsOn
 import eth.serotine.ui.components.biometricsStillOffered
+import eth.serotine.ui.components.epochSecondsNow
 import eth.serotine.ui.components.exactAmount
 import eth.serotine.ui.components.feeDetail
 import eth.serotine.ui.components.figureText
@@ -57,13 +60,18 @@ import eth.serotine.ui.components.grouped
 import eth.serotine.ui.components.notSentItem
 import eth.serotine.ui.components.notSignedText
 import eth.serotine.ui.components.promptDeadline
+import eth.serotine.ui.components.recipientHint
 import eth.serotine.ui.components.recipientItem
 import eth.serotine.ui.components.recipientNote
+import eth.serotine.ui.components.redatedWhile
 import eth.serotine.ui.components.recipientStates
 import eth.serotine.ui.components.recipientText
 import eth.serotine.ui.components.resolveAgain
+import eth.serotine.ui.components.retryLookupWaits
 import eth.serotine.ui.components.typedAmount
 import eth.serotine.ui.components.verifiedAt
+import kotlin.time.TimeMark
+import kotlin.time.TimeSource
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.NonCancellable
@@ -77,8 +85,6 @@ import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import kotlin.time.TimeMark
-import kotlin.time.TimeSource
 
 /**
  * The Send screen's ViewModel (docs/wallet-ux.md, screens 7 and 8): a transfer from [from] on
@@ -96,13 +102,16 @@ import kotlin.time.TimeSource
  * made again. Its recipient's name is resolved again
  * with every quote. A price never reaches it: the amount is what was typed, in token units.
  *
+ * The compose step dates each balance against [now] (unix seconds), anew every second: simple mode
+ * shows how long ago it was proved in place of its block (docs/simple-ui.md).
+ *
  * One of the ViewModels the [WalletPassword] passes through (CLAUDE.md, *Trust*): it holds it in
  * the review's state while the field is shown, hands it to the signer in an [Unlock], and never
  * logs, saves or caches it; it is dropped once used, when the screen is not shown ([onHidden])
  * and when the screen is gone ([onCleared]).
  */
 class SendViewModel(
-    private val from: Address,
+    private val account: AccountId,
     asset: Address?,
     observeAccounts: ObserveAccounts,
     observeAccountValue: ObserveAccountValue,
@@ -112,9 +121,15 @@ class SendViewModel(
     private val sendTransfer: SendTransfer,
     private val rebroadcastTransfer: RebroadcastTransfer,
     private val warmFeeHistory: WarmFeeHistory,
-    private val network: Network,
     private val timeSource: TimeSource = TimeSource.Monotonic,
+    private val now: () -> Long = ::epochSecondsNow,
 ) : ViewModel() {
+    /** The account this screen is about: its address, on its network. */
+    private val from: Address = account.address
+
+    /** The account's network: everything here is read and sent there. */
+    private val network: Network = account.network
+
 
     init {
         // The compose step is open: the fee history is asked for now, ready by the review.
@@ -181,8 +196,13 @@ class SendViewModel(
          * [earlier] the hash of an earlier transaction that may still be on its way, which held it
          * back: its status is where it is tried again.
          */
-        data class Composing(val quoting: Boolean = false, val error: String? = null, val earlier: String? = null) :
-            Step
+        data class Composing(
+            val quoting: Boolean = false,
+            val error: String? = null,
+            val earlier: String? = null,
+            /** [error] in simple mode's words, null where it is the same: no block named. */
+            val simpleError: String? = null,
+        ) : Step
 
         /**
          * [quote] of [request], made at [quotedAt], under review; [hidden] once the screen stopped
@@ -229,7 +249,7 @@ class SendViewModel(
         recipientStates(inputs.map { it.to.trim() to it.lookupAttempt }, ::lookUp)
 
     private val model: StateFlow<Model?> =
-        combine(observeAccounts(), observeAccountValue(from), inputs, lookup) { list, value, inputs, lookup ->
+        combine(observeAccounts(), observeAccountValue(account), inputs, lookup) { list, value, inputs, lookup ->
             modelOf(list, value, inputs, lookup)
         }.stateIn(
             viewModelScope,
@@ -238,11 +258,17 @@ class SendViewModel(
             null,
         )
 
-    val uiState: StateFlow<SendUiState> = combine(model, step) { model, step -> render(model, step) }.stateIn(
-        viewModelScope,
-        SharingStarted.WhileSubscribed(stopTimeoutMillis = 5_000, replayExpirationMillis = 0),
-        SendUiState.Loading(network.displayName),
-    )
+    val uiState: StateFlow<SendUiState> = combine(model, step) { model, step -> model to step }
+        // A balance's age, which simple mode shows, is dated anew every second on the compose step.
+        .redatedWhile { (model, step) ->
+            step is Step.Composing && model?.options.orEmpty().any { it.provenAt != null }
+        }
+        .map { (model, step) -> render(model, step) }
+        .stateIn(
+            viewModelScope,
+            SharingStarted.WhileSubscribed(stopTimeoutMillis = 5_000, replayExpirationMillis = 0),
+            SendUiState.Loading(network.displayName),
+        )
 
     /** Chooses the asset: the token at [contract], or the network's currency (null). */
     fun onAssetChange(contract: String?) {
@@ -497,6 +523,7 @@ class SendViewModel(
             return Step.Composing(
                 error = refusal(quoting, request.option),
                 earlier = (quoting as? TransferQuoting.EarlierMaybeSent)?.hash,
+                simpleError = (quoting as? TransferQuoting.Reverts)?.let { simpleReverts(request.option) },
             )
         }
         return Step.Reviewing(
@@ -533,7 +560,8 @@ class SendViewModel(
         }
 
     private fun modelOf(list: AccountList, value: AccountValue, inputs: Inputs, lookup: RecipientState): Model {
-        val accounts = (list as? AccountList.Loaded)?.accounts.orEmpty()
+        // The sender's network's accounts only: the same address on another network is another account.
+        val accounts = (list as? AccountList.Loaded)?.accounts.orEmpty().filter { it.network == network }
         val sender = when (list) {
             is AccountList.Unreadable -> Sender.Cannot(LIST_UNAVAILABLE)
             is AccountList.Loaded -> {
@@ -578,6 +606,7 @@ class SendViewModel(
 
     private fun compose(model: Model, sender: SendFrom, step: Step.Composing): SendUiState.Compose {
         val inputs = model.inputs
+        val at = now()
         val text = inputs.to.trim()
         // The lookup of what is typed now; one of an earlier text is no answer about it.
         val lookup = model.lookup.takeIf { it.text == text }
@@ -587,9 +616,11 @@ class SendViewModel(
         val amount = typedAmount(inputs.amount, selected)
         val form = TransferForm(
             network = network.displayName,
+            toLabel = addressFieldLabel(network),
+            toHint = recipientHint(network),
             from = sender,
-            assets = model.options.map { it.choice() },
-            asset = selected?.choice(),
+            assets = model.options.map { it.choice(at) },
+            asset = selected?.choice(at),
             to = inputs.to,
             accounts = model.accounts.filter { it.address != from }
                 .map { AccountChoice(it.label, Eip55.format(it.address)) },
@@ -603,11 +634,13 @@ class SendViewModel(
             toNote = note,
             toError = isError,
             canRetryLookup = result is RecipientLookup.Unavailable,
+            retryLookupWaits = retryLookupWaits(result),
             amountError = amount.error,
             amountHint = amountHint(amount.units, selected, model.currency, network),
             canMax = selected?.balance != null && !step.quoting,
             quoting = step.quoting,
             error = step.error,
+            simpleError = step.simpleError,
             canReview = !step.quoting && requestOf(model) != null,
         )
         return SendUiState.Compose(form, inputs.fee, earlier = step.earlier)
@@ -628,6 +661,7 @@ class SendViewModel(
         }
         val nativeBalance = BalanceChange(
             what = "$native balance" + if (tokenBalance != null) ", which pays the fee" else "",
+            short = "$native balance",
             before = exactAmount(quote.nativeBefore, NATIVE_DECIMALS, native),
             after = "at least " + exactAmount(quote.nativeAfterAtLeast, NATIVE_DECIMALS, native),
             verifiedAt = verifiedAt(quote.balanceBlock),
@@ -696,6 +730,13 @@ class SendViewModel(
         return Request(model.inputs, to, option, amount)
     }
 
+    /** A transfer that reverts, as simple mode says it: no block named (docs/simple-ui.md). */
+    private fun simpleReverts(option: AssetOption): String = if (option.asset == TransferAsset.Native) {
+        "Checked on chain, this transfer fails: the recipient refuses it. Nothing was signed."
+    } else {
+        "Checked on chain, the token's contract refuses this transfer. Nothing was signed."
+    }
+
     private fun refusal(quoting: TransferQuoting, option: AssetOption): String = when (quoting) {
         is TransferQuoting.Quoted -> error("a quote is no refusal")
         TransferQuoting.ToZeroAddress -> ZERO_ADDRESS
@@ -725,7 +766,9 @@ class SendViewModel(
         TransferQuoting.Syncing -> "The light client is not synced yet: try again in a moment."
         is TransferQuoting.Unavailable -> when (quoting.reason) {
             ReadUnavailable.NO_ENGINE -> "There is no light client on this device, so nothing can be sent."
+            ReadUnavailable.NETWORK_OFF -> "The network's light client is not running, so nothing can be sent."
             ReadUnavailable.STALE_ANCHOR -> "The light client refuses to sync, so nothing can be quoted."
+            ReadUnavailable.SYNCING -> "The light client is still syncing, so nothing can be quoted yet."
             ReadUnavailable.UNPROVEN -> "${figureText(quoting.figure, "of the quote")} could not be verified this " +
                 "time: try again."
             ReadUnavailable.REFUSED -> "The light client on this device cannot quote this transfer."
@@ -737,7 +780,7 @@ class SendViewModel(
 
     /** What [text] names, resolved ([ResolveRecipient]); never throws. */
     private suspend fun lookUp(text: String): RecipientLookup = try {
-        resolveRecipient(recipientText(text))
+        resolveRecipient(network, recipientText(text))
     } catch (e: CancellationException) {
         throw e
     } catch (e: Exception) {
@@ -751,7 +794,7 @@ class SendViewModel(
     private fun warmFees() {
         viewModelScope.launch {
             try {
-                warmFeeHistory()
+                warmFeeHistory(network)
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {

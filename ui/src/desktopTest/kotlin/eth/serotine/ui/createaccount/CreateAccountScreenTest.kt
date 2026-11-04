@@ -11,6 +11,9 @@ import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performTextInput
 import eth.serotine.domain.model.Mnemonic
+import eth.serotine.domain.model.WalletPassword
+import eth.serotine.ui.components.NO_NETWORK_TICKED
+import eth.serotine.ui.components.NetworkChoice
 import eth.serotine.ui.components.PasswordStep
 import eth.serotine.ui.theme.SerotineTheme
 import org.junit.Rule
@@ -88,6 +91,23 @@ class CreateAccountScreenTest {
             "Screenshots and screen recordings of this window cannot be blocked here.",
             substring = true,
         ).assertIsDisplayed()
+    }
+
+    @Test
+    fun withNoNetworkTickedCreateSaysWhyAndCreatesNothing() {
+        val sepolia = NetworkChoice(11_155_111, "Sepolia", testnet = true, on = true)
+        val securing = CreateAccountUiState.Securing(
+            phrase,
+            PasswordStep.Existing("Kept in hardware."),
+            password = WalletPassword("correct horse"),
+            networks = listOf(sepolia),
+        )
+        show(securing)
+
+        rule.onNodeWithText("Add to which networks?").assertExists()
+        rule.onNode(hasText("Create account") and hasClickAction()).performClick()
+        rule.onNodeWithText(NO_NETWORK_TICKED).assertExists()
+        assertEquals(emptyList(), events)
     }
 
     @Test

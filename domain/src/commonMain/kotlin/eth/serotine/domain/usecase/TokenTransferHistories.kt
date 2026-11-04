@@ -1,6 +1,6 @@
 package eth.serotine.domain.usecase
 
-import eth.serotine.domain.model.Address
+import eth.serotine.domain.model.AccountId
 import eth.serotine.domain.model.TokenTransfer
 import eth.serotine.domain.model.TokenTransfers
 import eth.serotine.domain.repository.HistoryStarts
@@ -17,9 +17,11 @@ import kotlinx.coroutines.flow.Flow
  */
 class ObserveTokenTransfers(private val index: LogIndex, private val starts: HistoryStarts) {
 
-    operator fun invoke(account: Address): Flow<IndexedHistory<TokenTransferEvent>> {
-        val key = LogWatchKey.Mention(account)
+    operator fun invoke(account: AccountId): Flow<IndexedHistory<TokenTransferEvent>> {
+        val address = account.address
+        val key = LogWatchKey.Mention(address)
         return IndexedReader(
+            account.network,
             index,
             starts,
             key,
@@ -30,7 +32,7 @@ class ObserveTokenTransfers(private val index: LogIndex, private val starts: His
             },
             decode = { log ->
                 TokenTransfers.decode(log.log.address, log.log.topics, log.log.data)
-                    ?.takeIf { it.from == account || it.to == account }
+                    ?.takeIf { it.from == address || it.to == address }
                     ?.let { TokenTransferEvent(it, log.blockNumber, log.transactionHash, log.logIndex) }
             },
         ).observe()

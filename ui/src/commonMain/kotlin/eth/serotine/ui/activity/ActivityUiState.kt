@@ -12,12 +12,16 @@ sealed interface ActivityUiState {
 
     /**
      * The [rows], newest first (none: nothing listed yet, which [empty] says), and [coverage],
-     * what the list covers and what it leaves out.
+     * what the list covers and what it leaves out; [simpleCoverage], the same in simple mode's
+     * words, with no block number (docs/simple-ui.md, H5: "Activity since you added this account").
+     * Above them, the swaps whose next step [waiting] for the user, each with Continue.
      */
     data class Shown(
         val rows: List<ActivityRow>,
         val coverage: String,
         val empty: String = "Nothing sent from this device yet.",
+        val simpleCoverage: String = coverage,
+        val waiting: List<WaitingStep> = emptyList(),
     ) : ActivityUiState
 
     /** The history cannot be read right now, for the reason [message] gives. */
@@ -30,7 +34,11 @@ sealed interface ActivityUiState {
  * ([detail]: "To Bob · 0x12…5678", "Treasury · Safe nonce 4"), the EIP-55 address its blockie is of
  * ([about]), when a peer took it or the block it is in ([time]), and how it ended as this device saw
  * it ([status], "In block 9,412,118", and its [state]). [opens] is what a tap opens the detail of
- * (docs/wallet-ux.md, screen 26): the transaction, and for an event its log.
+ * (docs/wallet-ux.md, screen 26): the transaction, and for an event its log. Simple mode says no
+ * block number (docs/simple-ui.md, H5): [simpleTime] is when, where that is known (null for an event
+ * on chain, which only its block dates), and [simpleStatus] how it ended in words ("Confirmed",
+ * "Final", "Failed"), null where that is [status] itself: so a copy that changes [status] (a
+ * caution, a warning) never leaves an older simple status behind.
  */
 data class ActivityRow(
     val key: String,
@@ -41,6 +49,8 @@ data class ActivityRow(
     val status: String,
     val state: ActivityState,
     val opens: ActivityKey,
+    val simpleTime: String? = time,
+    val simpleStatus: String? = null,
 )
 
 /**
@@ -50,6 +60,15 @@ data class ActivityRow(
  * and a tap opens the order's status instead.
  */
 data class ActivityKey(val hash: String, val logIndex: Int? = null, val cowOrder: Boolean = false)
+
+/**
+ * A swap whose next step waits for the user (docs/simple-ui.md, H5): what it swaps ([title], "Swap 40
+ * USDC → ETH"), where it stands ([message], "Step 1 done. Step 2 is waiting for you.", said from the
+ * approval's verified receipt and never claimed without one), and the token it sells ([sell], its
+ * address), which Continue opens Swap with and Dismiss lets go of. In words, with no block number, in
+ * both views.
+ */
+data class WaitingStep(val title: String, val message: String, val sell: String)
 
 /** How a sent transaction ended, as an [ActivityRow] marks it. */
 enum class ActivityState {
@@ -76,4 +95,17 @@ enum class ActivityState {
      * accounts: it may be a look-alike, planted for them to copy.
      */
     CAUTION,
+}
+
+/**
+ * This Activity in simple mode's words (docs/simple-ui.md, H5): each row's [ActivityRow.simpleTime]
+ * (none for an event dated only by its block) and [ActivityRow.simpleStatus] in place of its time
+ * and status, and [ActivityUiState.Shown.simpleCoverage] in place of the coverage.
+ */
+internal fun ActivityUiState.simple(): ActivityUiState = when (this) {
+    is ActivityUiState.Shown -> copy(
+        rows = rows.map { it.copy(time = it.simpleTime.orEmpty(), status = it.simpleStatus ?: it.status) },
+        coverage = simpleCoverage,
+    )
+    else -> this
 }

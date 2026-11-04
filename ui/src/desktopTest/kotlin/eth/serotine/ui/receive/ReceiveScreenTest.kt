@@ -7,6 +7,7 @@ import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import eth.serotine.ui.components.NetworkLabel
 import eth.serotine.ui.theme.SerotineTheme
 import org.junit.Rule
 import org.junit.Test
@@ -21,6 +22,7 @@ class ReceiveScreenTest {
     private val ready = ReceiveUiState.Ready(
         "Daily",
         "0x8f3A2C71E5B9d04A6f1e3C2BA7D90E5F4c6B91c2",
+        NetworkLabel(11_155_111, "Sepolia", testnet = true),
         "Only send Sepolia assets to this address",
     )
     private val events = mutableListOf<String>()

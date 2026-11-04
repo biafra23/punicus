@@ -2,6 +2,7 @@ package eth.serotine.domain.repository
 
 import eth.serotine.domain.model.Address
 import eth.serotine.domain.model.Digest
+import eth.serotine.domain.model.Network
 
 /**
  * The port for the approvals a Safe's owners made on chain (`approveHash`), as the embedded
@@ -12,8 +13,11 @@ import eth.serotine.domain.model.Digest
  * on the engine, bounded by it; never throws.
  */
 interface SafeApprovals {
-    /** Whether [owner] approved the transaction hash [hash] on the Safe at [safe]. */
-    suspend fun approval(safe: Address, owner: Address, hash: Digest): ApprovalReading
+    /**
+     * Whether [owner] approved the transaction hash [hash] on the Safe at [safe] on [network].
+     * A [network] no adapter serves here is refused, never answered from another network ([ReadUnavailable.NO_ENGINE]).
+     */
+    suspend fun approval(network: Network, safe: Address, owner: Address, hash: Digest): ApprovalReading
 }
 
 /** The outcome of [SafeApprovals.approval]. */

@@ -1,9 +1,13 @@
 package eth.serotine.domain.usecase
 
+import eth.serotine.domain.model.Network
 import eth.serotine.domain.model.NetworkUpgrade.Phase
 import eth.serotine.domain.model.UpgradeNotice
 import eth.serotine.domain.model.UpgradeNotice.Kind
 import eth.serotine.domain.repository.KnownUpgrade
+import kotlin.test.Test
+import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.launch
@@ -11,9 +15,6 @@ import kotlinx.coroutines.test.advanceTimeBy
 import kotlinx.coroutines.test.currentTime
 import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
-import kotlin.test.Test
-import kotlin.test.assertEquals
-import kotlin.test.assertFailsWith
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class UpgradeNoticesTest {
@@ -22,7 +23,7 @@ class UpgradeNoticesTest {
     private val notifier = FakeNotifier()
     private val activation = glamsterdam.activationTime!!
     private var now = activation - 30 * DAY
-    private val notices = UpgradeNotices(known, notifier) { now }
+    private val notices = UpgradeNotices(Network.SEPOLIA, known, notifier) { now }
 
     private val shownKinds get() = notifier.shown.map { it.kind }
 
@@ -160,8 +161,8 @@ class UpgradeNoticesTest {
         val upgrades = FakeNetworkUpgrades()
         val start = activation - 7 * DAY - 60
         val clock = { start + currentTime / 1_000 }
-        val following = UpgradeNotices(known, notifier, clock)
-        backgroundScope.launch { FollowUpgradeReports(upgrades, following, clock)() }
+        val following = UpgradeNotices(Network.SEPOLIA, known, notifier, clock)
+        backgroundScope.launch { FollowUpgradeReports(Network.SEPOLIA, upgrades, following, clock)() }
         runCurrent()
         assertEquals(emptyList(), shownKinds)
 

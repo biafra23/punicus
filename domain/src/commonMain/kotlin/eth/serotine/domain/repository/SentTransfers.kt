@@ -1,6 +1,8 @@
 package eth.serotine.domain.repository
 
+import eth.serotine.domain.model.AccountId
 import eth.serotine.domain.model.Address
+import eth.serotine.domain.model.Network
 import eth.serotine.domain.model.CowOrderUid
 import eth.serotine.domain.model.SignedTransfer
 import eth.serotine.domain.model.SigningRequest
@@ -32,15 +34,15 @@ interface SentTransfers {
     suspend fun record(transfer: SentTransfer): Boolean
 
     /**
-     * Forgets [account]'s transactions whose nonce is below [minedCount], its verified count of
-     * mined transactions (each of those nonces is used on chain, by that transaction or another),
-     * but for a Safe's deployment whose Safe is not listed yet ([SentAction.SafeDeployment.listed]
-     * null), which is kept until it was taken before [unlistedBefore] (unix seconds): it is the
-     * only record of the Safe's owners and name. One no block took stays, past the time it holds
-     * its nonce (`RECORD_LIFETIME_SECONDS`), so that its status is still found.
-     * [SentTransfer.prunable] is the rule. False when the record could not be saved.
+     * Forgets [account]'s transactions (an address on a network: it counts its nonces on each chain apart) whose nonce
+     * is below [minedCount], its verified count of mined transactions (each of those nonces is used on chain, by that
+     * transaction or another), but for a Safe's deployment whose Safe is not listed yet
+     * ([SentAction.SafeDeployment.listed] null), which is kept until it was taken before [unlistedBefore] (unix
+     * seconds): it is the only record of the Safe's owners and name. One no block took stays, past the time it holds
+     * its nonce (`RECORD_LIFETIME_SECONDS`), so that its status is still found. [SentTransfer.prunable] is the rule.
+     * False when the record could not be saved.
      */
-    suspend fun prune(account: Address, minedCount: Long, unlistedBefore: Long): Boolean
+    suspend fun prune(account: AccountId, minedCount: Long, unlistedBefore: Long): Boolean
 }
 
 /**
@@ -48,8 +50,8 @@ interface SentTransfers {
  * nonce is below [minedCount], unless it is a Safe's deployment not listed yet, which is
  * forgotten only once taken before [unlistedBefore].
  */
-fun SentTransfer.prunable(account: Address, minedCount: Long, unlistedBefore: Long): Boolean {
-    if (this.account != account) return false
+fun SentTransfer.prunable(account: AccountId, minedCount: Long, unlistedBefore: Long): Boolean {
+    if (accountId != account) return false
     val deployment = action as? SentAction.SafeDeployment
     if (deployment != null && deployment.listed == null) return sentAt < unlistedBefore
     return nonce < minedCount
@@ -78,7 +80,7 @@ sealed interface SentTransferList {
 }
 
 /**
- * A transaction this wallet signed from [account] and a peer took: its [nonce] and [signed]
+ * A transaction this wallet signed on [network] from [account] and a peer took: its [nonce] and [signed]
  * bytes, what it does ([action]), the most it can take of the account's native balance
  * ([maxCost]: its value and the most its fee can be), and when a peer took it ([sentAt], unix
  * seconds): the moment its lifetime in the network's transaction pools runs from. The nonce and
@@ -92,6 +94,8 @@ sealed interface SentTransferList {
  * retried byte for byte, never replaced by one that could take the next nonce and pay twice.
  */
 data class SentTransfer(
+    /** The chain it was signed for and sent to: its signed bytes carry the chain id too. */
+    val network: Network,
     val account: Address,
     val nonce: Long,
     val signed: SignedTransfer,
@@ -103,6 +107,10 @@ data class SentTransfer(
     /** The transaction hash its receipt is watched by. */
     val hash: String
         get() = signed.hash
+
+    /** The account it was sent from: [account] on [network]. */
+    val accountId: AccountId
+        get() = AccountId(network, account)
 }
 
 /**
@@ -178,4 +186,13 @@ sealed interface SentAction {
      * finalized, nothing can fill the order. It moves nothing but the fee.
      */
     data class CowCancellation(val settlement: Address, val uid: CowOrderUid) : SentAction
+
+    /**
+     * A dApp's transaction (`eth_sendTransaction`, docs/walletconnect.md): [value] wei and a call to
+     * [to], for the dApp that stated itself as [dapp] (its claim), the answer to its [request]. What
+     * the call moves is the call's; the record holds its value and its fee. Naming the request is what
+     * keeps it from being signed twice, and what answers the dApp once a peer took it, however it was
+     * sent.
+     */
+    data class DappCall(val to: Address, val value: UInt256, val dapp: String, val request: DappRequestId) : SentAction
 }

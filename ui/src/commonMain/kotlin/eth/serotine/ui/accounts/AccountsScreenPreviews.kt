@@ -8,11 +8,15 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import eth.serotine.domain.model.AccountKind
 import eth.serotine.domain.model.Network
+import eth.serotine.domain.repository.LightClientStatus
 import eth.serotine.ui.components.Control
+import eth.serotine.ui.components.LightClientHealth.NOT_RUNNING
 import eth.serotine.ui.components.LightClientHealth.NOT_VERIFIED
 import eth.serotine.ui.components.LightClientHealth.STALE
 import eth.serotine.ui.components.LightClientHealth.VERIFIED
 import eth.serotine.ui.components.LightClientItem
+import eth.serotine.ui.components.StaleAnchorDialog
+import eth.serotine.ui.components.StaleAnchorWarning
 import eth.serotine.ui.components.UnavailableDialog
 import eth.serotine.ui.components.UnavailableFix
 import eth.serotine.ui.components.UnavailableNotice
@@ -23,18 +27,28 @@ import org.jetbrains.compose.ui.tooling.preview.Preview
 // The Accounts screen in Android Studio's preview pane, one preview per state it draws
 // differently. Built from display-ready values, as the screen tests are, never from the
 // ViewModel. AccountsScreenPreviewsTest renders each one in accountsScreenPreviews, at the end.
-// The addresses are EIP-55's own examples, and the amounts are made up.
+// The addresses are EIP-55's own examples, and the amounts are made up. Ethereum and Gnosis Chain
+// come with parts 4 and 5 of docs/networks.md; their sections here are drawn as they will be.
 
-private val network = Network.SEPOLIA.displayName
+private const val ETHEREUM = 1L
+private const val GNOSIS = 100L
+private val sepoliaId = Network.SEPOLIA.chainId
+
+/** A Sepolia section with [accounts] under [status]: the only network of a debug build. */
+private fun sepolia(
+    status: LightClientItem,
+    accounts: List<AccountItem>,
+    total: String? = "$3,125.00",
+    totalNote: String? = "Testnet prices · 1 not verified",
+) = NetworkSection(sepoliaId, "Sepolia", testnet = true, on = true, status, accounts, total, totalNote)
 
 private val synced = LightClientItem("Verified at block 8,412,307 · 8 s ago", null, false, VERIFIED)
-
-private val starting = LightClientItem("Starting the light client…", null, true, NOT_VERIFIED)
 
 private val accounts = listOf(
     AccountItem(
         "Daily",
         "0x5aAeb6053F3E94C9b9A09f33669435E7Ef1BeAed",
+        Network.SEPOLIA.chainId,
         AccountKind.EOA,
         Control.FULL_CONTROL,
         "1.25 ETH",
@@ -44,6 +58,7 @@ private val accounts = listOf(
     AccountItem(
         "Savings",
         "0xfB6916095ca1df60bB79Ce92cE3Ea74c37c5d359",
+        Network.SEPOLIA.chainId,
         AccountKind.EOA,
         Control.WATCH_ONLY,
         "< 0.0001 ETH",
@@ -53,6 +68,7 @@ private val accounts = listOf(
     AccountItem(
         "Treasury",
         "0xdbF03B407c01E7cD3CBea99509d93f8DDDC8C6FB",
+        Network.SEPOLIA.chainId,
         AccountKind.SAFE,
         Control.CO_SIGNER,
         "Not verified",
@@ -63,10 +79,9 @@ private val accounts = listOf(
 )
 
 private val withAccounts = AccountsUiState.Ready(
-    network,
-    synced,
-    accounts,
+    listOf(sepolia(synced, accounts)),
     total = "$3,125.00",
+    totalLabel = "Total · USD · Sepolia",
     totalNote = "Testnet prices · 1 not verified",
 )
 
@@ -86,11 +101,7 @@ private fun AccountsPreview(state: AccountsUiState, darkTheme: Boolean = false, 
 }
 
 /** No account whose key is held here: Create Safe greyed out in the open + menu (owner ruling #55). */
-private val noKeyHere = AccountsUiState.Ready(
-    network,
-    LightClientItem("Synced · verified head 9,412,118", null, false, VERIFIED),
-    emptyList(),
-)
+private val noKeyHere = AccountsUiState.Ready(emptyList())
 
 @Preview
 @Composable
@@ -127,6 +138,15 @@ private fun AccountsAccountsPreview() = AccountsPreview(withAccounts)
 @Composable
 private fun AccountsAccountsDarkPreview() = AccountsPreview(withAccounts, darkTheme = true)
 
+/** Amounts hidden: the eye at the top left closed, the total, each network's and each row's masked. */
+@Preview
+@Composable
+private fun AccountsHiddenPreview() = AccountsPreview(withAccounts.withAmountsHidden(true))
+
+@Preview
+@Composable
+private fun AccountsHiddenDarkPreview() = AccountsPreview(withAccounts.withAmountsHidden(true), darkTheme = true)
+
 /** The screen on a narrow phone (#68): a control badge too wide for its row shows as its icon. */
 @Preview
 @Composable
@@ -134,19 +154,25 @@ private fun AccountsNarrowPreview() = Box(Modifier.width(360.dp).fillMaxHeight()
 
 /** No verified head yet and no balance proven before: the strip red, every row syncing. */
 private val catchingUp = AccountsUiState.Ready(
-    network,
-    LightClientItem("Verifying sync committees · 1 of 4 periods", 0.25f, true, NOT_VERIFIED),
-    // Until a Safe is read it is never shown as more than watch-only (AccountItem.from).
-    accounts.map {
-        it.copy(
-            balance = "Syncing…",
-            balanceVerified = false,
-            value = null,
-            signers = null,
-            control = if (it.kind == AccountKind.SAFE) Control.WATCH_ONLY else it.control,
-        )
-    },
+    listOf(
+        sepolia(
+            LightClientItem("Verifying sync committees · 1 of 4 periods", 0.25f, true, NOT_VERIFIED),
+            // Until a Safe is read it is never shown as more than watch-only (AccountItem.from).
+            accounts.map {
+                it.copy(
+                    balance = "Syncing…",
+                    balanceVerified = false,
+                    value = null,
+                    signers = null,
+                    control = if (it.kind == AccountKind.SAFE) Control.WATCH_ONLY else it.control,
+                )
+            },
+            total = "Checking…",
+            totalNote = "Testnet prices · still checking",
+        ),
+    ),
     total = "Checking…",
+    totalLabel = "Total · USD · Sepolia",
     totalNote = "Testnet prices · still checking",
 )
 
@@ -160,20 +186,26 @@ private fun AccountsCatchingUpDarkPreview() = AccountsPreview(catchingUp, darkTh
 
 /** The verified head too old to read at: the amounts last verified, each said to be so. */
 private val headTooOld = AccountsUiState.Ready(
-    network,
-    LightClientItem("Synced · the verified head is 4 min old, waiting for a fresh one", null, true, STALE),
-    accounts.map {
-        it.copy(
-            balanceVerified = false,
-            balanceNote = if (it.balanceVerified) {
-                "Last verified Oct 19, 2026, 2:32 PM · may have changed since"
-            } else {
-                null
+    listOf(
+        sepolia(
+            LightClientItem("Synced · the verified head is 4 min old, waiting for a fresh one", null, true, STALE),
+            accounts.map {
+                it.copy(
+                    balanceVerified = false,
+                    balanceNote = if (it.balanceVerified) {
+                        "Last verified Oct 19, 2026, 2:32 PM · may have changed since"
+                    } else {
+                        null
+                    },
+                    value = null,
+                )
             },
-            value = null,
-        )
-    },
+            total = "Checking…",
+            totalNote = "Testnet prices · still checking",
+        ),
+    ),
     total = "Checking…",
+    totalLabel = "Total · USD · Sepolia",
     totalNote = "Testnet prices · still checking",
 )
 
@@ -187,28 +219,17 @@ private fun AccountsHeadTooOldDarkPreview() = AccountsPreview(headTooOld, darkTh
 
 @Preview
 @Composable
-private fun AccountsNoAccountsPreview() = AccountsPreview(
-    AccountsUiState.Ready(
-        network,
-        LightClientItem(
-            "Bootstrapping from the trusted checkpoint · looking for light-client servers",
-            null,
-            true,
-            NOT_VERIFIED,
-        ),
-        emptyList(),
-    ),
-)
+private fun AccountsNoAccountsPreview() = AccountsPreview(AccountsUiState.Ready(emptyList()))
 
 @Preview
 @Composable
 private fun AccountsLoadingPreview() =
-    AccountsPreview(AccountsUiState.Loading(network, starting))
+    AccountsPreview(AccountsUiState.Loading())
 
 @Preview
 @Composable
 private fun AccountsLoadingCreateSafeGreyedOutPreview() = AccountsPreview(
-    AccountsUiState.Loading(network, starting),
+    AccountsUiState.Loading(),
     fabExpanded = true,
 )
 
@@ -216,11 +237,17 @@ private fun AccountsLoadingCreateSafeGreyedOutPreview() = AccountsPreview(
 @Composable
 private fun AccountsListSetAsidePreview() = AccountsPreview(
     AccountsUiState.Ready(
-        network,
-        synced,
-        listOf(accounts.first().copy(balance = "Checking…", balanceVerified = false, value = null)),
+        listOf(
+            sepolia(
+                synced,
+                listOf(accounts.first().copy(balance = "Checking…", balanceVerified = false, value = null)),
+                total = "Checking…",
+                totalNote = "Testnet prices · still checking",
+            ),
+        ),
         notice = "Your saved account list was damaged and has been set aside. Add your accounts again.",
         total = "Checking…",
+        totalLabel = "Total · USD · Sepolia",
         totalNote = "Testnet prices · still checking",
     ),
 )
@@ -231,12 +258,15 @@ private const val UPGRADE_DETAILS = "Reported by peers in 5 networks, not verifi
 @Composable
 private fun AccountsUpgradeAheadPreview() = AccountsPreview(
     withAccounts.copy(
-        upgrade = UpgradeBannerItem(
-            "Network upgrade ahead: update Serotine",
-            "Peers announce a Sepolia network upgrade on Nov 6, 2026, 3:00 PM that this version of Serotine " +
-                "does not support. Update the app before it activates, or Serotine stops verifying at the upgrade.",
-            UPGRADE_DETAILS,
-            urgent = false,
+        upgrades = listOf(
+            UpgradeBannerItem(
+                "Network upgrade ahead on Sepolia: update Serotine",
+                "Peers announce a Sepolia network upgrade on Nov 6, 2026, 3:00 PM that this version of Serotine " +
+                    "does not support. Update the app before it activates, or Serotine stops verifying at the " +
+                    "upgrade.",
+                UPGRADE_DETAILS,
+                urgent = false,
+            ),
         ),
     ),
 )
@@ -245,12 +275,14 @@ private fun AccountsUpgradeAheadPreview() = AccountsPreview(
 @Composable
 private fun AccountsUpgradeActivatedDarkPreview() = AccountsPreview(
     withAccounts.copy(
-        upgrade = UpgradeBannerItem(
-            "Network upgrade reported: update Serotine",
-            "Peers report that Sepolia upgraded on Nov 6, 2026, 3:00 PM to rules this version of Serotine does " +
-                "not support. Update the app to keep using your wallet.",
-            UPGRADE_DETAILS,
-            urgent = false,
+        upgrades = listOf(
+            UpgradeBannerItem(
+                "Network upgrade reported on Sepolia: update Serotine",
+                "Peers report that Sepolia upgraded on Nov 6, 2026, 3:00 PM to rules this version of Serotine " +
+                    "does not support. Update the app to keep using your wallet.",
+                UPGRADE_DETAILS,
+                urgent = false,
+            ),
         ),
     ),
     darkTheme = true,
@@ -260,8 +292,6 @@ private fun AccountsUpgradeActivatedDarkPreview() = AccountsPreview(
 @Composable
 private fun AccountsListUnavailablePreview() = AccountsPreview(
     AccountsUiState.ListUnavailable(
-        network,
-        synced,
         "Your saved account list cannot be read right now. Nothing has been changed, and no account can be " +
             "added until it can be read. Serotine keeps trying.",
     ),
@@ -271,24 +301,301 @@ private fun AccountsListUnavailablePreview() = AccountsPreview(
 @Composable
 private fun AccountsEnsNamesPreview() = AccountsPreview(
     withAccounts.copy(
-        accounts = listOf(
-            accounts[0],
-            // Named by the ENS name it was watched by, which still points to it.
-            accounts[1].copy(label = "savings-example.eth"),
-            // Its ENS name no longer points to it: the address stands in for the name.
-            AccountItem(
-                "0xD122…9aDb",
-                "0xD1220A0cf47c7B9Be7A2E6BA89F429762e7b9aDb",
-                AccountKind.EOA,
-                Control.WATCH_ONLY,
-                "0.42 ETH",
-                balanceVerified = true,
-                value = "$1,050.00 · testnet prices",
-                nameNote = "ENS name “old-savings-example.eth” no longer points to this address",
+        sections = listOf(
+            sepolia(
+                synced,
+                listOf(
+                    accounts[0],
+                    // Named by the ENS name it was watched by, which still points to it.
+                    accounts[1].copy(label = "savings-example.eth"),
+                    // Its ENS name no longer points to it: the address stands in for the name.
+                    AccountItem(
+                        "0xD122…9aDb",
+                        "0xD1220A0cf47c7B9Be7A2E6BA89F429762e7b9aDb",
+                        Network.SEPOLIA.chainId,
+                        AccountKind.EOA,
+                        Control.WATCH_ONLY,
+                        "0.42 ETH",
+                        balanceVerified = true,
+                        value = "$1,050.00 · testnet prices",
+                        nameNote = "ENS name “old-savings-example.eth” no longer points to this address",
+                    ),
+                ),
             ),
         ),
     ),
 )
+
+private val main = AccountItem(
+    "Main",
+    "0x5aAeb6053F3E94C9b9A09f33669435E7Ef1BeAed",
+    ETHEREUM,
+    AccountKind.EOA,
+    Control.FULL_CONTROL,
+    "3.2041 ETH",
+    balanceVerified = true,
+    value = "€9,612.30",
+)
+
+private val ethereum = NetworkSection(
+    ETHEREUM,
+    "Ethereum",
+    testnet = false,
+    on = true,
+    LightClientItem("Verified at block 23,618,402 · 6 s ago", null, false, VERIFIED),
+    listOf(
+        main,
+        AccountItem(
+            "Family Safe",
+            "0xdbF03B407c01E7cD3CBea99509d93f8DDDC8C6FB",
+            ETHEREUM,
+            AccountKind.SAFE,
+            Control.CO_SIGNER,
+            "1.076 ETH",
+            balanceVerified = true,
+            value = "€3,227.80",
+            signers = "2/3",
+            kindNote = "Safe",
+        ),
+    ),
+    total = "€12,840.10",
+)
+
+private val gnosis = NetworkSection(
+    GNOSIS,
+    "Gnosis Chain",
+    testnet = false,
+    on = true,
+    LightClientItem("Verified at block 42,907,115 · 3 s ago", null, false, VERIFIED),
+    listOf(main.copy(chainId = GNOSIS, balance = "1,571.2 XDAI", value = "€1,446.30")),
+    total = "€1,446.30",
+)
+
+private val savings = AccountItem(
+    "Savings",
+    "0xfB6916095ca1df60bB79Ce92cE3Ea74c37c5d359",
+    sepoliaId,
+    AccountKind.EOA,
+    Control.WATCH_ONLY,
+    "0.84 ETH",
+    balanceVerified = true,
+    value = "€2,520.00 · testnet prices",
+)
+
+/** Docs/networks.md's N1: a section per network, the top total leaving Sepolia out. */
+private val threeNetworks = AccountsUiState.Ready(
+    listOf(
+        ethereum,
+        gnosis,
+        sepolia(
+            LightClientItem("Verified at block 9,412,118 · 8 s ago", null, false, VERIFIED),
+            listOf(savings),
+            total = "€2,520.00",
+            totalNote = "Testnet prices",
+        ),
+    ),
+    total = "€14,286.40",
+    totalLabel = "Total · EUR · Ethereum and Gnosis Chain",
+    totalNote = "Sepolia not included",
+)
+
+@Preview
+@Composable
+private fun AccountsThreeNetworksPreview() = AccountsPreview(threeNetworks)
+
+@Preview
+@Composable
+private fun AccountsThreeNetworksDarkPreview() = AccountsPreview(threeNetworks, darkTheme = true)
+
+/** N2: Gnosis Chain catching up, its row last verified; the other sections unaffected. */
+@Preview
+@Composable
+private fun AccountsOneNetworkCatchingUpPreview() = AccountsPreview(
+    threeNetworks.copy(
+        sections = listOf(
+            ethereum,
+            gnosis.copy(
+                status = LightClientItem("Verifying sync committees · 3 of 7 periods", 3f / 7, true, NOT_VERIFIED),
+                accounts = gnosis.accounts.map {
+                    it.copy(
+                        balanceVerified = false,
+                        balanceNote = "Last verified Oct 21, 2026, 6:02 PM · may have changed since",
+                        value = null,
+                    )
+                },
+                total = "Checking…",
+                totalNote = "1 not verified",
+            ),
+            threeNetworks.sections[2],
+        ),
+        total = "€12,840.10",
+        totalNote = "1 not verified · Sepolia not included",
+    ),
+)
+
+/**
+ * A network this version can no longer follow while the others still can: its banner, urgent, and
+ * its section in the error colour, its accounts' Send greyed out (docs/networks.md, *Upgrades and
+ * the update screen*).
+ */
+private val networkBlocked =
+    threeNetworks.copy(
+        sections = listOf(
+            ethereum,
+            gnosis.copy(
+                status = LightClientItem("Catching up · 2 of 3 periods", 2f / 3, true, NOT_VERIFIED),
+                accounts = gnosis.accounts.map {
+                    it.copy(
+                        balanceVerified = false,
+                        balanceNote = "Last verified Nov 6, 2026, 2:58 PM · may have changed since",
+                        value = null,
+                        networkBlocked = GNOSIS_BLOCKED,
+                    )
+                },
+                total = "Checking…",
+                totalNote = "1 not verified",
+                blocked = GNOSIS_BLOCKED,
+            ),
+            threeNetworks.sections[2],
+        ),
+        total = "€12,840.10",
+        totalNote = "1 not verified · Sepolia not included",
+        upgrades = listOf(
+            UpgradeBannerItem(
+                "Update required to follow Gnosis Chain",
+                "Peers report that Gnosis Chain upgraded on Nov 6, 2026, 3:00 PM to rules this version of " +
+                    "Serotine does not support, and its light client is not verifying the chain. Update the app " +
+                    "to keep using your wallet.",
+                UPGRADE_DETAILS,
+                urgent = true,
+            ),
+        ),
+    )
+
+@Preview
+@Composable
+private fun AccountsNetworkBlockedPreview() = AccountsPreview(networkBlocked)
+
+@Preview
+@Composable
+private fun AccountsNetworkBlockedDarkPreview() = AccountsPreview(networkBlocked, darkTheme = true)
+
+private const val GNOSIS_BLOCKED = "This version of Serotine can no longer follow Gnosis Chain: nothing can be sent " +
+    "from its accounts until you update the app."
+
+/**
+ * Gnosis Chain's light client refusing a checkpoint past its weak-subjectivity window, the
+ * section warning with its "Catch up anyway…" (owner's request, 2026-10-24).
+ */
+private val staleAnchor = threeNetworks.copy(
+    sections = listOf(
+        ethereum,
+        gnosis.copy(
+            status = LightClientItem(
+                "Not syncing: the last trusted checkpoint is 6 periods old, past the safe limit of 3",
+                null,
+                false,
+                NOT_VERIFIED,
+            ),
+            accounts = gnosis.accounts.map {
+                it.copy(balance = "Sync refused", balanceVerified = false, value = null)
+            },
+            total = null,
+            staleAnchor = StaleAnchorWarning.of(Network.GNOSIS, LightClientStatus.StaleAnchor(6, 3)),
+        ),
+        threeNetworks.sections[2],
+    ),
+)
+
+@Preview
+@Composable
+private fun AccountsStaleAnchorPreview() = AccountsPreview(staleAnchor)
+
+@Preview
+@Composable
+private fun AccountsStaleAnchorDarkPreview() = AccountsPreview(staleAnchor, darkTheme = true)
+
+/** What "Catch up anyway…" asks before the light client may sync past the stale checkpoint. */
+@Preview
+@Composable
+private fun AccountsStaleAnchorDialogPreview() = SerotineTheme {
+    StaleAnchorDialog(StaleAnchorWarning.of(Network.GNOSIS, LightClientStatus.StaleAnchor(6, 3)), {}, {})
+}
+
+/** A display currency Gnosis Chain and Sepolia have no rate for: each section says so, out of the total. */
+@Preview
+@Composable
+private fun AccountsNoRateOnANetworkPreview() = AccountsPreview(
+    threeNetworks.copy(
+        sections = listOf(
+            ethereum.copy(total = "CHF 11,912.40"),
+            gnosis.copy(
+                accounts = gnosis.accounts.map { it.copy(value = "No CHF rate") },
+                total = "No CHF rate",
+                totalNote = "No CHF rate on Gnosis Chain · not in the total",
+            ),
+            threeNetworks.sections[2].let { sepolia ->
+                sepolia.copy(
+                    accounts = sepolia.accounts.map { it.copy(value = "No CHF rate") },
+                    total = "No CHF rate",
+                    totalNote = "No CHF rate on Sepolia · not in the total",
+                )
+            },
+        ),
+        total = "CHF 11,912.40",
+        totalLabel = "Total · CHF · Ethereum",
+        totalNote = "Sepolia not included · Gnosis Chain has no CHF rate",
+    ),
+)
+
+/** N18: Sepolia off, its account dimmed with its last verified balance, out of every total. */
+private val sepoliaOff = threeNetworks.copy(
+    sections = listOf(
+        ethereum,
+        gnosis,
+        NetworkSection(
+            sepoliaId,
+            "Sepolia",
+            testnet = true,
+            on = false,
+            LightClientItem("Off in this wallet · nothing is checked", null, false, NOT_RUNNING),
+            listOf(
+                savings.copy(
+                    label = "Test",
+                    control = Control.FULL_CONTROL,
+                    balanceVerified = false,
+                    balanceNote = "Last verified Oct 21, 2026, 6:02 PM · Sepolia is off",
+                    value = null,
+                    networkOff = "Sepolia",
+                ),
+            ),
+            total = "Off",
+        ),
+    ),
+    totalNote = null,
+)
+
+@Preview
+@Composable
+private fun AccountsNetworkOffPreview() = AccountsPreview(sepoliaOff)
+
+@Preview
+@Composable
+private fun AccountsNetworkOffDarkPreview() = AccountsPreview(sepoliaOff, darkTheme = true)
+
+/** A tap on Send of an account whose network is off: why, and Turn on (N19). */
+@Preview
+@Composable
+private fun AccountsSendNeedsNetworkPreview() = SerotineTheme {
+    UnavailableDialog(
+        UnavailableNotice(
+            "Send needs Sepolia",
+            networkOffReason("Sepolia", "Test"),
+            listOf(UnavailableFix("Turn on Sepolia") {}),
+        ),
+        onDismiss = {},
+    )
+}
 
 /** Every preview above, which AccountsScreenPreviewsTest renders: a new preview goes in here too. */
 internal val accountsScreenPreviews: List<@Composable () -> Unit> = listOf(
@@ -310,4 +617,18 @@ internal val accountsScreenPreviews: List<@Composable () -> Unit> = listOf(
     { AccountsCatchingUpDarkPreview() },
     { AccountsNarrowPreview() },
     { AccountsEnsNamesPreview() },
+    { AccountsThreeNetworksPreview() },
+    { AccountsThreeNetworksDarkPreview() },
+    { AccountsOneNetworkCatchingUpPreview() },
+    { AccountsNetworkOffPreview() },
+    { AccountsNetworkOffDarkPreview() },
+    { AccountsSendNeedsNetworkPreview() },
+    { AccountsNetworkBlockedPreview() },
+    { AccountsNoRateOnANetworkPreview() },
+    { AccountsNetworkBlockedDarkPreview() },
+    { AccountsStaleAnchorPreview() },
+    { AccountsStaleAnchorDarkPreview() },
+    { AccountsStaleAnchorDialogPreview() },
+    { AccountsHiddenPreview() },
+    { AccountsHiddenDarkPreview() },
 )

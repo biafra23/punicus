@@ -33,7 +33,8 @@ fun RemoveAccountRoute(viewModel: RemoveAccountViewModel, onClose: () -> Unit) {
 /**
  * The remove dialog as a pure function of [state]. For an account whose key is on this
  * device it says, before anything happens, that the key goes too and only the recovery
- * phrase brings it back (docs/wallet-ux.md, screen 3).
+ * phrase brings it back (docs/wallet-ux.md, screen 3), or that it stays for the same address
+ * held here on other networks (docs/networks.md, N7).
  */
 @Composable
 fun RemoveAccountDialog(state: RemoveAccountUiState, onRemove: () -> Unit, onCancel: () -> Unit) {
@@ -49,7 +50,7 @@ fun RemoveAccountDialog(state: RemoveAccountUiState, onRemove: () -> Unit, onCan
             val removing = confirm?.removing == true
             AlertDialog(
                 onDismissRequest = { if (!removing) onCancel() },
-                title = { Text(confirm?.let { "Remove ${it.label}?" } ?: "Remove account?") },
+                title = { Text(confirm?.let { "Remove ${it.label} on ${it.network}?" } ?: "Remove account?") },
                 text = {
                     confirm?.let {
                         Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -65,7 +66,10 @@ fun RemoveAccountDialog(state: RemoveAccountUiState, onRemove: () -> Unit, onCan
                                 )
                             }
                             Text(
-                                if (it.keyed) {
+                                if (it.keyed && it.keyStaysFor != null) {
+                                    "Its key stays on this device for the same address on ${it.keyStaysFor}. " +
+                                        "You can add it on ${it.network} again from there."
+                                } else if (it.keyed) {
                                     "Its key is deleted from this device. Only its recovery phrase brings this " +
                                         "account back: make sure you have it."
                                 } else {

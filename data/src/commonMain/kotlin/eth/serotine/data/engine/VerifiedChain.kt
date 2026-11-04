@@ -159,8 +159,21 @@ internal sealed interface EngineSnapshot {
     /** The engine is still starting. */
     data object Booting : EngineSnapshot
 
-    /** There is no engine, or it failed to start; this is final. */
+    /** There is no engine on this device, or the host has shut down; this is final. */
     data object Down : EngineSnapshot
+
+    /**
+     * The network's light client failed to start. Not final: it is tried again when the network
+     * is next asked to run (turned off and on, or needed again after idling), so a stream keeps
+     * polling through it.
+     */
+    data object Failed : EngineSnapshot
+
+    /**
+     * The network's light client is stopped: the network is turned off in this wallet ([off]),
+     * or on with nothing needing it. It starts again when asked: not final.
+     */
+    data class Stopped(val off: Boolean) : EngineSnapshot
 
     /**
      * The engine's report; see `io.myotis.api.StatusSnapshot` for each field. [upgrade] is

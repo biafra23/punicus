@@ -3,6 +3,7 @@ package eth.serotine.ui.createaccount
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import eth.serotine.domain.model.Mnemonic
+import eth.serotine.domain.model.Network
 import eth.serotine.domain.model.WalletPassword
 import eth.serotine.domain.repository.KeyStoreDescription
 import eth.serotine.domain.repository.NewMnemonic
@@ -10,13 +11,18 @@ import eth.serotine.domain.usecase.DescribeKeyStore
 import eth.serotine.domain.usecase.ImportMnemonicAccount
 import eth.serotine.domain.usecase.MnemonicImport
 import eth.serotine.domain.usecase.NewRecoveryPhrase
+import eth.serotine.domain.usecase.ObserveEnabledNetworks
+import eth.serotine.domain.usecase.SetNetworkEnabled
 import eth.serotine.ui.components.PasswordStep
 import eth.serotine.ui.components.STEPPED_DOWN_TEXT
+import eth.serotine.ui.components.chosenNetworks
+import eth.serotine.ui.components.networkChoices
 import eth.serotine.ui.components.notEnoughMemoryText
 import eth.serotine.ui.components.protectionText
 import eth.serotine.ui.createaccount.CreateAccountUiState.Checking
 import eth.serotine.ui.createaccount.CreateAccountUiState.Securing
 import eth.serotine.ui.createaccount.CreateAccountUiState.Showing
+import kotlin.random.Random
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -24,12 +30,12 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
-import kotlin.random.Random
 
 /**
  * Create account's ViewModel (docs/wallet-ux.md, screen 12): a new phrase from the key adapter
  * ([NewRecoveryPhrase]), shown on this screen alone; three of its words asked back; then the
- * wallet password, and the account stored as an import of those words ([ImportMnemonicAccount]). One of the
+ * wallet password and the networks to add it to (docs/networks.md, N8; one that is off is turned
+ * on here first), and the account stored as an import of those words ([ImportMnemonicAccount]). One of the
  * ViewModels the [Mnemonic] and the [WalletPassword] pass through (CLAUDE.md, *Trust*): it never
  * logs, saves or caches them, and drops them as soon as the screen is not shown ([onHidden],
  * [onCleared]). [random] picks the words to check; which ones is no secret.
@@ -38,10 +44,18 @@ class CreateAccountViewModel(
     private val newRecoveryPhrase: NewRecoveryPhrase,
     private val importMnemonicAccount: ImportMnemonicAccount,
     private val describeKeyStore: DescribeKeyStore,
+    observeEnabledNetworks: ObserveEnabledNetworks,
+    private val setNetworkEnabled: SetNetworkEnabled,
     private val random: Random = Random.Default,
 ) : ViewModel() {
 
     private val state = MutableStateFlow<CreateAccountUiState>(CreateAccountUiState.Preparing)
+
+    /** The networks on in this wallet, as last read; null before, when no network is listed yet. */
+    private var on: Set<Network>? = null
+
+    /** The networks ticked: none until the user ticks one (N8). */
+    private var chosen: Set<Network> = emptySet()
 
     /** Whether the screen is shown: a phrase made while it is not is not kept. */
     private var shown = true
@@ -52,12 +66,47 @@ class CreateAccountViewModel(
 
     init {
         startOver()
+        viewModelScope.launch {
+            observeEnabledNetworks().collect { networks ->
+                on = networks.toSet()
+                refreshNetworks()
+            }
+        }
+    }
+
+    /** Ticks the network of [chainId], or unticks it. */
+    fun onNetworkToggle(chainId: Long) {
+        val network = Network.ofChainId(chainId) ?: return
+        if (state.value !is Securing || (state.value as Securing).creating) return
+        chosen = if (network in chosen) chosen - network else chosen + network
+        refreshNetworks()
+    }
+
+    /** Turns the network of [chainId] on, and ticks it: the way to choose one that is off. */
+    fun onTurnOnNetwork(chainId: Long) {
+        val network = Network.ofChainId(chainId) ?: return
+        viewModelScope.launch {
+            if (setNetworkEnabled(network, on = true)) {
+                chosen = chosen + network
+                refreshNetworks()
+            }
+        }
+    }
+
+    /** The check boxes, once the networks on are read: none before, rather than every one shown off. */
+    private fun choices() = on?.let { networkChoices(it, chosen) }.orEmpty()
+
+    private fun refreshNetworks() {
+        state.update { current ->
+            if (current is Securing) current.copy(networks = choices()) else current
+        }
     }
 
     /** A new phrase, the one before forgotten; ignored while one is being made. */
     fun startOver() {
         if (making?.isActive == true) return
         shown = true
+        chosen = emptySet()
         state.value = CreateAccountUiState.Preparing
         making = viewModelScope.launch {
             val made = try {
@@ -112,7 +161,7 @@ class CreateAccountViewModel(
             state.value = checking.copy(wrong = true)
             return
         }
-        state.value = Securing(checking.phrase, PasswordStep.Checking)
+        state.value = Securing(checking.phrase, PasswordStep.Checking, networks = choices())
         describe()
     }
 
@@ -142,7 +191,7 @@ class CreateAccountViewModel(
         state.value = securing.copy(creating = true, error = null, passwordError = null)
         viewModelScope.launch {
             val result = try {
-                importMnemonicAccount(securing.phrase, securing.password)
+                importMnemonicAccount(securing.phrase, securing.password, securing.networks.chosenNetworks())
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {

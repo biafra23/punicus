@@ -7,11 +7,13 @@ import androidx.compose.ui.test.hasClickAction
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithContentDescription
+import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import eth.serotine.ui.addtoken.AddTokenScreen
 import eth.serotine.ui.addtoken.AddTokenUiState
 import eth.serotine.ui.addtoken.TokenCard
+import eth.serotine.ui.components.NetworkLabel
 import eth.serotine.ui.components.verifiedStripSample
 import eth.serotine.ui.theme.SerotineTheme
 import org.junit.Rule
@@ -51,13 +53,12 @@ class TokenScreensTest {
         rule.setContent {
             SerotineTheme {
                 TokensScreen(
-                    TokensUiState(listOf(usdc, added)),
-                    verifiedStripSample,
+                    TokensUiState(listOf(TokenSection(NetworkLabel(SEPOLIA, "Sepolia", true), listOf(usdc, added)))),
                     onBack = {},
                     onAddToken = { events += "add" },
                     onCopy = { events += "copy $it" },
-                    onSetHidden = { address, hidden -> events += "hidden $address $hidden" },
-                    onRemove = { events += "remove $it" },
+                    onSetHidden = { chainId, address, hidden -> events += "hidden $chainId $address $hidden" },
+                    onRemove = { chainId, address -> events += "remove $chainId $address" },
                 )
             }
         }
@@ -72,7 +73,11 @@ class TokenScreensTest {
         rule.onNodeWithText("Show token").assertIsDisplayed()
         rule.onNodeWithText("Remove").performClick()
 
-        assertEquals(listOf("add", "hidden ${usdc.address} true", "remove ${added.address}"), events)
+        rule.onNodeWithTag(TOKENS_SECTION_TAG + SEPOLIA).assertIsDisplayed()
+        assertEquals(
+            listOf("add", "hidden $SEPOLIA ${usdc.address} true", "remove $SEPOLIA ${added.address}"),
+            events,
+        )
     }
 
     @Test
@@ -127,3 +132,6 @@ class TokenScreensTest {
         rule.onNode(hasText("Add token") and hasClickAction()).assertIsNotEnabled()
     }
 }
+
+/** Sepolia's chain id, the network the tokens above are on. */
+private const val SEPOLIA = 11_155_111L

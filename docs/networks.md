@@ -1,12 +1,11 @@
 # Networks: Ethereum and Gnosis Chain beside Sepolia
 
-A plan, not yet a ruling (drawn 2026-10-22). Today the app works on Sepolia
-alone (owner ruling, 2026-10-15; CLAUDE.md, *Data sources*), and adding a
-network is the owner's decision, recorded in CLAUDE.md before its code lands.
-This page proposes how Ethereum mainnet (chain id 1) and Gnosis Chain (chain id
-100) come in, and what has to be decided first (*Open questions*, at the end).
-When the owner accepts it, the rulings it needs go into CLAUDE.md in the first
-part's PR, and docs/wallet-ux.md takes over the screens as each part lands.
+Drawn 2026-10-22 and accepted by the owner the same day, with the answer this
+page proposes to each open question (*Open questions*, at the end): the ruling
+is in CLAUDE.md (*Data sources*), recorded by the first part's PR. This page
+says how Ethereum mainnet (chain id 1) and Gnosis Chain (chain id 100) come in
+beside Sepolia, and docs/wallet-ux.md takes over the screens as each part
+lands.
 
 The mockups (source: `networks-screens.html`, which opens in a browser) are
 numbered N1 to N20 below. They follow the style of `wallet-ux-screens.html`:
@@ -256,7 +255,7 @@ are unchanged.
 
 ## The engine host
 
-- **One engine, one handle per network.** `MyotisNode` today is one engine
+- **One engine, one handle per network.** `MyotisNode` was one engine
   hosting one chain. It splits into the process's `MyotisHost` (the engine,
   its ports, pause and resume, the log pump) and a `ChainNode` per network
   (the handle, `ProvenReads`, the adapters of that chain). The ports'
@@ -302,7 +301,10 @@ are unchanged.
   USDT, DAI, WETH, WBTC, LINK, UNI, EURC, PYUSD, GHO and AAVE; Gnosis's WXDAI,
   USDC (Circle's native and the bridged USDC.e are two tokens, both
   labelled), USDT, WETH, GNO, EURe and sDAI. A token's symbol is never taken
-  as the same token on another network.
+  as the same token on another network. Added 2026-10-28, on the owner's
+  instruction: Gnosis's GNO also on Ethereum; CoW Protocol's COW and Safe's
+  SAFE on Ethereum and, bridged from there, on Gnosis Chain. None of the
+  three is on Sepolia.
 - **Settings → Tokens** groups the list by network. **Add token** asks for
   the network first (N17), then reads the contract on that network.
 - **Multicall3** is pinned per network (its code hash proven on each) before
@@ -350,6 +352,11 @@ are unchanged.
   full before Add. The Gnosis account is added by address: it has no
   `ensName` and does not follow the name, since no Gnosis registry was asked.
   The Ethereum and Sepolia accounts follow it as today (issue #67).
+  Each answer names the registry that gave it ("On Ethereum: no address",
+  "On Sepolia's test registry: resolves to 0x…"), and a testnet's registry
+  is always named as one, so a name never looks registered on mainnet. A
+  single card names the network Add adds it on (owner's request,
+  2026-10-29).
 
 ## Screens
 
@@ -474,7 +481,11 @@ that are on and have accounts. A Sepolia widget keeps "testnet prices"; an Ether
 ETH at mainnet's rate, a Gnosis one xDAI at its rate. Each refresh wakes only
 that network. A widget placed before the update has no network in its state
 and is migrated as Sepolia, still marked "testnet prices". Choosing another
-network means placing a new widget.
+network means placing a new widget. Since issue #178 the configuration also
+asks for the price and the currency (docs/wallet-ux.md, *Home-screen
+widget*), and `last-exchange-rate.json` keeps one entry per pair (format 3):
+a network's entry from before is its native pair, following the display
+currency.
 
 ## Delivery: a multi-PR plan through `feature/networks`
 
@@ -498,11 +509,23 @@ releasable. The parts, in order:
    and screen tests use made-up Ethereum and Gnosis states, and the network
    steps are tested against a fake two-network catalog. The screenshots
    artifact shows them.
-4. **Ethereum.** `Network.ETHEREUM`; its Chainlink feeds, built-in tokens
-   and icons, Safe deployments and fallback handler, Uniswap v3 and
-   Multicall3 pins, each proven on mainnet by the PR, with the values read
-   stated; the ENS root. A real-network test like `MyotisNodeSepoliaTest`.
-   From here a release build starts with Ethereum on and Sepolia off.
+4. **Ethereum**, in four parts:
+   - **4a, Ethereum joins.** `Network.ETHEREUM` with nothing pinned yet (no
+     feeds, tokens, Safe deployments or swap venue), and what a second
+     network makes per network: the upgrade warnings (a banner per network,
+     a network blocked alone said in its own section, the update screen
+     only when every network followed is blocked), the display currency
+     (one for the wallet, offered when a network with accounts prices it),
+     Settings → Tokens grouped by network, each host's upgrade notices per
+     network, and the build defaults. From here a release build starts with
+     Ethereum on and Sepolia off.
+   - **4b, the widget's network** (*The widget*).
+   - **4c, Ethereum's pins**: its Chainlink feeds, built-in tokens and icons,
+     Safe deployments and fallback handler, Uniswap v3 and Multicall3 pins,
+     each proven on mainnet by the PR, with the values read stated; the ENS
+     root. A real-network test like `MyotisHostSepoliaTest`.
+   - **4d, the iOS host** split into a `ChainNode` per network, as the JVM
+     one was in part 2.
 5. **Gnosis Chain.** `Network.GNOSIS`; the xDAI icon and price, its feeds,
    tokens, Safe deployments (L2), fallback handler, and what open questions 2
    and 7 decide for names and swaps. A release build's defaults gain Gnosis
@@ -513,13 +536,16 @@ releasable. The parts, in order:
 Parts 4 and 5 are independent once 3 is in and can be reviewed in either
 order.
 
-**Still the owner's to answer before part 1 is coded** (CLAUDE.md, step 3
-of the multi-PR rule): may the part PRs be merged into `feature/networks`
-without waiting for the owner, or does the owner merge each one? The answer
-lives in the conversation where it is given. Until a session has it in its
-own conversation, the owner merges each part.
+**The part PRs** (CLAUDE.md, step 3 of the multi-PR rule): the owner answered
+yes, the session executing the plan merges each part into `feature/networks`
+once it is done under the workflow (2026-10-22). The answer lives in that
+session's conversation; a later session resuming the plan without it in its own
+conversation asks again, and until then the owner merges each part.
 
-## Open questions, the owner's to decide
+## Open questions, decided
+
+The owner decided each as this page proposes (2026-10-22; CLAUDE.md, *Data
+sources*): the default named in each item below is the ruling.
 
 1. **Real funds.** Mainnet and Gnosis hold real value. Should the first
    account added on either show a one-time notice (what Serotine is, what

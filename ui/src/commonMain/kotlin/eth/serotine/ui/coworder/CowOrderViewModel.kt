@@ -133,6 +133,8 @@ class CowOrderViewModel(
             val quoting: Boolean = false,
             val error: String? = null,
             val earlier: EarlierTransaction? = null,
+            /** [error] with no block, for simple mode; null where it is [error] itself. */
+            val simpleError: String? = null,
         ) : Step
 
         /** [quote] under review, made at [quotedAt]; [hidden] once the screen stopped being shown since. */
@@ -234,7 +236,7 @@ class CowOrderViewModel(
         if (current.quoting) return
         val record = (model.value?.reading as? CowOrderReading.Found)?.record ?: return
         if (!record.live || model.value?.cannotSign != null) return
-        step.value = current.copy(quoting = true, error = null, earlier = null)
+        step.value = current.copy(quoting = true, error = null, earlier = null, simpleError = null)
         hiddenWhileQuoting = false
         job = viewModelScope.launch {
             val next = quoted(record, unlock = null)
@@ -421,6 +423,10 @@ class CowOrderViewModel(
                 error = refusal(quoting),
                 earlier = EarlierTransaction(quoting.hash, note = null, label = "Open the earlier transaction"),
             )
+            is CowCancellationQuoting.Reverts -> Step.Viewing(
+                error = refusal(quoting),
+                simpleError = "The cancellation reverts, checked on chain. Nothing was signed.",
+            )
             else -> Step.Viewing(error = refusal(quoting))
         }
     }
@@ -441,7 +447,9 @@ class CowOrderViewModel(
         CowCancellationQuoting.Syncing -> "The light client is not synced yet: try again in a moment."
         is CowCancellationQuoting.Unavailable -> when (quoting.reason) {
             ReadUnavailable.NO_ENGINE -> "There is no light client on this device, so nothing can be cancelled."
+            ReadUnavailable.NETWORK_OFF -> "The network's light client is not running, so nothing can be cancelled."
             ReadUnavailable.STALE_ANCHOR -> "The light client refuses to sync, so nothing can be quoted."
+            ReadUnavailable.SYNCING -> "The light client is still syncing, so nothing can be quoted yet."
             ReadUnavailable.UNPROVEN ->
                 "${figureText(quoting.figure, "of the cancellation")} could not be verified this time: try again."
             ReadUnavailable.REFUSED -> "The light client on this device cannot quote the cancellation."
@@ -542,6 +550,17 @@ class CowOrderViewModel(
             },
             error = step.error.takeIf { record.live },
             quoting = step.quoting,
+            simpleEnd = when (val proven = record.end) {
+                is CowOrderEnd.Filled -> "Filled: it bought ${buy(proven.trade.buyAmount)}, as this account's " +
+                    "verified logs say."
+                is CowOrderEnd.Unfilled -> if (proven.cancelled) {
+                    "Cancelled on chain: it never filled, as this account's verified logs prove."
+                } else {
+                    "Not filled: no trade for it in this account's verified logs, which are proven past its validity."
+                }
+                else -> null
+            },
+            simpleError = step.simpleError.takeIf { record.live },
         )
     }
 
@@ -565,6 +584,8 @@ class CowOrderViewModel(
             ),
             simulation = "The cancellation, run as a verified call from this account $ran, goes through. Once a " +
                 "block has it, nothing can fill the order, and its end is proven once that block is finalized.",
+            simpleSimulation = "Checked on chain: the cancellation should go through. Once it is in a block, " +
+                "nothing can fill the order.",
             unlock = step.unlock,
             refreshing = step.refreshing,
             signing = step.signing,

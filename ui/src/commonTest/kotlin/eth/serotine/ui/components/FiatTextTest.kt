@@ -45,6 +45,27 @@ class FiatTextTest {
     }
 
     @Test
+    fun aValueAtAPoolsAverageSaysSoAndSoDoesATotalThatIncludesOne() {
+        assertEquals(
+            "≈ $0.12 · Uniswap\u00a030-\u2060min\u00a0average",
+            valuationText(
+                Valuation.Valued(0.12, 0, stale = false, poolAverage = true),
+                DisplayCurrency.USD,
+                Network.ETHEREUM,
+            ),
+        )
+        assertEquals(
+            "Includes Uniswap averages · 1 asset without a price",
+            totalNote(Total(12.0, valued = 2, leftOut = 1, poolAveraged = 1), Network.ETHEREUM, DisplayCurrency.USD),
+        )
+        assertEquals("", totalNote(Total(12.0, valued = 2), Network.ETHEREUM, DisplayCurrency.USD))
+        assertEquals(
+            "No price: its pool just moved",
+            valuationText(Valuation.NoPrice(NoPriceReason.POOL_MOVED), DisplayCurrency.USD, Network.ETHEREUM),
+        )
+    }
+
+    @Test
     fun aTotalSaysWhatItLeavesOutAndNeverChecksForever() {
         assertEquals(
             "Testnet prices · 2 assets without a price · 1 not verified · still checking",

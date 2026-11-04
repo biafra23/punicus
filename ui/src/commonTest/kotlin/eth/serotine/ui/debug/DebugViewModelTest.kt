@@ -1,12 +1,14 @@
 package eth.serotine.ui.debug
 
+import eth.serotine.domain.model.InterfaceMode
 import eth.serotine.domain.model.LogLevel
 import eth.serotine.domain.usecase.ClearDebugLog
 import eth.serotine.domain.usecase.ObserveDebugLog
-import eth.serotine.domain.usecase.ObserveDebugScreen
+import eth.serotine.domain.usecase.ObserveDebugTab
 import eth.serotine.domain.usecase.SetDebugLogLevel
 import eth.serotine.ui.FakeDebugLog
 import eth.serotine.ui.MemoryDebugScreen
+import eth.serotine.ui.MemoryInterfaceMode
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.launch
@@ -83,6 +85,16 @@ class DebugViewModelTest {
     }
 
     @Test
+    fun theFilterTextIsThereAtOnceWithoutTheUiStateCatchingUp() = runTest {
+        val viewModel = viewModel()
+
+        viewModel.setFilter("ge")
+        viewModel.setFilter("get")
+
+        assertEquals("get", viewModel.filterText.value)
+    }
+
+    @Test
     fun clearEmptiesTheLog() = runTest {
         Dispatchers.setMain(UnconfinedTestDispatcher(testScheduler))
         log.records.value = listOf(log.record(1))
@@ -97,15 +109,20 @@ class DebugViewModelTest {
     }
 
     @Test
-    fun theTabFollowsTheSetting() = runTest {
+    fun theTabFollowsTheSettingInDetailedViewOnly() = runTest {
         Dispatchers.setMain(UnconfinedTestDispatcher(testScheduler))
         val setting = MemoryDebugScreen()
-        val tab = DebugTabViewModel(ObserveDebugScreen(setting))
+        val mode = MemoryInterfaceMode(InterfaceMode.DETAILED)
+        val tab = DebugTabViewModel(ObserveDebugTab(setting, mode))
         runCurrent()
         assertEquals(false, tab.shown.value)
 
         setting.enabled.value = true
         runCurrent()
         assertEquals(true, tab.shown.value)
+
+        mode.mode.value = InterfaceMode.SIMPLE
+        runCurrent()
+        assertEquals(false, tab.shown.value)
     }
 }

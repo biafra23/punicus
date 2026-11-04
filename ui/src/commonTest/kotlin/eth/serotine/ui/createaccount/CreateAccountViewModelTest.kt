@@ -2,9 +2,11 @@ package eth.serotine.ui.createaccount
 
 import eth.serotine.domain.model.Address
 import eth.serotine.domain.model.Mnemonic
+import eth.serotine.domain.model.Network
 import eth.serotine.domain.model.WalletPassword
 import eth.serotine.domain.repository.BiometricChange
 import eth.serotine.domain.repository.KeyDeletion
+import eth.serotine.domain.repository.KeyDerivation
 import eth.serotine.domain.repository.KeyImport
 import eth.serotine.domain.repository.KeyProtection
 import eth.serotine.domain.repository.KeyStore
@@ -14,9 +16,20 @@ import eth.serotine.domain.repository.NewMnemonic
 import eth.serotine.domain.usecase.DescribeKeyStore
 import eth.serotine.domain.usecase.ImportMnemonicAccount
 import eth.serotine.domain.usecase.NewRecoveryPhrase
+import eth.serotine.domain.usecase.ObserveEnabledNetworks
+import eth.serotine.domain.usecase.SetNetworkEnabled
 import eth.serotine.domain.usecase.WalletChanges
 import eth.serotine.ui.FakeAccounts
+import eth.serotine.ui.MemoryNetworkSettings
 import eth.serotine.ui.components.PasswordStep
+import kotlin.random.Random
+import kotlin.test.AfterTest
+import kotlin.test.Test
+import kotlin.test.assertEquals
+import kotlin.test.assertFalse
+import kotlin.test.assertIs
+import kotlin.test.assertSame
+import kotlin.test.assertTrue
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -26,14 +39,6 @@ import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.test.setMain
-import kotlin.random.Random
-import kotlin.test.AfterTest
-import kotlin.test.Test
-import kotlin.test.assertEquals
-import kotlin.test.assertFalse
-import kotlin.test.assertIs
-import kotlin.test.assertSame
-import kotlin.test.assertTrue
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class CreateAccountViewModelTest {
@@ -42,6 +47,7 @@ class CreateAccountViewModelTest {
     private val account = Address.of("0xf39fd6e51aad88f6f4ce6ab8827279cfffb92266")
     private val accounts = FakeAccounts()
     private val keys = FakeKeyStore()
+    private val networks = MemoryNetworkSettings()
 
     @AfterTest
     fun resetMainDispatcher() = Dispatchers.resetMain()
@@ -52,6 +58,8 @@ class CreateAccountViewModelTest {
             NewRecoveryPhrase(keys),
             ImportMnemonicAccount(keys, accounts, WalletChanges()),
             DescribeKeyStore(keys),
+            ObserveEnabledNetworks(networks),
+            SetNetworkEnabled(networks),
             Random(7),
         )
     }
@@ -64,6 +72,7 @@ class CreateAccountViewModelTest {
             onCheckedWordChange(index, " ${hardhat.split(" ")[position - 1].uppercase()} ")
         }
         onCheck()
+        onNetworkToggle(Network.SEPOLIA.chainId)
     }
 
     @Test
@@ -291,6 +300,9 @@ class CreateAccountViewModelTest {
 
         override suspend fun enableBiometrics(password: WalletPassword, confirmation: String): BiometricChange =
             BiometricChange.NotOnThisDevice
+
+        override suspend fun deriveAccount(from: Address, password: WalletPassword, held: Set<Address>) =
+            KeyDerivation.Unavailable
 
         override suspend fun disableBiometrics(): BiometricChange = BiometricChange.NotOnThisDevice
     }

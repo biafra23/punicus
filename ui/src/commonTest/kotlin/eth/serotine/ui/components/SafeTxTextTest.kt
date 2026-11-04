@@ -32,6 +32,17 @@ class SafeTxTextTest {
         safeTxActionItem(action, nonce = 12, tokens, Network.SEPOLIA)
 
     @Test
+    fun aRevertIsSaidWithItsBlockAndInSimpleModesWordsWithout() {
+        val reverts = CallRefusal.Reverts(9_412_118)
+        assertEquals(
+            "It reverts, run as a verified call at block 9,412,118. Nothing was signed.",
+            callRefusalText(reverts, Network.SEPOLIA),
+        )
+        assertEquals("It reverts, checked on chain. Nothing was signed.", simpleCallRefusalText(reverts))
+        assertNull(simpleCallRefusalText(CallRefusal.Syncing), "it names no block: the same in both views")
+    }
+
+    @Test
     fun aSwapsDeadlineIsSaidOfTheRouterOnlyOnceItIsUniswaps() {
         val swap = RouterSwap(
             router = module,
@@ -172,7 +183,10 @@ class SafeTxTextTest {
 
     @Test
     fun gasTermsAreListedWithTheAddressesTheyPay() {
-        val terms = gasTermsItem(SafeTxGasTerms(UInt256.of(50_000), UInt256.ZERO, UInt256.of(1), module, friend))
+        val terms = gasTermsItem(
+            SafeTxGasTerms(UInt256.of(50_000), UInt256.ZERO, UInt256.of(1), module, friend),
+            Network.SEPOLIA,
+        )
 
         assertEquals(
             listOf(
@@ -194,8 +208,9 @@ class SafeTxTextTest {
             safeTxRefusalText(SafeTxRefusal.NotNext(4), Network.SEPOLIA),
         )
         assertEquals(
-            "A request for another network (chain id 1), not Sepolia.",
-            safeTxRefusalText(SafeTxRefusal.WrongChain(1), Network.SEPOLIA),
+            // Chain 10, OP Mainnet, is no network of this wallet's.
+            "A request for chain id 10, which is not a network this wallet supports.",
+            safeTxRefusalText(SafeTxRefusal.WrongChain(10), Network.SEPOLIA),
         )
         assertEquals(
             "It reverts, run as a verified call at block 9,412,118. Nothing was signed.",
@@ -229,6 +244,12 @@ class SafeTxTextTest {
                 SafeTxRefusal.NotQuoted(CallRefusal.EarlierMaybeSent("0x" + "5e".repeat(32))),
                 Network.SEPOLIA,
             ),
+        )
+        assertEquals(
+            "This Safe is still on version 1.1.1, from before the way Serotine checks signatures today: it is " +
+                "shown, but not signed, approved or executed here. Migrating it to a newer version (in Safe{Wallet} " +
+                "or another app) fixes this.",
+            safeTxRefusalText(SafeTxRefusal.TooOldToSign("1.1.1"), Network.SEPOLIA),
         )
     }
 }

@@ -102,6 +102,10 @@ private val approval = SwapUiState.ApprovalReview(
     simulation = "The approval, run as a verified call from this account at block 8,412,307, goes through. It " +
         "moves nothing: the swap is its own transaction, quoted once a block has this one.",
     unlock = UnlockStep(),
+    step = "Step 1 of 2",
+    next = "Step 2, the swap: once a block has this approval, the price is checked again and you confirm the swap.",
+    headline = "Allow Uniswap's SwapRouter02 to use 40 USDC",
+    scope = "Only this amount, for this swap.",
 )
 
 private val review = SwapUiState.SwapReview(
@@ -195,7 +199,7 @@ private fun SwapPreview(
     SerotineTheme(darkTheme = darkTheme) {
         SwapScreen(
             state = state,
-            lightClient = lightClient,
+            chrome = SwapChrome.Strip(lightClient),
             onSellChange = {},
             onBuyChange = {},
             onAmountChange = {},
@@ -337,6 +341,11 @@ private fun SwapApprovalResetFirstPreview() = SwapPreview(
         resetNote = "USDC refuses to move one allowance to another, as the approval of the whole amount showed: " +
             "this sets it to zero first, and the whole amount is approved once that is in a block.",
         unlock = UnlockStep(WalletPassword("made-up preview password")),
+        step = "Step 1 of 3",
+        next = "Step 2, the approval of the whole amount: once a block has this one, it is checked again and you " +
+            "confirm it, then the swap.",
+        headline = "Set what Uniswap's SwapRouter02 may use of USDC to zero",
+        scope = "It allows nothing: the whole amount is approved in the next step.",
     ),
 )
 
@@ -435,6 +444,38 @@ private fun SwapWatchOnlyPreview() = SwapPreview(
 @Composable
 private fun SwapSentPreview() = SwapPreview(SwapUiState.Sent("Sepolia", "0x" + "5e".repeat(32)))
 
+/** Between the steps: the approval sent, the swap quoted once a block has it. */
+@Preview
+@Composable
+private fun SwapApprovalPendingPreview() = SwapPreview(
+    SwapUiState.ApprovalPending(
+        network = "Sepolia",
+        hash = "0x" + "a1".repeat(32),
+        title = "Step 1 of 2 sent: the approval",
+        message = "Once a block has the approval, the swap is quoted again here and you confirm step 2. If you " +
+            "leave, it waits in this account's Activity: Continue there quotes it again. The approval only lets " +
+            "USDC be taken in a swap you send yourself.",
+    ),
+)
+
+/** The swap quoted once its approval is in a block: step 2 of 2. */
+@Preview
+@Composable
+private fun SwapReviewStepTwoPreview() = SwapPreview(review.copy(step = "Step 2 of 2"))
+
+/** A block has the approval sent before, yet the allowance still falls short: said before another is sent. */
+@Preview
+@Composable
+private fun SwapApprovalEarlierFailedPreview() = SwapPreview(
+    approval.copy(
+        earlierFailed = FailedApproval(
+            "A block has the approval sent before, yet the allowance still falls short: it may have failed. Open " +
+                "it to see why before you send another.",
+            "0x" + "a1".repeat(32),
+        ),
+    ),
+)
+
 /** Every preview above, which SwapScreenPreviewsTest renders: a new preview goes in here too. */
 internal val swapScreenPreviews: List<@Composable () -> Unit> = listOf(
     { SwapComposeEmptyPreview() },
@@ -466,4 +507,7 @@ internal val swapScreenPreviews: List<@Composable () -> Unit> = listOf(
     { SwapLoadingPreview() },
     { SwapWatchOnlyPreview() },
     { SwapSentPreview() },
+    { SwapApprovalPendingPreview() },
+    { SwapReviewStepTwoPreview() },
+    { SwapApprovalEarlierFailedPreview() },
 )

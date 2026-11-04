@@ -128,6 +128,36 @@ class SafeTxSigningTest {
     }
 
     @Test
+    fun aSafeStillOnAPreOneThreeZeroSingletonIsNeitherImportedNorSignedThoughItIsRecognised() = runTest {
+        // diskordia.eth's case, had it never moved to a pinned ≥1.3.0 singleton: recognised (its
+        // owners and threshold are read and shown) but checks a hash this app does not compute.
+        for (version in listOf("1.0.0", "1.1.1", "1.2.0")) {
+            world.state = world.state.copy(version = version)
+            val request = world.request(usdcTransfer(4), world.carol)
+
+            assertEquals(
+                SigningRequestImport.Refused(SafeTxRefusal.TooOldToSign(version)),
+                import(world.codec.encode(request)),
+            )
+            assertEquals(
+                SafeTxSignCheck.Refused(SafeTxRefusal.TooOldToSign(version)),
+                sign.check(request, world.alice.address),
+            )
+        }
+        assertEquals(emptyList(), world.queue.requests.value)
+        assertEquals(emptyList(), world.signer.asked)
+    }
+
+    @Test
+    fun aSafeMigratedToAPinnedSingletonSignsAsAnyOtherOne() = runTest {
+        // changeMasterCopy only ever moves a Safe to a singleton this build pins (SafeDeployments):
+        // state.version is what it reads there now, 1.3.0 on here, never one of the three above.
+        world.state = world.state.copy(version = "1.3.0")
+
+        assertIs<SafeTxSignCheck.Ready>(sign.check(world.request(usdcTransfer(4)), world.alice.address))
+    }
+
+    @Test
     fun aSafeThatCouldNotBeVerifiedThisTimeIsWaitedOutForItsNextReading() = runTest {
         val request = world.request(usdcTransfer(4), world.carol)
         world.kind.value = KindReading.Unavailable(ReadUnavailable.UNPROVEN)
@@ -161,7 +191,7 @@ class SafeTxSigningTest {
         // As the engine adapter answers a slow Safe: its code proven (2 s), then its own retries
         // for its whole 20 s budget, unproven; the next poll 4 s on, and a read of 12 s that is.
         val slow = object : AddressKinds {
-            override fun observeKind(address: Address): Flow<KindReading> = flow {
+            override fun observeKind(network: Network, address: Address): Flow<KindReading> = flow {
                 delay(22.seconds)
                 emit(KindReading.Unavailable(ReadUnavailable.UNPROVEN))
                 delay(16.seconds)
@@ -229,7 +259,7 @@ class SafeTxSigningTest {
     @Test
     fun aTextThatIsNoRequestForThisNetworkIsRefusedAsTheCodecSays() = runTest {
         world.codec.texts["v2"] = SigningRequestDecoding.UnknownVersion(2)
-        world.codec.texts["mainnet"] = SigningRequestDecoding.WrongChain(1)
+        world.codec.texts["mainnet"] = SigningRequestDecoding.UnknownChain(1)
 
         assertEquals(SigningRequestImport.Refused(SafeTxRefusal.Malformed), import("hello"))
         assertEquals(SigningRequestImport.Refused(SafeTxRefusal.UnknownVersion(2)), import("v2"))
@@ -241,16 +271,27 @@ class SafeTxSigningTest {
         val text = world.codec.encode(world.request(usdcTransfer(4), world.carol))
         val other = Address.of("0x" + "6b".repeat(20))
 
-        assertEquals(SigningRequestImport.Refused(SafeTxRefusal.OtherSafe(world.safe)), import(text, safe = other))
+        assertEquals(
+            SigningRequestImport.Refused(SafeTxRefusal.OtherSafe(world.safe)),
+            import(text, safe = other.onSepolia),
+        )
         assertEquals(emptyList(), world.queue.requests.value)
-        assertIs<SigningRequestImport.Imported>(import(text, safe = world.safe))
+        assertIs<SigningRequestImport.Imported>(import(text, safe = world.safe.onSepolia))
     }
 
     @Test
     fun aDelegateCallIsShownForWhatItIsAndNeverSigned() = runTest {
         val tx = SafeTx(
-            usdc.address, UInt256.ZERO, Erc20.transferData(world.recipient, UInt256.ONE), SafeOperation.DELEGATECALL,
-            UInt256.ZERO, UInt256.ZERO, UInt256.ZERO, Address.ZERO, Address.ZERO, nonce = 4,
+            usdc.address,
+            UInt256.ZERO,
+            Erc20.transferData(world.recipient, UInt256.ONE),
+            SafeOperation.DELEGATECALL,
+            UInt256.ZERO,
+            UInt256.ZERO,
+            UInt256.ZERO,
+            Address.ZERO,
+            Address.ZERO,
+            nonce = 4,
         )
         val request = world.request(tx)
 

@@ -53,7 +53,7 @@ class SafeSwapsTest {
 
         override suspend fun venue(network: Network): VenueReading = venue
 
-        override suspend fun call(to: Address, data: ByteArray): Simulation {
+        override suspend fun call(network: Network, to: Address, data: ByteArray): Simulation {
             check(to == deployment.quoterV2 && data.contentEquals(QuoterV2.quote(swap.route, swap.amountIn)))
             return quote
         }
@@ -149,7 +149,7 @@ class SafeSwapsTest {
     fun aVerdictThatNeedsNoHeadIsGivenWhileTheLightClientSaysNothingYet() = runTest {
         val silent = object : LightClient {
             override val datesFinalizedBlocks = true
-            override fun observeStatus(): Flow<LightClientStatus> = flow { awaitCancellation() }
+            override fun observeStatus(network: Network): Flow<LightClientStatus> = flow { awaitCancellation() }
         }
         val checkSilently = CheckSafeSwap(chain, silent, Network.SEPOLIA)
 

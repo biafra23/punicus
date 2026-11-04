@@ -1,6 +1,7 @@
 package eth.serotine.domain.usecase
 
 import eth.serotine.domain.model.GPv2Settlement
+import eth.serotine.domain.model.Network
 import eth.serotine.domain.repository.AccountList
 import eth.serotine.domain.repository.AccountRepository
 import eth.serotine.domain.repository.CowOrderEnd
@@ -57,6 +58,8 @@ class ProveCowOrderEnds(
     private val logIndex: LogIndex,
     private val lightClient: LightClient,
     private val accounts: AccountRepository,
+    /** The network whose orders this proves, at its finalized blocks, in its log index (docs/networks.md). */
+    private val network: Network,
     private val clock: () -> Long = ::epochSecondsNow,
 ) {
     /**
@@ -67,17 +70,25 @@ class ProveCowOrderEnds(
      */
     suspend operator fun invoke() {
         cowOrders.prune(signedBefore = clock() - COW_ORDERS_KEPT_SECONDS)
-        val finalized = lightClient.observeStatus()
+        val finalized = lightClient.observeStatus(network)
             .map { (it as? LightClientStatus.Synced)?.finalized }
             .distinctUntilChanged()
-        // The wallet's addresses; null while the list cannot be read, when no account counts as removed.
+        // The wallet's addresses on this network; null while the list cannot be read, when no account
+        // counts as removed.
         val held = accounts.observeAccounts()
-            .map { list -> (list as? AccountList.Loaded)?.accounts?.map { it.address }?.toSet() }
+            .map { list ->
+                (list as? AccountList.Loaded)?.accounts?.filter { it.network == network }?.map { it.address }?.toSet()
+            }
             .distinctUntilChanged()
-        combine(cowOrders.observe(), finalized, held, logIndex.observeCoverage()) { orders, final, addresses, _ ->
+        combine(
+            cowOrders.observe(),
+            finalized,
+            held,
+            logIndex.observeCoverage(network),
+        ) { orders, final, addresses, _ ->
             Triple(orders, final, addresses)
         }.collectLatest { (orders, final, addresses) ->
-            val live = (orders as? CowOrderList.Loaded)?.orders.orEmpty().filter { it.live }
+            val live = (orders as? CowOrderList.Loaded)?.orders.orEmpty().filter { it.live && it.network == network }
             for (order in live) {
                 val removed = addresses != null && order.account !in addresses
                 endOf(order, final, removed)?.let { cowOrders.end(order.uid, it) }
@@ -102,7 +113,7 @@ class ProveCowOrderEnds(
             topic0s = listOf(GPv2Settlement.TRADE_TOPIC, GPv2Settlement.ORDER_INVALIDATED_TOPIC),
             position = 1,
         )
-        val logs = when (val reading = logIndex.logs(query)) {
+        val logs = when (val reading = logIndex.logs(order.network, query)) {
             is LogsReading.Logs -> reading.logs
             is LogsReading.BeforeStart ->
                 return CowOrderEnd.NotProvable.takeIf { finalized.timestamp > order.order.validTo }

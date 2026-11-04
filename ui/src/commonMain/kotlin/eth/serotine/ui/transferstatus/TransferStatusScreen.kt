@@ -2,6 +2,7 @@ package eth.serotine.ui.transferstatus
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
@@ -25,9 +26,13 @@ import androidx.compose.material3.ListItem
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
@@ -36,14 +41,20 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import eth.serotine.domain.model.InterfaceMode
 import eth.serotine.ui.components.AccountAvatar
 import eth.serotine.ui.components.Blockie
 import eth.serotine.ui.components.LightClientItem
 import eth.serotine.ui.components.NotSentFields
 import eth.serotine.ui.components.TokenIcon
 import eth.serotine.ui.components.UnderLightClientStrip
+import eth.serotine.ui.components.UnderLightClientStripIfAny
 import eth.serotine.ui.components.shortAddress
-import eth.serotine.ui.lightclient.LightClientViewModel
+import eth.serotine.ui.mode.LocalInterfaceMode
+import kotlinx.coroutines.flow.StateFlow
+
+/** Test tag of simple mode's Details button, for UI tests. */
+const val TRANSFER_DETAILS_TAG = "transfer-details"
 
 /** Test tag of each step, for UI tests. */
 const val TRANSFER_STEP_TAG = "transfer-step"
@@ -64,28 +75,43 @@ const val TRANSFER_SAFE_TAG = "transfer-safe"
 @Composable
 fun TransferStatusRoute(
     viewModel: TransferStatusViewModel,
-    lightClient: LightClientViewModel,
+    /** The strip of the network this screen is about: its account's. */
+    lightClient: StateFlow<LightClientItem>,
     onDone: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
-    val strip by lightClient.item.collectAsStateWithLifecycle()
-    TransferStatusScreen(state, strip, onDone, onRetry = viewModel::retry, modifier = modifier)
+    // The same state in the view the user chose (docs/simple-ui.md): the strip in Detailed view; in simple
+    // mode the same item, drawn as the sync line while it says something.
+    when (LocalInterfaceMode.current) {
+        InterfaceMode.SIMPLE -> {
+            val strip by lightClient.collectAsStateWithLifecycle()
+            SimpleTransferStatusScreen(state, onDone, viewModel::retry, modifier, syncLine = strip)
+        }
+        InterfaceMode.DETAILED -> {
+            val strip by lightClient.collectAsStateWithLifecycle()
+            TransferStatusScreen(state, strip, onDone, viewModel::retry, modifier)
+        }
+    }
 }
 
 /**
  * Send, status (docs/wallet-ux.md, screen 9) as a pure function of [state]: what was sent, and
  * Signed → Broadcast → Included → Finalized, each step with its block once it has one; for one
- * maybe sent, Try again ([onRetry]), which sends the same signed bytes.
+ * maybe sent, Try again ([onRetry]), which sends the same signed bytes. [lightClient] is the
+ * network's strip, Detailed view's; simple mode ([SimpleTransferStatusScreen]) draws none (null),
+ * and offers its steps' blocks behind *Details* ([details]; none: no Details).
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun TransferStatusScreen(
     state: TransferStatusUiState,
-    lightClient: LightClientItem,
+    lightClient: LightClientItem?,
     onDone: () -> Unit,
     onRetry: () -> Unit,
     modifier: Modifier = Modifier,
+    details: List<String> = emptyList(),
+    syncLine: LightClientItem? = null,
 ) {
     Scaffold(
         modifier = modifier,
@@ -108,12 +134,13 @@ fun TransferStatusScreen(
             )
         },
     ) { padding ->
-        UnderLightClientStrip(lightClient, Modifier.padding(padding)) {
+        val body: @Composable BoxScope.() -> Unit = {
             when (state) {
                 is TransferStatusUiState.Loading -> CircularProgressIndicator(Modifier.align(Alignment.Center))
-                is TransferStatusUiState.Shown -> Shown(state, onDone, onRetry)
+                is TransferStatusUiState.Shown -> Shown(state, onDone, onRetry, details)
             }
         }
+        UnderLightClientStripIfAny(lightClient, Modifier.padding(padding), syncLine, body)
     }
 }
 
@@ -203,7 +230,7 @@ private fun FromRow(from: String, label: String) {
 }
 
 @Composable
-private fun Shown(state: TransferStatusUiState.Shown, onDone: () -> Unit, onRetry: () -> Unit) {
+private fun Shown(state: TransferStatusUiState.Shown, onDone: () -> Unit, onRetry: () -> Unit, details: List<String>) {
     Column(
         Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp),
@@ -300,6 +327,21 @@ private fun Shown(state: TransferStatusUiState.Shown, onDone: () -> Unit, onRetr
                 style = MaterialTheme.typography.bodySmall,
                 fontFamily = FontFamily.Monospace,
             )
+        }
+        if (details.isNotEmpty()) {
+            var open by rememberSaveable { mutableStateOf(false) }
+            TextButton(onClick = { open = !open }, Modifier.testTag(TRANSFER_DETAILS_TAG)) {
+                Text(if (open) "Hide details" else "Details")
+            }
+            if (open) {
+                details.forEach {
+                    Text(
+                        it,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+            }
         }
         Button(onClick = onDone, modifier = Modifier.align(Alignment.End)) { Text("Done") }
     }

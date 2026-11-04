@@ -36,15 +36,17 @@ import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import eth.serotine.domain.model.InterfaceMode
 import eth.serotine.ui.components.AccountAvatar
 import eth.serotine.ui.components.CHECKING_SAFE
 import eth.serotine.ui.components.LightClientItem
-import eth.serotine.ui.components.UnderLightClientStrip
+import eth.serotine.ui.components.UnderLightClientStripIfAny
 import eth.serotine.ui.components.done
 import eth.serotine.ui.components.submitOnDone
-import eth.serotine.ui.lightclient.LightClientViewModel
+import eth.serotine.ui.mode.LocalInterfaceMode
 import eth.serotine.ui.platform.KeepScreenOn
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.StateFlow
 
 /** Test tag of the request's field, for UI tests. */
 const val IMPORT_REQUEST_FIELD_TAG = "import-request-field"
@@ -56,36 +58,57 @@ const val IMPORT_REQUEST_BUTTON_TAG = "import-request-button"
 @Composable
 fun SafeImportRoute(
     viewModel: SafeImportViewModel,
-    lightClient: LightClientViewModel,
+    /** The strip of the network this screen is about: its account's. */
+    lightClient: StateFlow<LightClientItem>,
     onBack: () -> Unit,
     onImported: (hash: String) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     // Main.immediate: a paste reaches its field in the same frame.
     val state by viewModel.uiState.collectAsStateWithLifecycle(context = Dispatchers.Main.immediate)
-    val strip by lightClient.item.collectAsStateWithLifecycle()
     val imported = (state as? SafeImportUiState.Imported)?.hash
     val currentOnImported by rememberUpdatedState(onImported)
     LaunchedEffect(imported) {
         if (imported != null) currentOnImported(imported)
     }
-    SafeImportScreen(state, strip, viewModel::onTextChange, viewModel::import, onBack, modifier)
+    // The same state in the view the user chose (docs/simple-ui.md).
+    when (LocalInterfaceMode.current) {
+        InterfaceMode.SIMPLE -> SimpleSafeImportScreen(
+            state,
+            viewModel::onTextChange,
+            viewModel::import,
+            onBack,
+            modifier,
+            syncLine = lightClient.collectAsStateWithLifecycle().value,
+        )
+        // The strip in Detailed view; in simple mode the same item, drawn as the sync line while it says something.
+        InterfaceMode.DETAILED -> SafeImportScreen(
+            state,
+            lightClient.collectAsStateWithLifecycle().value,
+            viewModel::onTextChange,
+            viewModel::import,
+            onBack,
+            modifier,
+        )
+    }
 }
 
 /**
  * Import a request (docs/wallet-ux.md, screen 16) as a pure function of [state]: the Safe it is
  * for, the request's text pasted as another device shared it, and Import, which checks it against
- * the chain; why one is refused is said under the field.
+ * the chain; why one is refused is said under the field. [lightClient] is the strip above it,
+ * Detailed view's; simple mode ([SimpleSafeImportScreen]) has none.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SafeImportScreen(
     state: SafeImportUiState,
-    lightClient: LightClientItem,
+    lightClient: LightClientItem?,
     onTextChange: (String) -> Unit,
     onImport: () -> Unit,
     onBack: () -> Unit,
     modifier: Modifier = Modifier,
+    syncLine: LightClientItem? = null,
 ) {
     // The Safe's check can take up to 45 s: the display stays on while it runs.
     if ((state as? SafeImportUiState.Entering)?.importing == true) KeepScreenOn()
@@ -110,7 +133,7 @@ fun SafeImportScreen(
             )
         },
     ) { padding ->
-        UnderLightClientStrip(lightClient, Modifier.padding(padding)) {
+        UnderLightClientStripIfAny(lightClient, Modifier.padding(padding), syncLine) {
             when (state) {
                 is SafeImportUiState.Imported -> CircularProgressIndicator(Modifier.align(Alignment.Center))
                 is SafeImportUiState.Entering -> Entering(state, onTextChange, onImport)

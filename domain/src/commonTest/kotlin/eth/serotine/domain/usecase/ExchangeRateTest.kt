@@ -3,6 +3,7 @@ package eth.serotine.domain.usecase
 import eth.serotine.domain.model.DisplayCurrency
 import eth.serotine.domain.model.Network
 import eth.serotine.domain.model.PriceId
+import eth.serotine.domain.model.RatePair
 import eth.serotine.domain.model.RateSnapshot
 import eth.serotine.domain.repository.CurrencyChoice
 import eth.serotine.domain.repository.FeedReading
@@ -33,8 +34,8 @@ class ExchangeRateTest {
     private val read = ReadExchangeRate(feeds, history)
     private val setting = MemoryCurrencySetting()
     private val last = MemoryLastRate()
-    private val currencies = ObserveDisplayCurrencies(feeds, setting)
-    private val refresh = RefreshExchangeRate(currencies, read, last, Network.SEPOLIA)
+    private val currencies = ObserveDisplayCurrencies(feeds, setting, ListAccountRepository())
+    private val refresh = RefreshExchangeRate(currencies, read, last, RatePair.native(Network.SEPOLIA))
 
     /** A day back that has no round, which is a lasting answer: read once, no retries. */
     private fun noDayBack() {
@@ -49,7 +50,7 @@ class ExchangeRateTest {
         history.answers[ETH] = PastReading.Verified(2_200.0, updatedAt = 1, stale = false)
         history.answers[EUR] = PastReading.Verified(1.1, updatedAt = 1, stale = false)
 
-        val snapshot = (read(ETH, DisplayCurrency.EUR) as RateResult.Read).snapshot
+        val snapshot = (read(Network.SEPOLIA, ETH, DisplayCurrency.EUR) as RateResult.Read).snapshot
 
         assertEquals(2_000.0, snapshot.rate, 1e-9)
         assertEquals(2_000.0, snapshot.dayAgoRate!!, 1e-9)
@@ -66,11 +67,23 @@ class ExchangeRateTest {
         history.answers[LINK_ID] = PastReading.Verified(0.004, updatedAt = 1, stale = false)
         history.answers[ETH] = PastReading.Verified(2_500.0, updatedAt = 1, stale = false)
 
-        val snapshot = (read(LINK_ID, DisplayCurrency.USD) as RateResult.Read).snapshot
+        val snapshot = (read(Network.SEPOLIA, LINK_ID, DisplayCurrency.USD) as RateResult.Read).snapshot
 
         assertEquals(12.0, snapshot.rate, 1e-9)
         assertEquals(10.0, snapshot.dayAgoRate!!, 1e-9)
         assertEquals(20.0, snapshot.dayChangePercent!!, 1e-9)
+    }
+
+    @Test
+    fun aRateWithAPoolsAverageOnItsPathSaysSo() = runTest {
+        feeds.answer(LINK_ID, 0.005, pool = true)
+        feeds.answer(ETH, 2_400.0)
+        noDayBack()
+        history.answers[LINK_ID] = PastReading.NoRoundThatOld
+
+        val snapshot = (read(Network.SEPOLIA, LINK_ID, DisplayCurrency.USD) as RateResult.Read).snapshot
+        assertTrue(snapshot.poolAverage)
+        assertFalse((read(Network.SEPOLIA, ETH, DisplayCurrency.USD) as RateResult.Read).snapshot.poolAverage)
     }
 
     @Test
@@ -85,7 +98,7 @@ class ExchangeRateTest {
             PastReading.Syncing,
         )) {
             history.answers[EUR] = missing
-            val snapshot = (read(ETH, DisplayCurrency.EUR) as RateResult.Read).snapshot
+            val snapshot = (read(Network.SEPOLIA, ETH, DisplayCurrency.EUR) as RateResult.Read).snapshot
             assertEquals(2_000.0, snapshot.rate, 1e-9)
             assertNull(snapshot.dayAgoRate, "$missing")
             assertNull(snapshot.dayChangePercent)
@@ -97,7 +110,7 @@ class ExchangeRateTest {
         feeds.of(ETH).value = FeedReading.Unavailable(ReadUnavailable.UNPROVEN)
         history.queued[ETH] = ArrayDeque(listOf(PastReading.Unavailable(ReadUnavailable.UNPROVEN), PastReading.Syncing))
         history.answers[ETH] = PastReading.Verified(2_000.0, updatedAt = 1, stale = false)
-        val reading = async { read(ETH, DisplayCurrency.USD) }
+        val reading = async { read(Network.SEPOLIA, ETH, DisplayCurrency.USD) }
         runCurrent()
         assertFalse(reading.isCompleted)
 
@@ -111,7 +124,10 @@ class ExchangeRateTest {
     fun aLastingAnswerEndsTheReadAtOnce() = runTest {
         feeds.of(ETH).value = FeedReading.Unavailable(ReadUnavailable.NO_ENGINE)
 
-        assertEquals(RateResult.NotRead(Price.Unavailable(ReadUnavailable.NO_ENGINE)), read(ETH, DisplayCurrency.USD))
+        assertEquals(
+            RateResult.NotRead(Price.Unavailable(ReadUnavailable.NO_ENGINE)),
+            read(Network.SEPOLIA, ETH, DisplayCurrency.USD),
+        )
     }
 
     @Test
@@ -119,7 +135,10 @@ class ExchangeRateTest {
         feeds.of(ETH).value = FeedReading.NoPrice(NoPriceReason.DECIMALS_CHANGED)
         feeds.answer(EUR, 1.2)
 
-        assertEquals(RateResult.NotRead(Price.NoPrice(NoPriceReason.DECIMALS_CHANGED)), read(ETH, DisplayCurrency.EUR))
+        assertEquals(
+            RateResult.NotRead(Price.NoPrice(NoPriceReason.DECIMALS_CHANGED)),
+            read(Network.SEPOLIA, ETH, DisplayCurrency.EUR),
+        )
         assertTrue(history.asked.isEmpty())
     }
 
@@ -144,6 +163,38 @@ class ExchangeRateTest {
 
         assertEquals(DisplayCurrency.USD, refresh()!!.quote)
         assertFalse(refresh.isDue(nowSeconds = 1_060, maxAgeSeconds = 600))
+    }
+
+    @Test
+    fun aPairWithItsOwnCurrencyIsShownInItWhateverTheDisplayCurrency() = runTest {
+        feeds.answer(LINK_ID, 0.005)
+        feeds.answer(ETH, 2_400.0)
+        feeds.answer(EUR, 1.2)
+        val pair = RatePair(Network.SEPOLIA, LINK_ID, DisplayCurrency.EUR)
+        val link = RefreshExchangeRate(currencies, read, last, pair)
+        setting.choose(DisplayCurrency.USD)
+
+        val snapshot = link()!!
+
+        assertEquals(LINK_ID, snapshot.base)
+        assertEquals(DisplayCurrency.EUR, snapshot.quote)
+        assertEquals(10.0, snapshot.rate, 1e-9)
+        assertEquals(pair, last.pair)
+        setting.choose(DisplayCurrency.GBP)
+        assertFalse(link.isDue(nowSeconds = 1_060, maxAgeSeconds = 600)) // the display currency is not its
+    }
+
+    @Test
+    fun aTokenThatFollowsTheDisplayCurrencyIsShownInIt() = runTest {
+        feeds.answer(LINK_ID, 0.005)
+        feeds.answer(ETH, 2_400.0)
+        feeds.answer(EUR, 1.2)
+        setting.choose(DisplayCurrency.EUR)
+
+        val snapshot = RefreshExchangeRate(currencies, read, last, RatePair(Network.SEPOLIA, LINK_ID, null))()!!
+
+        assertEquals(DisplayCurrency.EUR, snapshot.quote)
+        assertEquals(10.0, snapshot.rate, 1e-9)
     }
 
     @Test
@@ -224,20 +275,22 @@ internal class FakeHistory : PriceHistory {
     val queued = mutableMapOf<PriceId, ArrayDeque<PastReading>>()
     val asked = mutableListOf<Pair<PriceId, Long>>()
 
-    override suspend fun before(priceId: PriceId, secondsBefore: Long): PastReading {
+    override suspend fun before(network: Network, priceId: PriceId, secondsBefore: Long): PastReading {
         asked += priceId to secondsBefore
         return queued[priceId]?.removeFirstOrNull() ?: answers[priceId] ?: PastReading.Syncing
     }
 }
 
-/** [LastExchangeRate] in memory. */
+/** [LastExchangeRate] in memory: the last rate saved, of [pair], whatever pair is loaded. */
 internal class MemoryLastRate : LastExchangeRate {
     var kept: RateSnapshot? = null
+    var pair: RatePair? = null
 
-    override suspend fun load(): RateSnapshot? = kept
+    override suspend fun load(pair: RatePair): RateSnapshot? = kept
 
-    override suspend fun save(snapshot: RateSnapshot): Boolean {
+    override suspend fun save(pair: RatePair, snapshot: RateSnapshot): Boolean {
         kept = snapshot
+        this.pair = pair
         return true
     }
 }

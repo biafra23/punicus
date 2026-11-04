@@ -1,5 +1,6 @@
 package eth.serotine.domain.usecase
 
+import eth.serotine.domain.model.AccountId
 import eth.serotine.domain.model.Address
 import eth.serotine.domain.model.CowDeployment
 import eth.serotine.domain.model.CowMinimum
@@ -161,11 +162,11 @@ class QuoteCowSwap(
         // swap is. One that sells the same token could be mined beside this order.
         quoter.heldBack(from)?.let { return@cancellingReads it.asCowSwapQuoting() }
 
-        val balance = async { tokenBalances.observeBalance(from, soldToken.address).first() }
-        val head = async { lightClient.observeStatus().first() }
+        val balance = async { tokenBalances.observeBalance(network, from, soldToken.address).first() }
+        val head = async { lightClient.observeStatus(network).first() }
         val starts = async { historyStarts.observe().first() }
         val orders = async { cowOrders.observe().first() }
-        val records = async { unminedOf(sentTransfers, inputs, from, clock) }
+        val records = async { unminedOf(network, sentTransfers, inputs, from, clock) }
         val deployment = when (val venue = cowChain.venue(network)) {
             is CowVenueReading.Verified -> venue.deployment
             CowVenueReading.NotPinned -> return@cancellingReads CowSwapQuoting.NoVenue(contract = null)
@@ -182,7 +183,7 @@ class QuoteCowSwap(
             return@cancellingReads CowSwapQuoting.Unavailable(ReadUnavailable.UNPROVEN)
         }
         when (val read = starts.await()) {
-            is HistoryStartList.Loaded -> if (!followedBy(read, from, finalized)) {
+            is HistoryStartList.Loaded -> if (!followedBy(read, AccountId(network, from), finalized)) {
                 return@cancellingReads CowSwapQuoting.NotOffered(CowNotOffered.NOT_FOLLOWED_YET)
             }
             HistoryStartList.Unreadable -> return@cancellingReads CowSwapQuoting.HistoryUnreadable
@@ -233,7 +234,7 @@ class QuoteCowSwap(
             ?: return@cancellingReads CowSwapQuoting.NotOffered(CowNotOffered.FEE_ABOVE_PROCEEDS)
         val floor = CowMinimum.floor(net, tolerance)
 
-        val allowance = when (val read = readAllowance(inputs, from, soldToken, deployment.vaultRelayer)) {
+        val allowance = when (val read = readAllowance(network, inputs, from, soldToken, deployment.vaultRelayer)) {
             is AllowanceRead.Read -> read.allowance
             AllowanceRead.NotAToken -> return@cancellingReads CowSwapQuoting.NotAToken
             AllowanceRead.Refused -> return@cancellingReads CowSwapQuoting.Refused
@@ -298,7 +299,7 @@ class QuoteCowSwap(
 
     /** Whether the settlement contract's own `domainSeparator()` is the one computed here. */
     private suspend fun domainSeparatorHolds(deployment: CowDeployment): DomainCheck =
-        when (val run = cowChain.call(deployment.settlement, GPv2Settlement.domainSeparator())) {
+        when (val run = cowChain.call(network, deployment.settlement, GPv2Settlement.domainSeparator())) {
             is Simulation.Succeeded -> {
                 val onChain = GPv2Settlement.domainSeparatorOf(run.returnHex)
                 val here = GPv2Signing.domainSeparator(network.chainId, deployment.settlement)
@@ -322,7 +323,7 @@ class QuoteCowSwap(
  * start): its order's range, which starts there, must not reach below the account's entry
  * (docs/swaps.md, *Proving an order's end*). Not yet when the start is only noted.
  */
-private fun followedBy(starts: HistoryStartList.Loaded, account: Address, finalized: FinalizedBlock): Boolean {
+private fun followedBy(starts: HistoryStartList.Loaded, account: AccountId, finalized: FinalizedBlock): Boolean {
     val start = (starts.starts[account] as? HistoryStart.Fixed)?.block
     return start != null && start <= finalized.number
 }
@@ -457,7 +458,7 @@ class PlaceCowOrder(
     suspend operator fun invoke(quote: CowSwapQuote, unlock: Unlock): CowOrderPlacing {
         // Never signed stale: at most a minute old by the verified head's own clock, so that the
         // order keeps at least four of its five minutes.
-        val synced = lightClient.observeStatus().first() as? LightClientStatus.Synced
+        val synced = lightClient.observeStatus(quote.network).first() as? LightClientStatus.Synced
             ?: return CowOrderPlacing.QuoteStale
         val now = synced.headTimestamp ?: return CowOrderPlacing.QuoteStale
         if (now > quote.headTimestamp + QUOTE_MAX_AGE_SECONDS) return CowOrderPlacing.QuoteStale
@@ -563,7 +564,8 @@ internal suspend fun List<CowOrderRecord>.holding(
 
 /** Whether the settlement's `filledAmount` of [order] at the head reads its sell amount or more. */
 private suspend fun CowChain.doneAtHead(order: CowOrderRecord): Boolean {
-    val run = call(order.settlement, GPv2Settlement.filledAmount(order.uid)) as? Simulation.Succeeded ?: return false
+    val run = call(order.network, order.settlement, GPv2Settlement.filledAmount(order.uid)) as? Simulation.Succeeded
+        ?: return false
     val filled = GPv2Settlement.filledAmountOf(run.returnHex) ?: return false
     return filled >= order.order.sellAmount
 }

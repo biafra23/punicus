@@ -27,6 +27,7 @@ import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.ExperimentalComposeUiApi
@@ -38,9 +39,11 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LifecycleEventEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import eth.serotine.domain.model.InterfaceMode
 import eth.serotine.ui.components.CHECKING_SAFE
 import eth.serotine.ui.components.FromLine
 import eth.serotine.ui.components.Heading
+import eth.serotine.ui.components.HiddenDetails
 import eth.serotine.ui.components.LightClientItem
 import eth.serotine.ui.components.Note
 import eth.serotine.ui.components.OwnerChoices
@@ -50,16 +53,20 @@ import eth.serotine.ui.components.ReviewButton
 import eth.serotine.ui.components.SafeTxActionCard
 import eth.serotine.ui.components.TokenIcon
 import eth.serotine.ui.components.TransferFormFields
-import eth.serotine.ui.components.UnderLightClientStrip
+import eth.serotine.ui.components.UnderLightClientStripIfAny
 import eth.serotine.ui.components.UnlockFields
-import eth.serotine.ui.lightclient.LightClientViewModel
+import eth.serotine.ui.mode.LocalInterfaceMode
 import eth.serotine.ui.platform.KeepScreenOn
 import eth.serotine.ui.platform.rememberCopyText
 import eth.serotine.ui.platform.rememberShareText
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.StateFlow
 
 /** Test tag of the reviewed amount, for UI tests. */
 const val PROPOSE_AMOUNT_REVIEWED_TAG = "propose-amount-reviewed"
+
+/** Test tag of the review's *Details* in simple mode, for UI tests. */
+const val PROPOSE_DETAILS_TAG = "propose-details"
 
 /** Test tag of the wallet password field, for UI tests. */
 const val PROPOSE_PASSWORD_TAG = "propose-password"
@@ -79,14 +86,14 @@ const val PROPOSE_DROP_UNSAVED_TAG = "propose-drop-unsaved"
 @Composable
 fun SafeProposeRoute(
     viewModel: SafeProposeViewModel,
-    lightClient: LightClientViewModel,
+    /** The strip of the network this screen is about: its account's. */
+    lightClient: StateFlow<LightClientItem>,
     onBack: () -> Unit,
     onProposed: (hash: String) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     // Main.immediate: as on Send, an edit reaches its field in the same frame.
     val state by viewModel.uiState.collectAsStateWithLifecycle(context = Dispatchers.Main.immediate)
-    val strip by lightClient.item.collectAsStateWithLifecycle()
     LifecycleEventEffect(Lifecycle.Event.ON_STOP) { viewModel.onHidden() }
     LifecycleEventEffect(Lifecycle.Event.ON_START) { viewModel.onShown() }
     val proposed = (state as? SafeProposeUiState.Proposed)?.hash
@@ -94,10 +101,8 @@ fun SafeProposeRoute(
     LaunchedEffect(proposed) {
         if (proposed != null) currentOnProposed(proposed)
     }
-    SafeProposeScreen(
-        state = state,
-        lightClient = strip,
-        actions = SafeProposeActions(
+    val actions = remember(viewModel) {
+        SafeProposeActions(
             onAssetChange = viewModel::onAssetChange,
             onToChange = viewModel::onToChange,
             onPickAccount = viewModel::onPickAccount,
@@ -113,12 +118,32 @@ fun SafeProposeRoute(
             onSignWithBiometrics = viewModel::signWithBiometrics,
             onDropUnsaved = viewModel::dropUnsaved,
             onKeepUnsaved = viewModel::keepUnsaved,
-        ),
-        onBack = onBack,
-        onCopy = rememberCopyText(),
-        onShareText = rememberShareText(),
-        modifier = modifier,
-    )
+        )
+    }
+    val copy = rememberCopyText()
+    val share = rememberShareText()
+    // The same state in the view the user chose (docs/simple-ui.md).
+    when (LocalInterfaceMode.current) {
+        InterfaceMode.SIMPLE -> SimpleSafeProposeScreen(
+            state,
+            actions,
+            onBack,
+            copy,
+            share,
+            modifier,
+            syncLine = lightClient.collectAsStateWithLifecycle().value,
+        )
+        // The strip in Detailed view; in simple mode the same item, drawn as the sync line while it says something.
+        InterfaceMode.DETAILED -> SafeProposeScreen(
+            state = state,
+            lightClient = lightClient.collectAsStateWithLifecycle().value,
+            actions = actions,
+            onBack = onBack,
+            onCopy = copy,
+            onShareText = share,
+            modifier = modifier,
+        )
+    }
 }
 
 /**
@@ -155,17 +180,21 @@ class SafeProposeActions(
  * out of screen capture where the platform allows; where it does not, the screen says so. A
  * request signed that the queue could not keep is shared from the review: [onCopy] puts its text
  * on the clipboard, [onShareText] hands it to the share sheet (null where there is none).
+ * [lightClient] is the strip above it, Detailed view's; simple mode ([SimpleSafeProposeScreen]) has
+ * none, and keeps the review's blocks behind *Details* ([details]).
  */
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalComposeUiApi::class)
 @Composable
 fun SafeProposeScreen(
     state: SafeProposeUiState,
-    lightClient: LightClientItem,
+    lightClient: LightClientItem?,
     actions: SafeProposeActions,
     onBack: () -> Unit,
     onCopy: (String) -> Unit = {},
     onShareText: ((String) -> Unit)? = null,
     modifier: Modifier = Modifier,
+    details: List<String> = emptyList(),
+    syncLine: LightClientItem? = null,
 ) {
     val review = state as? SafeProposeUiState.Review
     // In the review, back is to the form; while a signature runs, back waits for it. While the Safe
@@ -219,7 +248,7 @@ fun SafeProposeScreen(
             )
         },
     ) { padding ->
-        UnderLightClientStrip(lightClient, Modifier.padding(padding)) {
+        UnderLightClientStripIfAny(lightClient, Modifier.padding(padding), syncLine) {
             when (state) {
                 is SafeProposeUiState.Loading, is SafeProposeUiState.Proposed ->
                     CircularProgressIndicator(Modifier.align(Alignment.Center))
@@ -250,7 +279,7 @@ fun SafeProposeScreen(
                     form.error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
                     ReviewButton(form, actions.onReview, Modifier.align(Alignment.End))
                 }
-                is SafeProposeUiState.Review -> ReviewContent(state, actions, onCopy, onShareText)
+                is SafeProposeUiState.Review -> ReviewContent(state, actions, onCopy, onShareText, details)
             }
         }
     }
@@ -262,6 +291,7 @@ private fun ReviewContent(
     actions: SafeProposeActions,
     onCopy: (String) -> Unit,
     onShareText: ((String) -> Unit)?,
+    details: List<String>,
 ) {
     Column(
         Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp),
@@ -293,9 +323,11 @@ private fun ReviewContent(
             Text(state.balance.before)
             state.balance.queued?.let { Text("− $it") }
             Text("→ ${state.balance.after}")
-            Note(state.balance.verifiedAt)
+            // Empty in simple mode, which keeps it behind Details.
+            state.balance.verifiedAt.takeIf { it.isNotEmpty() }?.let { Note(it) }
         }
         Text(state.simulation, style = MaterialTheme.typography.bodyMedium)
+        if (details.isNotEmpty()) HiddenDetails(PROPOSE_DETAILS_TAG) { details.forEach { Note(it) } }
         TextButton(onClick = actions.onRefresh, enabled = state.idle) {
             if (state.refreshing) {
                 CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp)

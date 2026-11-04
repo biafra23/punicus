@@ -1,5 +1,6 @@
 package eth.serotine.data.engine
 
+import eth.serotine.domain.model.Network
 import eth.serotine.domain.repository.Broadcast
 import eth.serotine.domain.repository.Broadcaster
 import kotlinx.coroutines.CoroutineDispatcher
@@ -13,11 +14,13 @@ import kotlinx.coroutines.withContext
  * a device without an engine ([chain] null), or an engine that fails, has not sent anything.
  */
 class EngineBroadcaster internal constructor(
+    private val served: Network,
     private val chain: TransactingChain?,
     private val dispatcher: CoroutineDispatcher,
 ) : Broadcaster {
 
-    override suspend fun send(raw: ByteArray): Broadcast {
+    override suspend fun send(network: Network, raw: ByteArray): Broadcast {
+        if (network != served) return Broadcast.Unavailable("no light client for $network on this device")
         val chain = chain ?: return Broadcast.Unavailable("no light client on this device")
         return withContext(dispatcher) {
             try {

@@ -31,7 +31,11 @@ class AccountDialogsTest {
     fun aRemovalUnderWayCannotBeWalkedAwayFrom() {
         rule.setContent {
             SerotineTheme {
-                RemoveAccountDialog(RemoveAccountUiState.Confirm("Daily", DAILY, keyed = true, removing = true), {}, {})
+                RemoveAccountDialog(
+                    RemoveAccountUiState.Confirm("Daily", DAILY, "Sepolia", keyed = true, removing = true),
+                    {},
+                    {},
+                )
             }
         }
 
@@ -76,14 +80,14 @@ class AccountDialogsTest {
         rule.setContent {
             SerotineTheme {
                 RemoveAccountDialog(
-                    RemoveAccountUiState.Confirm("Daily", DAILY, keyed = true),
+                    RemoveAccountUiState.Confirm("Daily", DAILY, "Sepolia", keyed = true),
                     onRemove = { events += "remove" },
                     onCancel = { events += "cancel" },
                 )
             }
         }
 
-        rule.onNodeWithText("Remove Daily?").assertIsDisplayed()
+        rule.onNodeWithText("Remove Daily on Sepolia?").assertIsDisplayed()
         rule.onNodeWithText(DAILY).assertIsDisplayed()
         rule.onNodeWithText("Only its recovery phrase brings this account back", substring = true).assertIsDisplayed()
         rule.onNodeWithText("Remove").performClick()
@@ -94,7 +98,9 @@ class AccountDialogsTest {
     @Test
     fun removingAWatchedAccountSaysItCanBeWatchedAgain() {
         rule.setContent {
-            SerotineTheme { RemoveAccountDialog(RemoveAccountUiState.Confirm("Savings", DAILY, keyed = false), {}, {}) }
+            SerotineTheme {
+                RemoveAccountDialog(RemoveAccountUiState.Confirm("Savings", DAILY, "Sepolia", keyed = false), {}, {})
+            }
         }
 
         rule.onNodeWithText("You can watch it again at any time", substring = true).assertIsDisplayed()
@@ -115,5 +121,24 @@ class AccountDialogsTest {
 
         rule.onNodeWithTag(RENAME_FIELD_TAG).performImeAction()
         assertEquals(listOf("save"), events)
+    }
+
+    @Test
+    fun removingOneNetworksAccountSaysTheKeyStaysForTheOthers() {
+        rule.setContent {
+            SerotineTheme {
+                RemoveAccountDialog(
+                    RemoveAccountUiState.Confirm("Main", DAILY, "Gnosis Chain", keyed = true, keyStaysFor = "Ethereum"),
+                    {},
+                    {},
+                )
+            }
+        }
+
+        rule.onNodeWithText("Remove Main on Gnosis Chain?").assertIsDisplayed()
+        rule.onNodeWithText(
+            "Its key stays on this device for the same address on Ethereum. You can add it on Gnosis Chain again " +
+                "from there.",
+        ).assertIsDisplayed()
     }
 }

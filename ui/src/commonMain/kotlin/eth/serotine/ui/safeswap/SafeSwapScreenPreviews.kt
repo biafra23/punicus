@@ -28,12 +28,15 @@ private const val TREASURY = "0xdbF03B407c01E7cD3CBea99509d93f8DDDC8C6FB"
 private const val DAILY = "0x5aAeb6053F3E94C9b9A09f33669435E7Ef1BeAed"
 private const val SAVINGS = "0xfB6916095ca1df60bB79Ce92cE3Ea74c37c5d359"
 private const val USDC = "0x1c7D4B196Cb0C7B01d743Fbc6116a902379C7238"
+private const val USDT = "0x52908400098527886E0F7030069857D2E4169EE7"
 private const val ROUTER = "0x3bFA4769FB09eefC5a80d6E87c3B9C650f7Ae48E"
 private const val POOL = "0xD1220A0cf47c7B9Be7A2E6BA89F429762e7b9aDb"
 
 private val from = SendFrom("Treasury", TREASURY)
 private val ether = AssetChoice("ETH", "Ether", "eth", "2.5 ETH", verifiedAt = "block 8,412,307")
 private val usdc = AssetChoice("USDC", "USDC", "usdc", "250 USDC", contract = USDC, verifiedAt = "block 8,412,307")
+private val usdt =
+    AssetChoice("USDT", "Tether USD", "usdt", "250 USDT", contract = USDT, verifiedAt = "block 8,412,307")
 
 private val form = SwapForm(
     network = "Sepolia",
@@ -167,6 +170,51 @@ private fun SafeSwapReviewSwapOnlyPreview() = SafeSwapPreview(
     ),
 )
 
+private fun usdtApproval(title: String) = approval.action.copy(
+    title = title,
+    addresses = listOf(ActionAddress("Spender", ROUTER), ActionAddress("Token contract", USDT)),
+    icon = "usdt",
+    symbol = "USDT",
+)
+
+@Preview
+@Composable
+private fun SafeSwapReviewResetFirstPreview() = SafeSwapPreview(
+    review.copy(
+        sell = usdt,
+        sold = "100 USDT",
+        route = listOf(RouteStep("USDT → WETH", "0.05 %", POOL)),
+        spender = SpenderItem("Uniswap's SwapRouter02", ROUTER),
+        transactions = listOf(
+            SafeSwapTransaction(
+                "Safe nonce 12",
+                usdtApproval("Allow a contract to take 0 USDT"),
+            ),
+            SafeSwapTransaction(
+                "Safe nonce 13",
+                usdtApproval("Allow a contract to take 100 USDT"),
+            ),
+            SafeSwapTransaction(
+                "Safe nonce 14",
+                swap.action.copy(
+                    title = "Swap 100 USDT for at least 0.04 ETH",
+                    addresses = listOf(ActionAddress("Router", ROUTER), ActionAddress("Token sold", USDT)),
+                    icon = "usdt",
+                    symbol = "USDT",
+                ),
+            ),
+        ),
+        approvalNote = "The router may take 5 USDT of the Safe's USDT, and USDT refuses to move one allowance to " +
+            "another, as the approval of the whole amount showed: the first Safe transaction sets it to zero, the " +
+            "next approves exactly the amount sold, each its own.",
+        balance = SafeBalanceChange("USDT balance of the Safe", "250 USDT", "150 USDT", "verified at block 8,412,307"),
+        simulation = "The allowance set to zero, run as a verified call from the Safe at block 8,412,307, goes " +
+            "through; the approval after it cannot run before it has, and is run as a verified call when its " +
+            "execution is quoted. The swap cannot run before the router's allowance is approved on chain: it is " +
+            "run as a verified call when its execution is quoted, before anyone sends it.",
+    ),
+)
+
 @Preview
 @Composable
 private fun SafeSwapReviewReplacesPreview() = SafeSwapPreview(
@@ -218,6 +266,7 @@ internal val safeSwapScreenPreviews: List<@Composable () -> Unit> = listOf(
     { SafeSwapReviewPreview() },
     { SafeSwapReviewDarkPreview() },
     { SafeSwapReviewSwapOnlyPreview() },
+    { SafeSwapReviewResetFirstPreview() },
     { SafeSwapReviewReplacesPreview() },
     { SafeSwapReviewSigningPreview() },
     { SafeSwapReviewHalfSignedPreview() },

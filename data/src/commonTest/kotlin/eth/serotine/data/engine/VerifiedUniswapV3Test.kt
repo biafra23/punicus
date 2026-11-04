@@ -90,7 +90,7 @@ class VerifiedUniswapV3Test {
         assertEquals(VenueReading.Unavailable(ReadUnavailable.UNPROVEN), venue().venue(Network.SEPOLIA))
 
         chain.snapshot = running(phase = EngineSnapshot.Phase.SYNCING)
-        assertEquals(VenueReading.Unavailable(ReadUnavailable.UNPROVEN), venue().venue(Network.SEPOLIA))
+        assertEquals(VenueReading.Unavailable(ReadUnavailable.SYNCING), venue().venue(Network.SEPOLIA))
         chain.snapshot = EngineSnapshot.Down
         assertEquals(VenueReading.Unavailable(ReadUnavailable.NO_ENGINE), venue().venue(Network.SEPOLIA))
         assertEquals(
@@ -134,17 +134,17 @@ class VerifiedUniswapV3Test {
         val data = byteArrayOf(0x1a, 0x68, 0x65, 0x02)
         val pool = Address.of("0x" + "99".repeat(20))
         chain.calls[pool to data.toHex()] = CallOutcome.Returned("00".repeat(32), 120)
-        assertEquals(Simulation.Succeeded("00".repeat(32), 120), venue().call(pool, data))
+        assertEquals(Simulation.Succeeded("00".repeat(32), 120), venue().call(Network.SEPOLIA, pool, data))
 
         chain.calls[pool to data.toHex()] = CallOutcome.Reverted(121)
-        assertEquals(Simulation.Reverted(121), venue().call(pool, data))
+        assertEquals(Simulation.Reverted(121), venue().call(Network.SEPOLIA, pool, data))
         chain.calls[pool to data.toHex()] = CallOutcome.Refused
-        assertEquals(Simulation.Refused, venue().call(pool, data))
+        assertEquals(Simulation.Refused, venue().call(Network.SEPOLIA, pool, data))
         chain.calls.clear()
-        assertEquals(Simulation.Unavailable(ReadUnavailable.UNPROVEN), venue().call(pool, data))
+        assertEquals(Simulation.Unavailable(ReadUnavailable.UNPROVEN), venue().call(Network.SEPOLIA, pool, data))
 
         chain.failure = IllegalStateException("the engine failed")
-        assertEquals(Simulation.Unavailable(ReadUnavailable.UNPROVEN), venue().call(pool, data))
+        assertEquals(Simulation.Unavailable(ReadUnavailable.UNPROVEN), venue().call(Network.SEPOLIA, pool, data))
     }
 
     @Test

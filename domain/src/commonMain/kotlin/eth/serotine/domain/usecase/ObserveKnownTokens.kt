@@ -1,5 +1,6 @@
 package eth.serotine.domain.usecase
 
+import eth.serotine.domain.model.Network
 import eth.serotine.domain.model.Token
 import eth.serotine.domain.repository.MetadataReading
 import eth.serotine.domain.repository.ReadUnavailable
@@ -30,8 +31,8 @@ class ObserveKnownTokens(
      * The list, re-emitted when the built-in list, a check or the settings change. A change of
      * the settings (a token hidden, added or removed) does not start the checks again.
      */
-    operator fun invoke(): Flow<KnownTokenList> =
-        combine(checkedBuiltIns(), userTokens.observe()) { checked, settings ->
+    operator fun invoke(network: Network): Flow<KnownTokenList> =
+        combine(checkedBuiltIns(network), userTokens.observe(network)) { checked, settings ->
             val loaded = settings as? TokenSettings.Loaded
             val hidden = loaded?.hidden.orEmpty()
             val builtInSymbols = checked.mapTo(HashSet()) { (token, _) -> token.symbol.lowercase() }
@@ -58,17 +59,18 @@ class ObserveKnownTokens(
 
     /** Each built-in entry with its check, re-checked only when the built-in list changes. */
     @OptIn(ExperimentalCoroutinesApi::class)
-    private fun checkedBuiltIns(): Flow<List<Pair<Token, BuiltInCheck>>> =
-        catalog.observeTokens().flatMapLatest { builtIn ->
+    private fun checkedBuiltIns(network: Network): Flow<List<Pair<Token, BuiltInCheck>>> =
+        catalog.observeTokens(network).flatMapLatest { builtIn ->
             if (builtIn.isEmpty()) {
                 flowOf(emptyList())
             } else {
-                combine(builtIn.map { token -> checkOf(token).map { check -> token to check } }) { it.toList() }
+                combine(builtIn.map {
+                    token -> checkOf(network, token).map { check -> token to check } }) { it.toList() }
             }
         }
 
-    /** What the contract of the built-in [token] says, compared with what it is listed as. */
-    private fun checkOf(token: Token): Flow<BuiltInCheck> = metadata.observe(token.address)
+    /** What the contract of the built-in [token] on [network] says, compared with what it is listed as. */
+    private fun checkOf(network: Network, token: Token): Flow<BuiltInCheck> = metadata.observe(network, token.address)
         .map { reading ->
             when (reading) {
                 MetadataReading.Syncing -> BuiltInCheck.Checking

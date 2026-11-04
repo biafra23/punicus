@@ -7,8 +7,9 @@ design. Its Uniswap plan is built, its eight parts merged through
 `feature/swaps-cow`. Issue #69 tracks both. A swap PR is held
 to this page together with docs/wallet-ux.md (the screens and their rules),
 docs/embedding-myotis.md (what the engine reads and sends) and
-docs/keys-and-signing.md (what is signed). Where this page and CLAUDE.md
-disagree, CLAUDE.md wins and this page is fixed.
+docs/keys-and-signing.md (what is signed). Where this page and the rules
+under `.claude/` (their short form in CLAUDE.md) disagree, the rules win and
+this page is fixed.
 
 ## The owner's direction (2026-10-18, and 2026-10-22)
 
@@ -124,14 +125,15 @@ A Safe swaps through the co-signing queue (docs/wallet-ux.md, *Co-signing a
 Safe transaction*), on Uniswap only until CoW's pre-signature is built
 (*Later on CoW*).
 
-- **Two transactions.** The approval and the swap are two Safe transactions
-  at consecutive nonces. A MultiSend batch would be a delegate call: the
-  owner allowed one through the pinned `MultiSendCallOnly` (2026-10-18,
-  issue #57), but until that is built every delegate call is refused.
+- **Two transactions, or three.** The approval and the swap are two Safe
+  transactions at consecutive nonces. A MultiSend batch would be a delegate
+  call: the owner allowed one through the pinned `MultiSendCallOnly`
+  (2026-10-18, issue #57), but until that is built every delegate call is
+  refused.
   - The approval is for the exact amount, at the Safe's next nonce, and the
-    swap takes the one after it. When that one is taken already (a
-    transaction queued further ahead), nothing is proposed: the swap would
-    sit beside it.
+    swap takes the one after it. When a nonce they would take is taken
+    already (a transaction queued further ahead), nothing is proposed: the
+    swap would sit beside it.
   - The allowance is the router's on chain, as the approvals of it queued
     before the swap leave it (per nonce the least of its alternatives, since
     any one of them may be the one that runs). One that covers the amount
@@ -139,9 +141,19 @@ Safe transaction*), on Uniswap only until CoW's pre-signature is built
   - A swap of the token through the router queued before it counts on the
     allowance a new approval would set: nothing is proposed until it has
     run or gone.
-  - A token that refuses one allowance for another (USDT's kind) would take
-    a third transaction, the allowance set to zero first: it is not
-    proposed from a Safe.
+  - A token that refuses one allowance for another (USDT's kind) takes a
+    third transaction, the allowance set to zero first (owner's request,
+    2026-10-23): `approve(0)` at the Safe's next nonce, the approval of the
+    amount after it, and the swap last. It is told by the approval's
+    verified run from the Safe: when the approval of the amount reverts (or
+    returns false) over a non-zero allowance on chain, `approve(0)` is run
+    instead, and only if that goes through are the three proposed. The
+    approval after it cannot run before the reset has, so like the swap it
+    is run when its execution is quoted. A reset signed and queued whose
+    approval was not is not proposed again: the approval goes after it,
+    and the swap last. A token that refuses the approval
+    with its allowance at zero, or `approve(0)` itself, is not swapped from
+    a Safe: nothing is proposed.
 - **What is held back.** What the transactions queued before the swap may
   move of the asset sold is not the swap's to sell, as for a Safe's transfer.
 - **Only what is decoded counts.** The allowance and the balance a proposal
@@ -257,7 +269,7 @@ They are pinned per `Network`, as Safe's deployments are (`SafeDeployments`):
     EURC at 0.01 % and 0.3 %, PYUSD and GHO at 0.3 %, DAI and USDT at all
     four tiers, WBTC at 0.05 %, AAVE at 0.3 % and 1 %.
   - How long a review's quote takes through the engine is what
-    `MyotisNodeSepoliaTest` prints when run with the engine's library; the
+    `MyotisHostSepoliaTest` prints when run with the engine's library; the
     number of candidates is bounded only if that asks for it.
 - **The fee a route costs**, when routes are ranked net: its QuoterV2 gas ×
   (the next base fee + the Normal tip), in wei for WETH or ETH bought, and
@@ -541,7 +553,7 @@ can still fill could swap them twice.
 ### Proving an order's end
 
 The proof reads no past state. The engine answers its reads from the head
-(`MyotisNode` asks for `"latest"`), and a block number passed to
+(`MyotisHost` asks for `"latest"`), and a block number passed to
 `VerifiedReads.getBalance` is answered from the head anyway
 (docs/embedding-myotis.md). A read at the head after `validTo` proves
 nothing either: `freeFilledAmountStorage` lets a settlement reset an expired

@@ -4,7 +4,7 @@
 # line, prefix-matched on the referring class, exact-matched on the target.
 #
 # A FIRST-PARTY (eth/serotine/*, io/myotis/*) violation NEVER belongs here — fix
-# the call instead (CLAUDE.md "minSdk 29 JDK-API budget"). Third-party entries
+# the call instead (.claude/rules/platform.md, "minSdk 29 JDK-API budget"). Third-party entries
 # fall into three classes, noted per section:
 #   [guarded]  the library probes for the API at runtime and falls back;
 #   [dormant]  the code path is not wired/reachable in this app's configuration;

@@ -18,6 +18,7 @@ import eth.serotine.domain.repository.BiometricUnlock
 import eth.serotine.domain.repository.Broadcast
 import eth.serotine.domain.repository.FeeLevel
 import eth.serotine.domain.repository.KeyDeletion
+import eth.serotine.domain.repository.KeyDerivation
 import eth.serotine.domain.repository.KeyImport
 import eth.serotine.domain.repository.KeyProtection
 import eth.serotine.domain.repository.KeyStore
@@ -33,10 +34,12 @@ import eth.serotine.domain.repository.Unlock
 import eth.serotine.domain.usecase.DeploySafe
 import eth.serotine.domain.usecase.DescribeKeyStore
 import eth.serotine.domain.usecase.ObserveAccounts
+import eth.serotine.domain.usecase.ObserveEnabledNetworks
 import eth.serotine.domain.usecase.PlanSafe
 import eth.serotine.domain.usecase.QuoteSafeDeployment
 import eth.serotine.domain.usecase.RebroadcastTransfer
 import eth.serotine.domain.usecase.ResolveRecipient
+import eth.serotine.domain.usecase.SetNetworkEnabled
 import eth.serotine.domain.usecase.WarmFeeHistory
 import eth.serotine.ui.FactoryInputs
 import eth.serotine.ui.FakeAccounts
@@ -47,11 +50,25 @@ import eth.serotine.ui.FakeReceipts
 import eth.serotine.ui.FakeReleases
 import eth.serotine.ui.FakeSigner
 import eth.serotine.ui.FakeTransactionInputs
+import eth.serotine.ui.MemoryNetworkSettings
 import eth.serotine.ui.MemorySentTransfers
 import eth.serotine.ui.TEST_RELEASE
 import eth.serotine.ui.components.AccountChoice
 import eth.serotine.ui.components.BalanceChange
 import eth.serotine.ui.components.Eip55
+import eth.serotine.ui.components.NetworkChip
+import eth.serotine.ui.components.NetworkLabel
+import kotlin.test.AfterTest
+import kotlin.test.Test
+import kotlin.test.assertContentEquals
+import kotlin.test.assertEquals
+import kotlin.test.assertFalse
+import kotlin.test.assertIs
+import kotlin.test.assertNotEquals
+import kotlin.test.assertNull
+import kotlin.test.assertTrue
+import kotlin.time.Duration.Companion.seconds
+import kotlin.time.TestTimeSource
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
@@ -64,23 +81,13 @@ import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.test.setMain
-import kotlin.test.AfterTest
-import kotlin.test.Test
-import kotlin.test.assertContentEquals
-import kotlin.test.assertEquals
-import kotlin.test.assertFalse
-import kotlin.test.assertIs
-import kotlin.test.assertNotEquals
-import kotlin.test.assertNull
-import kotlin.test.assertTrue
-import kotlin.time.Duration.Companion.seconds
-import kotlin.time.TestTimeSource
 
 /** [CreateSafeViewModel] over fake ports, through the real use cases. */
 @OptIn(ExperimentalCoroutinesApi::class)
 class CreateSafeViewModelTest {
 
     private val daily = Account(
+        Network.SEPOLIA,
         Address.of("0x8f3a2c71e5b9d04a6f1e3c2ba7d90e5f4c6b91c2"),
         AccountKind.EOA,
         "Daily",
@@ -89,19 +96,27 @@ class CreateSafeViewModelTest {
 
     // EIP-55's own examples: 0xfB6916095ca1df60bB79Ce92cE3Ea74c37c5d359 and 0xdbF03B40….
     private val savings = Account(
+        Network.SEPOLIA,
         Address.of("0xfb6916095ca1df60bb79ce92ce3ea74c37c5d359"),
         AccountKind.EOA,
         "Savings",
         AccountCustody.Watched,
     )
     private val spare = Account(
+        Network.SEPOLIA,
         Address.of("0x5aaeb6053f3e94c9b9a09f33669435e7ef1beaed"),
         AccountKind.EOA,
         "Spare",
         AccountCustody.InKeyStore,
     )
     private val treasury =
-        Account(Address.of("0x" + "5a".repeat(20)), AccountKind.SAFE, "Treasury", AccountCustody.Watched)
+        Account(
+            Network.SEPOLIA,
+            Address.of("0x" + "5a".repeat(20)),
+            AccountKind.SAFE,
+            "Treasury",
+            AccountCustody.Watched,
+        )
     private val friend = Address.of("0xdbf03b407c01e7cd3cbea99509d93f8dddc8c6fb")
 
     private val accounts = FakeAccounts(daily, savings, treasury)
@@ -117,7 +132,7 @@ class CreateSafeViewModelTest {
     private val clock = TestTimeSource()
     private val kind = MutableStateFlow<KindReading>(KindReading.Verified(AddressKind.Eoa, 9_412_118))
     private val kinds = object : AddressKinds {
-        override fun observeKind(address: Address): Flow<KindReading> = kind
+        override fun observeKind(network: Network, address: Address): Flow<KindReading> = kind
     }
     private var salts = 0L
     private var biometrics: BiometricUnlock = BiometricUnlock.NotOnThisDevice
@@ -132,6 +147,9 @@ class CreateSafeViewModelTest {
         override suspend fun enableBiometrics(password: WalletPassword, confirmation: String): BiometricChange =
             error("not used by these tests")
 
+        override suspend fun deriveAccount(from: Address, password: WalletPassword, held: Set<Address>) =
+            KeyDerivation.Unavailable
+
         override suspend fun disableBiometrics(): BiometricChange = error("not used by these tests")
 
         override suspend fun delete(address: Address): KeyDeletion = error("not used by these tests")
@@ -140,18 +158,21 @@ class CreateSafeViewModelTest {
     @AfterTest
     fun resetMainDispatcher() = Dispatchers.resetMain()
 
+    private val networks = MemoryNetworkSettings()
+
     private fun TestScope.viewModel(): CreateSafeViewModel {
         Dispatchers.setMain(UnconfinedTestDispatcher(testScheduler))
         val viewModel = CreateSafeViewModel(
             ObserveAccounts(accounts),
             DescribeKeyStore(keys),
             ResolveRecipient(names),
-            PlanSafe(releases, Network.SEPOLIA) { UInt256.of(++salts) },
-            QuoteSafeDeployment(kinds, balances, inputs, sent, Network.SEPOLIA) { 1_800_000_000 },
+            PlanSafe(releases) { UInt256.of(++salts) },
+            QuoteSafeDeployment(kinds, balances, inputs, sent) { 1_800_000_000 },
             DeploySafe(signer, broadcaster, sent) { 1_800_000_000 },
             RebroadcastTransfer(broadcaster, sent, receipts),
             WarmFeeHistory(inputs),
-            Network.SEPOLIA,
+            ObserveEnabledNetworks(networks),
+            SetNetworkEnabled(networks),
             clock,
         )
         backgroundScope.launch { viewModel.uiState.collect {} }
@@ -219,6 +240,48 @@ class CreateSafeViewModelTest {
 
         val state = assertIs<CreateSafeUiState.CannotCreate>(viewModel.uiState.value)
         assertTrue("pay for its deployment" in state.message)
+    }
+
+    @Test
+    fun choosingTheNetworkOnTheThresholdStepGoesBackToTheOwners() = runTest {
+        val viewModel = viewModel()
+        viewModel.onContinue()
+        runCurrent()
+        viewModel.threshold
+
+        // Nothing is planned before the review: the network can still change, and the owners are looked at again.
+        viewModel.onNetwork(Network.SEPOLIA.chainId)
+        runCurrent()
+        assertEquals(
+            listOf(NetworkChip(NetworkLabel.of(Network.SEPOLIA), selected = true)),
+            viewModel.owners.networks.filter { it.selected },
+        )
+    }
+
+    @Test
+    fun theNetworkComesFirstAndOneThatIsOffIsTurnedOnFromThere() = runTest {
+        networks.on.value = emptySet()
+        val viewModel = viewModel()
+
+        // With none on, the first network stands chosen, greyed out with its reason, as every other is.
+        val off = assertIs<CreateSafeUiState.CannotCreate>(viewModel.uiState.value)
+        assertEquals("Ethereum is off in this wallet. Turn it on to create a Safe there.", off.message)
+        assertEquals(
+            NetworkChip(
+                NetworkLabel.of(Network.SEPOLIA),
+                selected = false,
+                reason = "Sepolia is off in this wallet. Turn it on to create a Safe there.",
+                off = true,
+            ),
+            off.networks.single { it.network.chainId == Network.SEPOLIA.chainId },
+        )
+
+        viewModel.onTurnOnNetwork(Network.SEPOLIA.chainId)
+        runCurrent()
+        assertEquals(
+            listOf(NetworkChip(NetworkLabel.of(Network.SEPOLIA), selected = true)),
+            viewModel.owners.networks.filter { it.selected },
+        )
     }
 
     @Test
@@ -304,6 +367,7 @@ class CreateSafeViewModelTest {
                 "friend.eth",
                 "Resolved from friend.eth at finalized block 9,411,900",
                 true,
+                simpleNote = "Resolved from friend.eth, checked on chain",
             ),
             viewModel.owners.typed.single(),
         )
@@ -391,6 +455,9 @@ class CreateSafeViewModelTest {
             quote.balance,
         )
         assertTrue("returns this address, which held no code at block 9,412,118" in review.prediction)
+        // Simple mode's words for the same: no block (docs/simple-ui.md).
+        assertTrue("block" !in review.simplePrediction.orEmpty() && review.simplePrediction != null)
+        assertTrue("block" !in quote.simpleSimulation, quote.simpleSimulation)
         assertNull(review.error)
     }
 

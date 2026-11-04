@@ -1,9 +1,12 @@
 package eth.serotine.domain.usecase
 
+import eth.serotine.domain.model.Network
 import eth.serotine.domain.model.SwapVenue
 import eth.serotine.domain.repository.LightClient
 import eth.serotine.domain.repository.SwapVenueSetting
+import eth.serotine.domain.repository.UniswapV3Chain
 import eth.serotine.domain.repository.VenueChoice
+import eth.serotine.domain.repository.VenueReading
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
 
@@ -29,4 +32,15 @@ class ChooseSwapVenue(private val setting: SwapVenueSetting) {
  */
 class CowOfferedOnThisDevice(private val lightClient: LightClient) {
     operator fun invoke(): Boolean = lightClient.datesFinalizedBlocks
+}
+
+/**
+ * Whether Swap is offered on a network: false only where no Uniswap v3 deployment is pinned
+ * ([VenueReading.NotPinned]), as on Gnosis Chain until one is (owner ruling, 2026-10-22;
+ * docs/networks.md, open question 7), so that the account screen greys Swap out with the reason.
+ * A pinned deployment not proven right now still offers Swap, whose quote proves it or says why
+ * it cannot.
+ */
+class HasSwapVenue(private val uniswap: UniswapV3Chain) {
+    suspend operator fun invoke(network: Network): Boolean = uniswap.venue(network) != VenueReading.NotPinned
 }

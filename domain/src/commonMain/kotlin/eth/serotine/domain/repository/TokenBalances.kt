@@ -1,23 +1,24 @@
 package eth.serotine.domain.repository
 
 import eth.serotine.domain.model.Address
+import eth.serotine.domain.model.Network
 import eth.serotine.domain.model.TokenUnits
 import kotlinx.coroutines.flow.Flow
 
 /**
  * The port for ERC-20 balances, as the embedded light client proves them: the token
  * contract's own `balanceOf`, run as a verified call. :data implements it over the Myotis
- * engine (`eth.serotine.data.engine`), on the one network the app works on; nothing else may
+ * engine (`eth.serotine.data.engine`), each network's by its own light client; nothing else may
  * answer it — no indexer, no token API (CLAUDE.md, *Trust*). The one older answer it gives is
  * the light client's own last proof, labelled as such ([TokenBalanceReading.LastKnown]).
  */
 interface TokenBalances {
     /**
-     * The balance [holder] has of the token at [token], re-emitted when the verified head
-     * moves or the light client's state changes; consecutive equal readings are not
-     * repeated. Never fails.
+     * The balance [holder] has of the token at [token] on [network], re-emitted when the verified head moves or the
+     * light client's state changes; consecutive equal readings are not repeated. A [network] no adapter serves here is
+     * refused, never answered from another network ([ReadUnavailable.NO_ENGINE]). Never fails.
      */
-    fun observeBalance(holder: Address, token: Address): Flow<TokenBalanceReading>
+    fun observeBalance(network: Network, holder: Address, token: Address): Flow<TokenBalanceReading>
 }
 
 /** One answer of [TokenBalances.observeBalance]. */
@@ -37,9 +38,10 @@ sealed interface TokenBalanceReading {
 
     /**
      * [units] of the token, from a verified call against the state of block [blockNumber]
-     * (null when the engine did not say which block it ran against).
+     * (null when the engine did not say which block it ran against), made at a verified head
+     * produced at [provenAt] (unix seconds; null when unknown), as [BalanceReading.Verified] says.
      */
-    data class Verified(val units: TokenUnits, val blockNumber: Long?) : TokenBalanceReading
+    data class Verified(val units: TokenUnits, val blockNumber: Long?, val provenAt: Long? = null) : TokenBalanceReading
 
     /**
      * The contract did not answer `balanceOf` as a token does: the verified call reverted or

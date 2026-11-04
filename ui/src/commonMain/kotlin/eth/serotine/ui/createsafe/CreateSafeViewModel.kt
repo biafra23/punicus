@@ -19,6 +19,7 @@ import eth.serotine.domain.repository.Unlock
 import eth.serotine.domain.usecase.DeploySafe
 import eth.serotine.domain.usecase.DescribeKeyStore
 import eth.serotine.domain.usecase.ObserveAccounts
+import eth.serotine.domain.usecase.ObserveEnabledNetworks
 import eth.serotine.domain.usecase.PlanSafe
 import eth.serotine.domain.usecase.PlannedOwner
 import eth.serotine.domain.usecase.QuoteSafeDeployment
@@ -32,12 +33,15 @@ import eth.serotine.domain.usecase.SafeDeploymentRefusal
 import eth.serotine.domain.usecase.SafePlan
 import eth.serotine.domain.usecase.SafePlanRefusal
 import eth.serotine.domain.usecase.SafePlanning
+import eth.serotine.domain.usecase.SetNetworkEnabled
 import eth.serotine.domain.usecase.TransferSending
 import eth.serotine.domain.usecase.WarmFeeHistory
 import eth.serotine.ui.components.AccountChoice
 import eth.serotine.ui.components.BalanceChange
 import eth.serotine.ui.components.Eip55
 import eth.serotine.ui.components.NATIVE_DECIMALS
+import eth.serotine.ui.components.NetworkChip
+import eth.serotine.ui.components.NetworkLabel
 import eth.serotine.ui.components.PROMPT_TIMED_OUT
 import eth.serotine.ui.components.PROMPT_TOO_LATE
 import eth.serotine.ui.components.QUOTE_MAX_AGE
@@ -45,6 +49,7 @@ import eth.serotine.ui.components.RecipientState
 import eth.serotine.ui.components.ResolvedAgain
 import eth.serotine.ui.components.STALE_QUOTE
 import eth.serotine.ui.components.UnlockStep
+import eth.serotine.ui.components.addressFieldLabel
 import eth.serotine.ui.components.biometricsOn
 import eth.serotine.ui.components.biometricsStillOffered
 import eth.serotine.ui.components.callRefusalText
@@ -58,8 +63,13 @@ import eth.serotine.ui.components.recipientNote
 import eth.serotine.ui.components.recipientStates
 import eth.serotine.ui.components.recipientText
 import eth.serotine.ui.components.resolveAgain
+import eth.serotine.ui.components.retryLookupWaits
+import eth.serotine.ui.components.simpleCallRefusalText
 import eth.serotine.ui.components.unavailableText
 import eth.serotine.ui.components.verifiedAt
+import kotlin.concurrent.Volatile
+import kotlin.time.TimeMark
+import kotlin.time.TimeSource
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.NonCancellable
@@ -73,11 +83,11 @@ import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import kotlin.time.TimeMark
-import kotlin.time.TimeSource
 
 /**
- * The ViewModel of Create Safe (docs/wallet-ux.md, screens 13 to 15) on [network]: the Safe's
+ * The ViewModel of Create Safe (docs/wallet-ux.md, screens 13 to 15): first the network it is
+ * created on (docs/networks.md, N12; by default the first that is on and has an account whose key is
+ * held here to pay), then the Safe's
  * name and owners — the wallet's accounts, and addresses or ENS names typed ([ResolveRecipient]) —
  * then its threshold, held to the recovery shapes [PlanSafe] allows, then its deployment planned
  * (the address computed here) and quoted from an account whose key is held here
@@ -106,14 +116,23 @@ class CreateSafeViewModel(
     private val deploySafe: DeploySafe,
     private val rebroadcastTransfer: RebroadcastTransfer,
     private val warmFeeHistory: WarmFeeHistory,
-    private val network: Network,
+    observeEnabledNetworks: ObserveEnabledNetworks,
+    private val setNetworkEnabled: SetNetworkEnabled,
     private val timeSource: TimeSource = TimeSource.Monotonic,
 ) : ViewModel() {
 
-    init {
-        // The owners step is open: the fee history is asked for now, ready by the review.
-        warmFees()
-    }
+    /** The network the user picked; null until they pick one, the default standing until then. */
+    private val picked = MutableStateFlow<Network?>(null)
+
+    /**
+     * The network the Safe is created on, as the model last found it: what the steps that do not read
+     * the model (a name's lookup, the fee history, the sent screen) use. A review uses its plan's.
+     */
+    @Volatile
+    private var network: Network = Network.entries.first()
+
+    /** The network whose fee history was last asked for; null until the model first settles one. */
+    private var warmed: Network? = null
 
     /** An owner typed and added: its [address], and the ENS [name] it was resolved from at [resolvedAt]. */
     private data class Typed(val address: Address, val name: String?, val resolvedAt: Long?)
@@ -134,14 +153,29 @@ class CreateSafeViewModel(
     )
 
     /** Everything the first two steps are derived from. */
-    private class Model(val list: AccountList, val inputs: Inputs, val lookup: RecipientState) {
+    private class Model(
+        val list: AccountList,
+        val inputs: Inputs,
+        val lookup: RecipientState,
+        val network: Network,
+        /** The networks on in this wallet. */
+        val on: Set<Network>,
+    ) {
         val accounts: List<Account> = (list as? AccountList.Loaded)?.accounts.orEmpty()
 
-        /** The wallet's externally owned accounts: what can be chosen as an owner. */
+        /**
+         * The wallet's externally owned accounts, on any network, one entry per address (the one
+         * held in the key store where there is one): what can be chosen as an owner, since an
+         * address is an owner on any chain (docs/networks.md, *Safes and swaps*).
+         */
         val eoas: List<Account> = accounts.filter { it.kind == AccountKind.EOA }
+            .groupBy { it.address }
+            .map { (_, entries) -> entries.firstOrNull { it.custody == AccountCustody.InKeyStore } ?: entries.first() }
 
-        /** Those whose key is held here: what can pay for the deployment. */
-        val held: List<Account> = eoas.filter { it.custody == AccountCustody.InKeyStore }
+        /** Those whose key is held here on [network]: what can pay for the deployment there. */
+        val held: List<Account> = accounts.filter {
+            it.network == network && it.kind == AccountKind.EOA && it.custody == AccountCustody.InKeyStore
+        }
 
         val selected: Set<Address> = inputs.selected ?: setOfNotNull(held.firstOrNull()?.address)
 
@@ -194,6 +228,8 @@ class CreateSafeViewModel(
             val signing: Boolean = false,
             val notSent: NotSent? = null,
             val hidden: Boolean = false,
+            /** [error] with no block, for simple mode; null where it is [error] itself. */
+            val simpleError: String? = null,
         ) : Step {
             val idle: Boolean
                 get() = !quoting && !signing && notSent == null
@@ -211,21 +247,64 @@ class CreateSafeViewModel(
     /** Whether the screen is shown now ([onShown], [onHidden]). */
     private var shown = false
 
-    /** The owner typed, resolved: an address at once, a name once the typing paused. */
+    /** The owner typed, resolved on the network chosen: an address at once, a name once the typing paused. */
     private val lookup: Flow<RecipientState> =
-        recipientStates(inputs.map { it.input.trim() to it.lookupAttempt }, ::lookUp)
+        recipientStates(inputs.map { it.input.trim() to it.lookupAttempt }) { text -> lookUp(network, text) }
 
-    private val model: StateFlow<Model?> = combine(observeAccounts(), inputs, lookup, ::Model).stateIn(
+    private val model: StateFlow<Model?> = combine(
+        observeAccounts(),
+        inputs,
+        lookup,
+        observeEnabledNetworks(),
+        picked,
+    ) { list, inputs, lookup, enabled, picked ->
+        val on = enabled.toSet()
+        val chosen = picked ?: defaultNetwork(list, on)
+        network = chosen
+        // The network settled, at the screen's opening or chosen anew: its fee history is asked for
+        // now, ready by the review; once per network, not for the default it was before the accounts.
+        if (chosen != warmed) {
+            warmed = chosen
+            warmFees()
+        }
+        Model(list, inputs, lookup, chosen, on)
+    }.stateIn(
         viewModelScope,
         SharingStarted.WhileSubscribed(stopTimeoutMillis = 5_000, replayExpirationMillis = 0),
         null,
     )
+
+    /** The network whose light client the strip shows: the one the Safe is created on. */
+    val stripNetwork: StateFlow<Network> = model.map { it?.network ?: network }
+        // As the model is: followed while the screen is, never keeping the account list read past it.
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(stopTimeoutMillis = 5_000), network)
 
     val uiState: StateFlow<CreateSafeUiState> = combine(model, step, ::render).stateIn(
         viewModelScope,
         SharingStarted.WhileSubscribed(stopTimeoutMillis = 5_000, replayExpirationMillis = 0),
         CreateSafeUiState.Loading(network.displayName),
     )
+
+    /**
+     * Creates the Safe on the network of [chainId] (N12): on the owners step only, before anything
+     * is planned. The owners chosen among the wallet's accounts start again from that network's.
+     */
+    fun onNetwork(chainId: Long) {
+        val chosen = Network.ofChainId(chainId) ?: return
+        // Before a review only: nothing is planned until then. The owners are looked at again.
+        if (step.value !is Step.Owners && step.value !is Step.Threshold) return
+        picked.value = chosen
+        inputs.update { it.copy(selected = null, threshold = null) }
+        step.value = Step.Owners()
+    }
+
+    /** Turns the network of [chainId] on, and chooses it: the way to create a Safe on one that is off. */
+    fun onTurnOnNetwork(chainId: Long) {
+        val chosen = Network.ofChainId(chainId) ?: return
+        viewModelScope.launch {
+            if (setNetworkEnabled(chosen, on = true)) onNetwork(chainId)
+        }
+    }
 
     /** The Safe's name now reads [text]. */
     fun onNameChange(text: String) = changeOwners { it.copy(name = text) }
@@ -437,11 +516,12 @@ class CreateSafeViewModel(
     /** Plans the Safe of [model]'s owners and threshold, and quotes its deployment for review. */
     private fun review(model: Model) {
         val owners = model.owners
-        val planning = planSafe(owners.map { PlannedOwner.Account(it) }, model.threshold, model.inputs.name)
+        val planning =
+            planSafe(model.network, owners.map { PlannedOwner.Account(it) }, model.threshold, model.inputs.name)
         // A refusal is the threshold step's own to show; it is drawn there already.
         val plan = (planning as? SafePlanning.Planned)?.plan ?: return
         val payers = model.held
-        // None held here any more: the screen says so already (render's CannotCreate, NO_PAYER), and
+        // None held here any more: the screen says so already (render's CannotCreate, noPayerText), and
         // nothing is planned or quoted until one is.
         if (payers.isEmpty()) return
         // An owner pays when one is held here: the account the user picked first for it.
@@ -478,7 +558,7 @@ class CreateSafeViewModel(
         // A quote in flight is of another payer or fee, or as good as this one: for nothing now.
         job?.cancel()
         val cleared = current.unlock.copy(error = null)
-        val asked = current.copy(quoting = true, hidden = false, error = null, unlock = cleared)
+        val asked = current.copy(quoting = true, hidden = false, error = null, simpleError = null, unlock = cleared)
         step.value = asked
         job = viewModelScope.launch { quote(asked, note) }
     }
@@ -490,7 +570,7 @@ class CreateSafeViewModel(
      */
     private suspend fun quote(asked: Step.Reviewing, note: String?) {
         for (owner in asked.named) {
-            val moved = movedName(owner) ?: continue
+            val moved = movedName(owner, asked.plan.network) ?: continue
             step.update { latest ->
                 if (latest is Step.Reviewing && latest.quoting && sameRequest(latest, asked)) {
                     Step.Owners(moved)
@@ -525,6 +605,8 @@ class CreateSafeViewModel(
                     quotedAt = null,
                     quoting = false,
                     error = refusalText(quoting.refusal),
+                    simpleError = (quoting.refusal as? SafeDeploymentRefusal.NotQuoted)
+                        ?.let { simpleCallRefusalText(it.refusal) },
                 )
             }
         }
@@ -532,11 +614,14 @@ class CreateSafeViewModel(
         requoteIfHidden()
     }
 
-    /** Why [owner]'s name is no longer the address it was added as, or null when it still is. */
-    private suspend fun movedName(owner: Typed): String? {
+    /**
+     * Why [owner]'s name is no longer the address it was added as, resolved again on [network], the
+     * plan's, or null when it still is.
+     */
+    private suspend fun movedName(owner: Typed, network: Network): String? {
         val name = owner.name ?: return null
         val found = RecipientLookup.Found(owner.address, name, owner.resolvedAt)
-        val again = resolveAgain(found, ::lookUp) { _, unverifiable ->
+        val again = resolveAgain(found, { text -> lookUp(network, text) }) { _, unverifiable ->
             if (unverifiable) {
                 "“$name” could not be resolved with verified calls again just now, so no Safe is deployed " +
                     "with it as an owner: review it again in a moment."
@@ -614,7 +699,7 @@ class CreateSafeViewModel(
     }
 
     private fun ownersRefusal(model: Model): SafePlanRefusal? =
-        planSafe.ownersRefusal(model.owners.map { PlannedOwner.Account(it) })
+        planSafe.ownersRefusal(model.network, model.owners.map { PlannedOwner.Account(it) })
 
     private fun render(model: Model?, step: Step): CreateSafeUiState {
         val network = network.displayName
@@ -623,10 +708,14 @@ class CreateSafeViewModel(
         // the signature checks the chain again, and says what it finds.
         if (step is Step.Reviewing) return review(step)
         model ?: return CreateSafeUiState.Loading(network)
+        val chosen = model.network.displayName
         when {
-            model.list is AccountList.Unreadable -> return CreateSafeUiState.CannotCreate(network, LIST_UNAVAILABLE)
-            !planSafe.hasRelease() -> return CreateSafeUiState.CannotCreate(network, NO_RELEASE)
-            model.held.isEmpty() -> return CreateSafeUiState.CannotCreate(network, NO_PAYER)
+            model.list is AccountList.Unreadable -> return CreateSafeUiState.CannotCreate(chosen, LIST_UNAVAILABLE)
+            model.network !in model.on ->
+                return CreateSafeUiState.CannotCreate(chosen, offText(model.network), chips(model))
+            !planSafe.hasRelease(model.network) ->
+                return CreateSafeUiState.CannotCreate(chosen, NO_RELEASE, chips(model))
+            model.held.isEmpty() -> return CreateSafeUiState.CannotCreate(chosen, noPayerText(model), chips(model))
         }
         return when (step) {
             is Step.Owners -> owners(model, step.error)
@@ -647,7 +736,8 @@ class CreateSafeViewModel(
         }
         val owners = model.owners
         return CreateSafeUiState.Owners(
-            network = network.displayName,
+            network = model.network.displayName,
+            networks = chips(model),
             name = inputs.name,
             accounts = model.eoas.map { account ->
                 OwnerChoice(
@@ -663,6 +753,7 @@ class CreateSafeViewModel(
                         label = typed.name ?: model.accounts.firstOrNull { it.address == typed.address }?.label,
                         note = typedNote(typed, model),
                         selected = true,
+                        simpleNote = simpleTypedNote(typed, model),
                     )
                 },
             input = inputs.input,
@@ -679,11 +770,14 @@ class CreateSafeViewModel(
                     label = it.name ?: model.accounts.firstOrNull { account -> account.address == it.address }?.label,
                     note = it.blockNumber?.let { block -> "Resolved at finalized block ${grouped(block)}" } ?: TYPED,
                     selected = it.address in owners,
+                    simpleNote = it.blockNumber?.let { RESOLVED_ON_CHAIN },
                 )
             },
             inputNote = note,
             inputError = isError,
+            inputLabel = addressFieldLabel(model.network),
             canRetryLookup = (lookup as? RecipientState.Done)?.result is RecipientLookup.Unavailable,
+            retryLookupWaits = retryLookupWaits((lookup as? RecipientState.Done)?.result),
             canAdd = found != null && found.address !in owners,
             error = error ?: if (owners.isEmpty()) null else ownersRefusal(model)?.let(::planRefusalText),
             canContinue = owners.isNotEmpty() && ownersRefusal(model) == null && nameError(inputs.name) == null,
@@ -695,9 +789,9 @@ class CreateSafeViewModel(
         val count = owners.size
         val threshold = model.threshold
         val planned = owners.map { PlannedOwner.Account(it) }
-        val refusal = planSafe.ownersRefusal(planned) ?: planSafe.shapeRefusal(planned, threshold)
+        val refusal = planSafe.ownersRefusal(model.network, planned) ?: planSafe.shapeRefusal(planned, threshold)
         return CreateSafeUiState.Threshold(
-            network = network.displayName,
+            network = model.network.displayName,
             owners = owners.map { ownerItem(it, model) },
             threshold = threshold,
             ownerCount = count,
@@ -714,15 +808,19 @@ class CreateSafeViewModel(
     private fun review(step: Step.Reviewing): CreateSafeUiState.Review {
         val plan = step.plan
         val quote = step.quote
-        val native = network.nativeSymbol
+        val native = plan.network.nativeSymbol
         val payerLabel = step.payers.firstOrNull { it.address == step.payer }?.label
         val computed = "Computed here (CREATE2) from the factory, the singleton, the owners, the threshold and a salt."
         return CreateSafeUiState.Review(
-            network = network.displayName,
+            network = plan.network.displayName,
             name = plan.label.ifEmpty { "No name: it is listed as the next account number" },
             address = Eip55.format(plan.address),
             signers = "${plan.threshold}/${plan.owners.size}",
             version = "Safe ${plan.release.version}",
+            simplePrediction = quote?.let {
+                "$computed The factory's run, checked on chain, returns this address, which held no code when " +
+                    "it was checked."
+            },
             prediction = when {
                 quote != null -> {
                     val ran = quote.call.simulationBlock?.let { "at block ${grouped(it)}" } ?: "at the head"
@@ -752,6 +850,8 @@ class CreateSafeViewModel(
                     ),
                     simulation = "Run as a verified call from this account $ran, the factory deploys the Safe at " +
                         "this address and sets it up with these owners and this threshold.",
+                    simpleSimulation = "Checked on chain: the factory should deploy the Safe at this address and " +
+                        "set it up with these owners and this threshold.",
                     pending = call.pendingCost.takeUnless { cost -> cost.isZero }?.let { cost ->
                         "Earlier transactions from this account, not mined yet, may still take up to " +
                             exactAmount(cost, NATIVE_DECIMALS, native) + ": the balance after counts it."
@@ -759,6 +859,7 @@ class CreateSafeViewModel(
                 )
             },
             error = step.error,
+            simpleError = step.simpleError,
             quoting = step.quoting,
             signing = step.signing,
             notSent = step.notSent?.let {
@@ -779,6 +880,7 @@ class CreateSafeViewModel(
                 typed != null -> typedNote(typed, model)
                 else -> TYPED
             },
+            simpleNote = typed?.takeIf { account == null }?.let { simpleTypedNote(it, model) },
         )
     }
 
@@ -788,6 +890,11 @@ class CreateSafeViewModel(
         model.accounts.any { it.address == typed.address } -> "In your wallet"
         else -> TYPED
     }
+
+    /** [typedNote] in simple mode's words, with no block (docs/simple-ui.md); null where it names none. */
+    private fun simpleTypedNote(typed: Typed, model: Model): String? =
+        typed.takeIf { it.name != null && it.resolvedAt != null && typedNote(it, model) != TYPED }
+            ?.let { "Resolved from ${it.name}, checked on chain" }
 
     private fun nameError(name: String): String? =
         if (name.trim().length > RenameAccount.MAX_LABEL_LENGTH) {
@@ -830,8 +937,6 @@ class CreateSafeViewModel(
     }
 
     private fun refusalText(refusal: SafeDeploymentRefusal): String = when (refusal) {
-        is SafeDeploymentRefusal.WrongNetwork -> "This Safe was planned for ${refusal.network.displayName}, not " +
-            "${network.displayName}."
         is SafeDeploymentRefusal.AlreadyDeployed -> if (refusal.kind is AddressKind.Safe) {
             "A Safe exists at this address already, so a deployment there would fail. Go back and continue again " +
                 "for another address."
@@ -856,8 +961,56 @@ class CreateSafeViewModel(
         is SafeDeploymentRefusal.NotQuoted -> callRefusalText(refusal.refusal, network)
     }
 
-    private suspend fun lookUp(text: String): RecipientLookup = try {
-        resolveRecipient(recipientText(text))
+    /**
+     * The network a Safe is created on until the user picks one: the first that is on with an
+     * account whose key is held here to pay, else the first that is on, else the first there is.
+     */
+    private fun defaultNetwork(list: AccountList, on: Set<Network>): Network {
+        val accounts = (list as? AccountList.Loaded)?.accounts.orEmpty()
+        val payable = Network.entries.filter { network ->
+            network in on && accounts.any { it.network == network && it.isHeldEoa() }
+        }
+        return payable.firstOrNull() ?: Network.entries.firstOrNull { it in on } ?: Network.entries.first()
+    }
+
+    private fun Account.isHeldEoa() = kind == AccountKind.EOA && custody == AccountCustody.InKeyStore
+
+    /** Each network as the first choice (N12), greyed out with the reason where a Safe cannot be created. */
+    private fun chips(model: Model): List<NetworkChip> = Network.entries.map { network ->
+        val reason = when {
+            network !in model.on -> offText(network)
+            !planSafe.hasRelease(network) -> NO_RELEASE
+            model.accounts.none { it.network == network && it.isHeldEoa() } -> noPayerText(model, network)
+            else -> null
+        }
+        NetworkChip(NetworkLabel.of(network), network == model.network, reason, off = network !in model.on)
+    }
+
+    private fun offText(network: Network) =
+        "${network.displayName} is off in this wallet. Turn it on to create a Safe there."
+
+    /**
+     * Why no account can pay on [network]: none whose key is held here on it; and which would do,
+     * the wallet's held accounts on other networks, added there from their menu.
+     */
+    private fun noPayerText(model: Model, network: Network = model.network): String {
+        val elsewhere = model.accounts.filter { it.network != network && it.isHeldEoa() }
+            .map { it.label }
+            .distinct()
+        val name = network.displayName
+        val would = if (elsewhere.isEmpty()) {
+            "Import or create an account on it first, and fund it."
+        } else {
+            "Add ${elsewhere.joinToString(" or ")} on $name (Add on another network, in its menu), or import or " +
+                "create an account on it, and fund it."
+        }
+        return "Creating a Safe on $name needs an account whose key is on this device there, to pay for its " +
+            "deployment. $would"
+    }
+
+    /** [text] resolved on [network]: the one chosen on the owners' step, the plan's on a review. */
+    private suspend fun lookUp(network: Network, text: String): RecipientLookup = try {
+        resolveRecipient(network, recipientText(text))
     } catch (e: CancellationException) {
         throw e
     } catch (e: Exception) {
@@ -871,7 +1024,7 @@ class CreateSafeViewModel(
     private fun warmFees() {
         viewModelScope.launch {
             try {
-                warmFeeHistory()
+                warmFeeHistory(network)
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
@@ -893,6 +1046,9 @@ class CreateSafeViewModel(
         const val KEY_HERE = "Key on this device"
         const val WATCHED = "Watch-only: its key is elsewhere"
         const val TYPED = "Typed"
+
+        /** A name's resolution in simple mode's words: no block (docs/simple-ui.md). */
+        const val RESOLVED_ON_CHAIN = "Resolved, checked on chain"
         const val DEVICE_KEY =
             "This device's hardware key (Secure Enclave or StrongBox) as an owner comes later: Serotine does not " +
                 "build its passkey signer yet."
@@ -900,9 +1056,6 @@ class CreateSafeViewModel(
             "Serotine could not finish this deployment. Check the paying account's balance before you deploy again."
         const val LIST_UNAVAILABLE =
             "Your account list cannot be read right now, so no Safe can be created. Serotine keeps trying."
-        const val NO_PAYER =
-            "Creating a Safe takes an account whose key is on this device, to pay for its deployment: create or " +
-                "import one first."
         const val NO_RELEASE = "Serotine pins no Safe release to create a Safe from on this network."
 
         /** The recovery shapes the wallet creates (docs/keys-and-signing.md, *Backup and recovery*). */

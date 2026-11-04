@@ -1,19 +1,20 @@
 package eth.serotine.domain.usecase
 
 import eth.serotine.domain.model.DisplayCurrency
+import eth.serotine.domain.model.Network
 import eth.serotine.domain.model.PriceId
 import eth.serotine.domain.model.RateSnapshot
 import eth.serotine.domain.repository.PastReading
 import eth.serotine.domain.repository.PriceFeeds
 import eth.serotine.domain.repository.PriceHistory
 import eth.serotine.domain.repository.ReadUnavailable
+import kotlin.math.max
+import kotlin.time.Duration.Companion.seconds
 import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.first
-import kotlin.math.max
-import kotlin.time.Duration.Companion.seconds
 
 /**
  * One verified reading of what one [PriceId] costs in a [DisplayCurrency], and what it cost 24
@@ -31,15 +32,16 @@ class ReadExchangeRate(private val feeds: PriceFeeds, private val history: Price
 
     private val usdPrice = ObserveUsdPrice(feeds)
 
-    suspend operator fun invoke(base: PriceId, quote: DisplayCurrency): RateResult = coroutineScope {
-        val (basePrice, quotePrice) = combine(usdPrice(base), usdPrice(quote.priceId)) { b, q -> b to q }
+    suspend operator fun invoke(network: Network, base: PriceId, quote: DisplayCurrency): RateResult = coroutineScope {
+        val (basePrice, quotePrice) =
+            combine(usdPrice(network, base), usdPrice(network, quote.priceId)) { b, q -> b to q }
             .first { (b, q) -> b.settled() && q.settled() }
         val now = basePrice inUnitsOf quotePrice
         if (now !is Price.Priced || basePrice !is Price.Priced || quotePrice !is Price.Priced) {
             return@coroutineScope RateResult.NotRead(now)
         }
-        val baseDayAgo = async { pastUsd(base, emptySet()) }
-        val quoteDayAgo = async { pastUsd(quote.priceId, emptySet()) }
+        val baseDayAgo = async { pastUsd(network, base, emptySet()) }
+        val quoteDayAgo = async { pastUsd(network, quote.priceId, emptySet()) }
         val dayAgo = baseDayAgo.await()?.let { price -> quoteDayAgo.await()?.let { price / it } }
         RateResult.Read(
             RateSnapshot(
@@ -51,6 +53,7 @@ class ReadExchangeRate(private val feeds: PriceFeeds, private val history: Price
                 // A leg's oldest update and its age add up to the time of the head it was read at.
                 readAt = max(basePrice.headTime(), quotePrice.headTime()),
                 stale = now.stale,
+                poolAverage = now.poolAverage,
             ),
         )
     }
@@ -67,24 +70,24 @@ class ReadExchangeRate(private val feeds: PriceFeeds, private val history: Price
         if (updatedAt == Long.MAX_VALUE) Long.MIN_VALUE else updatedAt + ageSeconds
 
     /** The USD price of [id] a day before the head, or null when there is no verified, fresh one. */
-    private suspend fun pastUsd(id: PriceId, path: Set<PriceId>): Double? {
+    private suspend fun pastUsd(network: Network, id: PriceId, path: Set<PriceId>): Double? {
         if (id == PriceId.USD) return 1.0
-        val quote = feeds.quotes[id] ?: return null
+        val quote = feeds.quotes(network)[id] ?: return null
         // As ObserveUsdPrice: a table whose quotes go round in a circle never reaches USD.
         if (quote == id || quote in path) return null
-        val own = (past(id) as? PastReading.Verified)?.takeIf { !it.stale } ?: return null
-        return if (quote == PriceId.USD) own.price else pastUsd(quote, path + id)?.let { own.price * it }
+        val own = (past(network, id) as? PastReading.Verified)?.takeIf { !it.stale } ?: return null
+        return if (quote == PriceId.USD) own.price else pastUsd(network, quote, path + id)?.let { own.price * it }
     }
 
-    /** [id]'s round a day back, read again a few times while it is unproven or the light client syncs. */
-    private suspend fun past(id: PriceId): PastReading {
-        var reading = history.before(id, DAY_SECONDS)
+    /** [id]'s round a day back on [network], read again a few times while it is unproven or syncing. */
+    private suspend fun past(network: Network, id: PriceId): PastReading {
+        var reading = history.before(network, id, DAY_SECONDS)
         repeat(PAST_RETRIES) {
             val passing = reading == PastReading.Syncing ||
                 reading == PastReading.Unavailable(ReadUnavailable.UNPROVEN)
             if (!passing) return reading
             delay(PAST_RETRY_PAUSE)
-            reading = history.before(id, DAY_SECONDS)
+            reading = history.before(network, id, DAY_SECONDS)
         }
         return reading
     }

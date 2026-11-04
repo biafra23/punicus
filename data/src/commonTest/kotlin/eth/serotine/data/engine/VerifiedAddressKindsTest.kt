@@ -5,10 +5,16 @@ import eth.serotine.data.keys.toHex
 import eth.serotine.data.safe.SafeDeployments
 import eth.serotine.data.safe.SafeSingleton
 import eth.serotine.domain.model.Address
+import eth.serotine.domain.model.Network
 import eth.serotine.domain.repository.AddressKind
 import eth.serotine.domain.repository.KindReading
 import eth.serotine.domain.repository.ReadUnavailable
 import eth.serotine.domain.repository.SafeState
+import kotlin.test.Test
+import kotlin.test.assertEquals
+import kotlin.test.assertTrue
+import kotlin.time.Duration.Companion.milliseconds
+import kotlin.time.Duration.Companion.seconds
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.async
@@ -20,11 +26,6 @@ import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import org.kotlincrypto.hash.sha3.Keccak256
-import kotlin.test.Test
-import kotlin.test.assertEquals
-import kotlin.test.assertTrue
-import kotlin.time.Duration.Companion.milliseconds
-import kotlin.time.Duration.Companion.seconds
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class VerifiedAddressKindsTest {
@@ -46,6 +47,7 @@ class VerifiedAddressKindsTest {
 
     private fun TestScope.kinds() =
         VerifiedAddressKinds(
+            Network.SEPOLIA,
             chain,
             StandardTestDispatcher(testScheduler),
             4.seconds,
@@ -73,7 +75,10 @@ class VerifiedAddressKindsTest {
         chain.snapshot = running(head = 9)
         chain.codes[address] = ProvenCode("ef0100" + delegate.hex.removePrefix("0x"), blockNumber = 9)
 
-        assertEquals(KindReading.Verified(AddressKind.DelegatedEoa(delegate), 9), kinds().observeKind(address).first())
+        assertEquals(
+            KindReading.Verified(AddressKind.DelegatedEoa(delegate), 9),
+            kinds().observeKind(Network.SEPOLIA, address).first(),
+        )
     }
 
     @Test
@@ -81,25 +86,28 @@ class VerifiedAddressKindsTest {
         chain.snapshot = running(head = 9)
         chain.codes[address] = ProvenCode("ef0100" + delegate.hex.removePrefix("0x"), blockNumber = 9)
         val kinds = kinds()
-        kinds.observeKind(address).first()
+        kinds.observeKind(Network.SEPOLIA, address).first()
 
         // Only balances are offered as last known; what an address is gates signing.
         chain.snapshot = running(head = 9, headAgeMs = 60_000)
-        assertEquals(KindReading.Syncing, kinds.observeKind(address).first())
+        assertEquals(KindReading.Syncing, kinds.observeKind(Network.SEPOLIA, address).first())
     }
 
     @Test
     fun whatCannotBeProvenIsSaidSo() = runTest {
         chain.snapshot = running(head = 9)
-        assertEquals(KindReading.Unavailable(ReadUnavailable.UNPROVEN), kinds().observeKind(address).first())
+        assertEquals(
+            KindReading.Unavailable(ReadUnavailable.UNPROVEN),
+            kinds().observeKind(Network.SEPOLIA, address).first(),
+        )
 
         chain.snapshot = EngineSnapshot.Booting
-        assertEquals(KindReading.Syncing, kinds().observeKind(address).first())
+        assertEquals(KindReading.Syncing, kinds().observeKind(Network.SEPOLIA, address).first())
 
         assertEquals(
             KindReading.Unavailable(ReadUnavailable.NO_ENGINE),
-            VerifiedAddressKinds(null, StandardTestDispatcher(testScheduler), 4.seconds, safes)
-                .observeKind(address)
+            VerifiedAddressKinds(Network.SEPOLIA, null, StandardTestDispatcher(testScheduler), 4.seconds, safes)
+                .observeKind(Network.SEPOLIA, address)
                 .first(),
         )
     }
@@ -112,7 +120,10 @@ class VerifiedAddressKindsTest {
         chain.snapshot = running(head = 9)
         chain.failure = Error("native library broken")
 
-        assertEquals(KindReading.Unavailable(ReadUnavailable.UNPROVEN), kinds().observeKind(address).first())
+        assertEquals(
+            KindReading.Unavailable(ReadUnavailable.UNPROVEN),
+            kinds().observeKind(Network.SEPOLIA, address).first(),
+        )
     }
 
     @Test
@@ -171,7 +182,7 @@ class VerifiedAddressKindsTest {
                 ),
                 9,
             ),
-            kinds().observeKind(address).first { it !is KindReading.Syncing },
+            kinds().observeKind(Network.SEPOLIA, address).first { it !is KindReading.Syncing },
         )
     }
 
@@ -182,7 +193,10 @@ class VerifiedAddressKindsTest {
         val guard = Address.of("0x" + "44".repeat(20))
         chain.storage[address to "4a204f620c8c5ccdca3fd54d003badd85ba500436a431f0cbda4f558c93c34c8"] = word(guard)
 
-        val reading = kinds().observeKind(address).first { it !is KindReading.Syncing } as KindReading.Verified
+        val reading = kinds().observeKind(
+            Network.SEPOLIA,
+            address,
+        ).first { it !is KindReading.Syncing } as KindReading.Verified
         assertEquals(guard, (reading.kind as AddressKind.Safe).state.guard)
     }
 
@@ -191,7 +205,10 @@ class VerifiedAddressKindsTest {
         chain.snapshot = running(head = 9)
         val kinds = kinds()
         suspend fun kind() =
-            (kinds.observeKind(address).first { it !is KindReading.Syncing } as KindReading.Verified).kind
+            (kinds.observeKind(
+                Network.SEPOLIA,
+                address,
+            ).first { it !is KindReading.Syncing } as KindReading.Verified).kind
 
         // A pinned proxy whose singleton is not pinned.
         safeStorage()
@@ -217,14 +234,14 @@ class VerifiedAddressKindsTest {
         chain.slotBlocks[Triple(address, 5L, null)] = 10 // at every attempt
         assertEquals(
             KindReading.Unavailable(ReadUnavailable.UNPROVEN),
-            kinds().observeKind(address).first { it !is KindReading.Syncing },
+            kinds().observeKind(Network.SEPOLIA, address).first { it !is KindReading.Syncing },
         )
 
         chain.slotBlocks.clear()
         chain.unprovenSlots += Triple(address, 2L, owner1)
         assertEquals(
             KindReading.Unavailable(ReadUnavailable.UNPROVEN),
-            kinds().observeKind(address).first { it !is KindReading.Syncing },
+            kinds().observeKind(Network.SEPOLIA, address).first { it !is KindReading.Syncing },
         )
     }
 
@@ -236,7 +253,10 @@ class VerifiedAddressKindsTest {
         chain.slots.remove(Triple(address, 1L, module))
         val kinds = kinds()
         suspend fun kind() =
-            (kinds.observeKind(address).first { it !is KindReading.Syncing } as KindReading.Verified).kind
+            (kinds.observeKind(
+                Network.SEPOLIA,
+                address,
+            ).first { it !is KindReading.Syncing } as KindReading.Verified).kind
         assertEquals(emptyList(), (kind() as AddressKind.Safe).state.modules)
 
         // Setup always writes the sentinel: a set-up Safe without it was written by other means.
@@ -251,7 +271,10 @@ class VerifiedAddressKindsTest {
         chain.snapshot = running(head = 9)
         val kinds = kinds()
         suspend fun kind() =
-            (kinds.observeKind(address).first { it !is KindReading.Syncing } as KindReading.Verified).kind
+            (kinds.observeKind(
+                Network.SEPOLIA,
+                address,
+            ).first { it !is KindReading.Syncing } as KindReading.Verified).kind
 
         safeStorage()
         chain.slots[Triple(address, 3L, null)] = word(3) // three owners counted, two listed
@@ -272,7 +295,10 @@ class VerifiedAddressKindsTest {
         chain.storage[address to VerifiedAddressKinds.MODULE_GUARD_SLOT.toHex()] = word(planted)
         val kinds = kinds()
         suspend fun kind() =
-            (kinds.observeKind(address).first { it !is KindReading.Syncing } as KindReading.Verified).kind
+            (kinds.observeKind(
+                Network.SEPOLIA,
+                address,
+            ).first { it !is KindReading.Syncing } as KindReading.Verified).kind
         // 1.4.1 never consults a module guard: a word there is no protection.
         assertEquals(null, (kind() as AddressKind.Safe).state.moduleGuard)
 
@@ -290,7 +316,7 @@ class VerifiedAddressKindsTest {
         // The fourth proof of the first read lands at the next head; the second read is all there.
         chain.slotBlockOfCall = { call -> if (call < 3) 9 else 10 }
 
-        val reading = kinds().observeKind(address).first { it !is KindReading.Syncing }
+        val reading = kinds().observeKind(Network.SEPOLIA, address).first { it !is KindReading.Syncing }
 
         assertEquals(10, (reading as KindReading.Verified).blockNumber)
         assertEquals(true, reading.kind is AddressKind.Safe)
@@ -304,7 +330,7 @@ class VerifiedAddressKindsTest {
 
         assertEquals(
             KindReading.Unavailable(ReadUnavailable.UNPROVEN),
-            kinds().observeKind(address).first { it !is KindReading.Syncing },
+            kinds().observeKind(Network.SEPOLIA, address).first { it !is KindReading.Syncing },
         )
     }
 
@@ -318,12 +344,12 @@ class VerifiedAddressKindsTest {
 
         assertEquals(
             KindReading.Unavailable(ReadUnavailable.UNPROVEN),
-            kinds().observeKind(address).first { it !is KindReading.Syncing },
+            kinds().observeKind(Network.SEPOLIA, address).first { it !is KindReading.Syncing },
         )
 
         // One attested slot for all: one state, shown with its label.
         chain.slotAnchorOfCall = { 19 }
-        val reading = kinds().observeKind(address).first { it !is KindReading.Syncing }
+        val reading = kinds().observeKind(Network.SEPOLIA, address).first { it !is KindReading.Syncing }
         assertEquals(9, (reading as KindReading.Verified).blockNumber)
     }
 
@@ -336,7 +362,7 @@ class VerifiedAddressKindsTest {
 
         assertEquals(
             KindReading.Unavailable(ReadUnavailable.UNPROVEN),
-            kinds().observeKind(address).first { it !is KindReading.Syncing },
+            kinds().observeKind(Network.SEPOLIA, address).first { it !is KindReading.Syncing },
         )
     }
 
@@ -351,7 +377,7 @@ class VerifiedAddressKindsTest {
 
         assertEquals(
             KindReading.Unavailable(ReadUnavailable.UNPROVEN),
-            kinds().observeKind(address).first { it !is KindReading.Syncing },
+            kinds().observeKind(Network.SEPOLIA, address).first { it !is KindReading.Syncing },
         )
     }
 
@@ -366,7 +392,7 @@ class VerifiedAddressKindsTest {
             ProvenCode(proxyCode, 9, if (call == 0) ProofAnchor.Walked(9) else ProofAnchor.Attested(9))
         }
 
-        val reading = kinds().observeKind(address).first { it !is KindReading.Syncing }
+        val reading = kinds().observeKind(Network.SEPOLIA, address).first { it !is KindReading.Syncing }
 
         assertEquals(9, (reading as KindReading.Verified).blockNumber)
         assertEquals(true, reading.kind is AddressKind.Safe)
@@ -383,7 +409,7 @@ class VerifiedAddressKindsTest {
 
         assertEquals(
             KindReading.Unavailable(ReadUnavailable.UNPROVEN),
-            kinds().observeKind(address).first { it !is KindReading.Syncing },
+            kinds().observeKind(Network.SEPOLIA, address).first { it !is KindReading.Syncing },
         )
         // Ten proofs of 1 s a read: the first read, the code again, and a second read the budget
         // cuts off before its last proof.
@@ -397,7 +423,7 @@ class VerifiedAddressKindsTest {
         // The third storage proof (the owner list's second entry) comes back null once: a slow peer.
         chain.slotFailsOnCall = { call -> call == 2 }
 
-        val reading = kinds().observeKind(address).first { it !is KindReading.Syncing }
+        val reading = kinds().observeKind(Network.SEPOLIA, address).first { it !is KindReading.Syncing }
 
         assertEquals(9, (reading as KindReading.Verified).blockNumber)
         assertEquals(listOf(owner1, owner2), (reading.kind as AddressKind.Safe).state.owners)
@@ -412,7 +438,7 @@ class VerifiedAddressKindsTest {
         // The 3rd, 4th and 5th storage proofs fail: all three tries of one slot in the first read.
         chain.slotFailsOnCall = { call -> call in 2..4 }
 
-        val reading = kinds().observeKind(address).first { it !is KindReading.Syncing }
+        val reading = kinds().observeKind(Network.SEPOLIA, address).first { it !is KindReading.Syncing }
 
         assertEquals(true, (reading as KindReading.Verified).kind is AddressKind.Safe)
         assertEquals(true, logged.any { "read 1: slot 2 under ${owner1.hex} unproven after 3 tries" in it }, "$logged")
@@ -428,7 +454,7 @@ class VerifiedAddressKindsTest {
         // through, the fourth is all at block 12. (Three reads were all a Safe got before the budget.)
         chain.slotBlockOfCall = { call -> if (call >= 27) 12 else 9L + call / 9 + (if (call % 9 >= 4) 1 else 0) }
 
-        val reading = kinds().observeKind(address).first { it !is KindReading.Syncing }
+        val reading = kinds().observeKind(Network.SEPOLIA, address).first { it !is KindReading.Syncing }
 
         assertEquals(12, (reading as KindReading.Verified).blockNumber)
         assertEquals(true, reading.kind is AddressKind.Safe)
@@ -446,7 +472,7 @@ class VerifiedAddressKindsTest {
 
         assertEquals(
             KindReading.Unavailable(ReadUnavailable.UNPROVEN),
-            kinds().observeKind(address).first { it !is KindReading.Syncing },
+            kinds().observeKind(Network.SEPOLIA, address).first { it !is KindReading.Syncing },
         )
         // The budget, the code's first proof in it, and no proof asked for past it.
         assertEquals(VerifiedAddressKinds.SAFE_READ_BUDGET, start.elapsedNow())
@@ -462,7 +488,7 @@ class VerifiedAddressKindsTest {
 
         assertEquals(
             KindReading.Unavailable(ReadUnavailable.UNPROVEN),
-            kinds().observeKind(address).first { it !is KindReading.Syncing },
+            kinds().observeKind(Network.SEPOLIA, address).first { it !is KindReading.Syncing },
         )
         // The code's proof (1 s), then four reads of three tries (3 s) each followed by a 1 s pause,
         // and a fifth whose last try ends the budget at 20 s.
@@ -484,7 +510,7 @@ class VerifiedAddressKindsTest {
             }
         }
 
-        val reading = kinds().observeKind(address).first { it !is KindReading.Syncing }
+        val reading = kinds().observeKind(Network.SEPOLIA, address).first { it !is KindReading.Syncing }
 
         assertEquals(true, (reading as KindReading.Verified).kind is AddressKind.Safe)
         assertEquals(3, chain.codeCalls)
@@ -498,7 +524,7 @@ class VerifiedAddressKindsTest {
         // A JNA call that fails with an Error, once.
         chain.slotThrowsOnCall = { call -> if (call == 2) Error("native call failed") else null }
 
-        val reading = kinds().observeKind(address).first { it !is KindReading.Syncing }
+        val reading = kinds().observeKind(Network.SEPOLIA, address).first { it !is KindReading.Syncing }
 
         assertEquals(true, (reading as KindReading.Verified).kind is AddressKind.Safe)
         assertEquals(1, chain.codeCalls, "one read: only the slot was asked for again")
@@ -512,7 +538,7 @@ class VerifiedAddressKindsTest {
         lateinit var reader: Job
         chain.onSlotCall = { call -> if (call == 3) reader.cancel() }
 
-        reader = launch { kinds().observeKind(address).collect {} }
+        reader = launch { kinds().observeKind(Network.SEPOLIA, address).collect {} }
         advanceUntilIdle()
 
         assertTrue(reader.isCancelled)
@@ -526,9 +552,9 @@ class VerifiedAddressKindsTest {
         // The first read's owner-list proof fails all three tries: the read pauses before it is made again.
         chain.slotFailsOnCall = { call -> call in 2..4 }
         val kinds = kinds()
-        val first = launch { kinds.observeKind(address).first { it !is KindReading.Syncing } }
+        val first = launch { kinds.observeKind(Network.SEPOLIA, address).first { it !is KindReading.Syncing } }
         runCurrent() // the first subscriber's read is in its pause
-        val second = async { kinds.observeKind(address).first { it !is KindReading.Syncing } }
+        val second = async { kinds.observeKind(Network.SEPOLIA, address).first { it !is KindReading.Syncing } }
         runCurrent() // the second waits on it
 
         first.cancel() // a one-shot check that gave up, a screen left
@@ -545,7 +571,7 @@ class VerifiedAddressKindsTest {
         chain.codes[address] = ProvenCode(proxyCode, 9, ProofAnchor.Walked(9))
         chain.slotWalked = 9
 
-        val reading = kinds().observeKind(address).first { it !is KindReading.Syncing }
+        val reading = kinds().observeKind(Network.SEPOLIA, address).first { it !is KindReading.Syncing }
         assertEquals(9, (reading as KindReading.Verified).blockNumber)
         assertEquals(true, reading.kind is AddressKind.Safe)
     }
@@ -555,19 +581,25 @@ class VerifiedAddressKindsTest {
         chain.snapshot = running(head = 9)
         safeStorage()
         val kinds = kinds()
-        kinds.observeKind(address).first { it !is KindReading.Syncing }
+        kinds.observeKind(Network.SEPOLIA, address).first { it !is KindReading.Syncing }
         val asked = chain.proofRequests.size
 
         // The next head: the reading stands, nothing is asked again.
         chain.snapshot = running(head = 10)
-        val standing = kinds.observeKind(address).first { it !is KindReading.Syncing } as KindReading.Verified
+        val standing = kinds.observeKind(
+            Network.SEPOLIA,
+            address,
+        ).first { it !is KindReading.Syncing } as KindReading.Verified
         assertEquals(9, standing.blockNumber)
         assertEquals(asked, chain.proofRequests.size)
 
         // Five heads on: read again, and labelled with its new block.
         chain.snapshot = running(head = 14)
         chain.slotBlock = 14
-        val again = kinds.observeKind(address).first { it !is KindReading.Syncing } as KindReading.Verified
+        val again = kinds.observeKind(
+            Network.SEPOLIA,
+            address,
+        ).first { it !is KindReading.Syncing } as KindReading.Verified
         assertEquals(14, again.blockNumber)
     }
 

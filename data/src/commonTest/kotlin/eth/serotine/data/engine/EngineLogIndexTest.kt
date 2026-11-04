@@ -1,6 +1,7 @@
 package eth.serotine.data.engine
 
 import eth.serotine.domain.model.Address
+import eth.serotine.domain.model.Network
 import eth.serotine.domain.repository.LogCoverage
 import eth.serotine.domain.repository.LogCoverageReading
 import eth.serotine.domain.repository.LogQuery
@@ -8,12 +9,6 @@ import eth.serotine.domain.repository.LogWatch
 import eth.serotine.domain.repository.LogWatchKey
 import eth.serotine.domain.repository.LogsReading
 import eth.serotine.domain.repository.ReadUnavailable
-import kotlinx.coroutines.ExperimentalCoroutinesApi
-import kotlinx.coroutines.flow.first
-import kotlinx.coroutines.test.StandardTestDispatcher
-import kotlinx.coroutines.test.TestScope
-import kotlinx.coroutines.test.runTest
-import kotlinx.serialization.json.Json
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
@@ -21,6 +16,12 @@ import kotlin.test.assertFalse
 import kotlin.test.assertIs
 import kotlin.test.assertTrue
 import kotlin.time.Duration.Companion.seconds
+import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.test.StandardTestDispatcher
+import kotlinx.coroutines.test.TestScope
+import kotlinx.coroutines.test.runTest
+import kotlinx.serialization.json.Json
 
 /** [EngineLogIndex] against the engine's log-index JSON (Myotis `myotis-engine/src/host.rs`). */
 @OptIn(ExperimentalCoroutinesApi::class)
@@ -41,11 +42,12 @@ class EngineLogIndexTest {
     }
 
     private fun TestScope.index(chain: LogIndexChain? = this@EngineLogIndexTest.chain) =
-        EngineLogIndex(chain, StandardTestDispatcher(testScheduler), 4.seconds)
+        EngineLogIndex(Network.SEPOLIA, chain, StandardTestDispatcher(testScheduler), 4.seconds)
 
     @Test
     fun aChangeIsOneConfigWithAnAddressEntryAndATopicEntryAtAllThreePositions() = runTest {
         val taken = index().configure(
+            Network.SEPOLIA,
             listOf(
                 LogWatch(LogWatchKey.Mention(alice), 9_400_000),
                 LogWatch(LogWatchKey.Emitter(vault), 9_500_000),
@@ -70,20 +72,24 @@ class EngineLogIndexTest {
     fun aChangeIsNotAskedWhileReadsCannotBeVerifiedAndIsNotTakenWhenTheEngineRefusesIt() = runTest {
         val watch = listOf(LogWatch(LogWatchKey.Mention(alice), 1))
         chain.base.snapshot = running(phase = EngineSnapshot.Phase.CATCHING_UP)
-        assertFalse(index().configure(watch, emptyList()))
+        assertFalse(index().configure(Network.SEPOLIA, watch, emptyList()))
         assertEquals(emptyList(), chain.configs)
 
         chain.base.snapshot = running()
         chain.takes = false
-        assertFalse(index().configure(watch, emptyList()))
-        assertFalse(index(chain = null).configure(watch, emptyList()))
-        assertTrue(index().configure(emptyList(), emptyList()), "nothing to ask")
+        assertFalse(index().configure(Network.SEPOLIA, watch, emptyList()))
+        assertFalse(index(chain = null).configure(Network.SEPOLIA, watch, emptyList()))
+        assertTrue(index().configure(Network.SEPOLIA, emptyList(), emptyList()), "nothing to ask")
     }
 
     @Test
     fun anEntryBothWatchedAndUnwatchedIsTheCallersError() = runTest {
         assertFailsWith<IllegalArgumentException> {
-            index().configure(listOf(LogWatch(LogWatchKey.Mention(alice), 1)), listOf(LogWatchKey.Mention(alice)))
+            index().configure(
+                Network.SEPOLIA,
+                listOf(LogWatch(LogWatchKey.Mention(alice), 1)),
+                listOf(LogWatchKey.Mention(alice)),
+            )
         }
     }
 
@@ -103,19 +109,22 @@ class EngineLogIndexTest {
                     LogWatchKey.Mention(alice) to LogCoverage(9_400_000, null),
                 ),
             ),
-            index().observeCoverage().first(),
+            index().observeCoverage(Network.SEPOLIA).first(),
         )
 
         chain.status = """{"error":"handle is paused"}"""
-        assertEquals(LogCoverageReading.Unavailable, index().observeCoverage().first())
-        assertEquals(LogCoverageReading.Unavailable, index(chain = null).observeCoverage().first())
+        assertEquals(LogCoverageReading.Unavailable, index().observeCoverage(Network.SEPOLIA).first())
+        assertEquals(LogCoverageReading.Unavailable, index(chain = null).observeCoverage(Network.SEPOLIA).first())
     }
 
     @Test
     fun aMentionIsQueriedAtItsPositionAndAnEmitterByItsAddress() = runTest {
         chain.answer = "[]"
-        index().logs(LogQuery(LogWatchKey.Mention(alice), 9_400_000, 9_400_255, listOf(transfer), position = 2))
-        index().logs(LogQuery(LogWatchKey.Emitter(vault), 16, 32))
+        index().logs(
+            Network.SEPOLIA,
+            LogQuery(LogWatchKey.Mention(alice), 9_400_000, 9_400_255, listOf(transfer), position = 2),
+        )
+        index().logs(Network.SEPOLIA, LogQuery(LogWatchKey.Emitter(vault), 16, 32))
 
         assertEquals(
             listOf(
@@ -138,28 +147,43 @@ class EngineLogIndexTest {
                 """"removed":false}"""
 
         chain.answer = "[${log(150)}]"
-        val logs = assertIs<LogsReading.Logs>(index().logs(query)).logs
+        val logs = assertIs<LogsReading.Logs>(index().logs(Network.SEPOLIA, query)).logs
         assertEquals(150, logs.single().blockNumber)
         assertEquals(3, logs.single().logIndex)
         assertEquals(token, logs.single().log.address)
 
         chain.answer = "[${log(150)},${log(201)}]"
-        assertEquals(LogsReading.Unavailable(ReadUnavailable.UNPROVEN), index().logs(query), "outside the range")
+        assertEquals(
+            LogsReading.Unavailable(ReadUnavailable.UNPROVEN),
+            index().logs(Network.SEPOLIA, query),
+            "outside the range",
+        )
         chain.answer = "[${log(150, topic2 = transfer)}]"
-        assertEquals(LogsReading.Unavailable(ReadUnavailable.UNPROVEN), index().logs(query), "not naming Alice")
+        assertEquals(
+            LogsReading.Unavailable(ReadUnavailable.UNPROVEN),
+            index().logs(Network.SEPOLIA, query),
+            "not naming Alice",
+        )
         chain.answer = "[{\"address\":\"${token.hex}\"}]"
-        assertEquals(LogsReading.Unavailable(ReadUnavailable.UNPROVEN), index().logs(query), "not a log")
+        assertEquals(
+            LogsReading.Unavailable(ReadUnavailable.UNPROVEN),
+            index().logs(Network.SEPOLIA, query),
+            "not a log",
+        )
     }
 
     @Test
     fun aRangeBelowTheEntrysBlockOrOfAnEntryNotFollowedIsNotAskedOfTheEngine() = runTest {
         val belowAlices = LogQuery(LogWatchKey.Mention(alice), 99, 200, position = 1)
-        assertEquals(LogsReading.BeforeStart(100), index().logs(belowAlices))
-        assertEquals(LogsReading.NotWatched, index().logs(LogQuery(LogWatchKey.Emitter(alice), 100, 200)))
+        assertEquals(LogsReading.BeforeStart(100), index().logs(Network.SEPOLIA, belowAlices))
+        assertEquals(
+            LogsReading.NotWatched,
+            index().logs(Network.SEPOLIA, LogQuery(LogWatchKey.Emitter(alice), 100, 200)),
+        )
         chain.status = """{"error":"handle is paused"}"""
         assertEquals(
             LogsReading.Unavailable(ReadUnavailable.UNPROVEN),
-            index().logs(LogQuery(LogWatchKey.Mention(alice), 100, 200, position = 1)),
+            index().logs(Network.SEPOLIA, LogQuery(LogWatchKey.Mention(alice), 100, 200, position = 1)),
         )
 
         assertEquals(emptyList(), chain.filters)
@@ -170,7 +194,7 @@ class EngineLogIndexTest {
         val query = LogQuery(LogWatchKey.Emitter(vault), 100, 200)
         suspend fun answer(json: String): LogsReading {
             chain.answer = json
-            return index().logs(query)
+            return index().logs(Network.SEPOLIA, query)
         }
 
         assertEquals(
@@ -190,10 +214,13 @@ class EngineLogIndexTest {
         assertEquals(LogsReading.Unavailable(ReadUnavailable.UNPROVEN), answer("not json"))
 
         chain.answer = null
-        assertEquals(LogsReading.Unavailable(ReadUnavailable.UNPROVEN), index().logs(query))
+        assertEquals(LogsReading.Unavailable(ReadUnavailable.UNPROVEN), index().logs(Network.SEPOLIA, query))
         chain.base.snapshot = EngineSnapshot.Down
-        assertEquals(LogsReading.Unavailable(ReadUnavailable.NO_ENGINE), index().logs(query))
-        assertEquals(LogsReading.Unavailable(ReadUnavailable.NO_ENGINE), index(chain = null).logs(query))
+        assertEquals(LogsReading.Unavailable(ReadUnavailable.NO_ENGINE), index().logs(Network.SEPOLIA, query))
+        assertEquals(
+            LogsReading.Unavailable(ReadUnavailable.NO_ENGINE),
+            index(chain = null).logs(Network.SEPOLIA, query),
+        )
     }
 }
 

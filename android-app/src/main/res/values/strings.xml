@@ -6,7 +6,7 @@
     <string name="biometric_prompt_title">Unlock your key</string>
     <string name="biometric_prompt_use_password">Use the password</string>
     <string name="rate_widget_label">Exchange rate</string>
-    <string name="rate_widget_description">The ether rate in your display currency and its change over 24 hours, verified by the light client; refreshed on Wi-Fi or another unmetered network, while the app is open, and with its refresh button.</string>
+    <string name="rate_widget_description">A network\'s own currency in your display currency, on the network you choose when you place it, and its change over 24 hours, verified by the light client; refreshed on Wi-Fi or another unmetered network, while the app is open, and with its refresh button.</string>
     <!-- What the exchange-rate widget shows until its first rate is drawn. -->
     <string name="rate_widget_placeholder_pair">ETH</string>
     <string name="rate_widget_placeholder_rate">—</string>
@@ -14,6 +14,8 @@
     <string name="rate_widget_refresh">Refresh exchange rate</string>
     <string name="rate_widget_refreshing">Refreshing exchange rate</string>
     <string name="rate_widget_no_network">Exchange rate not refreshed: no network</string>
+    <string name="rate_widget_network_off">Exchange rate not refreshed: its network is off. Turn it on in Settings → Networks.</string>
+    <string name="rate_widget_not_saved">The widget\'s network could not be saved. Try placing it again.</string>
     <string name="rate_widget_not_started">Exchange rate not refreshed: Android would not start the refresh</string>
     <string name="rate_widget_not_refreshed">Exchange rate not refreshed: the light client had no verified rate</string>
 </resources>

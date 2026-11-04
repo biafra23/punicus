@@ -1,5 +1,6 @@
 package eth.serotine.ui.safeimport
 
+import eth.serotine.domain.model.AccountId
 import eth.serotine.domain.model.Address
 import eth.serotine.domain.model.Network
 import eth.serotine.domain.model.SafeSignature
@@ -10,6 +11,12 @@ import eth.serotine.domain.usecase.ImportSigningRequest
 import eth.serotine.domain.usecase.ObserveAccount
 import eth.serotine.ui.SafeWorld
 import eth.serotine.ui.components.Eip55
+import kotlin.test.AfterTest
+import kotlin.test.Test
+import kotlin.test.assertEquals
+import kotlin.test.assertIs
+import kotlin.test.assertTrue
+import kotlin.time.Duration.Companion.seconds
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.launch
@@ -20,12 +27,6 @@ import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.test.setMain
-import kotlin.test.AfterTest
-import kotlin.test.Test
-import kotlin.test.assertEquals
-import kotlin.test.assertIs
-import kotlin.test.assertTrue
-import kotlin.time.Duration.Companion.seconds
 
 /** [SafeImportViewModel] over fake ports, through the real use case. */
 @OptIn(ExperimentalCoroutinesApi::class)
@@ -39,7 +40,7 @@ class SafeImportViewModelTest {
     private fun TestScope.viewModel(): SafeImportViewModel {
         Dispatchers.setMain(UnconfinedTestDispatcher(testScheduler))
         val viewModel = SafeImportViewModel(
-            world.safe,
+            AccountId(Network.SEPOLIA, world.safe),
             ObserveAccount(world.accounts),
             ImportSigningRequest(
                 world.codec,
@@ -48,7 +49,6 @@ class SafeImportViewModelTest {
                 world.queue,
                 UnconfinedTestDispatcher(testScheduler),
             ),
-            Network.SEPOLIA,
         )
         backgroundScope.launch { viewModel.uiState.collect {} }
         runCurrent()

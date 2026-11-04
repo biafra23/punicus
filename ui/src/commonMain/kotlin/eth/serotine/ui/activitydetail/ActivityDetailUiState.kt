@@ -22,6 +22,9 @@ sealed interface ActivityDetailUiState {
      * contract of an ERC-20 transfer the wallet does not list, which Add token opens Add token by
      * address with (screen 20); null when there is none to add. [opensStatus] is the hash of a
      * transaction sent from this device, whose status (screen 9) Status opens; null for an event.
+     * [simpleStatus] is [status] in simple mode's words, with no block ("Confirmed"); null where that
+     * is [status] itself. [amountsHidden] while the user hides amounts (docs/wallet-ux.md, *Hiding
+     * amounts*): the eye in the top bar is closed, and every amount here already reads "••••".
      */
     data class Shown(
         override val title: String,
@@ -33,6 +36,8 @@ sealed interface ActivityDetailUiState {
         val note: String? = null,
         val addToken: String? = null,
         val opensStatus: String? = null,
+        val simpleStatus: String? = null,
+        val amountsHidden: Boolean = false,
     ) : ActivityDetailUiState
 
     /** It cannot be shown, for the reason [message] gives. */
@@ -61,4 +66,7 @@ enum class DetailKind {
 
     /** A transaction's or a message's hash, with Copy. */
     HASH,
+
+    /** A block number: drawn as [TEXT], and kept behind *Details* in simple mode (docs/simple-ui.md). */
+    BLOCK,
 }

@@ -1,0 +1,6 @@
+# SHA-256 of the Serotine release key's certificate, as apksigner prints it.
+# sign-release (android-apk.yml) refuses any signer but this one, and a user
+# compares a downloaded Serotine-<tag>-android.apk against it with
+#   apksigner verify --print-certs Serotine-<tag>-android.apk
+# (docs/android-release-signing.md). Changing it means rotating the key.
+d7a33aee06dbedab0e640283ff1b8c8cc919cf3a82aa3bc8fd7c67a3abdddec0

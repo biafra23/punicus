@@ -62,6 +62,7 @@ import kotlinx.coroutines.flow.first
  */
 @ConsistentCopyVisibility
 data class SwapQuote internal constructor(
+    val network: Network,
     val from: Address,
     val sell: TransferAsset,
     val buy: TransferAsset,
@@ -183,11 +184,15 @@ class QuoteSwap(
         val boughtToken = (buy as? TransferAsset.Erc20Token)?.token
         // What refuses the swap whatever its route is read first, side by side: the route's
         // quotes, the costly reads, come only once none of it does.
-        val native = async { nativeBalances.observeBalance(from).first() }
-        val soldBalance = soldToken?.let { async { tokenBalances.observeBalance(from, it.address).first() } }
-        val boughtBalance = boughtToken?.let { async { tokenBalances.observeBalance(from, it.address).first() } }
-        val head = async { lightClient.observeStatus().first() }
-        val records = async { unminedOf(sentTransfers, inputs, from, clock) }
+        val native = async { nativeBalances.observeBalance(network, from).first() }
+        val soldBalance = soldToken?.let { async { tokenBalances.observeBalance(network, from, it.address).first() } }
+        val boughtBalance = boughtToken?.let { async { tokenBalances.observeBalance(
+            network,
+            from,
+            it.address,
+        ).first() } }
+        val head = async { lightClient.observeStatus(network).first() }
+        val records = async { unminedOf(network, sentTransfers, inputs, from, clock) }
         val orders = soldToken?.let { async { cowOrders.observe().first() } }
         val deployment = when (val venue = findRoute.venue(network)) {
             is VenueReading.Verified -> venue.deployment
@@ -260,7 +265,7 @@ class QuoteSwap(
         val minimum = tolerance.minimumOf(found.quote.amountOut)
         if (minimum.isZero) return@cancellingReads SwapQuoting.TooSmall
         if (soldToken != null) {
-            val allowance = when (val read = readAllowance(inputs, from, soldToken, router)) {
+            val allowance = when (val read = readAllowance(network, inputs, from, soldToken, router)) {
                 is AllowanceRead.Read -> read.allowance
                 AllowanceRead.NotAToken -> return@cancellingReads SwapQuoting.NotAToken
                 AllowanceRead.Refused -> return@cancellingReads SwapQuoting.Refused
@@ -297,6 +302,7 @@ class QuoteSwap(
         }
         SwapQuoting.Quoted(
             SwapQuote(
+                network = network,
                 from = from,
                 sell = sell,
                 buy = buy,
@@ -346,6 +352,7 @@ internal sealed interface Unmined {
  * holds one. A record that cannot be read holds none, as for every quote.
  */
 internal suspend fun unminedOf(
+    network: Network,
     sentTransfers: SentTransfers,
     inputs: TransactionInputs,
     from: Address,
@@ -353,9 +360,9 @@ internal suspend fun unminedOf(
 ): Unmined {
     val since = clock() - RECORD_LIFETIME_SECONDS
     val mine = (sentTransfers.observe().first() as? SentTransferList.Loaded)?.transfers.orEmpty()
-        .filter { it.account == from && !it.maybeSent && it.sentAt >= since }
+        .filter { it.network == network && it.account == from && !it.maybeSent && it.sentAt >= since }
     if (mine.isEmpty()) return Unmined.Read(emptyList())
-    val mined = when (val read = inputs.minedNonce(from)) {
+    val mined = when (val read = inputs.minedNonce(network, from)) {
         is NonceReading.Read -> read.nonce
         is NonceReading.Unavailable -> return Unmined.Unavailable(read.reason)
     }
@@ -384,12 +391,13 @@ internal sealed interface AllowanceRead {
 
 /** [token]'s allowance of [spender] over [owner]'s tokens, as a verified call from [owner]. */
 internal suspend fun readAllowance(
+    network: Network,
     inputs: TransactionInputs,
     owner: Address,
     token: Token,
     spender: Address,
 ): AllowanceRead = readAllowance(owner, token.address, spender) { to, data ->
-    inputs.simulate(owner, to, UInt256.ZERO, data)
+    inputs.simulate(network, owner, to, UInt256.ZERO, data)
 }
 
 /** The allowance of [spender] over [owner]'s tokens at [token], as [call] runs `allowance` verified. */
@@ -540,7 +548,7 @@ class SendSwap(
     suspend operator fun invoke(quote: SwapQuote, unlock: Unlock): SwapSending {
         val tx = quote.transaction
         val buysEther = quote.buy == TransferAsset.Native
-        when (val run = inputs.simulate(quote.from, tx.to, tx.value, tx.data)) {
+        when (val run = inputs.simulate(quote.network, quote.from, tx.to, tx.value, tx.data)) {
             is Simulation.Succeeded -> {
                 val out = SwapRouter02.amountOutOf(run.returnHex, buysEther)
                 if (out == null || out < quote.minimumOut) return SwapSending.NoLongerMet(run.blockNumber)
@@ -550,7 +558,7 @@ class SendSwap(
             is Simulation.Unavailable -> return SwapSending.NotRun(run.reason)
         }
         return SwapSending.Done(
-            signAndSend(signer, broadcaster, sentTransfers, quote.call, quote.action, clock, unlock),
+            signAndSend(signer, broadcaster, sentTransfers, quote.network, quote.call, quote.action, clock, unlock),
         )
     }
 }
@@ -584,6 +592,7 @@ sealed interface SwapSending {
  */
 @ConsistentCopyVisibility
 data class TokenApprovalQuote internal constructor(
+    val network: Network,
     val from: Address,
     val token: Token,
     val spender: Address,
@@ -646,11 +655,11 @@ class QuoteTokenApproval(
     ): ApprovalQuoting = cancellingReads {
         require(!amount.isZero) { "an approval a swap needs is of something" }
         quoter.heldBack(from)?.let { return@cancellingReads it.asApprovalQuoting() }
-        val native = async { nativeBalances.observeBalance(from).first() }
+        val native = async { nativeBalances.observeBalance(network, from).first() }
         // An approval sets the allowance, whatever it was: one sent beside an earlier swap of the
         // token could take from that swap what it counts on, and one beside an earlier approval
         // is that approval again.
-        when (val read = unminedOf(sentTransfers, inputs, from, clock)) {
+        when (val read = unminedOf(network, sentTransfers, inputs, from, clock)) {
             is Unmined.Read -> {
                 read.transfers.lastOrNull { it.sells(token) }
                     ?.let { return@cancellingReads ApprovalQuoting.EarlierSwapPending(it.hash) }
@@ -660,7 +669,7 @@ class QuoteTokenApproval(
             is Unmined.Unavailable ->
                 return@cancellingReads ApprovalQuoting.Unavailable(read.reason, QuoteFigure.NONCE)
         }
-        val allowance = when (val read = readAllowance(inputs, from, token, spender)) {
+        val allowance = when (val read = readAllowance(network, inputs, from, token, spender)) {
             is AllowanceRead.Read -> read.allowance
             AllowanceRead.NotAToken -> return@cancellingReads ApprovalQuoting.NotAToken
             AllowanceRead.Refused -> return@cancellingReads ApprovalQuoting.Refused
@@ -692,6 +701,7 @@ class QuoteTokenApproval(
         }
         ApprovalQuoting.Quoted(
             TokenApprovalQuote(
+                network = network,
                 from = from,
                 token = token,
                 spender = spender,
@@ -778,6 +788,7 @@ class SendTokenApproval(
         signer,
         broadcaster,
         sentTransfers,
+        quote.network,
         quote.call,
         SentAction.TokenApproval(quote.token, quote.spender, quote.amount),
         clock,

@@ -2,6 +2,7 @@ package eth.serotine.domain.usecase
 
 import eth.serotine.domain.model.Account
 import eth.serotine.domain.model.AccountCustody
+import eth.serotine.domain.model.AccountId
 import eth.serotine.domain.model.AccountKind
 import eth.serotine.domain.model.Address
 import eth.serotine.domain.model.Digest
@@ -33,7 +34,6 @@ import eth.serotine.domain.repository.SafeTxQueueList
 import eth.serotine.domain.repository.SentTransfer
 import eth.serotine.domain.repository.SentTransferList
 import eth.serotine.domain.repository.SentTransfers
-import eth.serotine.domain.repository.prunable
 import eth.serotine.domain.repository.SignatureRecovery
 import eth.serotine.domain.repository.Signer
 import eth.serotine.domain.repository.Signing
@@ -44,6 +44,7 @@ import eth.serotine.domain.repository.TokenBalanceReading
 import eth.serotine.domain.repository.TokenBalances
 import eth.serotine.domain.repository.TransactionInputs
 import eth.serotine.domain.repository.Unlock
+import eth.serotine.domain.repository.prunable
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.flowOf
@@ -56,8 +57,20 @@ import kotlinx.coroutines.flow.map
  */
 internal class SafeWorld {
     val safe = Address.of("0x" + "5a".repeat(20))
-    val alice = Account(Address.of("0x" + "11".repeat(20)), AccountKind.EOA, "Alice", AccountCustody.InKeyStore)
-    val bob = Account(Address.of("0x" + "22".repeat(20)), AccountKind.EOA, "Bob", AccountCustody.Watched)
+    val alice = Account(
+        Network.SEPOLIA,
+        Address.of("0x" + "11".repeat(20)),
+        AccountKind.EOA,
+        "Alice",
+        AccountCustody.InKeyStore,
+    )
+    val bob = Account(
+        Network.SEPOLIA,
+        Address.of("0x" + "22".repeat(20)),
+        AccountKind.EOA,
+        "Bob",
+        AccountCustody.Watched,
+    )
     val carol = Address.of("0x" + "33".repeat(20))
     val stranger = Address.of("0x" + "44".repeat(20))
     val recipient = Address.of("0x" + "bb".repeat(20))
@@ -69,12 +82,12 @@ internal class SafeWorld {
         }
     val kind = MutableStateFlow<KindReading>(KindReading.Verified(AddressKind.Safe(state), 100))
     val kinds = object : AddressKinds {
-        override fun observeKind(address: Address): Flow<KindReading> = kind
+        override fun observeKind(network: Network, address: Address): Flow<KindReading> = kind
     }
     val accounts = ListAccountRepository(
         alice,
         bob,
-        Account(safe, AccountKind.SAFE, "Treasury", AccountCustody.Watched),
+        Account(Network.SEPOLIA, safe, AccountKind.SAFE, "Treasury", AccountCustody.Watched),
     )
     val observeSafe = ObserveSafe(kinds, accounts)
     val recovery = FakeRecovery()
@@ -89,10 +102,14 @@ internal class SafeWorld {
     var native: BalanceReading = BalanceReading.Verified(Wei.of("1000000000000000000"), 100)
     var tokens: TokenBalanceReading = TokenBalanceReading.Verified(TokenUnits.of("5000000"), 100)
     val nativeBalances = object : NativeBalances {
-        override fun observeBalance(address: Address): Flow<BalanceReading> = flowOf(native)
+        override fun observeBalance(network: Network, address: Address): Flow<BalanceReading> = flowOf(native)
     }
     val tokenBalances = object : TokenBalances {
-        override fun observeBalance(holder: Address, token: Address): Flow<TokenBalanceReading> = flowOf(tokens)
+        override fun observeBalance(
+            network: Network,
+            holder: Address,
+            token: Address,
+        ): Flow<TokenBalanceReading> = flowOf(tokens)
     }
 
     /** A request for this Safe, signed by [first] and [second] (none when null). */
@@ -136,7 +153,7 @@ internal class FakeBroadcaster : Broadcaster {
     var answer: Broadcast = Broadcast.Sent("0x" + "00".repeat(32))
     val sent = mutableListOf<ByteArray>()
 
-    override suspend fun send(raw: ByteArray): Broadcast {
+    override suspend fun send(network: Network, raw: ByteArray): Broadcast {
         sent += raw
         return answer
     }
@@ -147,7 +164,7 @@ internal class FakeApprovals : SafeApprovals {
     val approved = mutableMapOf<Address, ApprovalReading>()
     val asked = mutableListOf<Address>()
 
-    override suspend fun approval(safe: Address, owner: Address, hash: Digest): ApprovalReading {
+    override suspend fun approval(network: Network, safe: Address, owner: Address, hash: Digest): ApprovalReading {
         asked += owner
         return approved[owner] ?: ApprovalReading.Read(approved = false, blockNumber = 120)
     }
@@ -168,8 +185,12 @@ internal class MemorySafeTxQueue : SafeTxQueue {
     val requests = MutableStateFlow<List<SigningRequest>>(emptyList())
     var unreadable = false
 
-    override fun observe(safe: Address): Flow<SafeTxQueueList> = requests.map { list ->
-        if (unreadable) SafeTxQueueList.Unreadable else SafeTxQueueList.Loaded(list.filter { it.safe == safe })
+    override fun observe(safe: AccountId): Flow<SafeTxQueueList> = requests.map { list ->
+        if (unreadable) {
+            SafeTxQueueList.Unreadable
+        } else {
+            SafeTxQueueList.Loaded(list.filter { it.network == safe.network && it.safe == safe.address })
+        }
     }
 
     override suspend fun save(request: SigningRequest): SigningRequest? {
@@ -189,8 +210,10 @@ internal class MemorySafeTxQueue : SafeTxQueue {
         return true
     }
 
-    override suspend fun prune(safe: Address, nonce: Long): Boolean {
-        requests.value = requests.value.filterNot { it.safe == safe && it.nonce < nonce }
+    override suspend fun prune(safe: AccountId, nonce: Long): Boolean {
+        requests.value = requests.value.filterNot {
+            it.network == safe.network && it.safe == safe.address && it.nonce < nonce
+        }
         return true
     }
 }
@@ -206,7 +229,7 @@ internal class MemorySentTransfers : SentTransfers {
     }
 
 
-    override suspend fun prune(account: Address, minedCount: Long, unlistedBefore: Long): Boolean {
+    override suspend fun prune(account: AccountId, minedCount: Long, unlistedBefore: Long): Boolean {
         transfers.value = transfers.value.filterNot { it.prunable(account, minedCount, unlistedBefore) }
         return true
     }
@@ -219,14 +242,14 @@ internal class FakeTransactionInputs : TransactionInputs {
     var simulation: Simulation = Simulation.Succeeded("", 100)
     val simulated = mutableListOf<Triple<Address, Address, ByteArray>>()
 
-    override suspend fun nonce(account: Address): NonceReading = NonceReading.Read(7)
+    override suspend fun nonce(network: Network, account: Address): NonceReading = NonceReading.Read(7)
 
     /** Every account's verified count of mined transactions. */
     var mined = 7L
 
-    override suspend fun minedNonce(account: Address): NonceReading = NonceReading.Read(mined)
+    override suspend fun minedNonce(network: Network, account: Address): NonceReading = NonceReading.Read(mined)
 
-    override suspend fun fees(): FeeReading = FeeReading.Quoted(
+    override suspend fun fees(network: Network): FeeReading = FeeReading.Quoted(
         FeeQuote(
             nextBaseFee = UInt256.of(GWEI * 10),
             tips = FeeLevel.entries.associateWith { UInt256.of(GWEI) },
@@ -234,10 +257,22 @@ internal class FakeTransactionInputs : TransactionInputs {
         ),
     )
 
-    override suspend fun estimateGas(from: Address, to: Address, value: UInt256, data: ByteArray): GasEstimate =
+    override suspend fun estimateGas(
+        network: Network,
+        from: Address,
+        to: Address,
+        value: UInt256,
+        data: ByteArray,
+    ): GasEstimate =
         estimate ?: GasEstimate.Estimated(gas)
 
-    override suspend fun simulate(from: Address, to: Address, value: UInt256, data: ByteArray): Simulation {
+    override suspend fun simulate(
+        network: Network,
+        from: Address,
+        to: Address,
+        value: UInt256,
+        data: ByteArray,
+    ): Simulation {
         simulated += Triple(from, to, data)
         return simulation
     }

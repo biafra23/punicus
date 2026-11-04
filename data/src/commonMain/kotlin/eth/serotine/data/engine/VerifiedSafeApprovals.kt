@@ -2,6 +2,7 @@ package eth.serotine.data.engine
 
 import eth.serotine.domain.model.Address
 import eth.serotine.domain.model.Digest
+import eth.serotine.domain.model.Network
 import eth.serotine.domain.repository.ApprovalReading
 import eth.serotine.domain.repository.ReadUnavailable
 import eth.serotine.domain.repository.SafeApprovals
@@ -17,12 +18,14 @@ import kotlinx.coroutines.CoroutineDispatcher
  * verified read. A device without an engine ([chain] null) answers [ReadUnavailable.NO_ENGINE].
  */
 class VerifiedSafeApprovals internal constructor(
+    private val served: Network,
     private val chain: VerifiedChain?,
     private val dispatcher: CoroutineDispatcher,
 ) : SafeApprovals {
 
-    override suspend fun approval(safe: Address, owner: Address, hash: Digest): ApprovalReading =
-        chain.askVerified(dispatcher, ApprovalReading::Unavailable) { verified ->
+    override suspend fun approval(network: Network, safe: Address, owner: Address, hash: Digest): ApprovalReading {
+        if (network != served) return ApprovalReading.Unavailable(ReadUnavailable.NO_ENGINE)
+        return chain.askVerified(dispatcher, ApprovalReading::Unavailable) { verified ->
             when (val outcome = verified.call(safe, Abi.approvedHashes(owner, hash))) {
                 is CallOutcome.Returned -> Abi.uint256(outcome.hex)
                     ?.let { ApprovalReading.Read(approved = it != "0", outcome.blockNumber) }
@@ -32,4 +35,5 @@ class VerifiedSafeApprovals internal constructor(
                 null -> ApprovalReading.Unavailable(ReadUnavailable.UNPROVEN)
             }
         }
+    }
 }

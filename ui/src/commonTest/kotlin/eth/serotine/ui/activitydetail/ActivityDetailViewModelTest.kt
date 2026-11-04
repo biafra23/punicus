@@ -2,6 +2,7 @@ package eth.serotine.ui.activitydetail
 
 import eth.serotine.domain.model.Account
 import eth.serotine.domain.model.AccountCustody
+import eth.serotine.domain.model.AccountId
 import eth.serotine.domain.model.AccountKind
 import eth.serotine.domain.model.Address
 import eth.serotine.domain.model.CowOrderUid
@@ -25,21 +26,32 @@ import eth.serotine.domain.repository.SentOutcome
 import eth.serotine.domain.repository.SentTransfer
 import eth.serotine.domain.usecase.ObserveAccountHistory
 import eth.serotine.domain.usecase.ObserveAccounts
+import eth.serotine.domain.usecase.ObserveAmountsHidden
 import eth.serotine.domain.usecase.ObserveKnownTokens
 import eth.serotine.domain.usecase.ObserveSafeHistory
 import eth.serotine.domain.usecase.ObserveSentToAddresses
 import eth.serotine.domain.usecase.ObserveTokenTransfers
+import eth.serotine.domain.usecase.ToggleAmountsHidden
 import eth.serotine.ui.FakeAccounts
 import eth.serotine.ui.FakeLogIndex
 import eth.serotine.ui.FakeMetadata
 import eth.serotine.ui.ListCatalog
+import eth.serotine.ui.MemoryAmountsHidden
 import eth.serotine.ui.MemoryHistoryStarts
 import eth.serotine.ui.MemoryTransactionHistory
 import eth.serotine.ui.MemoryUserTokens
 import eth.serotine.ui.activity.ActivityKey
 import eth.serotine.ui.activity.ActivityState
+import eth.serotine.ui.components.AMOUNT_MASK
 import eth.serotine.ui.components.Eip55
 import eth.serotine.ui.topicOf
+import kotlin.test.AfterTest
+import kotlin.test.Test
+import kotlin.test.assertEquals
+import kotlin.test.assertFalse
+import kotlin.test.assertIs
+import kotlin.test.assertNull
+import kotlin.test.assertTrue
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.launch
@@ -49,24 +61,19 @@ import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.test.setMain
-import kotlin.test.AfterTest
-import kotlin.test.Test
-import kotlin.test.assertEquals
-import kotlin.test.assertFalse
-import kotlin.test.assertIs
-import kotlin.test.assertNull
-import kotlin.test.assertTrue
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class ActivityDetailViewModelTest {
 
     private val alice = Account(
+        Network.SEPOLIA,
         Address.of("0x8f3a2c71e5b9d04a6f1e3c2ba7d90e5f4c6b91c2"),
         AccountKind.EOA,
         "Alice",
         AccountCustody.InKeyStore,
     )
     private val treasury = Account(
+        Network.SEPOLIA,
         Address.of("0xfb6916095ca1df60bb79ce92ce3ea74c37c5d359"),
         AccountKind.SAFE,
         "Treasury",
@@ -81,7 +88,10 @@ class ActivityDetailViewModelTest {
     private val index = FakeLogIndex()
     private val userTokens = MemoryUserTokens()
 
+    private val amountsHidden = MemoryAmountsHidden()
+
     private val sent = SentTransfer(
+        network = Network.SEPOLIA,
         account = alice.address,
         nonce = 7,
         signed = SignedTransfer(byteArrayOf(2, 7)),
@@ -96,7 +106,7 @@ class ActivityDetailViewModelTest {
     private fun TestScope.viewModel(key: ActivityKey, address: Address = alice.address): ActivityDetailViewModel {
         Dispatchers.setMain(UnconfinedTestDispatcher(testScheduler))
         val viewModel = ActivityDetailViewModel(
-            address,
+            AccountId(Network.SEPOLIA, address),
             key,
             ObserveAccountHistory(history),
             ObserveAccounts(accounts),
@@ -104,7 +114,8 @@ class ActivityDetailViewModelTest {
             ObserveTokenTransfers(index, starts),
             ObserveKnownTokens(ListCatalog(usdc), userTokens, FakeMetadata()),
             ObserveSentToAddresses(history),
-            Network.SEPOLIA,
+            ObserveAmountsHidden(amountsHidden),
+            ToggleAmountsHidden(amountsHidden),
         ) { "at $it" }
         backgroundScope.launch { viewModel.uiState.collect {} }
         runCurrent()
@@ -148,6 +159,7 @@ class ActivityDetailViewModelTest {
         assertEquals("Alice", shown.title)
         assertEquals("Sent 40.5 USDC", shown.headline)
         assertEquals("Finalized in block 9,412,118", shown.status)
+        assertEquals("Final", shown.simpleStatus, "simple mode's words, no block")
         assertEquals(ActivityState.DONE, shown.state)
         assertEquals(
             listOf(
@@ -158,7 +170,7 @@ class ActivityDetailViewModelTest {
                 DetailField("Transaction hash", sent.hash, DetailKind.HASH),
                 DetailField("Nonce", "7"),
                 DetailField("Sent", "at 300"),
-                DetailField("Block", "9,412,118"),
+                DetailField("Block", "9,412,118", DetailKind.BLOCK),
             ),
             shown.fields,
         )
@@ -206,7 +218,7 @@ class ActivityDetailViewModelTest {
             listOf(
                 DetailField("Token contract", Eip55.format(spam), DetailKind.ADDRESS),
                 DetailField("Transaction hash", tx, DetailKind.HASH),
-                DetailField("Block", "9,402,000"),
+                DetailField("Block", "9,402,000", DetailKind.BLOCK),
             ),
             shown.fields,
             "the other side an unlisted contract names, not",
@@ -229,6 +241,28 @@ class ActivityDetailViewModelTest {
     }
 
     @Test
+    fun hiddenAmountsMaskTheHeadlineAndWhatMovedAndTheEyeTogglesThem() = runTest {
+        amountsHidden.hidden.value = true
+        history.entries.value = listOf(HistoryEntry(sent, SentOutcome.Finalized(9_412_118, succeeded = true)))
+        val viewModel = viewModel(ActivityKey(sent.hash))
+
+        val hidden = assertIs<ActivityDetailUiState.Shown>(viewModel.uiState.value)
+        assertTrue(hidden.amountsHidden)
+        assertEquals("Sent $AMOUNT_MASK USDC", hidden.headline)
+        assertEquals(DetailField("Amount", "$AMOUNT_MASK USDC"), hidden.fields.single { it.label == "Amount" })
+        // Who and where stay: only the amount is hidden.
+        assertEquals(DetailField("To", Eip55.format(bob), DetailKind.ADDRESS), hidden.fields.single { it.label == "To" })
+
+        viewModel.toggleAmounts()
+        runCurrent()
+        assertFalse(amountsHidden.hidden.value)
+        val shown = assertIs<ActivityDetailUiState.Shown>(viewModel.uiState.value)
+        assertFalse(shown.amountsHidden)
+        assertEquals("Sent 40.5 USDC", shown.headline)
+        assertEquals(DetailField("Amount", "40.5 USDC"), shown.fields.single { it.label == "Amount" })
+    }
+
+    @Test
     fun aListedTokensTransferNamesBothSidesAndWhatMoved() = runTest {
         indexed(alice.address)
         val tx = "0x" + "e1".repeat(32)
@@ -246,7 +280,7 @@ class ActivityDetailViewModelTest {
                 DetailField("Amount", "40 USDC"),
                 DetailField("Token contract", Eip55.format(usdc.address), DetailKind.ADDRESS, "USDC"),
                 DetailField("Transaction hash", tx, DetailKind.HASH),
-                DetailField("Block", "9,402,000"),
+                DetailField("Block", "9,402,000", DetailKind.BLOCK),
             ),
             shown.fields,
         )
@@ -285,7 +319,7 @@ class ActivityDetailViewModelTest {
                 DetailField("Amount", "1 ETH"),
                 DetailField("Safe", Eip55.format(treasury.address), DetailKind.ADDRESS, "Treasury"),
                 DetailField("Transaction hash", tx, DetailKind.HASH),
-                DetailField("Block", "9,405,000"),
+                DetailField("Block", "9,405,000", DetailKind.BLOCK),
             ),
             shown.fields,
         )

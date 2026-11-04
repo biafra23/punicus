@@ -42,7 +42,8 @@ const val DEBUG_LOG_TAG = "debug-log"
 @Composable
 fun DebugRoute(viewModel: DebugViewModel, modifier: Modifier = Modifier) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
-    DebugScreen(state, viewModel::setLevel, viewModel::setFilter, viewModel::clear, modifier)
+    val filter by viewModel.filterText.collectAsStateWithLifecycle()
+    DebugScreen(state.copy(filter = filter), viewModel::setLevel, viewModel::setFilter, viewModel::clear, modifier)
 }
 
 /**

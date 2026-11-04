@@ -83,10 +83,14 @@ internal data class NameAnswer(
 
 /** Why reads cannot be verified now, from [snapshot], or null when they can (at its readable head). */
 internal fun whyUnreadable(snapshot: EngineSnapshot): ReadUnavailable? = when (snapshot) {
-    EngineSnapshot.Down -> ReadUnavailable.NO_ENGINE
-    EngineSnapshot.Booting -> ReadUnavailable.UNPROVEN
+    EngineSnapshot.Down, EngineSnapshot.Failed -> ReadUnavailable.NO_ENGINE
+    is EngineSnapshot.Stopped -> ReadUnavailable.NETWORK_OFF
+    EngineSnapshot.Booting -> ReadUnavailable.SYNCING
     is EngineSnapshot.Running -> when {
         snapshot.phase == EngineSnapshot.Phase.STALE_ANCHOR -> ReadUnavailable.STALE_ANCHOR
+        // On its way to a verified head, its first one included; one synced whose head is not fresh, or
+        // that has no proof peer, is not.
+        snapshot.phase != EngineSnapshot.Phase.SYNCED || snapshot.headBlock <= 0 -> ReadUnavailable.SYNCING
         snapshot.readableHead == null -> ReadUnavailable.UNPROVEN
         else -> null
     }

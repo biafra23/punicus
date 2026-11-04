@@ -4,15 +4,22 @@ import eth.serotine.domain.model.Account
 import eth.serotine.domain.model.AccountCustody
 import eth.serotine.domain.model.AccountKind
 import eth.serotine.domain.model.Address
+import eth.serotine.domain.model.Network
 import eth.serotine.domain.repository.AccountAdd
 import eth.serotine.domain.repository.AccountChange
 import eth.serotine.domain.repository.AccountList
+import kotlin.random.Random
+import kotlin.test.AfterTest
+import kotlin.test.Test
+import kotlin.test.assertEquals
+import kotlin.test.assertFalse
+import kotlin.test.assertTrue
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.StandardTestDispatcher
-import kotlinx.coroutines.test.advanceTimeBy
 import kotlinx.coroutines.test.TestScope
+import kotlinx.coroutines.test.advanceTimeBy
 import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import kotlinx.io.buffered
@@ -21,12 +28,6 @@ import kotlinx.io.files.SystemFileSystem
 import kotlinx.io.files.SystemTemporaryDirectory
 import kotlinx.io.readString
 import kotlinx.io.writeString
-import kotlin.random.Random
-import kotlin.test.AfterTest
-import kotlin.test.Test
-import kotlin.test.assertEquals
-import kotlin.test.assertFalse
-import kotlin.test.assertTrue
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class FileAccountRepositoryTest {
@@ -35,12 +36,25 @@ class FileAccountRepositoryTest {
     private val file = Path(directory, "accounts.json")
 
     private val eoa =
-        Account(Address.of("0x" + "aa".repeat(20)), AccountKind.EOA, "Account 1", AccountCustody.InKeyStore)
+        Account(
+            Network.SEPOLIA,
+            Address.of("0x" + "aa".repeat(20)),
+            AccountKind.EOA,
+            "Account 1",
+            AccountCustody.InKeyStore,
+        )
     private val safe =
-        Account(Address.of("0x" + "bb".repeat(20)), AccountKind.SAFE, "Treasury", AccountCustody.InKeyStore)
+        Account(
+            Network.SEPOLIA,
+            Address.of("0x" + "bb".repeat(20)),
+            AccountKind.SAFE,
+            "Treasury",
+            AccountCustody.InKeyStore,
+        )
     private val watched =
-        Account(Address.of("0x" + "dd".repeat(20)), AccountKind.EOA, "Savings", AccountCustody.Watched)
+        Account(Network.SEPOLIA, Address.of("0x" + "dd".repeat(20)), AccountKind.EOA, "Savings", AccountCustody.Watched)
     private val byName = Account(
+        Network.SEPOLIA,
         Address.of("0x" + "ee".repeat(20)),
         AccountKind.EOA,
         "savings.eth",
@@ -89,18 +103,18 @@ class FileAccountRepositoryTest {
     }
 
     @Test
-    fun theFileIsVersionedAndHoldsAddressesKindsLabelsCustodyAndEnsNamesOnly() = runTest {
+    fun theFileIsVersionedAndHoldsNetworksAddressesKindsLabelsCustodyAndEnsNamesOnly() = runTest {
         repository().add(eoa)
         repository().add(watched)
         repository().add(byName)
 
         assertEquals(
-            """{"version":3,"accounts":[{"address":"0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",""" +
-                """"kind":"EOA","label":"Account 1","custody":"key-store"},""" +
+            """{"version":4,"accounts":[{"address":"0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",""" +
+                """"kind":"EOA","label":"Account 1","custody":"key-store","chain":11155111},""" +
                 """{"address":"0xdddddddddddddddddddddddddddddddddddddddd",""" +
-                """"kind":"EOA","label":"Savings","custody":"watched"},""" +
+                """"kind":"EOA","label":"Savings","custody":"watched","chain":11155111},""" +
                 """{"address":"0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",""" +
-                """"kind":"EOA","label":"savings.eth","custody":"watched","ens":"savings.eth"}]}""",
+                """"kind":"EOA","label":"savings.eth","custody":"watched","ens":"savings.eth","chain":11155111}]}""",
             text(file),
         )
         assertEquals(AccountList.Loaded(listOf(eoa, watched, byName)), repository().observeAccounts().first())
@@ -118,7 +132,7 @@ class FileAccountRepositoryTest {
 
         assertEquals(AccountList.Loaded(listOf(eoa)), repository.observeAccounts().first())
         assertEquals(AccountAdd.Added, repository.add(watched))
-        assertTrue(text(file).startsWith("""{"version":3,"""))
+        assertTrue(text(file).startsWith("""{"version":4,"""))
         assertEquals(AccountList.Loaded(listOf(eoa, watched)), repository().observeAccounts().first())
     }
 
@@ -133,7 +147,7 @@ class FileAccountRepositoryTest {
 
         assertEquals(AccountList.Loaded(listOf(watched)), repository.observeAccounts().first())
         assertEquals(AccountAdd.Added, repository.add(byName))
-        assertTrue(text(file).startsWith("""{"version":3,"""))
+        assertTrue(text(file).startsWith("""{"version":4,"""))
         assertEquals(AccountList.Loaded(listOf(watched, byName)), repository().observeAccounts().first())
     }
 
@@ -142,7 +156,7 @@ class FileAccountRepositoryTest {
         val repository = repository()
         repository.add(byName)
 
-        assertEquals(AccountChange.Changed, repository.rename(byName.address, "Savings"))
+        assertEquals(AccountChange.Changed, repository.rename(byName.id, "Savings"))
         val renamed = byName.copy(label = "Savings", ensName = null)
         assertEquals(AccountList.Loaded(listOf(renamed)), repository().observeAccounts().first())
     }
@@ -182,8 +196,8 @@ class FileAccountRepositoryTest {
         repository.add(eoa)
         repository.add(safe)
 
-        assertEquals(AccountChange.Changed, repository.rename(eoa.address, "Spending"))
-        assertEquals(AccountChange.Changed, repository.remove(safe.address))
+        assertEquals(AccountChange.Changed, repository.rename(eoa.id, "Spending"))
+        assertEquals(AccountChange.Changed, repository.remove(safe.id))
 
         assertEquals(AccountList.Loaded(listOf(eoa.copy(label = "Spending"))), repository().observeAccounts().first())
         assertEquals(AccountList.Loaded(listOf(eoa.copy(label = "Spending"))), repository.observeAccounts().first())
@@ -194,8 +208,8 @@ class FileAccountRepositoryTest {
         val repository = repository()
         repository.add(watched)
 
-        assertEquals(AccountChange.Changed, repository.setCustody(watched.address, AccountCustody.InKeyStore))
-        assertEquals(AccountChange.NotFound, repository.setCustody(safe.address, AccountCustody.InKeyStore))
+        assertEquals(AccountChange.Changed, repository.setCustody(watched.id, AccountCustody.InKeyStore))
+        assertEquals(AccountChange.NotFound, repository.setCustody(safe.id, AccountCustody.InKeyStore))
 
         assertEquals(
             AccountList.Loaded(listOf(watched.copy(custody = AccountCustody.InKeyStore))),
@@ -209,8 +223,8 @@ class FileAccountRepositoryTest {
         repository.add(eoa)
         val before = text(file)
 
-        assertEquals(AccountChange.NotFound, repository.rename(safe.address, "Treasury"))
-        assertEquals(AccountChange.NotFound, repository.remove(safe.address))
+        assertEquals(AccountChange.NotFound, repository.rename(safe.id, "Treasury"))
+        assertEquals(AccountChange.NotFound, repository.remove(safe.id))
         assertEquals(before, text(file))
     }
 
@@ -258,13 +272,13 @@ class FileAccountRepositoryTest {
 
     @Test
     fun aNewerFormatIsLeftUntouchedAndNothingIsAdded() = runTest {
-        val newer = """{"version":4,"accounts":[],"wallets":[]}"""
+        val newer = """{"version":5,"accounts":[],"wallets":[]}"""
         put(file, newer)
         val repository = repository()
 
         assertEquals(AccountList.Unreadable(AccountList.Reason.NEWER_FORMAT), repository.observeAccounts().first())
         assertEquals(AccountAdd.NotSaved, repository.add(eoa))
-        assertEquals(AccountChange.NotSaved, repository.remove(eoa.address))
+        assertEquals(AccountChange.NotSaved, repository.remove(eoa.id))
         assertEquals(newer, text(file))
         assertEquals(emptyList(), setAside())
     }
@@ -316,9 +330,39 @@ class FileAccountRepositoryTest {
         // Another process adds an account behind this instance's back.
         repository().add(safe)
 
-        mine.add(Account(Address.of("0x" + "cc".repeat(20)), AccountKind.EOA, "Account 3", AccountCustody.InKeyStore))
+        mine.add(
+            Account(
+                Network.SEPOLIA,
+                Address.of("0x" + "cc".repeat(20)),
+                AccountKind.EOA,
+                "Account 3",
+                AccountCustody.InKeyStore,
+            ),
+        )
 
         val stored = (repository().observeAccounts().first() as AccountList.Loaded).accounts
         assertEquals(listOf("Account 1", "Treasury", "Account 3"), stored.map { it.label })
+    }
+
+    @Test
+    fun anAccountOfAFileFromBeforeNetworksIsSepoliasAndOneOnAnUnknownChainIsANewerVersions() = runTest {
+        put(
+            file,
+            """{"version":3,"accounts":[{"address":"0xdddddddddddddddddddddddddddddddddddddddd",""" +
+                """"kind":"EOA","label":"Savings","custody":"watched"}]}""",
+        )
+        assertEquals(AccountList.Loaded(listOf(watched)), repository().observeAccounts().first())
+        assertEquals(Network.SEPOLIA, watched.network)
+
+        put(
+            file,
+            """{"version":4,"accounts":[{"address":"0xdddddddddddddddddddddddddddddddddddddddd",""" +
+                """"kind":"EOA","label":"Savings","custody":"watched","chain":11155111},""" +
+                """{"address":"0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",""" +
+                """"kind":"EOA","label":"Elsewhere","custody":"watched","chain":424242}]}""",
+        )
+        val newer = text(file)
+        assertEquals(AccountList.Unreadable(AccountList.Reason.NEWER_FORMAT), repository().observeAccounts().first())
+        assertEquals(newer, text(file), "left untouched")
     }
 }

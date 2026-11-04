@@ -1,5 +1,7 @@
 package eth.serotine.domain.usecase
 
+import eth.serotine.domain.model.AccountId
+import eth.serotine.domain.model.Network
 import eth.serotine.domain.repository.HistoryStart
 import eth.serotine.domain.repository.HistoryStartList
 import eth.serotine.domain.repository.HistoryStarts
@@ -70,6 +72,7 @@ sealed interface IndexedHistory<out E : IndexedEvent> {
  * the engine.
  */
 internal class IndexedReader<E : IndexedEvent>(
+    private val network: Network,
     private val index: LogIndex,
     private val starts: HistoryStarts,
     private val key: LogWatchKey,
@@ -80,7 +83,7 @@ internal class IndexedReader<E : IndexedEvent>(
     @OptIn(ExperimentalCoroutinesApi::class)
     fun observe(): Flow<IndexedHistory<E>> = flow {
         var last: IndexedHistory.Read<E>? = null
-        val coverage = index.observeCoverage().onStart { emit(LogCoverageReading.Unavailable) }
+        val coverage = index.observeCoverage(network).onStart { emit(LogCoverageReading.Unavailable) }
         emitAll(
             combine(starts.observe(), coverage, ::spanOf)
                 .distinctUntilChanged()
@@ -104,7 +107,7 @@ internal class IndexedReader<E : IndexedEvent>(
     private fun spanOf(held: HistoryStartList, coverage: LogCoverageReading): Span {
         val start = when (held) {
             HistoryStartList.Unreadable -> return Span.Other(IndexedHistory.Unavailable)
-            is HistoryStartList.Loaded -> (held.starts[key.address] as? HistoryStart.Fixed)?.block
+            is HistoryStartList.Loaded -> (held.starts[AccountId(network, key.address)] as? HistoryStart.Fixed)?.block
         } ?: return Span.Other(IndexedHistory.NotFollowed)
         val entries = (coverage as? LogCoverageReading.Read)?.entries ?: return Span.Other(IndexedHistory.Unavailable)
         val covered = entries[key]?.covered ?: return Span.Other(IndexedHistory.Checking(start))
@@ -134,7 +137,7 @@ internal class IndexedReader<E : IndexedEvent>(
         }
         val kept = if (before != null && grown) before.events.filter { it.blockNumber < keptBelow } else emptyList()
         val read = ranges.flatMap(queries).map { query ->
-            when (val answer = index.logs(query)) {
+            when (val answer = index.logs(network, query)) {
                 is LogsReading.Logs -> answer.logs.mapNotNull(decode)
                 // The span moved between the coverage and the query: the next coverage reads it again.
                 is LogsReading.NotCovered, is LogsReading.BeforeStart, LogsReading.NotWatched ->

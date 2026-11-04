@@ -153,13 +153,13 @@ internal object GPv2Signing {
     )
 
     /** keccak256 of GPv2's `Order` type: `GPv2Order.TYPE_HASH`, `0xd5a25ba2…e489`. */
-    val ORDER_TYPEHASH: ByteArray = keccak256(
-        (
-            "Order(address sellToken,address buyToken,address receiver,uint256 sellAmount,uint256 buyAmount," +
-                "uint32 validTo,bytes32 appData,uint256 feeAmount,string kind,bool partiallyFillable," +
-                "string sellTokenBalance,string buyTokenBalance)"
-            ).encodeToByteArray(),
-    )
+    val ORDER_TYPEHASH: ByteArray = keccak256(ORDER_TYPE.encodeToByteArray())
+
+    /** GPv2's `Order` type, as EIP-712's `encodeType` spells it. */
+    const val ORDER_TYPE: String =
+        "Order(address sellToken,address buyToken,address receiver,uint256 sellAmount,uint256 buyAmount," +
+            "uint32 validTo,bytes32 appData,uint256 feeAmount,string kind,bool partiallyFillable," +
+            "string sellTokenBalance,string buyTokenBalance)"
 
     /** keccak256("sell"): `GPv2Order.KIND_SELL`. */
     val KIND_SELL: ByteArray = keccak256("sell".encodeToByteArray())

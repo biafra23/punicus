@@ -54,8 +54,8 @@ class QuoteCowCancellation(
         if (!order.live) return@cancellingReads CowCancellationQuoting.AlreadyEnded
         val from = order.account
         quoter.heldBack(from)?.let { return@cancellingReads it.asCancellationQuoting() }
-        val native = async { nativeBalances.observeBalance(from).first() }
-        val synced = lightClient.observeStatus().first() as? LightClientStatus.Synced
+        val native = async { nativeBalances.observeBalance(network, from).first() }
+        val synced = lightClient.observeStatus(network).first() as? LightClientStatus.Synced
         val finalized = synced?.finalized ?: return@cancellingReads CowCancellationQuoting.Syncing
         val head = synced.headTimestamp ?: return@cancellingReads CowCancellationQuoting.Syncing
         // Past validTo, at a finalized block or at the head, no later block can fill it: nothing to
@@ -65,7 +65,7 @@ class QuoteCowCancellation(
         }
         // What the settlement holds of it, at the head: filled, or cancelled by a cancellation mined
         // and not finalized yet, is nothing to cancel again.
-        when (val run = cowChain.call(order.settlement, GPv2Settlement.filledAmount(order.uid))) {
+        when (val run = cowChain.call(network, order.settlement, GPv2Settlement.filledAmount(order.uid))) {
             is Simulation.Succeeded -> {
                 val filled = GPv2Settlement.filledAmountOf(run.returnHex)
                     ?: return@cancellingReads CowCancellationQuoting.Unavailable(ReadUnavailable.UNPROVEN)
@@ -76,7 +76,7 @@ class QuoteCowCancellation(
             Simulation.Refused -> return@cancellingReads CowCancellationQuoting.Refused
             is Simulation.Unavailable -> return@cancellingReads CowCancellationQuoting.Unavailable(run.reason)
         }
-        when (val read = unminedOf(sentTransfers, inputs, from, clock)) {
+        when (val read = unminedOf(network, sentTransfers, inputs, from, clock)) {
             is Unmined.Read -> read.transfers
                 .lastOrNull { (it.action as? SentAction.CowCancellation)?.uid == order.uid }
                 ?.let { return@cancellingReads CowCancellationQuoting.CancellationPending(it.hash) }
@@ -110,6 +110,7 @@ class SendCowCancellation(
         signer,
         broadcaster,
         sentTransfers,
+        quote.order.network,
         quote.call,
         SentAction.CowCancellation(quote.order.settlement, quote.order.uid),
         clock,
