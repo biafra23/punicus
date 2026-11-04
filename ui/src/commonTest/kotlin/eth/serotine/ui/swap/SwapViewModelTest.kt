@@ -61,6 +61,7 @@ import eth.serotine.domain.usecase.ChooseSwapVenue
 import eth.serotine.domain.usecase.CowOfferedOnThisDevice
 import eth.serotine.domain.usecase.DescribeKeyStore
 import eth.serotine.domain.usecase.DropWaitingSwap
+import eth.serotine.domain.usecase.EstimateSwap
 import eth.serotine.domain.usecase.FindUniswapRoute
 import eth.serotine.domain.usecase.FindWaitingSwap
 import eth.serotine.domain.usecase.KeepWaitingSwap
@@ -77,6 +78,7 @@ import eth.serotine.domain.usecase.QuoteCowSwap
 import eth.serotine.domain.usecase.QuoteSwap
 import eth.serotine.domain.usecase.QuoteTokenApproval
 import eth.serotine.domain.usecase.RebroadcastTransfer
+import eth.serotine.domain.usecase.RouteRanking
 import eth.serotine.domain.usecase.SWAP_DEADLINE_SECONDS
 import eth.serotine.domain.usecase.SendSwap
 import eth.serotine.domain.usecase.SendTokenApproval
@@ -242,6 +244,7 @@ class SwapViewModelTest {
                 Network.SEPOLIA,
                 now,
             ),
+            EstimateSwap(FindUniswapRoute(uniswap, inputs), RouteRanking.NET_OF_FEES),
             SendSwap(inputs, signer, broadcaster, sent, now),
             QuoteTokenApproval(inputs, balances, sent, Network.SEPOLIA, now),
             SendTokenApproval(signer, broadcaster, sent, now),
@@ -337,6 +340,94 @@ class SwapViewModelTest {
         viewModel.onSellChange(null)
         assertNull(viewModel.compose.buy, "ETH for ETH is no swap: the one bought goes")
         assertEquals(listOf("USDC", "LINK"), viewModel.compose.buyOptions.map { it.symbol })
+    }
+
+    @Test
+    fun composeShowsWhatTheSwapWouldReturnAndItsRateFromAVerifiedQuote() = runTest {
+        val viewModel = viewModel(sell = usdc.address)
+        assertNull(viewModel.compose.estimate, "nothing to buy yet")
+        viewModel.onBuyChange(null)
+        assertNull(viewModel.compose.estimate, "no amount yet")
+
+        viewModel.onAmountChange("40")
+        runCurrent()
+        val checking = assertNotNull(viewModel.compose.estimate)
+        assertTrue(checking.checking, "asked for a moment after the last edit")
+        assertNull(checking.receive)
+        assertEquals(0, uniswap.quotes, "not at every keystroke")
+
+        advanceTimeBy(1.seconds)
+        runCurrent()
+        val estimate = assertNotNull(viewModel.compose.estimate)
+        assertFalse(estimate.checking)
+        assertEquals("You receive", estimate.label)
+        assertEquals("≈ 0.016 ETH", estimate.receive)
+        assertEquals("At least 0.01592 ETH at 0.5 % tolerance", estimate.minimum)
+        assertEquals("1 USDC ≈ 0.0004 ETH", estimate.rate)
+        assertEquals("1 ETH ≈ 2500 USDC", estimate.inverseRate)
+        assertNull(estimate.impact, "0.1 % below the pool's spot")
+        assertTrue("block 9,412,118" in estimate.note, estimate.note)
+        assertEquals("Checked on chain. The review checks it again before you confirm.", estimate.simpleNote)
+        assertNotNull(estimate.simpleNote).let { assertFalse("block" in it) }
+
+        viewModel.onToleranceChange("1")
+        assertEquals("At least 0.01584 ETH at 1.00 % tolerance", viewModel.compose.estimate?.minimum)
+        viewModel.onToleranceChange("9")
+        assertNull(viewModel.compose.estimate?.minimum, "no tolerance, no minimum")
+        assertEquals("≈ 0.016 ETH", viewModel.compose.estimate?.receive, "the tolerance asks for no new quote")
+    }
+
+    @Test
+    fun theEstimateIsReadAgainWhileNothingChangesAndSaysWhyThereIsNone() = runTest {
+        val viewModel = viewModel(sell = usdc.address)
+        viewModel.onBuyChange(null)
+        viewModel.onAmountChange("40")
+        advanceTimeBy(1.seconds)
+        runCurrent()
+        val first = uniswap.quotes
+        assertTrue(first > 0)
+
+        advanceTimeBy(31.seconds)
+        runCurrent()
+        assertTrue(uniswap.quotes > first, "read again")
+
+        // No pool quotes 4 USDC here: QuoterV2 reverts.
+        viewModel.onAmountChange("4")
+        advanceTimeBy(1.seconds)
+        runCurrent()
+        val none = assertNotNull(viewModel.compose.estimate)
+        assertNull(none.receive)
+        assertNull(none.rate)
+        assertEquals("No Uniswap v3 pool takes USDC for ETH, directly or through WETH, for this amount.", none.note)
+    }
+
+    @Test
+    fun onCowTheEstimateSaysItIsUniswaps() = runTest {
+        val viewModel = viewModel(sell = usdc.address)
+        viewModel.onBuyChange(null)
+        viewModel.onAmountChange("40")
+        viewModel.onVenueChange(SwapVenue.COW)
+        advanceTimeBy(1.seconds)
+        runCurrent()
+
+        val estimate = assertNotNull(viewModel.compose.estimate)
+        assertEquals("On Uniswap, you would receive", estimate.label)
+        assertEquals("≈ 0.016 ETH", estimate.receive)
+        assertTrue("CoW is asked for its own estimate only when you review" in estimate.note, estimate.note)
+        assertTrue(cowApi.quotes.isEmpty(), "CoW is not asked before the review")
+    }
+
+    @Test
+    fun theEstimateGoesWithTheComposeStep() = runTest {
+        val viewModel = reviewed()
+        advanceTimeBy(1.seconds)
+        runCurrent()
+        assertIs<SwapUiState.SwapReview>(viewModel.uiState.value)
+        val quotes = uniswap.quotes
+
+        advanceTimeBy(2.minutes)
+        runCurrent()
+        assertEquals(quotes, uniswap.quotes, "no estimate is read under the review")
     }
 
     @Test

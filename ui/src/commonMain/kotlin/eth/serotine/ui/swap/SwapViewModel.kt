@@ -38,6 +38,7 @@ import eth.serotine.domain.usecase.CowSwapQuote
 import eth.serotine.domain.usecase.CowSwapQuoting
 import eth.serotine.domain.usecase.DescribeKeyStore
 import eth.serotine.domain.usecase.DropWaitingSwap
+import eth.serotine.domain.usecase.EstimateSwap
 import eth.serotine.domain.usecase.FindWaitingSwap
 import eth.serotine.domain.usecase.KeepWaitingSwap
 import eth.serotine.domain.usecase.ObserveAccountValue
@@ -52,6 +53,7 @@ import eth.serotine.domain.usecase.RebroadcastTransfer
 import eth.serotine.domain.usecase.SWAP_DEADLINE_SECONDS
 import eth.serotine.domain.usecase.SendSwap
 import eth.serotine.domain.usecase.SendTokenApproval
+import eth.serotine.domain.usecase.SwapEstimating
 import eth.serotine.domain.usecase.SwapQuote
 import eth.serotine.domain.usecase.SwapQuoting
 import eth.serotine.domain.usecase.SwapSending
@@ -70,6 +72,7 @@ import eth.serotine.ui.components.ROUTER_NAME
 import eth.serotine.ui.components.STALE_QUOTE
 import eth.serotine.ui.components.SendFrom
 import eth.serotine.ui.components.SpenderItem
+import eth.serotine.ui.components.SwapEstimateItem
 import eth.serotine.ui.components.SwapForm
 import eth.serotine.ui.components.SwapPick
 import eth.serotine.ui.components.TOO_SMALL
@@ -93,26 +96,32 @@ import eth.serotine.ui.components.promptDeadline
 import eth.serotine.ui.components.redatedWhile
 import eth.serotine.ui.components.routeSteps
 import eth.serotine.ui.components.sellNote
+import eth.serotine.ui.components.swapEstimateItem
 import eth.serotine.ui.components.swapOptions
 import eth.serotine.ui.components.toleranceError
 import eth.serotine.ui.components.typedAmount
 import eth.serotine.ui.components.verifiedAt
 import eth.serotine.ui.platform.formatDateTime
+import kotlin.time.Duration.Companion.milliseconds
 import kotlin.time.Duration.Companion.minutes
 import kotlin.time.Duration.Companion.seconds
 import kotlin.time.TimeMark
 import kotlin.time.TimeSource
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.flow.transformLatest
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -123,6 +132,10 @@ import kotlinx.coroutines.withContext
  * currency), the asset bought, the amount in the sold asset's units, the slippage tolerance and
  * the fee level — then quoted for review and signed.
  *
+ * - **While composing**, once the pair and the amount are set, what the swap would return and its rate
+ *   are shown from a verified Uniswap quote ([EstimateSwap]; docs/swaps.md, *The compose step's
+ *   estimate*): asked for [ESTIMATE_DELAY] after the last edit, and again every [ESTIMATE_REFRESH]
+ *   while nothing changes. Display only: the review quotes everything again.
  * - **The venue** is the user's to choose (*The user's choice of venue*): it starts at the one last
  *   chosen ([ObserveSwapVenue]), Uniswap the first time, and a choice is kept for the next swap
  *   ([ChooseSwapVenue]). CoW is greyed out where it is not offered, and a tap says why. When CoW
@@ -161,6 +174,7 @@ class SwapViewModel(
     observeAccountValue: ObserveAccountValue,
     private val describeKeyStore: DescribeKeyStore,
     private val quoteSwap: QuoteSwap,
+    private val estimateSwap: EstimateSwap,
     private val sendSwap: SendSwap,
     private val quoteTokenApproval: QuoteTokenApproval,
     private val sendTokenApproval: SendTokenApproval,
@@ -238,6 +252,12 @@ class SwapViewModel(
         val tolerance: SlippageTolerance,
         val venue: SwapVenue,
     )
+
+    /** The compose step's swap as far as an estimate needs it: [sell] for [buy], [amount] of it. */
+    private data class EstimateKey(val sell: TransferAsset, val buy: TransferAsset, val amount: UInt256)
+
+    /** The estimate of [key]: what [EstimateSwap] said, null while it is being read. */
+    private data class Estimate(val key: EstimateKey, val estimating: SwapEstimating?)
 
     /** What a quote comes to: something to review ([Quoted]), or the compose step saying why not. */
     private sealed interface Next
@@ -377,13 +397,37 @@ class SwapViewModel(
             null,
         )
 
-    val uiState: StateFlow<SwapUiState> = combine(model, step) { model, step -> model to step }
+    /**
+     * The compose step's estimate: read [ESTIMATE_DELAY] after the pair or the amount last changed,
+     * and again every [ESTIMATE_REFRESH]; none while no swap is complete or the screen is past the
+     * compose step.
+     */
+    @OptIn(ExperimentalCoroutinesApi::class)
+    private val estimates: Flow<Estimate?> =
+        combine(model, step) { model, step -> model?.takeIf { step is Step.Composing }?.let(::estimateKeyOf) }
+            .distinctUntilChanged()
+            .transformLatest { key ->
+                if (key == null) {
+                    emit(null)
+                    return@transformLatest
+                }
+                emit(Estimate(key, estimating = null))
+                delay(ESTIMATE_DELAY)
+                while (true) {
+                    emit(Estimate(key, estimate(key)))
+                    delay(ESTIMATE_REFRESH)
+                }
+            }
+
+    val uiState: StateFlow<SwapUiState> = combine(model, step, estimates) { model, step, estimate ->
+        Triple(model, step, estimate)
+    }
         // A balance's age, which simple mode shows, is dated anew every second on the compose step.
         .redatedWhile { (model, step) ->
             step is Step.Composing && model != null &&
                 (model.sellOptions + model.buyOptions).any { it.provenAt != null }
         }
-        .map { (model, step) -> render(model, step) }
+        .map { (model, step, estimate) -> render(model, step, estimate) }
         .stateIn(
             viewModelScope,
             SharingStarted.WhileSubscribed(stopTimeoutMillis = 5_000, replayExpirationMillis = 0),
@@ -1145,7 +1189,38 @@ class SwapViewModel(
         )
     }
 
-    private fun render(model: Model?, step: Step): SwapUiState {
+    /** The estimate [key] needs, or null when the compose step has no complete swap to estimate. */
+    private fun estimateKeyOf(model: Model): EstimateKey? {
+        if (model.swapper !is Swapper.From) return null
+        val sell = model.sell ?: return null
+        val buy = model.buy ?: return null
+        val amount = typedAmount(model.inputs.amount, sell).units ?: return null
+        return EstimateKey(sell.asset, buy.asset, amount)
+    }
+
+    /** [EstimateSwap] of [key]; a use case that throws, which it promises not to, as a read not had. */
+    private suspend fun estimate(key: EstimateKey): SwapEstimating = try {
+        estimateSwap(network, key.sell, key.buy, key.amount)
+    } catch (e: CancellationException) {
+        throw e
+    } catch (e: Exception) {
+        SwapEstimating.Unavailable(ReadUnavailable.UNPROVEN)
+    }
+
+    /** What the compose step shows of [estimate], when it is of the swap [model] has. */
+    private fun estimateItem(model: Model, estimate: Estimate?): SwapEstimateItem? {
+        val key = estimateKeyOf(model) ?: return null
+        return swapEstimateItem(
+            estimating = estimate?.takeIf { it.key == key }?.estimating,
+            sell = checkNotNull(model.sell),
+            buy = checkNotNull(model.buy),
+            tolerance = SlippageTolerance.parsePercent(model.inputs.tolerance.trim()),
+            cow = model.venue == SwapVenue.COW,
+            network = network,
+        )
+    }
+
+    private fun render(model: Model?, step: Step, estimate: Estimate?): SwapUiState {
         val network = network.displayName
         val composing = when (step) {
             is Step.Sent -> return SwapUiState.Sent(network, step.hash)
@@ -1181,6 +1256,7 @@ class SwapViewModel(
             simpleError = composing.simpleError,
             info = composing.info,
             canReview = !composing.quoting && requestOf(model) != null,
+            estimate = estimateItem(model, estimate),
         )
         return SwapUiState.Compose(
             form,
@@ -1657,6 +1733,12 @@ class SwapViewModel(
 
         /** For how long the screen waits for the approval's block before it goes back to the compose step. */
         val AWAIT_MAX = 15.minutes
+
+        /** How long after the last edit the compose step's estimate is asked for: not at every keystroke. */
+        val ESTIMATE_DELAY = 600.milliseconds
+
+        /** How often the compose step's estimate is read again while nothing changes. */
+        val ESTIMATE_REFRESH = 30.seconds
 
         /** How many quotes in a row may fail while the approval waits before the compose step says why. */
         const val AWAIT_FAILURES = 3

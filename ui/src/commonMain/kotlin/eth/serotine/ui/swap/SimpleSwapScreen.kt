@@ -61,7 +61,7 @@ fun SimpleSwapScreen(
     modifier = modifier,
 )
 
-/** [this] with no block in its form: the reviews keep their blocks for their *Details*. */
+/** [this] with no block in its form or its estimate: the reviews keep their blocks for their *Details*. */
 private fun SwapUiState.simple(): SwapUiState = when (this) {
     is SwapUiState.Compose -> copy(
         form = form.copy(
@@ -70,6 +70,7 @@ private fun SwapUiState.simple(): SwapUiState = when (this) {
             buyOptions = form.buyOptions.map { it.copy(verifiedAt = null) },
             buy = form.buy?.copy(verifiedAt = null),
             error = form.simpleError ?: form.error,
+            estimate = form.estimate?.let { it.copy(note = it.simpleNote ?: it.note) },
         ),
     )
     else -> this

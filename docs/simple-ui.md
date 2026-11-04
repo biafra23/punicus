@@ -257,6 +257,11 @@ change what it trusts.
   no "2 steps" box, since only the quote reads the allowance. The two steps
   are first said on the review ("Step 1 of 2"), so decision 6's "before the
   review" is not delivered yet.
+  The form shows what the swap would return, the least it may at the
+  tolerance and the rate, both ways, from a verified Uniswap quote,
+  "Checked on chain" (docs/swaps.md, *The compose step's estimate*). It
+  has no "You pay" and "You get" cards or flip button: the figures sit
+  under the asset bought.
 - **W2 · Swap review, Uniswap, 2 steps.** The swap in one line ("100 USDC →
   7.18 LINK, at least · via Uniswap · from Main"). Step 1, "Allow Uniswap to
   use 100 USDC: only this amount, for this swap", with its fee. Step 2,

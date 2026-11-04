@@ -11,6 +11,7 @@ import eth.serotine.ui.components.NotSentItem
 import eth.serotine.ui.components.RouteStep
 import eth.serotine.ui.components.SendFrom
 import eth.serotine.ui.components.SpenderItem
+import eth.serotine.ui.components.SwapEstimateItem
 import eth.serotine.ui.components.SwapForm
 import eth.serotine.ui.components.UnlockStep
 import eth.serotine.ui.components.verifiedStripSample
@@ -64,6 +65,18 @@ private val empty = SwapUiState.Compose(
     ),
 )
 
+/** What 40 USDC would return, as the ViewModel draws the compose step's verified quote. */
+private val estimate = SwapEstimateItem(
+    label = "You receive",
+    receive = "≈ 0.01587 ETH",
+    minimum = "At least 0.01579 ETH at 0.5 % tolerance",
+    rate = "1 USDC ≈ 0.0003968 ETH",
+    inverseRate = "1 ETH ≈ 2519.98 USDC",
+    note = "Uniswap's verified quote at block 8,412,307. The review quotes the swap again, with its network fee, " +
+        "before anything is signed.",
+    simpleNote = "Checked on chain. The review checks it again before you confirm.",
+)
+
 private val composed = empty.with {
     it.copy(
         sellOptions = listOf(ether, usdc),
@@ -73,10 +86,20 @@ private val composed = empty.with {
         amount = "40",
         amountHint = "≈ $40.00 · testnet prices",
         canReview = true,
+        estimate = estimate,
     )
 }.copy(venue = VenueItem(SwapVenue.UNISWAP))
 
-private val onCow = composed.copy(venue = VenueItem(SwapVenue.COW))
+private val onCow = composed.with {
+    it.copy(
+        estimate = estimate.copy(
+            label = "On Uniswap, you would receive",
+            note = "Uniswap's verified quote at block 8,412,307, to compare. CoW is asked for its own estimate " +
+                "only when you review the order.",
+            simpleNote = "Uniswap's price, checked on chain. CoW's own estimate comes with the review.",
+        ),
+    )
+}.copy(venue = VenueItem(SwapVenue.COW))
 
 /** This form step with [edit] applied to its form and the fee [fee]. */
 private fun SwapUiState.Compose.with(fee: FeeLevel = this.fee, edit: (SwapForm) -> SwapForm = { it }) =
@@ -236,6 +259,45 @@ private fun SwapComposedPreview() = SwapPreview(composed)
 
 @Preview
 @Composable
+private fun SwapComposeEstimateCheckingPreview() = SwapPreview(
+    composed.with {
+        it.copy(
+            estimate = SwapEstimateItem(
+                label = "You receive",
+                note = "Asking Uniswap's quoter, through the light client.",
+                checking = true,
+            ),
+        )
+    },
+)
+
+@Preview
+@Composable
+private fun SwapComposeEstimateUnavailablePreview() = SwapPreview(
+    composed.with {
+        it.copy(
+            estimate = SwapEstimateItem(
+                label = "You receive",
+                note = "The light client is still syncing: the swap is quoted once it has caught up.",
+            ),
+        )
+    },
+)
+
+@Preview
+@Composable
+private fun SwapComposeHighImpactPreview() = SwapPreview(
+    composed.with {
+        it.copy(
+            estimate = estimate.copy(
+                impact = "Price impact 3.42 %: this amount moves the pools' price. The review says more.",
+            ),
+        )
+    },
+)
+
+@Preview
+@Composable
 private fun SwapComposeQuotingPreview() = SwapPreview(composed.with { it.copy(quoting = true, canReview = false) })
 
 @Preview
@@ -260,6 +322,10 @@ private fun SwapComposeNoRoutePreview() = SwapPreview(
         it.copy(
             buy = link,
             error = "No Uniswap v3 pool takes USDC for LINK, directly or through WETH, for this amount.",
+            estimate = SwapEstimateItem(
+                label = "You receive",
+                note = "No Uniswap v3 pool takes USDC for LINK, directly or through WETH, for this amount.",
+            ),
         )
     },
 )
@@ -481,6 +547,9 @@ internal val swapScreenPreviews: List<@Composable () -> Unit> = listOf(
     { SwapComposeEmptyPreview() },
     { SwapComposeEmptyDarkPreview() },
     { SwapComposedPreview() },
+    { SwapComposeEstimateCheckingPreview() },
+    { SwapComposeEstimateUnavailablePreview() },
+    { SwapComposeHighImpactPreview() },
     { SwapComposeQuotingPreview() },
     { SwapComposeInputErrorsPreview() },
     { SwapComposeNoRoutePreview() },

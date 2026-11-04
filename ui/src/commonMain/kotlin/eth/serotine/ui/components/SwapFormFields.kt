@@ -2,13 +2,24 @@ package eth.serotine.ui.components
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.text.selection.SelectionContainer
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
@@ -28,6 +39,15 @@ const val SWAP_AMOUNT_TAG = "swap-amount"
 /** Test tag of the tolerance field, for UI tests. */
 const val SWAP_TOLERANCE_TAG = "swap-tolerance"
 
+/** Test tag of the compose step's estimate of what the swap returns, for UI tests. */
+const val SWAP_ESTIMATE_TAG = "swap-estimate"
+
+/** Test tag of the compose step's exchange rate, for UI tests. */
+const val SWAP_RATE_TAG = "swap-rate"
+
+/** Test tag of the button that turns the exchange rate the other way round, for UI tests. */
+const val SWAP_INVERT_RATE_TAG = "swap-invert-rate"
+
 /**
  * The swap form (screen 22), display-ready: [from] is fixed; [sellOptions] the account's assets
  * with their verified balances, [sell] the chosen one; [buyOptions] the assets the wallet lists
@@ -38,7 +58,8 @@ const val SWAP_TOLERANCE_TAG = "swap-tolerance"
  * review is quoted, [error] why the last one was refused, [canReview] when it can be asked for.
  * [fixed] when the pair and the amount are set and only the tolerance may change: a Safe's swap
  * proposed again in place of one queued. [simpleError] is [error] in simple mode's words, with no
- * block, null where it is [error] itself.
+ * block, null where it is [error] itself. [estimate] is what the swap would return and its rate, from a
+ * verified quote, once the pair and the amount are set; null until they are.
  */
 data class SwapForm(
     val network: String,
@@ -60,6 +81,30 @@ data class SwapForm(
     val canReview: Boolean = false,
     val fixed: Boolean = false,
     val simpleError: String? = null,
+    val estimate: SwapEstimateItem? = null,
+)
+
+/**
+ * What the swap being composed would return (docs/swaps.md, *The compose step's estimate*;
+ * docs/simple-ui.md, W1), display-ready: [label] heads it ("You receive", or on CoW what Uniswap
+ * would return); [receive] the verified quote's amount ("≈ 2499.98 USDC") and [minimum] the least
+ * the swap may return at the tolerance typed; [rate] what one unit sold returns ("1 WETH ≈ 2499.98
+ * USDC") and [inverseRate] the other way round; [impact] a warning when the amount moves the pools'
+ * price far; [note] where the figures come from (its block) or why there are none, and
+ * [simpleNote] the same in simple mode's words, with no block, null where it is [note] itself.
+ * [checking] while the quote is read. Display only: the review quotes the swap again, and only what
+ * it shows is signed.
+ */
+data class SwapEstimateItem(
+    val label: String,
+    val note: String,
+    val receive: String? = null,
+    val minimum: String? = null,
+    val rate: String? = null,
+    val inverseRate: String? = null,
+    val impact: String? = null,
+    val checking: Boolean = false,
+    val simpleNote: String? = null,
 )
 
 /**
@@ -118,6 +163,7 @@ internal fun SwapFormFields(
         ) { onBuyChange(it.contract) }
         Note("Only the assets your wallet lists: what a swap buys shows among the account's assets and can be sent.")
     }
+    form.estimate?.let { SwapEstimateFields(it) }
     Heading("Slippage tolerance")
     OutlinedTextField(
         value = form.tolerance,
@@ -133,4 +179,44 @@ internal fun SwapFormFields(
         keyboardOptions = KeyboardOptions(autoCorrectEnabled = false, keyboardType = KeyboardType.Decimal).done(),
         keyboardActions = submitOnDone(form.canReview, onReview),
     )
+}
+
+/**
+ * What the swap would return, the least it may at the tolerance, and the exchange rate, which a
+ * tap on the button beside it turns the other way round; or that the quote is being read, or why
+ * there is none.
+ */
+@Composable
+private fun SwapEstimateFields(estimate: SwapEstimateItem) {
+    var inverted by remember { mutableStateOf(false) }
+    Heading(estimate.label)
+    Column(Modifier.testTag(SWAP_ESTIMATE_TAG), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        if (estimate.checking) {
+            Row(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
+                CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp)
+                Text("Checking on chain…", style = MaterialTheme.typography.bodyMedium)
+            }
+        }
+        estimate.receive?.let {
+            SelectionContainer { Text(it, style = MaterialTheme.typography.headlineSmall) }
+        }
+        estimate.minimum?.let { Text(it, style = MaterialTheme.typography.bodyMedium) }
+        estimate.rate?.let { rate ->
+            val inverse = estimate.inverseRate
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    if (inverted && inverse != null) inverse else rate,
+                    Modifier.weight(1f, fill = false).testTag(SWAP_RATE_TAG),
+                    style = MaterialTheme.typography.bodyMedium,
+                )
+                if (inverse != null) {
+                    IconButton(onClick = { inverted = !inverted }, Modifier.testTag(SWAP_INVERT_RATE_TAG)) {
+                        Icon(SerotineIcons.Swap, contentDescription = "Show the rate the other way round")
+                    }
+                }
+            }
+        }
+        estimate.impact?.let { Text(it, color = MaterialTheme.colorScheme.error) }
+        Note(estimate.note)
+    }
 }
