@@ -25,7 +25,9 @@ plugins {
 // from a dev build. Git can:
 //
 //   clean checkout of a v* tag  ->  "0.1.0"                  a real release build
+//   ... of a pre-release tag    ->  "0.1.0-rc1"              the tag as cut (v0.1.0-rc1)
 //   any other commit            ->  "0.1.0-fbf551"           last release + 6 sha digits
+//   ... after a pre-release     ->  "0.1.0-rc1-fbf551"       a pre-release counts as one
 //   dirty tree on a v* tag      ->  "0.1.0-fbf551"           NOT what shipped — a dev build
 //   git but no tags reachable   ->  "0.1.0-SNAPSHOT-fbf551"  see below
 //   no git at all (src tarball) ->  "0.1.0-SNAPSHOT"         project.version verbatim
@@ -66,12 +68,19 @@ abstract class AppVersionSource : ValueSource<String, AppVersionSource.Params> {
     private fun treeIsPatched(): Boolean =
         git("status", "--porcelain", "--untracked-files=no").isNotEmpty()
 
-    /** Newest RELEASED version reachable from HEAD, or null when none is. */
-    private fun lastRelease(shape: Regex): String? =
-        // Not `describe --abbrev=0`: that returns exactly ONE tag, the nearest, so a single
-        // off-shape tag on the release line (v0.2.0-rc1) would fail the shape check and
-        // silently demote every descendant commit to the project.version fallback.
-        git("tag", "--list", "v[0-9]*", "--merged", "HEAD", "--sort=-v:refname")
+    /**
+     * The newest release among the `v*` tags that [scope] selects (`--merged HEAD`: reachable
+     * from HEAD; `--points-at HEAD`: on HEAD itself), or null when there is none. A release is
+     * a tag of [shape]. `versionsort.suffix=-rc` sorts a release candidate below its release, and
+     * a hotfix above it: v0.3.0-rc1 < v0.3.0 < v0.3.0-hotfix1. So a release tagged on the same
+     * commit as its candidate wins, whichever of the two is annotated.
+     */
+    private fun newestRelease(shape: Regex, vararg scope: String): String? =
+        // Not `describe`: `--abbrev=0` returns exactly ONE tag, the nearest, so a single
+        // off-shape tag on the release line would fail the shape check and silently demote
+        // every descendant commit to the project.version fallback; and `--exact-match`
+        // prefers an annotated tag over a lightweight one on the same commit.
+        git("-c", "versionsort.suffix=-rc", "tag", "--list", "v[0-9]*", *scope, "--sort=-v:refname")
             .lineSequence().map { it.trim() }
             .firstOrNull { shape.matches(it) }?.removePrefix("v")
 
@@ -79,13 +88,15 @@ abstract class AppVersionSource : ValueSource<String, AppVersionSource.Params> {
         val projectVersion = parameters.projectVersion.get()
         val sha = git("rev-parse", "--short=6", "HEAD")
         if (sha.isEmpty()) return projectVersion // no git, not a repo, or no commits yet
-        val shape = Regex("""^v\d+(\.\d+)*$""")
-        // --match confines this to the release line: without it describe picks by tag
-        // RECENCY, so a `nightly-*` laid down later would be read as this build's release.
-        val exactTag = git("describe", "--tags", "--exact-match", "--match", "v[0-9]*")
-        if (shape.matches(exactTag) && !treeIsPatched()) return exactTag.removePrefix("v")
+        // A release is a tag of the rc and hotfix shapes the release skill names: vX.Y.Z, a
+        // release candidate vX.Y.Z-rcN, a hotfix vX.Y.Z-hotfixN. The release guard lets any
+        // -suffix through, but a throwaway tag such as its own test's v9.9.9-guardtest is no
+        // release, so the shape is narrower here.
+        val shape = Regex("""^v\d+(\.\d+)*(-(rc|hotfix)\d+)?$""")
+        val onHead = newestRelease(shape, "--points-at", "HEAD")
+        if (onHead != null && !treeIsPatched()) return onHead
         // Keeping the qualifier on the fallback is load-bearing — see the table above.
-        return "${lastRelease(shape) ?: projectVersion}-$sha"
+        return "${newestRelease(shape, "--merged", "HEAD") ?: projectVersion}-$sha"
     }
 }
 
