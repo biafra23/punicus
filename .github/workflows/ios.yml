@@ -28,7 +28,7 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
         with:
-          # :ui stamps the app's version from the nearest v* tag (git describe).
+          # :ui stamps the app's version from the nearest v* tag (git tag --merged HEAD).
           fetch-depth: 0
 
       - name: Set up JDK 21
@@ -78,7 +78,7 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
         with:
-          # :ui stamps the app's version from the nearest v* tag (git describe).
+          # :ui stamps the app's version from the nearest v* tag (git tag --merged HEAD).
           fetch-depth: 0
 
       - name: Set up JDK 21

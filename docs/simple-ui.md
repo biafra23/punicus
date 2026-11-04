@@ -203,10 +203,12 @@ change what it trusts.
   verified receipt that it succeeded; otherwise the card says the approval
   is on its way, failed in its block, or that Continue checks where it
   stands. Dismiss beside Continue lets it go. The card shows in Detailed
-  view too: it names no block. Then the rows, newest first: what happened, when
-  it was sent or signed here (an event on chain is dated only by its block,
-  so its row has no time), and how it ended in words ("Confirmed", "Final",
-  "Failed", "Filled"), never a block number. Above them "Activity since you
+  view too: it names no block. Then the rows, by date, newest first unless
+  the top bar's menu turned them round ("Oldest first"): what happened,
+  when it was sent or signed here, or when its block was produced for an
+  event on chain (one the engine dated by its block alone has no time
+  here), and how it ended in words ("Confirmed", "Final", "Failed",
+  "Filled"), never a block number. Above them "Activity since you
   added it" (or since it was deployed from this device), and "older
   activity is still being checked" while it is. The mockup's day headings
   and amounts' values are not built yet.
@@ -257,6 +259,11 @@ change what it trusts.
   no "2 steps" box, since only the quote reads the allowance. The two steps
   are first said on the review ("Step 1 of 2"), so decision 6's "before the
   review" is not delivered yet.
+  The form shows what the swap would return, the least it may at the
+  tolerance and the rate, both ways, from a verified Uniswap quote,
+  "Checked on chain" (docs/swaps.md, *The compose step's estimate*). It
+  has no "You pay" and "You get" cards or flip button: the figures sit
+  under the asset bought.
 - **W2 · Swap review, Uniswap, 2 steps.** The swap in one line ("100 USDC →
   7.18 LINK, at least · via Uniswap · from Main"). Step 1, "Allow Uniswap to
   use 100 USDC: only this amount, for this swap", with its fee. Step 2,

@@ -51,6 +51,7 @@ import kotlin.concurrent.atomics.AtomicBoolean
 import kotlin.concurrent.atomics.ExperimentalAtomicApi
 import kotlin.experimental.ExperimentalNativeApi
 import kotlin.native.Platform
+import kotlin.time.Duration
 import kotlin.time.Duration.Companion.seconds
 import kotlin.time.TimeSource
 import kotlinx.coroutines.CancellationException
@@ -59,6 +60,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.IO
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
@@ -89,10 +91,12 @@ import platform.UIKit.UIBackgroundTaskInvalid
  * runs the work no screen owns: the engine's network-upgrade reports followed into
  * notifications, the Safes this wallet deployed listed once the light client proves them, and
  * how the transactions sent from here end recorded. That work runs while the app is in the
- * foreground; in the background the engine's networking is paused (a suspended app keeps no
- * sockets open) and resumed on return, and a reminder due meanwhile comes as the notification
- * [IosUpgradeNotifier] scheduled. The pause runs as a background task, so iOS lets it close the
- * engine's connections before it suspends the app. An app terminated while running shuts the
+ * foreground and for a grace period after it ([GRACE_PERIOD]), so a quick switch to another app
+ * comes back to synced light clients; then, in the background, the engine's networking is paused
+ * (a suspended app keeps no sockets open) and resumed on return, and a reminder due meanwhile
+ * comes as the notification [IosUpgradeNotifier] scheduled. The grace period and the pause run as
+ * a background task, so iOS keeps the app awake for them and lets it close the engine's
+ * connections before it suspends the app. An app terminated while running shuts the
  * engine down, waiting for that only briefly ([TERMINATE_WAIT]); an app killed while suspended
  * runs no code, which the engine survives as any mobile app's state must.
  */
@@ -275,6 +279,9 @@ class SerotineWallet {
     /** The work running while the app is in the foreground; main thread only. */
     private var foregroundWork: List<Job> = emptyList()
 
+    /** The wait before the pause, while the app is in the background and still awake; main thread only. */
+    private var gracePeriod: Job? = null
+
     init {
         // At launch the app is in the foreground: the work starts with the wallet.
         startForegroundWork()
@@ -294,11 +301,12 @@ class SerotineWallet {
         }
         val center = NSNotificationCenter.defaultCenter
         center.addObserverForName(UIApplicationDidEnterBackgroundNotification, null, NSOperationQueue.mainQueue) {
-            keepAwakeUntil("pause the engine", node.pause())
-            foregroundWork.forEach { it.cancel() }
-            foregroundWork = emptyList()
+            pauseAfterGracePeriod()
         }
         center.addObserverForName(UIApplicationWillEnterForegroundNotification, null, NSOperationQueue.mainQueue) {
+            // Back within the grace period: nothing was paused, and the light clients are still synced.
+            gracePeriod?.cancel()
+            gracePeriod = null
             node.resume()
             startForegroundWork()
         }
@@ -320,19 +328,52 @@ class SerotineWallet {
     }
 
     /**
-     * Asks iOS to keep the app running in the background until [job] has finished, or until the
-     * system's own limit; the task ends exactly once, whichever comes first.
+     * Keeps the engine's networking and the foreground work on for [GRACE_PERIOD] after the app
+     * went to the background, so a user who switches away for a moment, to copy an address say,
+     * finds the light clients still synced on return; then stops the work and pauses the engine.
+     * iOS keeps the app awake for this as a background task, which it limits to about 30 s: the
+     * wait is cut short to leave [PAUSE_MARGIN] for the pause within the time iOS says is left,
+     * and a task iOS ends early pauses at once. Main thread.
      */
     @OptIn(ExperimentalAtomicApi::class)
-    private fun keepAwakeUntil(name: String, job: Job) {
+    private fun pauseAfterGracePeriod() {
+        gracePeriod?.cancel()
         val app = UIApplication.sharedApplication
+        val paused = AtomicBoolean(false)
         val ended = AtomicBoolean(false)
         var task = UIBackgroundTaskInvalid
         val end = {
             if (ended.compareAndSet(false, true) && task != UIBackgroundTaskInvalid) app.endBackgroundTask(task)
         }
-        task = app.beginBackgroundTaskWithName(name) { end() }
-        job.invokeOnCompletion { end() }
+        // Once per grace period, on the main thread: the foreground work stops, and the pause runs.
+        val pause = {
+            if (paused.compareAndSet(false, true)) {
+                foregroundWork.forEach { it.cancel() }
+                foregroundWork = emptyList()
+                node.pause()
+            } else {
+                null
+            }
+        }
+        var waiting: Job? = null
+        task = app.beginBackgroundTaskWithName("keep the network on briefly, then pause the engine") {
+            // iOS ends the task: the pause cannot be waited for any more, only asked for.
+            waiting?.cancel()
+            if (gracePeriod === waiting) gracePeriod = null
+            pause()
+            end()
+        }
+        // In the background, the time iOS still gives the task; without a task, none.
+        val left = if (task == UIBackgroundTaskInvalid) Duration.ZERO else app.backgroundTimeRemaining.seconds
+        val wait = minOf(GRACE_PERIOD, left - PAUSE_MARGIN).coerceAtLeast(Duration.ZERO)
+        val waited = scope.launch(Dispatchers.Main) {
+            delay(wait)
+            pause()?.join()
+        }
+        // Ended by the pause, by a return to the foreground (nothing paused) or by iOS.
+        waited.invokeOnCompletion { end() }
+        waiting = waited
+        gracePeriod = waited
     }
 
     /**
@@ -424,6 +465,15 @@ class SerotineWallet {
     private companion object {
         /** How long a termination waits for the engine's shutdown; iOS allows about five seconds. */
         val TERMINATE_WAIT = 3.seconds
+
+        /**
+         * How long the networking stays on after the app went to the background: within the about
+         * 30 s iOS gives a background task.
+         */
+        val GRACE_PERIOD = 25.seconds
+
+        /** What the pause is left of the background task's time, to close the engine's connections. */
+        val PAUSE_MARGIN = 3.seconds
     }
 }
 
