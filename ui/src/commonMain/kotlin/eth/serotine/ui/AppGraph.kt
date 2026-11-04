@@ -93,6 +93,7 @@ import eth.serotine.domain.usecase.QuoteSafeDeployment
 import eth.serotine.domain.usecase.QuoteSafeExecution
 import eth.serotine.domain.usecase.QuoteSwap
 import eth.serotine.domain.usecase.QuoteTokenApproval
+import eth.serotine.domain.usecase.QuoteWrap
 import eth.serotine.domain.usecase.QuoteTransfer
 import eth.serotine.domain.usecase.ReadSafeTxOwners
 import eth.serotine.domain.usecase.RebroadcastTransfer
@@ -104,6 +105,7 @@ import eth.serotine.domain.usecase.ResolveRecipient
 import eth.serotine.domain.usecase.SendCowCancellation
 import eth.serotine.domain.usecase.SendSwap
 import eth.serotine.domain.usecase.SendTokenApproval
+import eth.serotine.domain.usecase.SendWrap
 import eth.serotine.domain.usecase.SendTransfer
 import eth.serotine.domain.usecase.SetDebugLogLevel
 import eth.serotine.domain.usecase.SetDebugScreen
@@ -419,6 +421,18 @@ class AppGraph(
             network,
         ),
         SendSwap(transactionInputs, signer, broadcaster, sentTransfers),
+        QuoteWrap(
+            uniswap,
+            transactionInputs,
+            nativeBalances,
+            tokenBalances,
+            sentTransfers,
+            cowOrders,
+            cowChain,
+            lightClient,
+            network,
+        ),
+        SendWrap(signer, broadcaster, sentTransfers),
         QuoteTokenApproval(transactionInputs, nativeBalances, sentTransfers, network),
         SendTokenApproval(signer, broadcaster, sentTransfers),
         RebroadcastTransfer(broadcaster, sentTransfers, receipts),

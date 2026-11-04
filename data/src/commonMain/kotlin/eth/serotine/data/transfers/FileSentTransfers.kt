@@ -23,8 +23,8 @@ import kotlinx.serialization.json.JsonElement
  * for, in the form a signing request travels in, the Safe a deployment created (its address,
  * owners, threshold, version and the name it is listed under), a token approval's token, spender
  * and amount, a swap's router, the asset and amount it sells and the asset and minimum it buys,
- * or a CoW order's cancellation on chain (its settlement contract and UID), and whether it is only
- * maybe sent.
+ * a wrap's or an unwrap's WETH9 and amount, or a CoW order's cancellation on chain (its
+ * settlement contract and UID), and whether it is only maybe sent.
  * An entry that does not decode (a damaged one, or one of a kind this build does not know) is
  * passed over, as [eth.serotine.data.safe.FileSafeTxQueue] passes one over, and the rest are read;
  * the file it was in is then set aside once, whole, and what was read written in its place, so
@@ -34,7 +34,8 @@ import kotlinx.serialization.json.JsonElement
  *
  * Format 2 adds the Safe transactions, format 3 the Safe deployments, format 4 the transactions
  * maybe sent, format 5 the token approvals and the swaps, format 6 the CoW orders' cancellations
- * on chain; a file of an earlier format reads as it is and is written as 6 at its next change,
+ * on chain, format 7 the wraps and unwraps; a file of an earlier format reads as it is and is
+ * written as 7 at its next change,
  * which a build that reads only an earlier one then leaves alone.
  */
 class FileSentTransfers(
@@ -86,7 +87,7 @@ class FileSentTransfers(
     private class StoredFile(val version: Int, val transfers: List<JsonElement>)
 
     private companion object {
-        const val FORMAT_VERSION = 6
+        const val FORMAT_VERSION = 7
         val JSON = Json
     }
 }

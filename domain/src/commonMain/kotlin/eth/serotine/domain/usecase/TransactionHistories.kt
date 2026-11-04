@@ -209,8 +209,9 @@ class ObserveSentToAddresses(private val history: TransactionHistory) {
         is SentAction.Transfer -> action.to
         is SentAction.SafeApproval -> action.request.recipient()
         is SentAction.SafeExecution -> action.request.recipient()
-        is SentAction.TokenApproval, is SentAction.Swap, is SentAction.SafeDeployment, is SentAction.CowCancellation ->
-            null
+        is SentAction.TokenApproval, is SentAction.Swap, is SentAction.Wrap, is SentAction.Unwrap,
+        is SentAction.SafeDeployment, is SentAction.CowCancellation,
+        -> null
     }
 
     private fun SigningRequest.recipient(): Address? = when (val action = SafeTxAction.of(safe, tx)) {
@@ -224,7 +225,9 @@ class ObserveSentToAddresses(private val history: TransactionHistory) {
 fun HistoryEntry.concerns(address: Address): Boolean {
     if (transfer.account == address) return true
     return when (val action = transfer.action) {
-        is SentAction.Transfer, is SentAction.TokenApproval, is SentAction.Swap, is SentAction.CowCancellation -> false
+        is SentAction.Transfer, is SentAction.TokenApproval, is SentAction.Swap, is SentAction.Wrap,
+        is SentAction.Unwrap, is SentAction.CowCancellation,
+        -> false
         is SentAction.SafeApproval -> action.request.safe == address
         is SentAction.SafeExecution -> action.request.safe == address
         is SentAction.SafeDeployment -> action.safe == address

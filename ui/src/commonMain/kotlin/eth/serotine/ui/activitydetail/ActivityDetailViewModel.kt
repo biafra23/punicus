@@ -181,6 +181,16 @@ class ActivityDetailViewModel(
                 fields.addContract("Token bought", action.buy, names)
                 fields += addressOf("Router", action.router, names)
             }
+            is SentAction.Wrap -> {
+                fields += DetailField("Wrapped", rows.amount(action.amount, TransferAsset.Native))
+                fields += DetailField("Into", rows.amount(action.amount, TransferAsset.Erc20Token(action.weth)))
+                fields.addContract("WETH9 contract", TransferAsset.Erc20Token(action.weth), names)
+            }
+            is SentAction.Unwrap -> {
+                fields += DetailField("Unwrapped", rows.amount(action.amount, TransferAsset.Erc20Token(action.weth)))
+                fields += DetailField("Into", rows.amount(action.amount, TransferAsset.Native))
+                fields.addContract("WETH9 contract", TransferAsset.Erc20Token(action.weth), names)
+            }
             is SentAction.SafeApproval -> fields += safeCallFields(action.request, names)
             is SentAction.SafeExecution -> fields += safeCallFields(action.request, names)
             is SentAction.SafeDeployment -> {

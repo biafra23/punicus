@@ -53,9 +53,10 @@ internal fun priceHintText(network: Network): String? = if (network.testnet) {
     null
 }
 
-/** [sell] and [buy], one token on Uniswap. */
+/** [sell] and [buy], one token on Uniswap, as a Safe's swap says it: a wrap, which a Safe cannot propose yet. */
 internal fun notASwapText(sell: String, buy: String): String =
-    "$sell and $buy are one token on Uniswap: ETH for WETH and back is a wrap, not a swap."
+    "$sell and $buy are one token on Uniswap: ETH for WETH and back is a wrap, not a swap, and a Safe cannot " +
+        "propose a wrap here yet."
 
 /** No pool for [sell] and [buy]. */
 internal fun noRouteText(sell: String, buy: String): String =

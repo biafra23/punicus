@@ -155,7 +155,7 @@ private fun SwapBlock(swap: SwapSummary) {
     Row(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
         Blockie(swap.router, size = 32.dp)
         Column {
-            Text("Through the router", style = MaterialTheme.typography.labelMedium)
+            Text(swap.through, style = MaterialTheme.typography.labelMedium)
             SelectionContainer {
                 Text(swap.router, style = MaterialTheme.typography.bodySmall, fontFamily = FontFamily.Monospace)
             }

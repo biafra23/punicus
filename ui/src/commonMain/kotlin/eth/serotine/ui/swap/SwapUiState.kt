@@ -118,6 +118,37 @@ sealed interface SwapUiState {
     ) : SwapUiState, Signable
 
     /**
+     * ETH for WETH, or back (docs/swaps.md, *Wrapping ETH*): no swap but WETH9's own `deposit` or
+     * `withdraw`, one for one, on neither venue. [title] ("Review wrap") and [signLabel] ("Sign
+     * and wrap") name it; [sold] exact in [sell]'s units, [receive] as much in [buy]'s;
+     * [explanation] says why it is no swap, [ranAt] that the exact transaction went through, run
+     * as a verified call; the WETH9 it goes through ([contract]); the most the fee can be and what
+     * it is made of; the verified [balances] before → after, and [pending] what earlier
+     * transactions not mined yet, or CoW orders, may still take.
+     */
+    data class WrapReview(
+        override val network: String,
+        val title: String,
+        val signLabel: String,
+        val from: SendFrom,
+        val sell: AssetChoice,
+        val sold: String,
+        val buy: AssetChoice,
+        val receive: String,
+        val explanation: String,
+        val ranAt: String,
+        val contract: SpenderItem,
+        val maxFee: String,
+        val feeDetail: String,
+        val balances: List<BalanceChange>,
+        val pending: String? = null,
+        override val unlock: UnlockStep,
+        override val refreshing: Boolean = false,
+        override val signing: Boolean = false,
+        override val notSent: NotSentItem? = null,
+    ) : SwapUiState, Signable
+
+    /**
      * Screen 23 for an order on CoW (docs/swaps.md, *The user's choice of venue*): [sold] exact in
      * [sell]'s units; CoW's [estimate] of what it buys, not verified ([estimateNote]), beside the
      * verified Uniswap net ([uniswapNet], [uniswapNote]), and which gives more ([comparison];

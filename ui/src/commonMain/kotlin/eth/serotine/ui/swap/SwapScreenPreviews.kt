@@ -20,7 +20,7 @@ import org.jetbrains.compose.ui.tooling.preview.Preview
 // The Swap screen in Android Studio's preview pane, one preview per state it draws differently.
 // Built from display-ready values, as the screen tests are, never from the ViewModel.
 // SwapScreenPreviewsTest renders each one in swapScreenPreviews, at the end. The addresses are
-// EIP-55's own examples standing in for the account, the tokens, the router and the pools, and CoW's
+// EIP-55's own examples standing in for the account, the tokens, the router, the pools and WETH9, and CoW's
 // settlement contract, which is public; the names, amounts, blocks, times, the order's UID and the
 // password are made up.
 
@@ -31,6 +31,7 @@ private const val POOL = "0xdbF03B407c01E7cD3CBea99509d93f8DDDC8C6FB"
 private const val SECOND_POOL = "0x52908400098527886E0F7030069857D2E4169EE7"
 private const val LINK = "0xde709f2102306220921060314715629080e2fb77"
 private const val SETTLEMENT = "0x9008D19f58AAbD9eD0D60971565AA8510560ab41"
+private const val WETH = "0x8617E340B3D01FA5F11F306F4090FD50E238070D"
 
 private val from = SendFrom("Daily", DAILY)
 
@@ -42,6 +43,54 @@ private val link =
     AssetChoice("LINK", "ChainLink Token", null, "0 LINK", contract = LINK, verifiedAt = "block 8,412,305")
 
 private val router = SpenderItem("Uniswap's SwapRouter02", ROUTER)
+
+private val weth =
+    AssetChoice("WETH", "Wrapped Ether", "weth", "0.25 WETH", contract = WETH, verifiedAt = "block 8,412,305")
+
+private val wrapReview = SwapUiState.WrapReview(
+    network = "Sepolia",
+    title = "Review wrap",
+    signLabel = "Sign and wrap",
+    from = from,
+    sell = ether,
+    sold = "0.1 ETH",
+    buy = weth,
+    receive = "0.1 WETH",
+    explanation = "Not a swap: WETH9's own deposit takes the ETH and credits as much WETH, one for one. No pool, " +
+        "no price, no slippage and no approval: only the network fee.",
+    ranAt = "The wrap, run as a verified call from this account at block 8,412,307, goes through.",
+    contract = SpenderItem("WETH9, the wrapped ether contract", WETH),
+    maxFee = "0.000924 ETH",
+    feeDetail = "Normal fee: 42,000 gas × at most 22 gwei, from the verified fee history up to block 8,412,306. " +
+        "Only what the block charges is paid.",
+    balances = listOf(
+        BalanceChange("ETH balance", "1.25 ETH", "at least 1.149076 ETH", "verified at block 8,412,307"),
+        BalanceChange("WETH balance", "0.25 WETH", "0.35 WETH", "verified at block 8,412,305"),
+    ),
+    unlock = UnlockStep(),
+)
+
+private val unwrapReview = wrapReview.copy(
+    title = "Review unwrap",
+    signLabel = "Sign and unwrap",
+    sell = weth,
+    sold = "0.1 WETH",
+    buy = ether,
+    receive = "0.1 ETH",
+    explanation = "Not a swap: WETH9's own withdraw takes the WETH and pays as much ETH, one for one. No pool, " +
+        "no price, no slippage and no approval: only the network fee.",
+    ranAt = "The unwrap, run as a verified call from this account at block 8,412,307, goes through.",
+    balances = listOf(
+        BalanceChange("WETH balance", "0.25 WETH", "0.1 WETH", "verified at block 8,412,305"),
+        BalanceChange(
+            "ETH balance, which pays the fee",
+            "1.25 ETH",
+            "at least 1.349076 ETH",
+            "verified at block 8,412,307",
+        ),
+    ),
+    pending = "This account's CoW orders that may still fill hold back 0.05 WETH. The balance after counts it.",
+)
 
 private val empty = SwapUiState.Compose(
     form = SwapForm(
@@ -435,6 +484,20 @@ private fun SwapWatchOnlyPreview() = SwapPreview(
 @Composable
 private fun SwapSentPreview() = SwapPreview(SwapUiState.Sent("Sepolia", "0x" + "5e".repeat(32)))
 
+@Preview
+@Composable
+private fun SwapWrapReviewPreview() = SwapPreview(
+    wrapReview.copy(unlock = UnlockStep(WalletPassword("made-up preview password"))),
+)
+
+@Preview
+@Composable
+private fun SwapWrapReviewDarkPreview() = SwapPreview(wrapReview, darkTheme = true)
+
+@Preview
+@Composable
+private fun SwapUnwrapReviewPreview() = SwapPreview(unwrapReview)
+
 /** Every preview above, which SwapScreenPreviewsTest renders: a new preview goes in here too. */
 internal val swapScreenPreviews: List<@Composable () -> Unit> = listOf(
     { SwapComposeEmptyPreview() },
@@ -466,4 +529,7 @@ internal val swapScreenPreviews: List<@Composable () -> Unit> = listOf(
     { SwapLoadingPreview() },
     { SwapWatchOnlyPreview() },
     { SwapSentPreview() },
+    { SwapWrapReviewPreview() },
+    { SwapWrapReviewDarkPreview() },
+    { SwapUnwrapReviewPreview() },
 )

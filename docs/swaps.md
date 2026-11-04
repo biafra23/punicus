@@ -60,8 +60,9 @@ signed.
   - A swap never offers a token by an address the wallet has not listed, so
     what it buys always shows among the account's assets and can be sent.
   - WETH is offered as the token it is: the pinned WETH9 is built in
-    (docs/wallet-ux.md, *Tokens*), and ETH against WETH is a wrap, not a
-    swap, so no route has it.
+    (docs/wallet-ux.md, *Tokens*). ETH against WETH is a wrap, not a
+    swap: no route has it, and the Swap screen wraps or unwraps instead
+    (*Wrapping ETH*).
   - Otherwise the pinned WETH is only a route's middle token and ETH's
     wrapper, which the router wraps and unwraps within the swap.
 - **The proceeds go to the account itself.** No other recipient is offered:
@@ -117,6 +118,46 @@ signed.
   - On CoW it comes from the settlement's `Trade` log (*Proving an order's
     end*). Until that log is found, the status says "at least" the minimum.
 - **Native ETH** goes in and out through WETH, as each venue does it (below).
+
+## Wrapping ETH
+
+ETH for WETH, or WETH for ETH, is no swap: the pinned WETH9 does it itself,
+one for one. The Swap screen takes that pair like any other and reviews a
+wrap or an unwrap instead of a swap (the owner's request, 2026-11-04: "If it
+is not a swap, then wrap it").
+
+- **Which WETH9.** The one pinned with Uniswap's deployment, its code proven
+  by the light client as the venue's other contracts are (*Pins*). A token
+  at any other address is no wrap, and a deployment not pinned, or whose
+  code is not its pin, wraps nothing: the swap's quote then says why
+  Uniswap is no venue.
+- **On neither venue.** The pair is checked before the venue is asked, so
+  CoW never learns of a wrap, whichever venue is chosen, and no pool is
+  quoted. The tolerance and the venue on the compose step do not apply to
+  it: a pair of ETH and a token may be reviewed without a valid tolerance,
+  and is refused as a swap, before any pool is quoted, when it is no wrap.
+- **The transaction.** `deposit()` carrying the amount as its value, or
+  `withdraw(amount)` carrying none. One for one, in wei: no pool, no price,
+  no minimum, no deadline and no approval, only the network fee. It is
+  quoted as every transaction from an account held here is (the nonce, the
+  fees, the gas) and run as a verified call that must go through and
+  return nothing, as WETH9 does. With no price to move, it is not run again
+  at the tap that signs it; the quote's age rules are Send's, as for a
+  swap.
+- **What it may take.** An unwrap takes WETH as a token send does: what the
+  account's transactions not mined yet still move of it, and what its CoW
+  orders may still take of it, is not the unwrap's (*A signed order is live
+  until it is proven dead*); a record of orders that cannot be read
+  unwraps nothing. A wrap takes ETH, which the quote's native balance
+  already counts.
+- **The record.** `SentAction` gains a wrap and an unwrap, each with the
+  WETH9 token and the amount; the sent-transfers file is format 7. The
+  status says "Wrap of 0.1 ETH into WETH" and the activity row "Wrapped
+  0.1 ETH into WETH" (or the unwrap), through WETH9, one for one: the
+  amount is exact, so no receipt log is read for it.
+- **From a Safe**, a wrap is not proposed yet: the Safe's Swap still says
+  the pair is a wrap. It needs WETH9's two calls decoded on the co-signing
+  path first.
 
 ## A Safe's swap
 

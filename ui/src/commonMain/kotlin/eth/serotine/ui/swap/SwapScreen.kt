@@ -161,8 +161,8 @@ fun SwapRoute(
 /**
  * Swap (docs/swaps.md; screens 22 and 23) as a pure function of [state]: the compose step — the
  * venue, sell, buy, amount, tolerance and fee — then the review of the approval the swap needs
- * first, if any, and of the swap on Uniswap or the order on CoW, each with the unlock that signs it;
- * and a CoW order once handed to CoW.
+ * first, if any, and of the swap on Uniswap or the order on CoW, or of the wrap ETH for WETH and
+ * back is, each with the unlock that signs it; and a CoW order once handed to CoW.
  */
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalComposeUiApi::class)
 @Composable
@@ -214,6 +214,7 @@ fun SwapScreen(
                         when (state) {
                             is SwapUiState.ApprovalReview -> "Approve"
                             is SwapUiState.SwapReview -> "Review swap"
+                            is SwapUiState.WrapReview -> state.title
                             is SwapUiState.CowReview -> "Review order"
                             is SwapUiState.Sent -> "Sent"
                             is SwapUiState.OrderPlaced -> "Order"
@@ -278,6 +279,18 @@ fun SwapScreen(
                     ReviewFooter(
                         state,
                         "Sign and swap",
+                        onRefresh,
+                        onPasswordChange,
+                        onSign,
+                        onSignWithBiometrics,
+                        onRetry,
+                    )
+                }
+                is SwapUiState.WrapReview -> ReviewColumn {
+                    WrapContent(state)
+                    ReviewFooter(
+                        state,
+                        state.signLabel,
                         onRefresh,
                         onPasswordChange,
                         onSign,
@@ -529,6 +542,25 @@ private fun SwapContent(state: SwapUiState.SwapReview) {
     Spender(state.spender)
     state.allowanceNote?.let { Note(it) }
     Note(state.deadline)
+    Heading("From, and paid to")
+    FromLine(state.from)
+    Fee(state.maxFee, state.feeDetail)
+    Heading("Verified simulation")
+    state.balances.forEach { Balance(it) }
+    state.pending?.let { Text(it, style = MaterialTheme.typography.bodySmall) }
+}
+
+/** A wrap or an unwrap: what it takes, what it pays one for one, through WETH9. */
+@Composable
+private fun WrapContent(state: SwapUiState.WrapReview) {
+    Text(state.explanation, style = MaterialTheme.typography.bodyMedium)
+    Heading("You give")
+    AmountLine(state.sell.icon, state.sell.symbol, state.sold)
+    Heading("You receive")
+    AmountLine(state.buy.icon, state.buy.symbol, state.receive)
+    Note(state.ranAt)
+    Heading("Through")
+    Spender(state.contract)
     Heading("From, and paid to")
     FromLine(state.from)
     Fee(state.maxFee, state.feeDetail)
