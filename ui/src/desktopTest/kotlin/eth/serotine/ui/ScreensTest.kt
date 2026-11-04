@@ -33,10 +33,11 @@ class ScreensTest {
     fun everyPreviewsListIsRegisteredOnce() {
         val lists = Screens.all.map { it.previews }
         assertEquals(lists.distinct().size, lists.size, "a previews list is registered under two screens")
-        // Gradle runs the tests from the module directory; a previews file is `<Feature>ScreenPreviews.kt`
-        // or `<Feature>DialogPreviews.kt` (.claude/rules/ui.md, "Every screen has previews").
-        val sources = File("src/commonMain/kotlin")
-        assertTrue(sources.isDirectory, "run from the ui module: ${sources.absolutePath} is not a directory")
+        // A previews file is `<Feature>ScreenPreviews.kt` or `<Feature>DialogPreviews.kt` (.claude/rules/ui.md,
+        // "Every screen has previews"). ui/build.gradle.kts hands the source directory over, whatever the
+        // working directory is.
+        val sources = File(checkNotNull(System.getProperty("serotine.ui.sources")) { "serotine.ui.sources is not set" })
+        assertTrue(sources.isDirectory, "${sources.absolutePath} is not a directory")
         val previewsFiles = sources.walkTopDown().filter { it.isFile && it.name.endsWith("Previews.kt") }.count()
         assertEquals(
             previewsFiles,
