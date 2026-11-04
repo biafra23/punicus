@@ -72,6 +72,11 @@ jobs:
       contents: read
     env:
       DMG_NAME: Serotine-${{ matrix.arch }}.dmg
+      # The Reown project IDs (docs/walletconnect.md, *Setting up the project ID*), which :data
+      # compiles into the app. A pull request from a fork gets no secrets: its build has them
+      # empty, and so WalletConnect switched off, as a local build without them does.
+      ORG_GRADLE_PROJECT_walletConnectProjectIdDebug: ${{ secrets.WALLETCONNECT_PROJECT_ID_DEBUG }}
+      ORG_GRADLE_PROJECT_walletConnectProjectIdRelease: ${{ secrets.WALLETCONNECT_PROJECT_ID_RELEASE }}
 
     steps:
       - name: Checkout

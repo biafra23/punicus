@@ -25,6 +25,7 @@ plugins {
 // from a dev build. Git can:
 //
 //   clean checkout of a v* tag  ->  "0.1.0"                  a real release build
+//   ... of a pre-release tag    ->  "0.1.0-rc1"              the tag as cut (v0.1.0-rc1)
 //   any other commit            ->  "0.1.0-fbf551"           last release + 6 sha digits
 //   dirty tree on a v* tag      ->  "0.1.0-fbf551"           NOT what shipped — a dev build
 //   git but no tags reachable   ->  "0.1.0-SNAPSHOT-fbf551"  see below
@@ -80,10 +81,13 @@ abstract class AppVersionSource : ValueSource<String, AppVersionSource.Params> {
         val sha = git("rev-parse", "--short=6", "HEAD")
         if (sha.isEmpty()) return projectVersion // no git, not a repo, or no commits yet
         val shape = Regex("""^v\d+(\.\d+)*$""")
+        // A build exactly on a tag shows that tag, a pre-release's included: the shapes the
+        // release guard accepts (release-version-guard.yml), vX.Y.Z and vX.Y.Z-<suffix>.
+        val tagged = Regex("""^v\d+(\.\d+)*(-[0-9A-Za-z][0-9A-Za-z.]*)?$""")
         // --match confines this to the release line: without it describe picks by tag
         // RECENCY, so a `nightly-*` laid down later would be read as this build's release.
         val exactTag = git("describe", "--tags", "--exact-match", "--match", "v[0-9]*")
-        if (shape.matches(exactTag) && !treeIsPatched()) return exactTag.removePrefix("v")
+        if (tagged.matches(exactTag) && !treeIsPatched()) return exactTag.removePrefix("v")
         // Keeping the qualifier on the fallback is load-bearing — see the table above.
         return "${lastRelease(shape) ?: projectVersion}-$sha"
     }

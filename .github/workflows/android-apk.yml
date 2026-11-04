@@ -62,6 +62,12 @@ jobs:
       # 'true' when the tree pins a release certificate. On a tag, sign-release
       # runs only then; without a pin the tag publishes the debug APK alone.
       release-cert: ${{ steps.cert.outputs.present }}
+    env:
+      # The Reown project IDs (docs/walletconnect.md, *Setting up the project ID*), which :data
+      # compiles into the app. A pull request from a fork gets no secrets: its build has them
+      # empty, and so WalletConnect switched off, as a local build without them does.
+      ORG_GRADLE_PROJECT_walletConnectProjectIdDebug: ${{ secrets.WALLETCONNECT_PROJECT_ID_DEBUG }}
+      ORG_GRADLE_PROJECT_walletConnectProjectIdRelease: ${{ secrets.WALLETCONNECT_PROJECT_ID_RELEASE }}
 
     steps:
       - name: Checkout
