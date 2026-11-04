@@ -13,6 +13,7 @@ import eth.serotine.domain.repository.HistoryList
 import eth.serotine.domain.repository.SentAction
 import eth.serotine.domain.repository.SentOutcome
 import eth.serotine.domain.repository.WaitingSwap
+import eth.serotine.domain.usecase.BuiltInCheck
 import eth.serotine.domain.usecase.IndexedEvent
 import eth.serotine.domain.usecase.IndexedHistory
 import eth.serotine.domain.usecase.KnownToken
@@ -26,6 +27,7 @@ import eth.serotine.domain.usecase.ObserveTokenTransfers
 import eth.serotine.domain.usecase.ObserveWaitingSwaps
 import eth.serotine.domain.usecase.SafeChainEvent
 import eth.serotine.domain.usecase.TokenTransferEvent
+import eth.serotine.ui.components.DecodingToken
 import eth.serotine.ui.components.grouped
 import eth.serotine.ui.platform.formatDateTime
 import kotlinx.coroutines.flow.Flow
@@ -43,10 +45,10 @@ import kotlinx.coroutines.flow.map
  * address the wallet never sent to ([ObserveSentToAddresses]) and that is none of its accounts
  * is cautioned. A log of a transaction listed as sent, in a block, is left out when its row says
  * the same. The CoW orders the account signed here ([ObserveAccountCowOrders]) are listed among
- * the transactions, by when each was signed, and open their status. Above them, each swap whose
- * next step waits for the user ([ObserveWaitingSwaps]), said from its approval's outcome in the
- * account's history. [formatTime] dates each in the user's own time zone. A row opens its detail,
- * which is navigation.
+ * the transactions, and open their status. Every row goes by when it happened, newest first
+ * ([merged]). Above them, each swap whose next step waits for the user ([ObserveWaitingSwaps]),
+ * said from its approval's outcome in the account's history. [formatTime] dates each in the
+ * user's own time zone. A row opens its detail, which is navigation.
  */
 class AccountActivity(
     private val observeAccountHistory: ObserveAccountHistory,
@@ -104,28 +106,47 @@ class AccountActivity(
         ): ActivityUiState {
             val names = parties.names
             val (history, orders) = sentHere
-            // Built per change, for the amounts it says to follow the eye.
-            val rows = ActivityRows(address, account.network, formatTime, sentHere.hidden)
             val entries = when (history) {
                 HistoryList.Unreadable -> return ActivityUiState.Unavailable(UNREADABLE)
                 is HistoryList.Loaded -> history.entries
             }
+            // Built per change, for the amounts it says to follow the eye. A Safe transaction is said
+            // as what it does, in the units of the tokens known so far, and an execution or approval
+            // on chain by the request this device holds of it.
+            val requests = entries.mapNotNull { it.transfer.action.safeRequest() }.associateBy { it.hash }
+            val rows = ActivityRows(
+                address,
+                account.network,
+                formatTime,
+                sentHere.hidden,
+                decodingTokens = tokens.forDecoding(),
+                requests = requests,
+            )
             val waiting = sentHere.waiting.map { waitingStep(it, entries, tokens, rows) }
-            // The CoW orders signed here among them, by when each was signed: a live one waits for
-            // its end as a transaction waits for its block, a filled or cancelled one goes by the
-            // block of its fill or its cancellation, and one never filled by where it was signed
-            // (the block that proved it came later).
-            val sent = (
-                entries.map {
-                    val listed = Listed(
-                        rows.row(it, names),
-                        it.outcome.blockNumberOrNull,
-                        pending = it.outcome == SentOutcome.NotSeen,
-                    )
-                    it.transfer.sentAt to listed
-                } + orders.map { it.signedAt to Listed(rows.orderRow(it), it.end?.placedAt, pending = it.live) }
-            ).sortedByDescending { it.first }.map { it.second }
-            if (transfers == null) return ActivityUiState.Shown(sent.map { it.row }, COVERAGE, waiting = waiting)
+            val safeEvents = (safe as? IndexedHistory.Read)?.events.orEmpty()
+            val tokenEvents = (transfers as? IndexedHistory.Read)?.events.orEmpty()
+            // When each block was produced, as the engine reported it with any event in it: what a
+            // transaction seen in that block goes by, before when a peer took it.
+            val allEvents: List<IndexedEvent> = safeEvents + tokenEvents
+            val blockTimes = allEvents.mapNotNull { event -> event.blockTimestamp?.let { event.blockNumber to it } }
+                .toMap()
+            // The CoW orders signed here among them: a live one waits for its end as a transaction
+            // waits for its block, a filled or cancelled one goes by the block of its fill or its
+            // cancellation, and one never filled by when it was signed (the block that proved it
+            // came later).
+            val sent = entries.map {
+                val block = it.outcome.blockNumberOrNull
+                Listed(
+                    rows.row(it, names),
+                    block,
+                    pending = it.outcome == SentOutcome.NotSeen,
+                    moment = block?.let(blockTimes::get) ?: it.transfer.sentAt,
+                )
+            } + orders.map {
+                val block = it.end?.placedAt
+                Listed(rows.orderRow(it), block, pending = it.live, moment = block?.let(blockTimes::get) ?: it.signedAt)
+            }
+            if (transfers == null) return ActivityUiState.Shown(merged(sent, emptyList()), COVERAGE, waiting = waiting)
             // Only a row that names its block says what its logs say: one no block was seen for (a
             // transaction mined while the app was closed) gets the verified log beside it.
             val seenInBlocks = entries.filter { it.outcome.blockNumberOrNull != null }.associateBy { it.transfer.hash }
@@ -134,11 +155,11 @@ class AccountActivity(
             // settlement can fill several of the account's orders, each of its own token.
             val fills = orders.filter { it.end is CowOrderEnd.Filled }
                 .groupBy { (it.end as CowOrderEnd.Filled).transactionHash.lowercase() }
-            val safeEvents = (safe as? IndexedHistory.Read)?.events.orEmpty()
+            val safeRows = safeEvents
                 .filterNot { it.transactionHash in seenInBlocks && it.event.saidBySentRow() }
                 .map { rows.eventRow(it, parties) to it }
             // Until the tokens are known, a transfer's amount cannot be said: none is listed yet.
-            val tokenEvents = (transfers as? IndexedHistory.Read)?.events.orEmpty()
+            val tokenRows = tokenEvents
                 .takeIf { tokens != null }.orEmpty()
                 .filterNot { it.transfer.movesNothing() }
                 .filterNot { event -> seenInBlocks[event.transactionHash]?.let { event.transfer.saidBy(it) } == true }
@@ -147,11 +168,16 @@ class AccountActivity(
                     fill.any { event.transfer.soldIn(it) || event.transfer.boughtIn(it) }
                 }
                 .map { rows.transferRow(it, parties, tokens.orEmpty()) to it }
-            val events = (safeEvents + tokenEvents)
+            val events = (safeRows + tokenRows)
                 .sortedWith(
                     compareByDescending<Pair<ActivityRow, IndexedEvent>> { it.second.blockNumber }
                     .thenByDescending { it.second.logIndex },
                 )
+            // An event the engine dated goes by its time like a sent row; one it did not by its block.
+            val dated = events.mapNotNull { (row, event) ->
+                event.blockTimestamp?.let { Listed(row, event.blockNumber, pending = false, moment = it, event = true) }
+            }
+            val undated = events.filter { it.second.blockTimestamp == null }
                 .map { (row, event) -> row to event.blockNumber }
             val deployedHere = entries.any { (it.transfer.action as? SentAction.SafeDeployment)?.safe == address }
             val since = if (deployedHere) "when it was deployed from this device" else "when it was added here"
@@ -177,7 +203,7 @@ class AccountActivity(
                 if (safe == null) notListedYet(account.network) else null,
             ).joinToString(" ")
             return ActivityUiState.Shown(
-                rows = merged(sent, events),
+                rows = merged(sent + dated, undated),
                 coverage = covered.joinToString(" "),
                 empty = "Nothing listed yet.",
                 simpleCoverage = simple,
@@ -262,25 +288,43 @@ class AccountActivity(
     }
 
     /**
-     * The sent rows (newest first) and the [events] (newest first) in one list, newest block
-     * first. A sent row still waiting for its block is newer than every block: it goes at the top.
-     * One with no block (a nonce used with no block seen, a CoW order never filled) goes with the
-     * newest row sent before it that has one, before the events of that row's block; when none
-     * has, just below the newest row sent after it that has one, and at the top when none has.
+     * Every row in one list, newest first: the [dated] rows by when each happened (a sent
+     * transaction by when its block was produced, where an event in that block says it, else by
+     * when a peer took it; a CoW order alike, by its fill's or cancellation's block, else by when
+     * it was signed; an event by when its block was produced), the sent ones before the events of
+     * the same moment; and the [undated] events (newest block first), from an engine that does not
+     * date a block, each among them by its block. A sent row still waiting for its block (a CoW
+     * order that may still fill) goes by when a peer took it, and its block, once it has one, is
+     * above every block covered: no undated event goes above it. One with no block that is not
+     * waiting (a nonce used with no block seen, a CoW order never filled) is dated by when it was
+     * sent, and for the undated events goes with the newest row sent before it that has a block,
+     * before the events of that row's block; when none has, just below the newest row sent after
+     * it that has one, and at the top when none has.
      */
-    private fun merged(sent: List<Listed>, events: List<Pair<ActivityRow, Long>>): List<ActivityRow> {
-        val sentBlocks = ArrayList<Long>(sent.size)
-        for ((at, listed) in sent.withIndex()) {
-            sentBlocks += listed.block
+    private fun merged(dated: List<Listed>, undated: List<Pair<ActivityRow, Long>>): List<ActivityRow> {
+        val sorted = dated.sortedWith(
+            compareByDescending<Listed> { it.moment }
+                .thenBy { it.event }
+                .thenByDescending { it.block ?: Long.MAX_VALUE },
+        )
+        val blocks = ArrayList<Long>(sorted.size)
+        for ((at, listed) in sorted.withIndex()) {
+            blocks += listed.block
                 ?: Long.MAX_VALUE.takeIf { listed.pending }
-                ?: sent.drop(at + 1).firstNotNullOfOrNull { it.block }?.let { it + 1 }
+                ?: sorted.drop(at + 1).firstNotNullOfOrNull { it.block }?.let { it + 1 }
                 // None sent before it has a block: just below the newest sent after it that has one.
-                ?: sentBlocks.lastOrNull { it != Long.MAX_VALUE }
+                ?: blocks.lastOrNull { it != Long.MAX_VALUE }
                 ?: Long.MAX_VALUE
         }
-        val all = sent.mapIndexed { at, listed -> listed.row to sentBlocks[at] } + events
-        // Stable: rows of one block keep the order they came in, the sent ones first.
-        return all.sortedByDescending { it.second }.map { it.first }
+        val rows = ArrayList<ActivityRow>(sorted.size + undated.size)
+        var next = 0
+        for ((at, listed) in sorted.withIndex()) {
+            // The undated events of newer blocks than this row's go above it; of its own block, below.
+            while (next < undated.size && undated[next].second > blocks[at]) rows += undated[next++].first
+            rows += listed.row
+        }
+        while (next < undated.size) rows += undated[next++].first
+        return rows
     }
 
     /**
@@ -315,10 +359,34 @@ class AccountActivity(
     }
 
     /**
-     * A sent transaction's [row], the [block] it was seen in (null: none seen), and whether it is
-     * [pending]: no block seen yet, nor its nonce used.
+     * A row that is dated: a sent transaction's, the [block] it was seen in (null: none seen),
+     * whether it is [pending] (no block seen yet, nor its nonce used) and its [moment] (unix
+     * seconds), when its block was produced where that is known, else when a peer took it; or an
+     * [event]'s, in its block, dated by the engine.
      */
-    private class Listed(val row: ActivityRow, val block: Long?, val pending: Boolean)
+    private class Listed(
+        val row: ActivityRow,
+        val block: Long?,
+        val pending: Boolean,
+        val moment: Long,
+        val event: Boolean = false,
+    )
+
+    /** The Safe transaction this action approves or executes; null for any other. */
+    private fun SentAction.safeRequest() = when (this) {
+        is SentAction.SafeApproval -> request
+        is SentAction.SafeExecution -> request
+        else -> null
+    }
+
+    /**
+     * The tokens a Safe transaction's transfer is said in the units of: every one known so far,
+     * hidden ones too, but no built-in entry its contract contradicts (as the queue decodes them,
+     * `KnownTokenList.forDecoding`); none until they are read.
+     */
+    private fun Map<Address, KnownToken>?.forDecoding(): List<DecodingToken> = this?.values.orEmpty()
+        .filter { it.check !is BuiltInCheck.Disagrees }
+        .map { DecodingToken(it.token, it.sharesBuiltInSymbol) }
 
     /**
      * The block an ended order's row goes by: its fill's, or its cancellation's. One never filled has

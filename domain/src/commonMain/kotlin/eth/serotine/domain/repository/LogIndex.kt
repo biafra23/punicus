@@ -134,7 +134,10 @@ sealed interface LogsReading {
 /**
  * One log the index served: [log] as it is in the receipt, in block [blockNumber] (hash
  * [blockHash]), emitted by transaction [transactionHash], at [logIndex] in the block. Hashes
- * are `0x` and 64 lower-case hex digits.
+ * are `0x` and 64 lower-case hex digits. [blockTimestamp] is when the block was produced (unix
+ * seconds) as its verified header says, which the engine reports with the log from the walk
+ * that verified it; null from an engine that does not report it, when the block alone dates
+ * the log.
  */
 data class IndexedLog(
     val log: ReceiptLog,
@@ -142,4 +145,9 @@ data class IndexedLog(
     val blockHash: String,
     val transactionHash: String,
     val logIndex: Int,
-)
+    val blockTimestamp: Long? = null,
+) {
+    init {
+        require(blockTimestamp == null || blockTimestamp >= 0) { "a block's time is never before 1970" }
+    }
+}

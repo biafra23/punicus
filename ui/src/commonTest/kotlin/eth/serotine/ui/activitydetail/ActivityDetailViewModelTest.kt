@@ -304,6 +304,7 @@ class ActivityDetailViewModelTest {
                 "0x" + "bb".repeat(32),
                 tx,
                 0,
+                blockTimestamp = 1_761_686_208,
             ),
         )
 
@@ -319,6 +320,7 @@ class ActivityDetailViewModelTest {
                 DetailField("Amount", "1 ETH"),
                 DetailField("Safe", Eip55.format(treasury.address), DetailKind.ADDRESS, "Treasury"),
                 DetailField("Transaction hash", tx, DetailKind.HASH),
+                DetailField("Time", "at 1761686208"),
                 DetailField("Block", "9,405,000", DetailKind.BLOCK),
             ),
             shown.fields,
@@ -363,7 +365,7 @@ class ActivityDetailViewModelTest {
         val state = viewModel(ActivityKey(execution.hash), treasury.address).uiState.value
 
         val shown = assertIs<ActivityDetailUiState.Shown>(state)
-        assertEquals("Executed transaction 4", shown.headline)
+        assertEquals("Executed transaction 4: Send 0.000000000000000001 ETH", shown.headline, "as its row")
         assertEquals(
             listOf(
                 DetailField("From", Eip55.format(alice.address), DetailKind.ADDRESS, "Alice"),

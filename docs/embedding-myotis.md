@@ -532,6 +532,16 @@ answered with an empty list.
   - Logs are taken only when every one is what the query selects, inside its
     range; anything else is no answer. A query names both ends of its range:
     the answer does not say which range it read.
+  - A log's `blockTimestamp` (unix seconds: a quantity as the JSON-RPC log
+    shape has it, or a number as the engine's other verified-read shapes
+    carry theirs), when the engine reports it from the walk that verified
+    the block's header, dates the event (`IndexedLog.blockTimestamp`); the
+    Activity dates and orders its rows by it. From an engine that does not
+    report it (none did as of Myotis 0.1.20) the event is dated by its block
+    alone, never by a time counted back from the head: a block's time is
+    verified or not shown. Reading a block's header for it instead is no
+    answer: `getBlockByNumber` serves one header window anchored at the
+    head (512 blocks), and a history reaches further back.
   - The engine takes an entry's `fromBlock` as saying nothing of it comes
     before that block, and answers a range reaching below it from there on.
     For an account not created here that is not so, so the adapter reads the

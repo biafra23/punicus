@@ -1,9 +1,11 @@
 package eth.serotine.ui.activity
 
 import eth.serotine.domain.model.Address
+import eth.serotine.domain.model.Digest
 import eth.serotine.domain.model.Network
 import eth.serotine.domain.model.PinnedFallbackHandlers
 import eth.serotine.domain.model.SafeEvent
+import eth.serotine.domain.model.SafeTxAction
 import eth.serotine.domain.model.SigningRequest
 import eth.serotine.domain.model.TokenTransfer
 import eth.serotine.domain.model.TransferAsset
@@ -14,10 +16,12 @@ import eth.serotine.domain.repository.HistoryEntry
 import eth.serotine.domain.repository.SentAction
 import eth.serotine.domain.repository.SentOutcome
 import eth.serotine.domain.usecase.BuiltInCheck
+import eth.serotine.domain.usecase.IndexedEvent
 import eth.serotine.domain.usecase.KnownToken
 import eth.serotine.domain.usecase.SafeChainEvent
 import eth.serotine.domain.usecase.TokenTransferEvent
 import eth.serotine.ui.components.AMOUNT_MASK
+import eth.serotine.ui.components.DecodingToken
 import eth.serotine.ui.components.Eip55
 import eth.serotine.ui.components.FALLBACK_HANDLER_REMOVED
 import eth.serotine.ui.components.GUARD_REMOVED_WARNING
@@ -26,20 +30,27 @@ import eth.serotine.ui.components.MODULE_DISABLED_WARNING
 import eth.serotine.ui.components.displaySymbol
 import eth.serotine.ui.components.exactAmount
 import eth.serotine.ui.components.grouped
+import eth.serotine.ui.components.safeTxActionItem
 import eth.serotine.ui.components.shortAddress
 
 /**
  * What the account at [address] is told of each transaction and event of its history, in the
  * words the Activity screen lists it with and its detail screen heads it with (docs/wallet-ux.md,
  * screens 25 and 26): one place, so the two never say it differently. [network] names its
- * currency, [formatTime] dates a transaction a peer took. With [hideAmounts] every amount it says
- * reads [AMOUNT_MASK] beside its unit (docs/wallet-ux.md, *Hiding amounts*).
+ * currency, [formatTime] dates a transaction a peer took and an event's block. With [hideAmounts]
+ * every amount it says reads [AMOUNT_MASK] beside its unit (docs/wallet-ux.md, *Hiding amounts*).
+ * A Safe transaction approved or executed is said as what it does ("Send 40 USDC"), as its queue
+ * row says it: its transfer in the units of a token the wallet knows ([decodingTokens]), and an
+ * execution or approval on chain by the request this device holds of it ([requests], by the Safe
+ * transaction's hash), or as "a Safe transaction" where it holds none.
  */
 internal class ActivityRows(
     private val address: Address,
     private val network: Network,
     private val formatTime: (Long) -> String,
     private val hideAmounts: Boolean = false,
+    private val decodingTokens: List<DecodingToken> = emptyList(),
+    private val requests: Map<Digest, SigningRequest> = emptyMap(),
 ) {
 
     /**
@@ -71,8 +82,8 @@ internal class ActivityRows(
             title = "",
             detail = "",
             about = Eip55.format(transfer.token),
-            time = "Block ${grouped(event.blockNumber)}",
-            simpleTime = null,
+            time = timeOf(event),
+            simpleTime = event.blockTimestamp?.let(formatTime),
             status = TOKEN_ON_CHAIN,
             state = ActivityState.DONE,
             opens = ActivityKey(event.transactionHash, event.logIndex),
@@ -138,14 +149,21 @@ internal class ActivityRows(
         return names[other]?.let { "$it · $short" } ?: short
     }
 
-    /** A Safe's [event] as a row; ETH received from a sender the user does not deal with is cautioned. */
+    /**
+     * A Safe's [event] as a row; ETH received from a sender the user does not deal with is cautioned.
+     * An execution or approval says what the Safe transaction does where this device holds its
+     * request ("Executed: Send 40 USDC"), and that it is a Safe transaction where it does not.
+     */
     fun eventRow(event: SafeChainEvent, parties: Parties): ActivityRow {
         fun named(other: Address): String = named(other, parties.names)
         val (title, other, detail) = when (val what = event.event) {
             is SafeEvent.SetUp ->
                 Triple("Set up", address, "${what.threshold} of ${owners(what.owners.size.toLong())} must sign")
             is SafeEvent.Executed -> Triple(
-                if (what.succeeded) "Executed a Safe transaction" else "A Safe transaction failed",
+                when {
+                    what.succeeded -> does(what.safeTxHash)?.let { "Executed: $it" } ?: "Executed a Safe transaction"
+                    else -> does(what.safeTxHash)?.let { "Failed: $it" } ?: "A Safe transaction failed"
+                },
                 address,
                 "Safe transaction ${shortHash(what.safeTxHash)}",
             )
@@ -154,7 +172,11 @@ internal class ActivityRows(
                 what.from,
                 "From ${named(what.from)}",
             )
-            is SafeEvent.Approved -> Triple("Approved a Safe transaction", what.owner, "By ${named(what.owner)}")
+            is SafeEvent.Approved -> Triple(
+                does(what.safeTxHash)?.let { "Approved: $it" } ?: "Approved a Safe transaction",
+                what.owner,
+                "By ${named(what.owner)}",
+            )
             is SafeEvent.OwnerAdded -> Triple("Owner added", what.owner, named(what.owner))
             is SafeEvent.OwnerRemoved -> Triple("Owner removed", what.owner, named(what.owner))
             is SafeEvent.ThresholdChanged ->
@@ -189,13 +211,34 @@ internal class ActivityRows(
             title = title,
             detail = detail,
             about = Eip55.format(other),
-            time = "Block ${grouped(event.blockNumber)}",
-            simpleTime = null,
+            time = timeOf(event),
+            simpleTime = event.blockTimestamp?.let(formatTime),
             status = status,
             state = state,
             opens = ActivityKey(event.transactionHash, event.logIndex),
         )
     }
+
+    /**
+     * When [event] happened, as its row says it: when its block was produced, where the engine
+     * reported it from the block's verified header; the block alone where it did not.
+     */
+    fun timeOf(event: IndexedEvent): String =
+        event.blockTimestamp?.let(formatTime) ?: "Block ${grouped(event.blockNumber)}"
+
+    /**
+     * What the Safe transaction [safeTxHash] does, where this device holds its request; null where
+     * it holds none, or the hash is not one.
+     */
+    private fun does(safeTxHash: String): String? = Digest.parse(safeTxHash)?.let(requests::get)?.let { does(it) }
+
+    /**
+     * What [request]'s Safe transaction does, as its queue row says it ("Send 40 USDC", "Add an
+     * owner"), its amounts masked while they are hidden.
+     */
+    fun does(request: SigningRequest): String =
+        safeTxActionItem(SafeTxAction.of(request.safe, request.tx), request.nonce, decodingTokens, network, hideAmounts)
+            .title
 
     /**
      * How an event's row is marked: failed for a call that reverted; a warning for what can move
@@ -335,14 +378,15 @@ internal class ActivityRows(
     }
 
     /**
-     * An approval or execution ([verb]) of [request]'s Safe transaction, sent by [sender]: its title
-     * and other side as the account at [address] sees it, the Safe or the sender.
+     * An approval or execution ([verb]) of [request]'s Safe transaction, sent by [sender]: its title,
+     * with what the transaction does, and its other side as the account at [address] sees it, the
+     * Safe or the sender.
      */
     private fun safeCall(verb: String, sender: Address, request: SigningRequest): Triple<String, Address, String> =
         if (sender == address) {
-            Triple("$verb a Safe transaction", request.safe, "Safe nonce ${request.nonce} ·")
+            Triple("$verb: ${does(request)}", request.safe, "Safe nonce ${request.nonce} ·")
         } else {
-            Triple("$verb transaction ${request.nonce}", sender, "By")
+            Triple("$verb transaction ${request.nonce}: ${does(request)}", sender, "By")
         }
 
     /** What simple mode says instead of a sent transaction's block: null where [statusOf] names none. */

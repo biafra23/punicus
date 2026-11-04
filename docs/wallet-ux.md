@@ -738,8 +738,19 @@ upgrades*).
 Screens 22 to 24 are the swap screens (docs/swaps.md).
 
 25. **Activity**: the transactions this device sent for an account, its
-    token transfers and, for a Safe, its own events on chain, newest first,
-    in the Activity tab of the account's detail (4, 16).
+    token transfers and, for a Safe, its own events on chain, by date, in
+    the Activity tab of the account's detail (4, 16). Newest first; the top
+    bar's menu turns the rows round ("Oldest first", then "Newest first"
+    back), offered while the tab is shown, as it sorts the assets on 4.
+    Each row is dated: a sent transaction by when a peer took it, a CoW
+    order by when it was signed, and an event on chain by when its block
+    was produced, as the block's verified header says, which the engine
+    reports with the log; from an engine that does not report it, the
+    event names its block alone ("Block 9,415,302") and goes among the
+    dated rows by that block. A sent transaction seen in a block goes by
+    the block's time where an event in that block says it, before the
+    events of that block; one still waiting for its block goes by when a
+    peer took it, and above every event dated by its block alone.
     - First, what the list covers: transactions sent from this device, and
       on chain from the block its history starts at on (when it was
       deployed from this device, or added here: "since added", owner ruling
@@ -749,16 +760,19 @@ Screens 22 to 24 are the swap screens (docs/swaps.md).
       (issue #85 has the plan for them).
     - One row per transaction: the blockie of its other side, what it did
       ("Sent 0.25 ETH", "Swapped 100 USDC for at least 4.28845 LINK",
-      "Executed a Safe transaction", "Deployed a Safe"),
-      whom or what else it concerns ("To Bob · 0x5aAe…eAed", "Safe nonce 4 ·
-      Treasury · …"), when a peer took it, and how it ended as this device
+      "Executed: Send 40 USDC", "Deployed a Safe"), whom or what else it
+      concerns ("To Bob · 0x5aAe…eAed", "Safe nonce 4 · Treasury · …"), when
+      a peer took it, and how it ended as this device
       saw it: in its block or finalized there, reverted, no block seen yet,
       no peer confirmed its broadcast, or mined while the app was not
       watching unless another transaction took its nonce. A tap opens its
       detail (26), and from there its status (9).
     - A Safe's Activity lists the approvals and executions of its
       transactions and its deployment, whichever account here sent them
-      ("Executed transaction 4", "By Alice · …").
+      ("Executed transaction 4: Send 40 USDC", "By Alice · …"). An approval
+      or execution says what the Safe transaction does as its queue row
+      does (16: "Send 40 USDC", "Add an owner", "Call a contract"), its
+      transfer in the units of a token the wallet knows.
     - The CoW orders an account signed here (docs/swaps.md) sit among its
       transactions: "CoW order: 40 USDC for at least 0.0159 ETH" on top
       while it may fill, then as the chain proves it, at the block of its
@@ -770,8 +784,13 @@ Screens 22 to 24 are the swap screens (docs/swaps.md).
       (`ObserveSafeHistory`): ETH received ("Received 0.5 ETH", "From Bob ·
       …"), executions and failed ones, approvals, its set-up, owner,
       threshold, module, guard and fallback-handler changes, a module's
-      transactions and messages signed. Each sits among the sent
-      transactions by its block ("Block 9,415,302") and opens its detail (26);
+      transactions and messages signed. An execution or approval says what
+      the Safe transaction did where this device holds its request, in its
+      history of approvals and executions ("Executed: Send 40 USDC",
+      "Failed: Send 40 USDC", "Approved: Add an owner"), and "a Safe
+      transaction" where it holds none: the log carries only the hash. Each
+      sits among the sent transactions by date, or by its block ("Block
+      9,415,302") where the engine did not date it, and opens its detail (26);
       one whose transaction is listed as sent from here, in a block, is left
       out when its row says the same (an execution, an approval, a
       deployment); a failure and a settings change are not. A module
@@ -820,8 +839,9 @@ Screens 22 to 24 are the swap screens (docs/swaps.md).
     concerns, each address in full (EIP-55, its blockie, the wallet's name
     for it) and every hash (the transaction's, a Safe transaction's, a
     message's), each selectable and with Copy, then what it moved, its
-    nonce, when a peer took it and its block. Read from what 25 is read
-    from, so it says what the row says.
+    nonce, when a peer took it (an event: when its block was produced, where
+    the engine reported it) and its block. Read from what 25 is read from,
+    so it says what the row says.
     - A transaction sent from here: From, its other side by kind (To, the
       token contract and the amount; the spender and the allowance; the
       router and both tokens of a swap; the Safe, its nonce, the Safe

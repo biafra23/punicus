@@ -33,16 +33,23 @@ class ObserveTokenTransfers(private val index: LogIndex, private val starts: His
             decode = { log ->
                 TokenTransfers.decode(log.log.address, log.log.topics, log.log.data)
                     ?.takeIf { it.from == address || it.to == address }
-                    ?.let { TokenTransferEvent(it, log.blockNumber, log.transactionHash, log.logIndex) }
+                    ?.let {
+                        TokenTransferEvent(it, log.blockNumber, log.transactionHash, log.logIndex, log.blockTimestamp)
+                    }
             },
         ).observe()
     }
 }
 
-/** A token's [transfer], in block [blockNumber], logged by transaction [transactionHash] at [logIndex] in the block. */
+/**
+ * A token's [transfer], in block [blockNumber], logged by transaction [transactionHash] at
+ * [logIndex] in the block, which was produced at [blockTimestamp] (unix seconds; null when the
+ * engine did not say).
+ */
 data class TokenTransferEvent(
     val transfer: TokenTransfer,
     override val blockNumber: Long,
     override val transactionHash: String,
     override val logIndex: Int,
+    override val blockTimestamp: Long? = null,
 ) : IndexedEvent

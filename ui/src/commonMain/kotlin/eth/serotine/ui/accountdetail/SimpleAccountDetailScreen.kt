@@ -3,6 +3,7 @@ package eth.serotine.ui.accountdetail
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import eth.serotine.ui.activity.ActivityKey
+import eth.serotine.ui.activity.ActivityOrder
 import eth.serotine.ui.activity.simple
 
 /**
@@ -39,6 +40,7 @@ fun SimpleAccountDetailScreen(
     onDismissWaiting: (sell: String) -> Unit = {},
     onDerive: () -> Unit = {},
     onToggleAmounts: () -> Unit = {},
+    onOrderActivity: (ActivityOrder) -> Unit = {},
 ) {
     val ready = state as? AccountDetailUiState.Ready
     AccountDetailScreen(
@@ -66,6 +68,7 @@ fun SimpleAccountDetailScreen(
         onDismissWaiting = onDismissWaiting,
         onDerive = onDerive,
         onToggleAmounts = onToggleAmounts,
+        onOrderActivity = onOrderActivity,
     )
 }
 

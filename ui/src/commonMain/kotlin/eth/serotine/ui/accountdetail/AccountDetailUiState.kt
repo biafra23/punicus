@@ -6,6 +6,7 @@ import eth.serotine.ui.accounts.networkBlockedReason
 import eth.serotine.ui.accounts.networkOffReason
 import eth.serotine.ui.accounts.sendBlockedReason
 import eth.serotine.ui.accounts.swapBlockedReason
+import eth.serotine.ui.activity.ActivityOrder
 import eth.serotine.ui.activity.ActivityUiState
 import eth.serotine.ui.components.Control
 import eth.serotine.ui.components.NetworkLabel
@@ -33,7 +34,9 @@ sealed interface AccountDetailUiState {
      * [threshold] its verified threshold of its owners ("2/3"), for its blockie. [label] is the
      * account's name, or its short address once the ENS name its name follows no longer points
      * to it, which [nameNote] then says. [activity] is what its Activity tab lists while that tab
-     * is shown, and Loading on any other. [network] is the account's (docs/networks.md, N3 and
+     * is shown, its rows running the way [activityOrder] says (newest first unless the user turned
+     * them round from the top bar's menu), and Loading on any other. [network] is the account's
+     * (docs/networks.md, N3 and
      * N4), named beside its control; [networkOn] false while that network is off in this wallet
      * (N19), when Send and Swap wait for it to be turned on; [networkBlocked] while this version can
      * no longer follow that network and others still can, which greys out Send and Swap too;
@@ -68,6 +71,7 @@ sealed interface AccountDetailUiState {
         val queue: SafeQueue? = null,
         val nameNote: String? = null,
         val activity: ActivityUiState = ActivityUiState.Loading,
+        val activityOrder: ActivityOrder = ActivityOrder.NEWEST_FIRST,
         val networkOn: Boolean = true,
         val networkBlocked: Boolean = false,
         val swapVenue: Boolean = true,
@@ -132,7 +136,8 @@ sealed interface AccountDetailUiState {
 
         /**
          * Whether the screen shows the [assets]: on the Assets [segment], and on a Safe's Owners or
-         * Queue one only for an account that has none. The top bar's menu offers the other [sort] order while it does.
+         * Queue one only for an account that has none. The top bar's menu offers the other [sort]
+         * order while it does, and the other [activityOrder] while the Activity is shown.
          */
         val showsAssets: Boolean
             get() = when (segment) {

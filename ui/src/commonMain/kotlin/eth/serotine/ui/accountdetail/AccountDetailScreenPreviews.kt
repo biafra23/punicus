@@ -182,7 +182,7 @@ private val activityRows = listOf(
     ),
     ActivityRow(
         key = "0x" + "2".repeat(64),
-        title = "Executed a Safe transaction",
+        title = "Executed: Send 0.25 ETH",
         detail = "Safe nonce 4 · Treasury · 0xfB69…d359",
         about = "0xfB6916095ca1df60bB79Ce92cE3Ea74c37c5d359",
         time = "Oct 18, 2026, 9:15 AM",
@@ -229,14 +229,17 @@ private const val TOKENS_ACTIVITY_COVERAGE = "Transactions sent from this device
     "when it was added here: its token transfers. ETH it received, and transactions sent from it elsewhere, " +
     "are not listed yet."
 
-/** An account's token transfers among a transaction sent from here. */
+/**
+ * An account's token transfers among a transaction sent from here, by date: each event dated by its
+ * block's verified header where the engine reported it, and by its block alone where it did not.
+ */
 private val tokenActivityRows = listOf(
     ActivityRow(
         key = "0x" + "f".repeat(64) + ":1",
         title = "Received 0.01 USDC",
         detail = "From 0x5290…9EE7",
         about = "0x52908400098527886E0F7030069857D2E4169EE7",
-        time = "Block 9,418,200",
+        time = "Oct 19, 2026, 6:48 PM",
         status = "From an address you have not sent to: compare every character before you copy it",
         state = ActivityState.CAUTION,
         opens = ActivityKey("0x" + "f".repeat(64), 1),
@@ -246,7 +249,7 @@ private val tokenActivityRows = listOf(
         title = "Received 250 USDC",
         detail = "From Treasury · 0xfB69…d359",
         about = "0xfB6916095ca1df60bB79Ce92cE3Ea74c37c5d359",
-        time = "Block 9,417,045",
+        time = "Oct 19, 2026, 3:06 PM",
         status = "On chain, from the token's verified logs",
         state = ActivityState.DONE,
         opens = ActivityKey("0x" + "b".repeat(64), 2),
@@ -261,12 +264,14 @@ private val tokenActivityRows = listOf(
         state = ActivityState.DONE,
         opens = ActivityKey("0x" + "c".repeat(64)),
     ),
+    // Dated by its block alone: the engine did not report when the block was produced.
     ActivityRow(
         key = "0x" + "d".repeat(64) + ":0",
         title = "An unlisted token logged a transfer to it",
         detail = "Contract 0x27b1…1c26",
         about = "0x27b1fdb04752bbc536007a920d24acb045561c26",
         time = "Block 9,408,511",
+        simpleTime = null,
         status = "The claim of a contract the wallet does not list: open it to add it as a token and see what moved",
         state = ActivityState.UNKNOWN,
         opens = ActivityKey("0x" + "d".repeat(64), 0),
@@ -276,21 +281,24 @@ private val tokenActivityRows = listOf(
         title = "Received 1.25 LINK",
         detail = "From Carol · 0xdbF0…C6FB",
         about = "0xdbF03B407c01E7cD3CBea99509d93f8DDDC8C6FB",
-        time = "Block 9,402,980",
+        time = "Oct 17, 2026, 4:21 PM",
         status = "On chain, from the token's verified logs",
         state = ActivityState.DONE,
         opens = ActivityKey("0x" + "e".repeat(64), 5),
     ),
 )
 
-/** A Safe's events among a transaction sent from here, as its Activity merges them by block. */
+/**
+ * A Safe's events among a transaction sent from here, as its Activity merges them by date; an
+ * execution says what the Safe transaction did where this device holds its request.
+ */
 private val safeActivityRows = listOf(
     ActivityRow(
         key = "0x" + "a".repeat(64) + ":0",
         title = "Module enabled",
         detail = "0x8617…070D",
         about = "0x8617E340B3D01FA5F11F306F4090FD50E238070D",
-        time = "Block 9,416,880",
+        time = "Oct 19, 2026, 5:42 PM",
         status = "A module can move this Safe's funds without its owners",
         state = ActivityState.WARNING,
         opens = ActivityKey("0x" + "a".repeat(64), 0),
@@ -300,14 +308,14 @@ private val safeActivityRows = listOf(
         title = "Received 0.5 ETH",
         detail = "From Bob · 0x5aAe…eAed",
         about = "0x5aAeb6053F3E94C9b9A09f33669435E7Ef1BeAed",
-        time = "Block 9,415,302",
+        time = "Oct 19, 2026, 2:38 PM",
         status = "On chain, from the Safe's verified logs",
         state = ActivityState.DONE,
         opens = ActivityKey("0x" + "6".repeat(64), 0),
     ),
     ActivityRow(
         key = "0x" + "7".repeat(64),
-        title = "Executed transaction 4",
+        title = "Executed transaction 4: Send 0.25 ETH",
         detail = "By Alice · 0xfB69…d359",
         about = "0xfB6916095ca1df60bB79Ce92cE3Ea74c37c5d359",
         time = "Oct 19, 2026, 2:02 PM",
@@ -320,17 +328,17 @@ private val safeActivityRows = listOf(
         title = "Owner added",
         detail = "Carol · 0xdbF0…C6FB",
         about = "0xdbF03B407c01E7cD3CBea99509d93f8DDDC8C6FB",
-        time = "Block 9,411,040",
+        time = "Oct 19, 2026, 9:51 AM",
         status = "On chain, from the Safe's verified logs",
         state = ActivityState.DONE,
         opens = ActivityKey("0x" + "8".repeat(64), 3),
     ),
     ActivityRow(
         key = "0x" + "9".repeat(64) + ":1",
-        title = "A Safe transaction failed",
+        title = "Failed: Send 40 USDC",
         detail = "Safe transaction 0x3f1c…a9e2",
         about = "0x52908400098527886E0F7030069857D2E4169EE7",
-        time = "Block 9,410,377",
+        time = "Oct 19, 2026, 7:32 AM",
         status = "Failed on chain: its call reverted",
         state = ActivityState.FAILED,
         opens = ActivityKey("0x" + "9".repeat(64), 1),
