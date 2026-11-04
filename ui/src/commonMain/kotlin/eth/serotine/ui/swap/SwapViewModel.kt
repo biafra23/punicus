@@ -817,7 +817,9 @@ class SwapViewModel(
                     sell = token,
                     buy = (request.buy.asset as? TransferAsset.Erc20Token)?.token?.address,
                     amount = request.amount,
-                    tolerance = request.tolerance,
+                    // Only a swap's approval waits, and a swap is quoted with a tolerance: a wrap has none
+                    // and no approval. Without one there is no swap to keep.
+                    tolerance = request.tolerance ?: return,
                     venue = request.venue,
                     approval = now.hash,
                     step = now.sent.first + 1,
