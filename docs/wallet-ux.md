@@ -774,11 +774,11 @@ Screens 22 to 24 are the swap screens (docs/swaps.md).
       does (16: "Send 40 USDC", "Add an owner", "Call a contract"), its
       transfer in the units of a token the wallet knows.
     - The CoW orders an account signed here (docs/swaps.md) sit among its
-      transactions: "CoW order: 40 USDC for at least 0.0159 ETH" on top
-      while it may fill, then as the chain proves it, at the block of its
-      fill or cancellation ("Swapped 40 USDC for 0.0161 ETH on CoW", "CoW
-      order cancelled"), or where it was signed when it never filled ("CoW
-      order not filled"). A fill's transfer of what it sold is not listed
+      transactions by date: "CoW order: 40 USDC for at least 0.0159 ETH"
+      by when it was signed while it may fill, then as the chain proves it,
+      by its fill's or cancellation's block ("Swapped 40 USDC for 0.0161 ETH
+      on CoW", "CoW order cancelled"), or by when it was signed when it
+      never filled ("CoW order not filled"). A fill's transfer of what it sold is not listed
       again. A tap opens the order's status, not 26.
     - And its events on chain, from the engine's verified log index
       (`ObserveSafeHistory`): ETH received ("Received 0.5 ETH", "From Bob ·
@@ -798,7 +798,8 @@ Screens 22 to 24 are the swap screens (docs/swaps.md).
       warning; so is every other change that weakens the Safe (a module
       disabled, a guard set or removed, the handler removed), with the
       warning its Safe transaction is signed with (17). A transaction sent
-      from here that waits for its block is above every event.
+      from here that waits for its block goes by when a peer took it, above
+      every event dated by its block alone.
     - And every ERC-20 and ERC-721 transfer to or from the account, whichever
       token moved (`ObserveTokenTransfers`, the log index's topic entry):
       "Received 250 USDC" / "From Treasury · …" for a token the wallet shows

@@ -290,13 +290,14 @@ class AccountActivity(
      * when a peer took it; a CoW order alike, by its fill's or cancellation's block, else by when
      * it was signed; an event by when its block was produced), the sent ones before the events of
      * the same moment; and the [undated] events (newest block first), from an engine that does not
-     * date a block, each among them by its block. A sent row still waiting for its block (a CoW
-     * order that may still fill) goes by when a peer took it, and its block, once it has one, is
-     * above every block covered: no undated event goes above it. One with no block that is not
+     * date a block, each among them by its block. A sent row still waiting for its block goes by
+     * when a peer took it (a CoW order that may still fill, by when it was signed), and counts as
+     * newer than every block: no undated event goes above it. One with no block that is not
      * waiting (a nonce used with no block seen, a CoW order never filled) is dated by when it was
-     * sent, and for the undated events goes with the newest row sent before it that has a block,
-     * before the events of that row's block; when none has, just below the newest row sent after
-     * it that has one, and at the top when none has.
+     * sent, and for the undated events counts as just newer than the newest dated row below it
+     * that has a block (a sent row or an event), so it goes before the undated events of that
+     * row's block; when none has, it counts as the block of the nearest dated row above it that
+     * has one, and as newer than every block when none has.
      */
     private fun merged(dated: List<Listed>, undated: List<Pair<ActivityRow, Long>>): List<ActivityRow> {
         val sorted = dated.sortedWith(
