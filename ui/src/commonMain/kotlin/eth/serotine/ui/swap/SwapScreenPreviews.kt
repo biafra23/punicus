@@ -322,10 +322,8 @@ private fun SwapComposeNoRoutePreview() = SwapPreview(
         it.copy(
             buy = link,
             error = "No Uniswap v3 pool takes USDC for LINK, directly or through WETH, for this amount.",
-            estimate = SwapEstimateItem(
-                label = "You receive",
-                note = "No Uniswap v3 pool takes USDC for LINK, directly or through WETH, for this amount.",
-            ),
+            // The estimate says no more than the refused Review: the ViewModel leaves it out.
+            estimate = null,
         )
     },
 )

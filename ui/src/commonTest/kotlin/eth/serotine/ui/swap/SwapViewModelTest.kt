@@ -402,6 +402,41 @@ class SwapViewModelTest {
     }
 
     @Test
+    fun anEstimateThatOnlyRepeatsTheRefusedReviewIsLeftOutAndNothingIsReadWhileReviewQuotes() = runTest {
+        val viewModel = viewModel(sell = usdc.address)
+        viewModel.onBuyChange(null)
+        viewModel.onAmountChange("4")
+        advanceTimeBy(1.seconds)
+        runCurrent()
+        val noRoute = "No Uniswap v3 pool takes USDC for ETH, directly or through WETH, for this amount."
+        assertEquals(noRoute, viewModel.compose.estimate?.note)
+
+        viewModel.review()
+        runCurrent()
+        assertEquals(noRoute, viewModel.compose.error)
+        assertNull(viewModel.compose.estimate, "said once, by the refused Review")
+    }
+
+    @Test
+    fun theEstimateStaysAndIsNotReadAgainWhileReviewQuotes() = runTest {
+        val viewModel = viewModel(sell = usdc.address)
+        viewModel.onBuyChange(null)
+        viewModel.onAmountChange("40")
+        advanceTimeBy(1.seconds)
+        runCurrent()
+        val shown = assertNotNull(viewModel.compose.estimate)
+        // The balance cannot be read for now: Review stays on the compose step, saying why.
+        balances.of(daily.address).value = BalanceReading.Syncing
+        val quotes = uniswap.quotes
+        viewModel.review()
+        runCurrent()
+        assertEquals(quotes, uniswap.quotes, "no estimate read beside the review's quote")
+
+        assertIs<SwapUiState.Compose>(viewModel.uiState.value)
+        assertEquals(shown, viewModel.compose.estimate, "the figures stand until they are due again")
+    }
+
+    @Test
     fun onCowTheEstimateSaysItIsUniswaps() = runTest {
         val viewModel = viewModel(sell = usdc.address)
         viewModel.onBuyChange(null)

@@ -41,10 +41,13 @@ internal fun routeSteps(route: SwapRoute, pools: List<Address>, sell: AssetOptio
     }
 }
 
+/** A price impact of [basisPoints] as a percentage, without its sign: "0.12", or "under 0.01" for none. */
+private fun impactFigure(basisPoints: Int): String =
+    if (basisPoints == 0) "under 0.01" else UInt256.of(basisPoints.toLong()).formatUnits(2)
+
 /** The price impact of [basisPoints] (null: not known), as a review says it. */
 internal fun priceImpactText(basisPoints: Int?): String = basisPoints?.let {
-    val figure = if (it == 0) "under 0.01" else UInt256.of(it.toLong()).formatUnits(2)
-    "Price impact: $figure %, the quote against the pools' spot prices, their fees aside."
+    "Price impact: ${impactFigure(it)} %, the quote against the pools' spot prices, their fees aside."
 } ?: "Price impact: not known this time: the pools' spot prices could not be read at the quote's block, or " +
     "give no measure for this amount."
 
@@ -71,9 +74,9 @@ internal fun noVenueText(contract: Address?, network: Network): String = contrac
 } ?: "Uniswap is not pinned for ${network.displayName}, so nothing can be swapped here."
 
 /**
- * [units] in whole units with [decimals], cut to about six significant digits, never rounded up:
- * "2499.98" for 2499.987654, "0.0004123" for 0.000412345. What an estimate shows; a review shows
- * the exact amount ([exactAmount]).
+ * [units] in whole units with [decimals], cut to six significant digits from one up and to four
+ * below one, never rounded up: "2499.98" for 2499.987654, "0.0004123" for 0.000412345. What an
+ * estimate shows; a review shows the exact amount ([exactAmount]).
  */
 internal fun approxUnits(units: UInt256, decimals: Int, symbol: String): String {
     val exact = units.formatUnits(decimals)
@@ -126,7 +129,7 @@ internal fun swapEstimateItem(
                     "1 ${buy.symbol} ≈ ${approxUnits(it, sell.decimals, sell.symbol)}"
                 },
                 impact = estimating.priceImpact?.takeIf { it >= ESTIMATE_IMPACT_WARNING }?.let {
-                    "Price impact ${UInt256.of(it.toLong()).formatUnits(2)} %: this amount moves the pools' price. " +
+                    "Price impact ${impactFigure(it)} %: this amount moves the pools' price. " +
                         "The review says more."
                 },
                 note = if (cow) {

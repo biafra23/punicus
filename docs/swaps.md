@@ -292,8 +292,8 @@ would return and its rate, before the review.
   finds it, ranked as the review ranks it (`EstimateSwap`). It is chain
   data read through the light client, never a price, and no feed or pool
   average enters it.
-  - What it returns ("≈ 0.016 ETH"), cut to about six significant digits,
-    never rounded up.
+  - What it returns ("≈ 0.016 ETH"), cut to six significant digits from
+    one up and to four below one, never rounded up.
   - The least the swap may return at the tolerance typed ("At least
     0.01592 ETH at 0.5 % tolerance").
   - The rate, one unit sold for what it returns ("1 USDC ≈ 0.0004 ETH"),
@@ -305,7 +305,8 @@ would return and its rate, before the review.
 - **It is asked for a moment after the last edit** of the pair or the
   amount, not at every keystroke, and again every 30 seconds while nothing
   changes. A tolerance edited asks for nothing new. It is read only on the
-  compose step, never under a review.
+  compose step: never under a review, and not while Review quotes the swap,
+  when the last figures stay.
 - **It signs nothing and decides nothing.** No balance, allowance, fee or
   earlier transaction is read, and the swap is not run from the account.
   The review quotes everything again (23), and only what it shows is signed.

@@ -163,7 +163,7 @@ internal fun SwapFormFields(
         ) { onBuyChange(it.contract) }
         Note("Only the assets your wallet lists: what a swap buys shows among the account's assets and can be sent.")
     }
-    form.estimate?.let { SwapEstimateFields(it) }
+    form.estimate?.let { SwapEstimateFields(it, pair = form.sell?.contract to form.buy?.contract) }
     Heading("Slippage tolerance")
     OutlinedTextField(
         value = form.tolerance,
@@ -183,12 +183,12 @@ internal fun SwapFormFields(
 
 /**
  * What the swap would return, the least it may at the tolerance, and the exchange rate, which a
- * tap on the button beside it turns the other way round; or that the quote is being read, or why
- * there is none.
+ * tap on the button beside it turns the other way round, until the [pair] changes; or that the
+ * quote is being read, or why there is none.
  */
 @Composable
-private fun SwapEstimateFields(estimate: SwapEstimateItem) {
-    var inverted by remember { mutableStateOf(false) }
+private fun SwapEstimateFields(estimate: SwapEstimateItem, pair: Any?) {
+    var inverted by remember(pair) { mutableStateOf(false) }
     Heading(estimate.label)
     Column(Modifier.testTag(SWAP_ESTIMATE_TAG), verticalArrangement = Arrangement.spacedBy(4.dp)) {
         if (estimate.checking) {

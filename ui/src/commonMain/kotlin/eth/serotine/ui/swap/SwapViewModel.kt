@@ -397,24 +397,44 @@ class SwapViewModel(
             null,
         )
 
+    /** The last estimate read, kept on screen while the review is quoted and read again after. */
+    private var lastEstimate: Estimate? = null
+
     /**
      * The compose step's estimate: read [ESTIMATE_DELAY] after the pair or the amount last changed,
      * and again every [ESTIMATE_REFRESH]; none while no swap is complete or the screen is past the
-     * compose step.
+     * compose step. While Review quotes the swap, the last one stays and nothing is read: the two
+     * would search the same routes through the light client at once.
      */
     @OptIn(ExperimentalCoroutinesApi::class)
     private val estimates: Flow<Estimate?> =
-        combine(model, step) { model, step -> model?.takeIf { step is Step.Composing }?.let(::estimateKeyOf) }
+        combine(model, step) { model, step ->
+            val composing = step as? Step.Composing ?: return@combine null
+            model?.let(::estimateKeyOf)?.let { it to composing.quoting }
+        }
             .distinctUntilChanged()
-            .transformLatest { key ->
-                if (key == null) {
+            .transformLatest { asked ->
+                val (key, quoting) = asked ?: run {
                     emit(null)
                     return@transformLatest
                 }
-                emit(Estimate(key, estimating = null))
-                delay(ESTIMATE_DELAY)
+                val last = lastEstimate?.takeIf { it.key == key }
+                if (quoting) {
+                    emit(last ?: Estimate(key, estimating = null))
+                    return@transformLatest
+                }
+                if (last == null) {
+                    emit(Estimate(key, estimating = null))
+                    delay(ESTIMATE_DELAY)
+                } else {
+                    // Back from a review that was refused: the figures stand until they are due again.
+                    emit(last)
+                    delay(ESTIMATE_REFRESH)
+                }
                 while (true) {
-                    emit(Estimate(key, estimate(key)))
+                    val read = Estimate(key, estimate(key))
+                    lastEstimate = read
+                    emit(read)
                     delay(ESTIMATE_REFRESH)
                 }
             }
@@ -1214,7 +1234,7 @@ class SwapViewModel(
             estimating = estimate?.takeIf { it.key == key }?.estimating,
             sell = checkNotNull(model.sell),
             buy = checkNotNull(model.buy),
-            tolerance = SlippageTolerance.parsePercent(model.inputs.tolerance.trim()),
+            tolerance = toleranceOf(model.inputs),
             cow = model.venue == SwapVenue.COW,
             network = network,
         )
@@ -1256,7 +1276,10 @@ class SwapViewModel(
             simpleError = composing.simpleError,
             info = composing.info,
             canReview = !composing.quoting && requestOf(model) != null,
-            estimate = estimateItem(model, estimate),
+            // Without figures, an estimate that only says what the refused Review already says is left out.
+            estimate = estimateItem(model, estimate)?.takeUnless {
+                it.receive == null && !it.checking && it.note == composing.error
+            },
         )
         return SwapUiState.Compose(
             form,
@@ -1566,13 +1589,16 @@ class SwapViewModel(
         return sentences.joinToString(" ") + " The balance after counts it."
     }
 
+    /** The tolerance [inputs] has typed, or null when it is none: what the review signs and the estimate says. */
+    private fun toleranceOf(inputs: Inputs): SlippageTolerance? = SlippageTolerance.parsePercent(inputs.tolerance.trim())
+
     /** The compose step's swap, when it is complete: what a quote is asked for. */
     private fun requestOf(model: Model): Request? {
         if (model.swapper !is Swapper.From) return null
         val sell = model.sell ?: return null
         val buy = model.buy ?: return null
         val amount = typedAmount(model.inputs.amount, sell).units ?: return null
-        val tolerance = SlippageTolerance.parsePercent(model.inputs.tolerance.trim()) ?: return null
+        val tolerance = toleranceOf(model.inputs) ?: return null
         return Request(model.inputs, sell, buy, amount, tolerance, model.venue)
     }
 
