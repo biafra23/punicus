@@ -283,6 +283,44 @@ They are pinned per `Network`, as Safe's deployments are (`SafeDeployments`):
 - **Exact input only.** The user says how much to sell. Exact output ("buy
   exactly 5 LINK") can come later.
 
+### The compose step's estimate
+
+Once the pair and the amount are set, Swap, compose (22) shows what the swap
+would return and its rate, before the review.
+
+- **The figures are a verified quote**: the best route as *Finding a route*
+  finds it, ranked as the review ranks it (`EstimateSwap`). It is chain
+  data read through the light client, never a price, and no feed or pool
+  average enters it.
+  - What it returns ("≈ 0.016 ETH"), cut to six significant digits from
+    one up and to four below one, never rounded up.
+  - The least the swap may return at the tolerance typed ("At least
+    0.01592 ETH at 0.5 % tolerance").
+  - The rate, one unit sold for what it returns ("1 USDC ≈ 0.0004 ETH"),
+    turned the other way round on a tap ("1 ETH ≈ 2500 USDC").
+  - A warning when the quote falls 1 % or more below the pools' spot
+    prices (the review's price impact).
+  - Where it comes from: Detailed view names the quote's block; simple
+    mode says "Checked on chain", with no block.
+- **It is asked for a moment after the last edit** of the pair or the
+  amount, not at every keystroke, and again every 30 seconds while nothing
+  changes. A tolerance edited asks for nothing new. It is read only on the
+  compose step: never under a review, and not while Review quotes the swap,
+  when the last figures stay. Figures older than 30 seconds, as when the
+  screen is shown again after a while, are never shown as current: they
+  are read anew.
+- **It signs nothing and decides nothing.** No balance, allowance or earlier
+  transaction of the account is read, and the swap is not run from it.
+  Ranked net of fees, the fee market is read to rank the routes, as the
+  review reads it. The review quotes everything again (23), and only what
+  it shows is signed.
+- **With CoW chosen, the figures are Uniswap's, and say so** ("On Uniswap,
+  you would receive"). CoW is asked for its own estimate only at the review:
+  it is contacted only for a swap the user sends to it (owner ruling,
+  2026-10-22).
+- **Without a quote, it says why**, in the words the review would use: no
+  route, one token, no venue, or the light client's state.
+
 ### The transaction
 
 - **One call:** `SwapRouter02.multicall(deadline, data)`, where `data` holds
@@ -827,7 +865,9 @@ docs/architecture.md.
      transactions' format 5), with what a swap sells held back from later
      transactions, and the status (9) for both.
 4. **Swap screens.**
-   - Swap, compose (22): from, sell, buy, amount, tolerance, fee.
+   - Swap, compose (22): from, sell, buy, amount, tolerance, fee; and,
+     added later, what the swap would return and its rate (*The compose
+     step's estimate*).
    - Swap, review (23): the approval step, then the swap; an approval sent
      returns to 22, which says so and goes on once a block has it.
    - A Swap button on the account detail (4) and "Swap ‹symbol›" in the asset
