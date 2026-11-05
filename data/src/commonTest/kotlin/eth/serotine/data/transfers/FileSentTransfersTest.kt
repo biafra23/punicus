@@ -207,6 +207,31 @@ class FileSentTransfersTest {
     }
 
     @Test
+    fun aWrapAndAnUnwrapAreRecordedWithTheirWeth9AndAmount() = runTest {
+        val weth = Token(Address.of("0x" + "ff".repeat(20)), "WETH", "Wrapped Ether", 18, icon = "weth")
+        val wrap = transfer(7).copy(action = SentAction.Wrap(weth, UInt256.of("100000000000000000")))
+        val unwrap = transfer(8).copy(action = SentAction.Unwrap(weth, UInt256.of("50000000000000000")))
+
+        record().record(wrap)
+        record().record(unwrap)
+
+        assertEquals(listOf(wrap, unwrap), stored())
+        val text = SystemFileSystem.source(file).buffered().use { it.readString() }
+        assertTrue(text.startsWith("""{"version":9,"""), "written as format 9: $text")
+    }
+
+    @Test
+    fun aWrapOfNoKnownKindIsPassedOver() = runTest {
+        SystemFileSystem.createDirectories(directory)
+        val weth = """{"address":"${bob.hex}","symbol":"WETH","name":"Wrapped Ether","decimals":18}"""
+        val wrap = """{"account":"${alice.hex}","nonce":8,"raw":"0208ff",""" +
+            """"wrap":{"kind":"rewrap","weth":$weth,"amount":"1"},"maxCost":"1","sentAt":1800000008}"""
+        SystemFileSystem.sink(file).buffered().use { it.writeString("""{"version":9,"transfers":[$wrap]}""") }
+
+        assertEquals(emptyList(), stored())
+    }
+
+    @Test
     fun aCowOrdersCancellationIsRecordedWithItsSettlementAndUid() = runTest {
         val settlement = Address.of("0x9008d19f58aabd9ed0d60971565aa8510560ab41")
         val uid = CowOrderUid.of("0x" + "ab".repeat(32) + alice.hex.removePrefix("0x") + "6ad9e7f4")
@@ -216,7 +241,7 @@ class FileSentTransfersTest {
 
         assertEquals(listOf(cancellation), stored())
         val text = SystemFileSystem.source(file).buffered().use { it.readString() }
-        assertTrue(text.startsWith("""{"version":8,"""), "written as format 8: $text")
+        assertTrue(text.startsWith("""{"version":9,"""), "written as format 9: $text")
     }
 
     @Test
@@ -232,7 +257,7 @@ class FileSentTransfersTest {
 
         assertEquals(listOf(call), stored())
         val text = SystemFileSystem.source(file).buffered().use { it.readString() }
-        assertTrue(text.startsWith("""{"version":8,"""), "written as format 8: $text")
+        assertTrue(text.startsWith("""{"version":9,"""), "written as format 9: $text")
     }
 
     @Test

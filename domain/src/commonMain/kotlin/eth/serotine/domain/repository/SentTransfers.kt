@@ -181,6 +181,20 @@ sealed interface SentAction {
     ) : SentAction
 
     /**
+     * ETH into WETH: [amount] wei deposited into the pinned WETH9, [weth] (`deposit`), which
+     * credits the account as much WETH (docs/swaps.md, *Wrapping ETH*). What it takes is the
+     * transaction's value, which its cost already holds.
+     */
+    data class Wrap(val weth: Token, val amount: UInt256) : SentAction
+
+    /**
+     * WETH back into ETH: [amount] of the pinned WETH9, [weth], withdrawn (`withdraw`), which pays
+     * the account as much ETH (docs/swaps.md, *Wrapping ETH*). What it takes of the token, the
+     * account's later transactions cannot move while this one is not mined.
+     */
+    data class Unwrap(val weth: Token, val amount: UInt256) : SentAction
+
+    /**
      * The account's cancellation on chain of its CoW order [uid] (`invalidateOrder`), sent to the
      * settlement contract [settlement] (docs/swaps.md, *Proving an order's end*): once mined and
      * finalized, nothing can fill the order. It moves nothing but the fee.

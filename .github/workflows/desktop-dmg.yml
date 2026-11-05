@@ -120,13 +120,14 @@ jobs:
       # Unsigned — Gatekeeper needs a right-click → Open the first time; notarization
       # (Apple Developer ID) is a follow-up. Retry to ride out transient repo-resolution blips.
       - name: Build macOS .dmg (${{ matrix.arch }})
-        # The Reown project IDs (docs/walletconnect.md, *Setting up the project ID*), which :data
-        # compiles into the app: the installers are release builds, so the release ID alone. Scoped
-        # to this step, the one that needs them, so no other step's action can read them.
-        # A pull request from a fork or Dependabot gets no secrets: its build has them empty, and so
-        # WalletConnect switched off, as a local build without them does.
+        # The Reown project ID (docs/walletconnect.md, *Setting up the project ID*), which :data
+        # compiles into the app: the repository's secret or variable WALLETCONNECT_PROJECT_ID, one
+        # ID for debug and release builds for now (owner ruling, 2026-11-05). The installers are release
+        # builds, so they get the release property alone.
+        # Scoped to this step, the one that needs it. Without it, the build has WalletConnect
+        # switched off, as a local build without one does.
         env:
-          ORG_GRADLE_PROJECT_walletConnectProjectIdRelease: ${{ secrets.WALLETCONNECT_PROJECT_ID_RELEASE }}
+          ORG_GRADLE_PROJECT_walletConnectProjectIdRelease: ${{ secrets.WALLETCONNECT_PROJECT_ID || vars.WALLETCONNECT_PROJECT_ID }}
         run: |
           GRADLE_ARGS="-Porg.gradle.java.installations.auto-detect=false -Porg.gradle.java.installations.auto-download=false -Porg.gradle.java.installations.paths=$JAVA_HOME"
           for attempt in 1 2 3; do
