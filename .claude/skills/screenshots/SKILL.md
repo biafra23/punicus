@@ -1,81 +1,101 @@
 ---
 name: screenshots
-description: "Render the screens' previews to PNG files and show them for a PR that changes the UI. What to show (every state the PR adds or changes, before and after side by side, the dark theme), how to render them headless, and where they go (the PR description, one artifact per PR, or the session), never the repository. Use when a PR changes what the user sees."
+description: "How a PR's screenshots come about: CI renders every screen's previews into docs/screenshots/<screen>/<state>.png, commits the changed ones to the PR's branch and writes a before/after table into the description. What the author does (a preview per state, the map of screens, the Screenshots section, merging CI's commit before the next push), what never to do (commit a PNG there yourself), how to look at them locally, and what each failure of the workflow means. Use when a PR changes what the user sees, adds or renames a screen or a state, or when the Screenshots check fails."
 ---
 
-# Screenshots for a PR that changes the UI
+# Screenshots
 
-(Owner's request, 2026-10-19, and the owner's ruling of the same day on
-where they go.)
+(Owner rulings, 2026-11-04. They replace the ruling of 2026-10-19 that no
+screenshot enters the repository, and with it the routes it named: a
+browser logged in to GitHub, one Artifact per PR, the session.)
 
-**A PR that changes the UI shows it in screenshots**: in its description,
-or, from a session that cannot upload them, in the session. "Changes the UI"
-means a user could see the difference: a screen, dialog or component drawn
-differently, a new or changed text, state, colour or layout, a new screen. A
-ViewModel-only change counts when it changes what a screen shows. A PR with
-no visible change says "No UI change" in place of the screenshots, so a
-reader can tell an omission from a decision.
+What the owner decided that day:
 
-## What to show
+- **It works from every kind of session**, local, SSH and cloud. "There is
+  no way around that requirement."
+- **The screenshots live in the repository, in one folder that can be
+  purged if it grows too much:** `docs/screenshots/`. Any git client sees
+  them on the commits that changed them, not only GitHub.
+- **The same screen is always at the same path**, through a map of screen
+  names: `ui/src/desktopTest/kotlin/eth/serotine/ui/Screens.kt`.
+- **Every screen is rendered**, not only those a PR touches, so the images
+  double as goldens. They are kept as small as possible, and one HTML page
+  shows them all (`docs/screenshots/index.html`).
 
-- Every state the PR adds or changes, each under a caption naming the screen
-  and the state.
-- For a changed screen, before and after side by side (a two-column table).
-  The before is taken on the base branch.
-- The dark theme too, when the change touches colours or the theme.
-- Made-up data only, as in the previews: never a real seed phrase, key or
-  password, and no account of the owner's.
+## What CI does
 
-## How to take them
+The Screenshots workflow (`.github/workflows/screenshots.yml`; its header
+has the details) runs on every PR:
 
-The screen's previews are the source (`.claude/rules/ui.md`, *Every screen
-has previews*), rendered headless, so a session with no display or device
-can take them too.
+1. It renders every preview into `docs/screenshots/<screen>/<state>.png`,
+   with the folder's `README.md` and `index.html`.
+2. It optimizes the PNGs that changed, losslessly, and fails a folder over
+   its size budget before anything is committed (`scripts/screenshots.py`).
+3. It commits them to the PR's branch as `github-actions[bot]`, pushed with
+   the `SCREENSHOTS_DEPLOY_KEY` deploy key, so CI runs again on the new
+   head. That run finds nothing to commit.
+4. It writes the before/after table into the description, between
+   `<!-- screenshots:start -->` and `<!-- screenshots:end -->`, under
+   `## Screenshots`: one row per screenshot added, changed or removed since
+   the branch left its base.
+
+On `main` it fails when the committed set differs from the render.
+
+## What the author does
+
+- **A preview per state** (`.claude/rules/ui.md`, *Every screen has
+  previews*). Each entry of a previews list is
+  `ScreenPreview("<state>") { … }`, and the name is the file: lowercase
+  words joined by hyphens, a dark twin ending in `-dark`.
+- **A new screen is registered in `Screens.kt`** with its slug, the folder's
+  name. `ScreensTest` fails until it is.
+- **A slug or a state name, once on `main`, stays.** Renaming one moves its
+  image, and the table shows it as one removed and one added.
+- **The `## Screenshots` section** holds one line in your words: what the
+  PR changes on screen, or "No UI change". CI writes its table under the
+  heading. Never edit between the markers: the next run rewrites them.
+- **Merge CI's commit before you push again.** After a push, CI may add a
+  commit `Screenshots: …` to the branch. Run `git pull --no-rebase` before
+  the next push. Never force-push over it.
+- **Never commit a PNG under `docs/screenshots/` yourself.** CI's render is
+  the only source: a render on another machine draws other fonts.
+
+The table is the check: a PR that says "No UI change" while its table lists
+changed screenshots, or a changed screen whose table lacks a state the PR
+adds, is a finding.
+
+**A change the previews cannot draw** (navigation, an animation, a host's
+window or notification) has no screenshot: the section's line says in words
+what changes. Whether a capture of the running app should go with it, and
+where, is open; the owner decides.
+
+## Looking at them locally
 
 ```bash
-# One screen (…DialogPreviewsTest for a dialog). Leave --tests out for every screen.
-./gradlew :ui:desktopTest --tests '*.<Feature>ScreenPreviewsTest' --rerun -Pscreenshots=build/screenshots
+# Every screen into build/screenshots/ (git-ignored), with README.md and index.html
+./gradlew :ui:desktopTest --tests '*PreviewsTest' --tests '*ScreenshotIndexTest' --rerun -Pscreenshots=build/screenshots
 ```
 
-It writes each preview of that screen to
-`build/screenshots/<feature>Screen-<nn>.png` (`…Dialog-<nn>.png` for a
-dialog's), nn the two-digit position in the previews list counting from 01
-(`RenderPreviews.kt`), replacing that screen's files from an earlier run. A
-state the PR adds gets a preview first, which the previews rule asks for
-anyway. A capture of the running app (`:desktop-app:run`, the debug Android
-app) may stand in or be added where the previews cannot show the change
-(navigation, an animation, a host's window or notification).
+One screen: `--tests '*.<Feature>ScreenPreviewsTest'`. The committed set is
+in `docs/screenshots/`; open its `index.html` from a checkout. An older
+commit's image: `git show <rev>:docs/screenshots/<screen>/<state>.png`.
 
-## Where to put them
+## When the Screenshots check fails
 
-**In the PR description only, never in the repository** (owner ruling,
-2026-10-19). No screenshot is committed anywhere: not on the PR's own branch
-(binaries merged into `main` stay in its history for good), not on a branch
-of its own, not in a commit removed again later. `build/screenshots/` is
-git-ignored and stays so.
+| The message says | What it means, and what to do |
+|---|---|
+| this run cannot push the render | A fork PR, the `SCREENSHOTS_DEPLOY_KEY` secret is not set, or the PR's head branch is `main`, which the workflow never writes. A maintainer renders on a branch of this repository, or the owner sets the secret. |
+| a preview is not deterministic | The render differs right after CI's own commit. A preview draws the clock or randomness: give it fixed sample data. |
+| the push was rejected | The branch moved while the run worked. The run on the new head renders again. |
+| over its budget | The folder, or one image, is too large. The way out is in the message and in the folder's README. |
+| does not match the render of main | A PR merged before its run had committed. Open a PR from `main`; its run commits the render. |
 
-Use the first of these your session can do:
+## The deploy key
 
-1. **A browser logged in to GitHub** (the desktop app's browser, on the
-   owner's computer). GitHub takes an image into a description only from
-   such a browser; the API offers no upload. Drag the files into the
-   description's `## Screenshots` section yourself: each under its caption,
-   before and after side by side for a changed screen.
-2. **The session's Artifact tool** (owner ruling, 2026-10-19). ONE artifact
-   per PR: a page with every screenshot under its caption, before and after
-   side by side for a changed screen, titled with the PR's number and
-   subject. Give its link in your reply. The description's `## Screenshots`
-   section gives the same link (private to the owner; the owner's artifact
-   gallery lists it too) and the command that renders the screenshots, with
-   no table of file names in place of the images. A push that changes what
-   the screenshots show republishes that same artifact in the same round, so
-   its link stays and its history keeps the earlier versions.
-3. **Neither a browser nor an Artifact tool:** attach the files to the
-   conversation, each named after its screen and state
-   (`accounts-head-too-old-after.png`) with its caption, and the section
-   says they were shown in the session.
-4. **A host where the files reach no one** (CI, a plain `claude` terminal):
-   the section lists each state under its caption, with the
-   `<feature>Screen-<nn>.png` it renders to, and says the images await
-   rendering with the command above: the after images on the PR's branch,
-   the before images on the base branch.
+`SCREENSHOTS_DEPLOY_KEY` is an Actions secret holding the private half of a
+write deploy key of this repository; the public half is under Settings →
+Deploy keys. Creating, rotating or removing it is the owner's action. A
+push with `GITHUB_TOKEN` would start no workflow, which is why a key is
+used. `main` has no branch protection today, so the key could push there
+too, though the workflow never does; a rule that lets only PRs into `main`
+would confine it to PR branches. That setting is the owner's.

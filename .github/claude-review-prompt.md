@@ -22,19 +22,18 @@ rules, especially:
   (.claude/rules/platform.md, "The minSdk 29 JDK-API budget"), no
   java.net.http, HTTP via Ktor;
   Java 17 class files for everything Android loads.
-- PR description: a PR that changes what the UI shows carries
-  screenshots of it, or says "No UI change"
-  (.claude/skills/screenshots/SKILL.md); read it with `gh pr view` and flag a
-  visible change without them, or with them missing a state it adds.
-  A session without a browser logged in to GitHub cannot upload
-  images, so a `## Screenshots` section linking the session's
-  artifact that shows them (a private claude.ai link the reviewer
-  cannot open), saying they were shown to the owner in the session,
-  or (CI, a plain terminal) that they await rendering, each state
-  listed under its caption, with the command that renders them,
-  counts as present; flag a table of file
-  names in place of images, and a screenshot committed to the
-  repository.
+- PR description: a PR that changes what the UI shows says so in
+  its `## Screenshots` section, or says "No UI change"
+  (.claude/skills/screenshots/SKILL.md). CI renders every screen
+  into docs/screenshots/ and writes the before/after table between
+  `<!-- screenshots:start -->` and `<!-- screenshots:end -->`; it
+  may still be missing while the Screenshots check runs, which is
+  not a finding. Read the description with `gh pr view` and flag
+  "No UI change" while the table lists changed screenshots, a
+  visible change whose table lacks a state it adds, a PNG under
+  docs/screenshots/ changed by a commit that is neither
+  github-actions[bot]'s nor a merge, and a rendered screenshot
+  committed anywhere else.
 - Kotlin: immutable data, sealed UI states, structured concurrency
   (no GlobalScope, no blocking on the main thread), SOLID as
   .claude/rules/architecture.md spells it out.

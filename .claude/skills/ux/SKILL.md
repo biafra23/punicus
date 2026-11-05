@@ -83,9 +83,10 @@ most designs touch:
 2. Every state the screen draws differently becomes a preview
    (`<Feature>ScreenPreviews.kt`), plus one in the dark theme, with made-up
    data: never a real seed phrase, key or password.
-3. The PR shows every state it adds or changes in screenshots, before and
-   after side by side for a changed screen, the dark theme too when colours
-   change (`.claude/skills/screenshots/SKILL.md`).
+3. The PR shows every state it adds or changes in screenshots: CI renders
+   each preview and writes the before/after table into the description
+   (`.claude/skills/screenshots/SKILL.md`). A state without a preview has no
+   screenshot, so the dark theme gets its own preview when colours change.
 
 A design that greys out, labels or refuses is as much a deliverable as one
 that adds: say in the doc what the user sees in each case, and why.
