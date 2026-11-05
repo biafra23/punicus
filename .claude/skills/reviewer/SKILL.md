@@ -65,8 +65,9 @@ diff at step 2 of the Workflow.
    screenshots skill); while the Screenshots check runs it may be missing,
    which is not a finding. Flag: "No UI change" while the table lists
    changed screenshots; a visible change whose table lacks a state the PR
-   adds; a PNG under `docs/screenshots/` changed by a commit that is not
-   `github-actions[bot]`'s; a rendered screenshot committed anywhere else;
+   adds; a PNG under `docs/screenshots/` changed by a commit that is
+   neither `github-actions[bot]`'s nor a merge; a rendered screenshot
+   committed anywhere else;
    a description that is not in English; a missing session link.
 8. **Kotlin.** Immutable data, sealed UI states, structured concurrency (no
    `GlobalScope`, no blocking on the main thread), SOLID as

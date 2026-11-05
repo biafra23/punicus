@@ -106,8 +106,9 @@ two repositories in step when one changes.
 (Owner rulings, 2026-11-04; `.claude/skills/screenshots/SKILL.md`.)
 
 - `screenshots.yml` is the one workflow that writes to the repository. It
-  commits rendered PNGs under `docs/screenshots/`, and nothing else, to a
-  same-repo PR's branch, and never to `main`.
+  commits what it renders under `docs/screenshots/` (the PNGs and the
+  folder's `README.md` and `index.html`), and nothing else, to a same-repo
+  PR's branch, and never to `main`.
 - It pushes with the `SCREENSHOTS_DEPLOY_KEY` deploy key, because a push
   with `GITHUB_TOKEN` starts no workflow and the new head would go untested.
   The key, and any change to it, is the owner's.

@@ -31,9 +31,9 @@ rules, especially:
   not a finding. Read the description with `gh pr view` and flag
   "No UI change" while the table lists changed screenshots, a
   visible change whose table lacks a state it adds, a PNG under
-  docs/screenshots/ changed by a commit that is not
-  github-actions[bot]'s, and a rendered screenshot committed
-  anywhere else.
+  docs/screenshots/ changed by a commit that is neither
+  github-actions[bot]'s nor a merge, and a rendered screenshot
+  committed anywhere else.
 - Kotlin: immutable data, sealed UI states, structured concurrency
   (no GlobalScope, no blocking on the main thread), SOLID as
   .claude/rules/architecture.md spells it out.

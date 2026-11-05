@@ -29,14 +29,15 @@ has the details) runs on every PR:
 
 1. It renders every preview into `docs/screenshots/<screen>/<state>.png`,
    with the folder's `README.md` and `index.html`.
-2. It optimizes the PNGs that changed, losslessly.
+2. It optimizes the PNGs that changed, losslessly, and fails a folder over
+   its size budget before anything is committed (`scripts/screenshots.py`).
 3. It commits them to the PR's branch as `github-actions[bot]`, pushed with
    the `SCREENSHOTS_DEPLOY_KEY` deploy key, so CI runs again on the new
    head. That run finds nothing to commit.
 4. It writes the before/after table into the description, between
    `<!-- screenshots:start -->` and `<!-- screenshots:end -->`, under
-   `## Screenshots`: one row per screenshot added, changed or removed.
-5. It fails a folder over its size budget (`scripts/screenshots.py`).
+   `## Screenshots`: one row per screenshot added, changed or removed since
+   the branch left its base.
 
 On `main` it fails when the committed set differs from the render.
 
