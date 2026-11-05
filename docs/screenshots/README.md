@@ -4,6 +4,10 @@ Every screen of Serotine in every state its previews draw, rendered headless fro
 
 [index.html](index.html) shows them all on one page from a checkout.
 
+Clone without the images: `git clone --filter=blob:none https://github.com/biafra23/serotine.git` fetches a file only when a command needs it, so the history of this folder costs nothing until it is looked at. `git sparse-checkout set --no-cone '/*' '!/docs/screenshots/'` leaves it out of the working tree as well.
+
+If the folder grows too much, there are two levers, both the owner's. Deleting the folder stops the growth and keeps every past image in the history. Rewriting the history with `git filter-repo --path docs/screenshots --invert-paths` drops them for good, but changes the SHA of every commit since the first screenshot: tags, links to commits and every existing clone must follow. CI fails a pull request once the folder, or one image, passes its size budget (`scripts/screenshots.py`).
+
 | Screen | Folder | States |
 |---|---|---|
 | [Account detail](#account-detail) | `account-detail/` | 35 |
@@ -52,9 +56,9 @@ Every screen of Serotine in every state its previews draw, rendered headless fro
 | [Tokens (simple mode)](#simple-tokens) | `simple-tokens/` | 2 |
 | [Transfer status (simple mode)](#simple-transfer-status) | `simple-transfer-status/` | 5 |
 | [Watch address (simple mode)](#simple-watch) | `simple-watch/` | 9 |
-| [Swap](#swap) | `swap/` | 35 |
+| [Swap](#swap) | `swap/` | 38 |
 | [Tokens](#tokens) | `tokens/` | 7 |
-| [Transfer status](#transfer-status) | `transfer-status/` | 25 |
+| [Transfer status](#transfer-status) | `transfer-status/` | 26 |
 | [Update required](#update-required) | `update-required/` | 2 |
 | [Watch address](#watch) | `watch/` | 25 |
 | [Widget setup](#widget-pair) | `widget-pair/` | 9 |
@@ -825,7 +829,7 @@ Every screen of Serotine in every state its previews draw, rendered headless fro
 <a name="swap"></a>
 ## Swap
 
-`swap/`, 35 states: `compose-empty`, `compose-empty-dark`, `composed`, `compose-estimate-checking`, `compose-estimate-unavailable`, `compose-high-impact`, `compose-quoting`, `compose-input-errors`, `compose-no-route`, `compose-cow-orders-unreadable`, `compose-on-cow`, `compose-cow-did-not-answer`, `compose-earlier-order-live`, `compose-approval-sent`, `compose-earlier-maybe-sent`, `compose-token-not-found`, `approval`, `approval-reset-first`, `review`, `review-dark`, `review-through-weth-with-biometrics`, `review-wrong-password`, `review-signing`, `review-refreshing`, `review-not-sent`, `cow-review`, `cow-review-dark`, `cow-review-uniswap-gives-more`, `order-placed`, `loading`, `watch-only`, `sent`, `approval-pending`, `review-step-two`, `approval-earlier-failed`
+`swap/`, 38 states: `compose-empty`, `compose-empty-dark`, `composed`, `compose-estimate-checking`, `compose-estimate-unavailable`, `compose-high-impact`, `compose-quoting`, `compose-input-errors`, `compose-no-route`, `compose-cow-orders-unreadable`, `compose-on-cow`, `compose-cow-did-not-answer`, `compose-earlier-order-live`, `compose-approval-sent`, `compose-earlier-maybe-sent`, `compose-token-not-found`, `approval`, `approval-reset-first`, `review`, `review-dark`, `review-through-weth-with-biometrics`, `review-wrong-password`, `review-signing`, `review-refreshing`, `review-not-sent`, `cow-review`, `cow-review-dark`, `cow-review-uniswap-gives-more`, `order-placed`, `loading`, `watch-only`, `sent`, `approval-pending`, `review-step-two`, `approval-earlier-failed`, `wrap-review`, `wrap-review-dark`, `unwrap-review`
 
 <a href="swap/compose-empty.png"><img src="swap/compose-empty.png" width="206" alt="compose-empty"></a>
 <a href="swap/compose-empty-dark.png"><img src="swap/compose-empty-dark.png" width="206" alt="compose-empty-dark"></a>
@@ -862,6 +866,9 @@ Every screen of Serotine in every state its previews draw, rendered headless fro
 <a href="swap/approval-pending.png"><img src="swap/approval-pending.png" width="206" alt="approval-pending"></a>
 <a href="swap/review-step-two.png"><img src="swap/review-step-two.png" width="206" alt="review-step-two"></a>
 <a href="swap/approval-earlier-failed.png"><img src="swap/approval-earlier-failed.png" width="206" alt="approval-earlier-failed"></a>
+<a href="swap/wrap-review.png"><img src="swap/wrap-review.png" width="206" alt="wrap-review"></a>
+<a href="swap/wrap-review-dark.png"><img src="swap/wrap-review-dark.png" width="206" alt="wrap-review-dark"></a>
+<a href="swap/unwrap-review.png"><img src="swap/unwrap-review.png" width="206" alt="unwrap-review"></a>
 
 <a name="tokens"></a>
 ## Tokens
@@ -879,7 +886,7 @@ Every screen of Serotine in every state its previews draw, rendered headless fro
 <a name="transfer-status"></a>
 ## Transfer status
 
-`transfer-status/`, 25 states: `pending`, `pending-dark`, `included`, `finalized`, `failed`, `unavailable`, `no-record`, `safe-execution`, `safe-deployment`, `safe-listed`, `safe-listed-dark`, `safe-not-listed`, `maybe-sent`, `retrying`, `turned-away`, `loading`, `swap`, `swap-failed`, `approval`, `allowance-reset`, `swap-dark`, `swap-received`, `nonce-used`, `maybe-sent-nonce-used`, `cow-cancellation`
+`transfer-status/`, 26 states: `pending`, `pending-dark`, `included`, `finalized`, `failed`, `unavailable`, `no-record`, `safe-execution`, `safe-deployment`, `safe-listed`, `safe-listed-dark`, `safe-not-listed`, `maybe-sent`, `retrying`, `turned-away`, `loading`, `swap`, `swap-failed`, `approval`, `allowance-reset`, `swap-dark`, `swap-received`, `nonce-used`, `maybe-sent-nonce-used`, `cow-cancellation`, `wrap`
 
 <a href="transfer-status/pending.png"><img src="transfer-status/pending.png" width="206" alt="pending"></a>
 <a href="transfer-status/pending-dark.png"><img src="transfer-status/pending-dark.png" width="206" alt="pending-dark"></a>
@@ -906,6 +913,7 @@ Every screen of Serotine in every state its previews draw, rendered headless fro
 <a href="transfer-status/nonce-used.png"><img src="transfer-status/nonce-used.png" width="206" alt="nonce-used"></a>
 <a href="transfer-status/maybe-sent-nonce-used.png"><img src="transfer-status/maybe-sent-nonce-used.png" width="206" alt="maybe-sent-nonce-used"></a>
 <a href="transfer-status/cow-cancellation.png"><img src="transfer-status/cow-cancellation.png" width="206" alt="cow-cancellation"></a>
+<a href="transfer-status/wrap.png"><img src="transfer-status/wrap.png" width="206" alt="wrap"></a>
 
 <a name="update-required"></a>
 ## Update required
