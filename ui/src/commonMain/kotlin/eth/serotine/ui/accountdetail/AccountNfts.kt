@@ -16,13 +16,14 @@ import eth.serotine.ui.components.grouped
 internal fun nftSection(holdings: NftHoldings, unlistedOpen: Boolean, off: String? = null): NftSection {
     val before = off?.let { "$it is off: proven before, may have changed since" }
     return when (holdings) {
-        NftHoldings.NotFollowed -> NftSection(empty = NOT_FOLLOWED)
+        NftHoldings.NotFollowed -> NftSection(unlistedOpen = unlistedOpen, empty = NOT_FOLLOWED)
         is NftHoldings.Checking -> NftSection(
+            unlistedOpen = unlistedOpen,
             empty = CHECKING,
             note = "Received since block ${grouped(holdings.start)}",
             simpleNote = SINCE_FOLLOWED,
         )
-        NftHoldings.Unavailable -> NftSection(empty = UNAVAILABLE)
+        NftHoldings.Unavailable -> NftSection(unlistedOpen = unlistedOpen, empty = UNAVAILABLE)
         is NftHoldings.Read -> {
             val (known, unlisted) = holdings.nfts.partition { it.collection.known != null }
             val unproven = "${holdings.unproven} not proven held yet".takeIf { holdings.unproven > 0 }

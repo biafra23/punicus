@@ -132,6 +132,9 @@ class AccountDetailViewModelTest {
     private val logIndex = FakeLogIndex()
     private val historyStarts = MemoryHistoryStarts()
     private val nftContracts = FakeNftContracts()
+
+    /** The log index the NFTs are found in: apart from the Activity's, which is read only on its tab. */
+    private val nftLogIndex = FakeLogIndex()
     private val names = FakeNames()
     private val balances = FakeBalances()
     private val usdc =
@@ -191,7 +194,7 @@ class AccountDetailViewModelTest {
         DropWaitingSwap(waitingSwaps),
         ObserveAmountsHidden(amountsHidden),
         ToggleAmountsHidden(amountsHidden),
-        ObserveNfts(logIndex, historyStarts, nftContracts),
+        ObserveNfts(nftLogIndex, historyStarts, nftContracts),
         formatTime = { "<$it>" },
         clock = { NOW },
     )
@@ -371,6 +374,7 @@ class AccountDetailViewModelTest {
                 pendingAssets = 3,
                 tokensNote = "Checking 3 tokens",
                 pricesNote = "Prices: Chainlink feeds, read through the light client, testnet prices",
+                nfts = NftSection(empty = "NFTs are found once the light client is synced."),
             ),
             viewModel.uiState.value,
         )
@@ -1012,7 +1016,7 @@ class AccountDetailViewModelTest {
             DropWaitingSwap(waitingSwaps),
             ObserveAmountsHidden(amountsHidden),
             ToggleAmountsHidden(amountsHidden),
-            ObserveNfts(logIndex, historyStarts, nftContracts),
+            ObserveNfts(nftLogIndex, historyStarts, nftContracts),
         )
         backgroundScope.launch { viewModel.uiState.collect {} }
         runCurrent()
