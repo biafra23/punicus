@@ -100,6 +100,31 @@ class SpliceTest(unittest.TestCase):
         new = screenshots.splice(body, self.block)
         self.assertTrue(new.startswith("Intro\n\n\n```\na\n\n\nb\n```\n"))
 
+    def test_markers_quoted_in_the_text_are_text(self):
+        # PR #242's description: the first run put its table between these two quotes.
+        intro = (
+            f"Intro\n\n- one line quotes `{screenshots.START}` and `{screenshots.END}` together;\n"
+            f"- this one quotes `{screenshots.START}\nand the next line `{screenshots.END}`, under the heading.\n"
+        )
+        body = intro + "\n## Screenshots\n\nNo UI change.\n\nSession: `x`\n"
+        new = screenshots.splice(body, self.block)
+        self.assertTrue(new.startswith(intro), "the quoted markers stay as written")
+        self.assertIn(f"## Screenshots\n\n{self.block}\n\nNo UI change.", new)
+
+    def test_markers_and_a_heading_in_fenced_code_are_text(self):
+        fenced = f"~~~\n## Screenshots\n{screenshots.START}\nOLD\n{screenshots.END}\n~~~\n"
+        body = f"Intro\n\n{fenced}\n## Screenshots\n\nNo UI change.\n\nSession: `x`\n"
+        new = screenshots.splice(body, self.block)
+        self.assertIn(fenced, new)
+        self.assertIn(f"## Screenshots\n\n{self.block}\n\nNo UI change.", new)
+
+    def test_a_second_run_replaces_the_first_runs_block(self):
+        body = f"Quotes `{screenshots.START}` and `{screenshots.END}`.\n\n## Screenshots\n\nNo UI change.\n"
+        first = screenshots.splice(body, self.block)
+        second = screenshots.splice(first, f"{screenshots.START}\nNEWER\n{screenshots.END}")
+        self.assertNotIn("NEW\n", second)
+        self.assertEqual(second, first.replace("\nNEW\n", "\nNEWER\n"))
+
     def test_crlf_bodies_are_normalized(self):
         new = screenshots.splice("Intro\r\n\r\n## Screenshots\r\n\r\nSession: `x`\r\n", self.block)
         self.assertNotIn("\r", new)

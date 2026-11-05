@@ -6,7 +6,8 @@
 
 `table` reads `git diff --name-status --no-renames <branch point> <head> -- docs/screenshots` on stdin and writes
 the before/after table of the screenshots the PR changed into the PR's description, between the
-markers `<!-- screenshots:start -->` and `<!-- screenshots:end -->`. A description without the markers
+markers `<!-- screenshots:start -->` and `<!-- screenshots:end -->`, each on a line of its own outside
+fenced code (a marker quoted in the text is text). A description without the markers
 gets them under its `## Screenshots` heading; without that heading, above its session link, the last
 line (the pr skill); without either, at the end. Every run rewrites the whole block from the diff, so
 the table never accumulates stale rows. The images are the files at the two commits, by raw URL, so
@@ -114,15 +115,40 @@ def img(url: str, alt: str) -> str:
     return f'<a href="{url}"><img src="{url}" width="{THUMB_WIDTH}" alt="{alt}"></a>'
 
 
+def prose(lines: list[str]) -> list[bool]:
+    """Per line, whether it lies outside a fenced code block: only there does a marker or the heading count."""
+    result, fence = [], None
+    for line in lines:
+        opening = re.match(r" {0,3}(`{3,}|~{3,})", line)
+        if fence is None:
+            result.append(opening is None)
+            fence = opening.group(1) if opening else None
+        else:
+            result.append(False)
+            closing = re.fullmatch(r" {0,3}(`{3,}|~{3,})\s*", line)
+            if closing and closing.group(1)[0] == fence[0] and len(closing.group(1)) >= len(fence):
+                fence = None
+    return result
+
+
 def splice(body: str, block: str) -> str:
-    """The description with the block in place of the marked one, or inserted where the docstring says."""
+    """The description with the block in place of the marked one, or inserted where the docstring says.
+
+    A marker counts only on a line of its own, outside fenced code: a description that quotes the markers
+    in its text, as this workflow's own PR does, keeps that text.
+    """
     body = body.replace("\r\n", "\n")
-    if START in body and END in body and body.index(START) < body.index(END):
-        head = body[: body.index(START)]
-        tail = body[body.index(END) + len(END) :]
-        return head + block + tail
     lines = body.split("\n")
-    heading = next((i for i, line in enumerate(lines) if re.fullmatch(r"##\s+Screenshots\s*", line)), None)
+    counts = prose(lines)
+    start = next((i for i, line in enumerate(lines) if counts[i] and line.rstrip() == START), None)
+    end = None
+    if start is not None:
+        end = next((i for i in range(start + 1, len(lines)) if counts[i] and lines[i].rstrip() == END), None)
+    if end is not None:
+        return "\n".join(lines[:start] + [block] + lines[end + 1 :])
+    heading = next(
+        (i for i, line in enumerate(lines) if counts[i] and re.fullmatch(r"##\s+Screenshots\s*", line)), None
+    )
     if heading is not None:
         insert = heading + 1
         while insert < len(lines) and not lines[insert].strip():
