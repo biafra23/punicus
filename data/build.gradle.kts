@@ -19,7 +19,7 @@ plugins {
 }
 
 // The Reown project IDs WalletConnect connects with (docs/walletconnect.md, ruling 2): never committed,
-// passed as Gradle properties (from CI secrets, or ~/.gradle/gradle.properties for a local build), one
+// passed as Gradle properties (from the CI secret or variable, or ~/.gradle/gradle.properties locally), one
 // for debug builds and one for release builds (for now the same ID: owner ruling, 2026-11-05). A build
 // without one has dApp connections switched off and says so. An ID is letters and digits: anything else
 // fails the build rather than reach the code.
