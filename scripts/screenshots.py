@@ -115,19 +115,37 @@ def img(url: str, alt: str) -> str:
     return f'<a href="{url}"><img src="{url}" width="{THUMB_WIDTH}" alt="{alt}"></a>'
 
 
+def opens_fence(line: str) -> str | None:
+    """The fence a line opens, or None. A backtick run with a backtick after it is inline code, not a fence."""
+    opening = re.match(r" {0,3}(`{3,}|~{3,})", line)
+    if opening is None or (opening.group(1)[0] == "`" and "`" in line[opening.end() :]):
+        return None
+    return opening.group(1)
+
+
+def closes_fence(line: str, fence: str) -> bool:
+    closing = re.fullmatch(r" {0,3}(`{3,}|~{3,})\s*", line)
+    return closing is not None and closing.group(1)[0] == fence[0] and len(closing.group(1)) >= len(fence)
+
+
 def prose(lines: list[str]) -> list[bool]:
-    """Per line, whether it lies outside a fenced code block: only there does a marker or the heading count."""
-    result, fence = [], None
-    for line in lines:
-        opening = re.match(r" {0,3}(`{3,}|~{3,})", line)
-        if fence is None:
-            result.append(opening is None)
-            fence = opening.group(1) if opening else None
-        else:
-            result.append(False)
-            closing = re.fullmatch(r" {0,3}(`{3,}|~{3,})\s*", line)
-            if closing and closing.group(1)[0] == fence[0] and len(closing.group(1)) >= len(fence):
-                fence = None
+    """Per line, whether it lies outside a fenced code block: only there does a marker or the heading count.
+
+    A fence that is never closed is read as text, so the block after it is still found and replaced, never
+    written a second time.
+    """
+    result = [True] * len(lines)
+    i = 0
+    while i < len(lines):
+        fence = opens_fence(lines[i])
+        close = None
+        if fence is not None:
+            close = next((j for j in range(i + 1, len(lines)) if closes_fence(lines[j], fence)), None)
+        if close is None:
+            i += 1
+            continue
+        result[i : close + 1] = [False] * (close + 1 - i)
+        i = close + 1
     return result
 
 

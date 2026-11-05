@@ -118,6 +118,13 @@ class SpliceTest(unittest.TestCase):
         self.assertIn(fenced, new)
         self.assertIn(f"## Screenshots\n\n{self.block}\n\nNo UI change.", new)
 
+    def test_an_unclosed_fence_or_inline_backticks_hide_no_block(self):
+        for opener in ("```\nnever closed", "```inline``` code"):
+            body = f"Intro\n\n{opener}\n\n## Screenshots\n\n{screenshots.START}\nOLD\n{screenshots.END}\n"
+            new = screenshots.splice(body, self.block)
+            self.assertNotIn("OLD", new, opener)
+            self.assertEqual(new.count(screenshots.START), 1, opener)
+
     def test_a_second_run_replaces_the_first_runs_block(self):
         body = f"Quotes `{screenshots.START}` and `{screenshots.END}`.\n\n## Screenshots\n\nNo UI change.\n"
         first = screenshots.splice(body, self.block)
