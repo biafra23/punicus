@@ -24,6 +24,9 @@ two open points, the chains and the order.
    dashboard.reown.com under the owner's account. A Gradle property supplies
    it at build time, from a CI secret, with separate IDs for debug and
    release. A build without an ID has WalletConnect switched off and says so.
+   Amended (owner ruling, 2026-11-05): one project ID serves both builds for
+   now, since a free-tier account has one project. CI reads it from one
+   repository secret or variable, `WALLETCONNECT_PROJECT_ID`.
 3. **A new key tier: an owner key in an external wallet.** The key lives in
    the other wallet, and so do its backup and its unlock. Serotine keeps only
    the address and the session. Safe owners first. An EOA whose key is in
@@ -475,33 +478,43 @@ the first thing that does.
 
 1. **An account on the WalletConnect (Reown) dashboard**, under the owner's
    own account: the project is the owner's.
-2. **Two projects of type Wallet (WalletKit)**, one for the debug build and
-   one for the release build. They are separate because ruling 2 asks for
-   separate IDs, and because the two Android apps have different package
-   names.
-3. **App ID on each project**: the Android package name and the iOS bundle
-   ID of that build. With those set, another app cannot use the project's ID
-   to pass itself off as Serotine.
-4. **The two IDs as GitHub Actions secrets** on the repository, named
-   `WALLETCONNECT_PROJECT_ID_DEBUG` and `WALLETCONNECT_PROJECT_ID_RELEASE`
-   (Settings → Secrets and variables → Actions → New repository secret).
-   - The steps that build what users install pass them to Gradle as the
+2. **One project of type Wallet (WalletKit)**, for the debug and the
+   release build alike (owner ruling, 2026-11-05: a free-tier account has
+   one project). Ruling 2 asked for two, one per build. The build keeps a
+   debug and a release property, so a second project, on a paid plan, needs
+   only the workflows to pass two names again.
+3. **No App ID or Domain allowlist, for now.** An empty list lets every app
+   use the ID. Serotine sends the relay its project ID and its signed login,
+   and no app ID, so a list could keep it out. Whether one does is for the
+   live relay test to show (`WalletConnectRelayLiveTest`). If it passes with
+   a list set, the list holds the Android package names `eth.serotine` and
+   `eth.serotine.debug` and the iOS bundle ID `eth.serotine`. With a list
+   set, another app cannot use the ID to pass itself off as Serotine. A
+   change to the list takes about 15 minutes to apply.
+4. **The ID as one GitHub Actions secret or variable** on the repository,
+   named `WALLETCONNECT_PROJECT_ID` (Settings → Secrets and variables →
+   Actions). A secret wins over a variable of the same name. The ID is not a
+   credential: it ships in every binary. So a variable, which shows in logs,
+   is fine.
+   - The steps that build what users install pass it to Gradle as the
      properties `walletConnectProjectIdDebug` and
      `walletConnectProjectIdRelease`, through the environment variables
      `ORG_GRADLE_PROJECT_walletConnectProjectIdDebug` and
      `ORG_GRADLE_PROJECT_walletConnectProjectIdRelease`, each in that step
-     alone. The APK build (`android-apk.yml`) passes both, since it builds
-     the debug and the release app. The macOS dmg, the Linux deb and the
-     Windows msi are release builds, and get the release ID alone. Build and
+     alone. The APK build (`android-apk.yml`) sets both, since it builds the
+     debug and the release app. The macOS dmg, the Linux deb and the Windows
+     msi are release builds, and set the release property alone. Build and
      Test and the iOS compile jobs need neither.
    - `:data` writes them into a generated, uncommitted source file, trimmed
      of spaces and line breaks. An ID that is not letters and digits fails
      the build.
-   - Until the secrets exist, CI builds with WalletConnect switched off. So
-     does a pull request from a fork or from Dependabot, which gets no
-     secrets.
-5. **For a local build**, the debug ID goes in `~/.gradle/gradle.properties`
-   as `walletConnectProjectIdDebug=<id>`, never in a file of the repository.
+   - Until the ID is set, CI builds with WalletConnect switched off. So does
+     a pull request from a fork or from Dependabot if it gets neither the
+     secret nor the variable.
+5. **For a local build**, the ID goes in `~/.gradle/gradle.properties` as
+   `walletConnectProjectIdDebug=<id>`, and as
+   `walletConnectProjectIdRelease=<id>` for a local release build, never in
+   a file of the repository.
    Which ID a build uses: the Android debug app, a desktop development run
    and the iOS debug binary the debug one; the release app, the desktop
    installers and the iOS release binary the release one. Without one, the

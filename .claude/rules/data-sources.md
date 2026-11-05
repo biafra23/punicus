@@ -224,8 +224,14 @@ docs/walletconnect.md is the contract.)
 - **What arrives through it is untrusted input**, decoded and shown as such.
   The dApp's name and URL are shown as "stated by the dApp, not verified".
 - **The Reown project ID is never committed.** A Gradle property supplies it
-  at build time, from a CI secret, with separate IDs for debug and release. A
-  build without one has WalletConnect switched off and says so.
+  at build time, from a CI secret or variable. A build without one has
+  WalletConnect switched off and says so.
+- **One project ID serves debug and release builds, for now** (owner ruling,
+  2026-11-05; it amends the separate IDs of 2026-11-03, #22). A free-tier
+  Reown account has one project. CI reads it from one repository secret or
+  variable, `WALLETCONNECT_PROJECT_ID`, for both builds. The build keeps a
+  debug and a release property, so a second project later needs only the
+  workflows to pass two names again.
 - **The optional services stay off:** the Verify API, fetching dApp icons
   (a request to a host the dApp chooses, which reveals the IP address), the
   push (echo) server and Link Mode.
