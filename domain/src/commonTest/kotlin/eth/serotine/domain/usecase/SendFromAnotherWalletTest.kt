@@ -93,7 +93,7 @@ class SendFromAnotherWalletTest {
     // OfferHandoff
 
     @Test
-    fun `a watched EOA is offered it where a wallet takes links, greyed out where none does`() {
+    fun aWatchedEOAIsOfferedItWhereAWalletTakesLinksGreyedOutWhereNoneDoes() {
         val wallets = Wallets()
         val offer = OfferHandoff(wallets)
         assertEquals(HandoffOffer.Offered, offer(account(AccountKind.EOA, AccountCustody.Watched)))
@@ -104,7 +104,7 @@ class SendFromAnotherWalletTest {
     }
 
     @Test
-    fun `a Safe and an account whose key is held here are left out`() {
+    fun aSafeAndAnAccountWhoseKeyIsHeldHereAreLeftOut() {
         val offer = OfferHandoff(Wallets())
         assertEquals(HandoffOffer.LeftOut, offer(account(AccountKind.SAFE, AccountCustody.Watched)))
         assertEquals(HandoffOffer.LeftOut, offer(account(AccountKind.EOA, AccountCustody.InKeyStore)))
@@ -113,7 +113,7 @@ class SendFromAnotherWalletTest {
     // HandOffTransfer
 
     @Test
-    fun `a transfer is handed over as its link, watched from the verified head`() = runTest {
+    fun aTransferIsHandedOverAsItsLinkWatchedFromTheVerifiedHead() = runTest {
         val wallets = Wallets()
         val hand = HandOffTransfer(wallets, Blocks(HeadReading.At(4_242)))
         val start = hand(account, TransferAsset.Native, to, UInt256.of(5L))
@@ -124,7 +124,7 @@ class SendFromAnotherWalletTest {
     }
 
     @Test
-    fun `the zero address, the token's own contract and nothing to send are refused before anything opens`() = runTest {
+    fun theZeroAddressTheTokensOwnContractAndNothingToSendAreRefusedBeforeAnythingOpens() = runTest {
         val wallets = Wallets()
         val hand = HandOffTransfer(wallets, Blocks())
         assertEquals(HandoffStart.ToZeroAddress, hand(account, TransferAsset.Native, Address.ZERO, UInt256.of(1L)))
@@ -137,7 +137,7 @@ class SendFromAnotherWalletTest {
     }
 
     @Test
-    fun `nothing is handed over while no verified block can be read`() = runTest {
+    fun nothingIsHandedOverWhileNoVerifiedBlockCanBeRead() = runTest {
         val wallets = Wallets()
         val start = HandOffTransfer(wallets, Blocks(HeadReading.Unavailable(ReadUnavailable.SYNCING)))(
             account,
@@ -150,7 +150,7 @@ class SendFromAnotherWalletTest {
     }
 
     @Test
-    fun `no app taking the link is said`() = runTest {
+    fun noAppTakingTheLinkIsSaid() = runTest {
         val start = HandOffTransfer(Wallets(opening = HandoffOpening.NO_WALLET), Blocks())(
             account,
             TransferAsset.Native,
@@ -163,7 +163,7 @@ class SendFromAnotherWalletTest {
     // matchHandoff
 
     @Test
-    fun `a payment of the currency matches by sender, recipient and value`() {
+    fun aPaymentOfTheCurrencyMatchesBySenderRecipientAndValue() {
         val handoff = handoff()
         assertEquals(HandoffMatch.Exact, matchHandoff(handoff, native(from, to, 1_000)))
         assertEquals(HandoffMatch.OtherAmount(UInt256.of(999L)), matchHandoff(handoff, native(from, to, 999)))
@@ -174,7 +174,7 @@ class SendFromAnotherWalletTest {
     }
 
     @Test
-    fun `a token payment matches only an exact transfer call of that token`() {
+    fun aTokenPaymentMatchesOnlyAnExactTransferCallOfThatToken() {
         val handoff = handoff(TransferAsset.Erc20Token(usdc))
         assertEquals(HandoffMatch.Exact, matchHandoff(handoff, token(from, to, 1_000)))
         assertEquals(HandoffMatch.OtherAmount(UInt256.of(10L)), matchHandoff(handoff, token(from, to, 10)))
@@ -188,7 +188,7 @@ class SendFromAnotherWalletTest {
     // WatchHandoff
 
     @Test
-    fun `the first block above the handoff with the transfer ends the watch, with its receipt's verdict`() = runTest {
+    fun theFirstBlockAboveTheHandoffWithTheTransferEndsTheWatchWithItsReceiptsVerdict() = runTest {
         val blocks = Blocks(HeadReading.At(103))
         blocks.bodies[102] = listOf(native(other, other, 1), native(from, to, 1_000, hash = 'c'))
         val deadline = testScheduler.timeSource.markNow().plus(10.minutes)
@@ -203,7 +203,7 @@ class SendFromAnotherWalletTest {
     }
 
     @Test
-    fun `within one block an exact transfer wins over a near one`() = runTest {
+    fun withinOneBlockAnExactTransferWinsOverANearOne() = runTest {
         val blocks = Blocks(HeadReading.At(101))
         blocks.bodies[101] = listOf(native(other, to, 1_000, hash = 'd'), native(from, to, 1_000, hash = 'e'))
         val deadline = testScheduler.timeSource.markNow().plus(10.minutes)
@@ -212,7 +212,7 @@ class SendFromAnotherWalletTest {
     }
 
     @Test
-    fun `a near transfer is kept while the account's own may still come, and answers at the deadline`() = runTest {
+    fun aNearTransferIsKeptWhileTheAccountsOwnMayStillComeAndAnswersAtTheDeadline() = runTest {
         val blocks = Blocks(HeadReading.At(102))
         blocks.bodies[101] = listOf(native(other, to, 1_000, hash = 'd'))
         blocks.bodies[102] = listOf(native(from, to, 1_000, hash = 'e'))
@@ -230,7 +230,7 @@ class SendFromAnotherWalletTest {
     }
 
     @Test
-    fun `a receipt that cannot be verified ends with no verdict, never an exception`() = runTest {
+    fun aReceiptThatCannotBeVerifiedEndsWithNoVerdictNeverAnException() = runTest {
         val blocks = Blocks(HeadReading.At(101))
         blocks.bodies[101] = listOf(native(from, to, 1_000))
         val gone = object : ReceiptTracker {
@@ -244,7 +244,7 @@ class SendFromAnotherWalletTest {
     }
 
     @Test
-    fun `blocks that stay unreadable end the watch after its grace, with why`() = runTest {
+    fun blocksThatStayUnreadableEndTheWatchAfterItsGraceWithWhy() = runTest {
         val blocks = Blocks(HeadReading.Unavailable(ReadUnavailable.NETWORK_OFF))
         val start = testScheduler.timeSource.markNow()
         val watch = WatchHandoff(blocks, Receipts(), pollInterval = 30.seconds, catchUp = 5.minutes)
@@ -254,7 +254,7 @@ class SendFromAnotherWalletTest {
     }
 
     @Test
-    fun `a reverted transfer is seen as failed`() = runTest {
+    fun aRevertedTransferIsSeenAsFailed() = runTest {
         val blocks = Blocks(HeadReading.At(101))
         blocks.bodies[101] = listOf(token(from, to, 1_000))
         val last = WatchHandoff(blocks, Receipts(succeeded = false))(
@@ -265,7 +265,7 @@ class SendFromAnotherWalletTest {
     }
 
     @Test
-    fun `nothing seen by the deadline, with every block up to the head read, is said`() = runTest {
+    fun nothingSeenByTheDeadlineWithEveryBlockUpToTheHeadReadIsSaid() = runTest {
         val blocks = Blocks(HeadReading.At(100))
         val start = testScheduler.timeSource.markNow()
         val watch = WatchHandoff(blocks, Receipts(), pollInterval = 4.seconds)(handoff(), start.plus(1.minutes))
@@ -275,7 +275,7 @@ class SendFromAnotherWalletTest {
     }
 
     @Test
-    fun `a block that cannot be read is said and asked for again, never skipped`() = runTest {
+    fun aBlockThatCannotBeReadIsSaidAndAskedForAgainNeverSkipped() = runTest {
         val blocks = Blocks(HeadReading.At(102))
         blocks.unreadable += 101
         blocks.bodies[102] = listOf(native(from, to, 1_000))
@@ -293,7 +293,7 @@ class SendFromAnotherWalletTest {
     }
 
     @Test
-    fun `a watch behind the head is not ended by the deadline`() = runTest {
+    fun aWatchBehindTheHeadIsNotEndedByTheDeadline() = runTest {
         val blocks = Blocks(HeadReading.At(103))
         blocks.unreadable += 101
         val start = testScheduler.timeSource.markNow()
