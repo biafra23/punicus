@@ -1166,9 +1166,21 @@ they are helpful." The rulings (owner rulings, 2026-11-05, #246; the
   proven to hold it.
 - **On chain only.** A row shows the collection's name (its `name()`, the
   contract's claim, or the built-in name) and the token id; an ERC-1155
-  amount above one shows as "×n". An image is drawn only from an on-chain
-  `data:` URI; otherwise the row says the image is not on chain. Nothing is
-  fetched from IPFS or HTTP.
+  amount above one shows as "×n", masked while amounts are hidden. The
+  section says images are not shown: nothing is fetched from IPFS or HTTP,
+  and an image from an on-chain `data:` URI is drawn in a later part.
+- **Older answers.** Detailed view dates each row by the block it was
+  proven held at. While the account's network is off, nothing is proven
+  again, and the section says the NFTs were proven before and may have
+  changed since. They are read only while the Assets tab is shown.
+- **Below the assets** (screen 4, in both views): the built-in collections'
+  rows, then "Unlisted collections (n)", n the collections, collapsed until
+  tapped, each NFT's row under it saying "not confirmed" with its contract. A line under them says what the
+  list covers ("Received since block 9,000 · 1 not proven held yet"; simple
+  mode: "Received since this wallet began following this account"). While
+  some are still to be proven and none is yet, it says "Checking NFTs…",
+  never that there are none; past the cap, "None held among the NFTs
+  checked".
 - **Built in, or unlisted.** The built-in collections (`KnownNftCollections`)
   are ENS's: the .eth registrar (ERC-721) and the NameWrapper (ERC-1155), on
   Ethereum and Sepolia. Their NFTs are shown openly. Any other collection's

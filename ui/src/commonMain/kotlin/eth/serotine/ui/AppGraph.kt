@@ -36,6 +36,7 @@ import eth.serotine.domain.repository.KeyStore
 import eth.serotine.domain.repository.KnownUpgradeStore
 import eth.serotine.domain.repository.LightClient
 import eth.serotine.domain.repository.LogIndex
+import eth.serotine.domain.repository.NftContracts
 import eth.serotine.domain.repository.NameResolver
 import eth.serotine.domain.repository.NativeBalances
 import eth.serotine.domain.repository.NetworkFreshness
@@ -116,6 +117,7 @@ import eth.serotine.domain.usecase.ObserveSentTransfer
 import eth.serotine.domain.usecase.ObserveSwapVenue
 import eth.serotine.domain.usecase.ObserveTokenHoldings
 import eth.serotine.domain.usecase.ObserveTokenMetadata
+import eth.serotine.domain.usecase.ObserveNfts
 import eth.serotine.domain.usecase.ObserveTokenTransfers
 import eth.serotine.domain.usecase.ObserveUpgradeWarnings
 import eth.serotine.domain.usecase.ObserveUsdPrice
@@ -269,6 +271,8 @@ class AppGraph(
     private val historyStarts: HistoryStarts,
     /** The light client's verified log index, which the host's `FollowAccountLogs` keeps following the accounts. */
     private val logIndex: LogIndex,
+    /** What NFT contracts say on chain, verified: who holds a token, and what a collection calls itself (#246). */
+    private val nfts: NftContracts,
     /** The Safe transactions waiting for their owners, kept on this device across restarts. */
     private val safeTxQueue: SafeTxQueue,
     /** The text a Safe's signing request travels in between devices, for every network the app knows. */
@@ -382,6 +386,7 @@ class AppGraph(
             DropWaitingSwap(waitingSwaps),
             ObserveAmountsHidden(amountsHidden),
             toggleAmountsHidden,
+            ObserveNfts(logIndex, historyStarts, nfts),
         )
 
     /**

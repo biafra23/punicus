@@ -702,6 +702,44 @@ private fun AccountDetailNetworkOffPreview() = AccountDetailPreview(
     lightClient = LightClientItem("Turned off in this wallet", null, false, LightClientHealth.NOT_RUNNING),
 )
 
+/** The account's NFTs (docs/wallet-ux.md, *NFTs*): two ENS names shown, two unlisted collections' collapsed. */
+private val nfts = NftSection(
+    shown = listOf(
+        NftRow("ENS", "#982531…4107", null, "0x57f1887a8BF19b14fC0dF6Fd9B2acc9Af147eA85"),
+        NftRow("ENS (wrapped)", "#310442…9921", null, "0x0635513f179D50A207757E05759CbD106d7dFcE8"),
+    ),
+    unlisted = listOf(
+        NftRow("Sepolia Punks", "#4021", null, "0x5b5B5b5b5B5b5b5b5b5b5B5b5b5B5b5b5b5b5b5b"),
+        NftRow("Free Mint Pass", "#7", "×3", "0xA7a7A7A7a7a7A7A7a7A7a7A7a7a7A7A7a7a7A7A7"),
+    ),
+    note = "Received since block 8,100,000 · 1 not proven held yet",
+    simpleNote = "Received since this account was added here · 1 not proven held yet",
+)
+
+@Preview
+@Composable
+private fun AccountDetailNftsPreview() = AccountDetailPreview(daily.copy(nfts = nfts))
+
+/** The unlisted collections' NFTs opened, each marked as not confirmed. */
+@Preview
+@Composable
+private fun AccountDetailNftsUnlistedOpenDarkPreview() =
+    AccountDetailPreview(daily.copy(nfts = nfts.copy(unlistedOpen = true)), darkTheme = true)
+
+/** The NFTs still being looked for in the account's history. */
+@Preview
+@Composable
+private fun AccountDetailNftsCheckingPreview() = AccountDetailPreview(
+    daily.copy(nfts = NftSection(empty = "Checking NFTs…", note = "Received since block 8,100,000")),
+)
+
+/** None found since the account's history starts. */
+@Preview
+@Composable
+private fun AccountDetailNftsNonePreview() = AccountDetailPreview(
+    daily.copy(nfts = NftSection(empty = "No NFTs found", note = "Received since block 8,100,000")),
+)
+
 /** Every preview above, which AccountDetailScreenPreviewsTest renders: a new preview goes in here too. */
 internal val accountDetailScreenPreviews: List<@Composable () -> Unit> = listOf(
     { AccountDetailAssetsPreview() },
@@ -739,4 +777,8 @@ internal val accountDetailScreenPreviews: List<@Composable () -> Unit> = listOf(
     { AccountDetailSafeOwnersNetworkOffPreview() },
     { AccountDetailAssetsHiddenPreview() },
     { AccountDetailAssetsHiddenDarkPreview() },
+    { AccountDetailNftsPreview() },
+    { AccountDetailNftsUnlistedOpenDarkPreview() },
+    { AccountDetailNftsCheckingPreview() },
+    { AccountDetailNftsNonePreview() },
 )

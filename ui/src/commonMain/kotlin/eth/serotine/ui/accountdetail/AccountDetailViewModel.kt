@@ -28,6 +28,8 @@ import eth.serotine.domain.usecase.ObserveEnsNames
 import eth.serotine.domain.usecase.ObserveKnownTokens
 import eth.serotine.domain.usecase.ObserveLightClient
 import eth.serotine.domain.usecase.ObserveNetworkLive
+import eth.serotine.domain.usecase.NftHoldings
+import eth.serotine.domain.usecase.ObserveNfts
 import eth.serotine.domain.usecase.ObserveSafe
 import eth.serotine.domain.usecase.ObserveSafeTxQueue
 import eth.serotine.domain.usecase.ObserveUpgradeWarnings
@@ -134,6 +136,8 @@ class AccountDetailViewModel(
     observeAmountsHidden: ObserveAmountsHidden,
     /** Hides amounts or shows them again: what a tap on the eye asks. */
     private val toggleAmountsHidden: ToggleAmountsHidden,
+    /** The account's NFTs, below its assets (docs/wallet-ux.md, *NFTs*, issue #246). */
+    observeNfts: ObserveNfts,
     /** How a row dates a balance last verified (unix seconds). */
     private val formatTime: (Long) -> String = ::formatDateTime,
     /** Now, in unix seconds: what simple mode's ages are dated against. */
@@ -268,6 +272,29 @@ class AccountDetailViewModel(
         .distinctUntilChanged()
         .flatMapLatest { shown -> if (shown) sharedActivity else flowOf(ActivityUiState.Loading) }
 
+    /** Whether the unlisted collections' NFTs are shown: collapsed until the user opens them (owner ruling, #246). */
+    private val unlistedNftsOpen = MutableStateFlow(false)
+
+    /**
+     * The account's NFTs, read while its Assets tab is shown and for 5 s after, as its Activity is:
+     * back within that, they are there at once and not proven again.
+     */
+    private val sharedNfts = observeNfts(account).stateIn<NftHoldings?>(
+        viewModelScope,
+        SharingStarted.WhileSubscribed(stopTimeoutMillis = 5_000, replayExpirationMillis = 0),
+        null,
+    )
+
+    /** The account's NFTs, display-ready, while the Assets tab is shown; null otherwise, and until first read. */
+    @OptIn(ExperimentalCoroutinesApi::class)
+    private val nfts = combine(
+        view.map { it.segment == DetailSegment.ASSETS }
+            .distinctUntilChanged()
+            .flatMapLatest { shown -> if (shown) sharedNfts else flowOf(null) },
+        unlistedNftsOpen,
+        networkOn,
+    ) { holdings, open, on -> holdings?.let { nftSection(it, open, network.displayName.takeUnless { on }) } }
+
     /** What the queue segment is drawn from. */
     private sealed interface QueueView {
         data object None : QueueView
@@ -341,6 +368,9 @@ class AccountDetailViewModel(
             .let { built -> combine(built, live, lastRefresh, observeLightClient(network), ::Dating) }
             .redatedWhile { it.dated }
             .map { it.finish(clock()) }
+            .combine(nfts) { state, nfts ->
+                if (state is AccountDetailUiState.Ready) state.copy(nfts = nfts) else state
+            }
             // Masked last, on the finished state (the Activity masks its own, as it is built).
             .combine(amountsHidden) { state, hidden -> state.withAmountsHidden(hidden) }
             .stateIn(
@@ -398,6 +428,11 @@ class AccountDetailViewModel(
             }
             view.update { it.copy(message = said) }
         }
+    }
+
+    /** Opens the unlisted collections' NFTs, or collapses them again. */
+    fun toggleUnlistedNfts() {
+        unlistedNftsOpen.update { !it }
     }
 
     /** The screen has said [AccountDetailUiState.Ready.message]. */
@@ -767,5 +802,12 @@ internal fun AccountDetailUiState.withAmountsHidden(hidden: Boolean): AccountDet
         amountsHidden = true,
         total = maskAmount(ready.total),
         assets = ready.assets.map { asset -> asset.copy(amount = maskAmount(asset.amount), value = maskAmount(asset.value)) },
+        // How many of an NFT the account holds is how much it holds, too.
+        nfts = ready.nfts?.let { nfts ->
+            nfts.copy(
+                shown = nfts.shown.map { it.copy(amount = maskAmount(it.amount)) },
+                unlisted = nfts.unlisted.map { it.copy(amount = maskAmount(it.amount)) },
+            )
+        },
     )
 }

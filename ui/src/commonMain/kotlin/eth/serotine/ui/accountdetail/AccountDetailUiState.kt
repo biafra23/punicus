@@ -48,7 +48,8 @@ sealed interface AccountDetailUiState {
      * before, or its light client has no fresh head; "is still syncing" while it catches up
      * (docs/simple-ui.md, H4 and *The sync line*). [amountsHidden] while the user hides amounts with
      * the eye beside Back (docs/wallet-ux.md, *Hiding amounts*): the total, the assets and the
-     * Activity already read "••••" beside their units.
+     * Activity already read "••••" beside their units. [nfts] is what the account holds of NFTs, below
+     * its assets (docs/wallet-ux.md, *NFTs*, issue #246); null until it is first read.
      */
     data class Ready(
         val label: String,
@@ -79,6 +80,7 @@ sealed interface AccountDetailUiState {
         val refreshing: Boolean = false,
         val cantCheck: UnreachableNetwork? = null,
         val amountsHidden: Boolean = false,
+        val nfts: NftSection? = null,
     ) : AccountDetailUiState {
 
         /** The tabs this account has: Assets | Activity, and a Safe's Owners | Queue after them. */
@@ -278,4 +280,36 @@ data class AssetRow(
     val warning: String? = null,
     val lastKnown: String? = null,
     val ageNote: String? = null,
+)
+
+/**
+ * An account's NFTs below its assets (docs/wallet-ux.md, *NFTs*; owner rulings, 2026-11-05, #246),
+ * display-ready: the built-in collections' NFTs, [shown] openly; the unlisted collections' NFTs,
+ * [unlisted], under a row that is collapsed until the user opens it ([unlistedOpen]); [empty], what
+ * the section says while it lists none ("No NFTs found", "Checking NFTs…"), or null; and [note], what
+ * it covers and what it does not ("Received since block 9,000 · 2 not checked yet"), which simple mode
+ * says without a block ([simpleNote]).
+ */
+data class NftSection(
+    val shown: List<NftRow> = emptyList(),
+    val unlisted: List<NftRow> = emptyList(),
+    val unlistedOpen: Boolean = false,
+    val empty: String? = null,
+    val note: String? = null,
+    val simpleNote: String? = null,
+)
+
+/**
+ * One NFT: its collection's [title] (a built-in collection's name, or what an unlisted contract says it
+ * is), its token id ([tokenId], "#1234", shortened when long: "#982531…4107"), how many the account
+ * holds when more than one ([amount], "×3", shortened as the id is), the collection's EIP-55
+ * [contract], and the block it was proven held at ([provenAt], "block 9,500"; null where the engine
+ * did not name it, and in simple mode, which shows no block).
+ */
+data class NftRow(
+    val title: String,
+    val tokenId: String,
+    val amount: String?,
+    val contract: String,
+    val provenAt: String? = null,
 )

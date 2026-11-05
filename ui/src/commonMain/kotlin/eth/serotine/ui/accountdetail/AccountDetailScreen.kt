@@ -125,6 +125,10 @@ const val ACCOUNT_SAFE_SETTINGS_TAG = "account-safe-settings"
 /** Test tag of each asset row, for UI tests. */
 const val ACCOUNT_ASSET_TAG = "account-asset"
 
+/** The account's NFTs section, and each NFT's row in it (docs/wallet-ux.md, *NFTs*). */
+const val ACCOUNT_NFTS_TAG = "account-nfts"
+const val ACCOUNT_NFT_TAG = "account-nft"
+
 /** Test tag of the Swap button, for UI tests. */
 const val ACCOUNT_SWAP_TAG = "account-swap"
 
@@ -203,6 +207,7 @@ fun AccountDetailRoute(
             onDerive = onDerive,
             onToggleAmounts = viewModel::toggleAmounts,
             onOrderActivity = viewModel::orderActivity,
+            onToggleUnlistedNfts = viewModel::toggleUnlistedNfts,
         )
         // The strip is collected only where it is drawn: shared while subscribed, it stays idle otherwise.
         InterfaceMode.DETAILED -> AccountDetailScreen(
@@ -231,6 +236,7 @@ fun AccountDetailRoute(
             onDerive = onDerive,
             onToggleAmounts = viewModel::toggleAmounts,
             onOrderActivity = viewModel::orderActivity,
+            onToggleUnlistedNfts = viewModel::toggleUnlistedNfts,
         )
     }
 }
@@ -255,6 +261,8 @@ fun AccountDetailRoute(
  * How the light client's state is shown is its [chrome]: Detailed view's strip under the top bar,
  * or simple mode's ([SimpleAccountDetailScreen]) pull-to-refresh. Once the account is read, the eye
  * beside Back hides or shows every amount ([onToggleAmounts]; docs/wallet-ux.md, *Hiding amounts*).
+ * Below the assets are the account's NFTs, the unlisted collections' opened or collapsed by
+ * [onToggleUnlistedNfts] (docs/wallet-ux.md, *NFTs*).
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -284,6 +292,7 @@ fun AccountDetailScreen(
     onDerive: () -> Unit = {},
     onToggleAmounts: () -> Unit = {},
     onOrderActivity: (ActivityOrder) -> Unit = {},
+    onToggleUnlistedNfts: () -> Unit = {},
 ) {
     val snackbar = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
@@ -459,6 +468,7 @@ fun AccountDetailScreen(
                     onDismissWaiting = onDismissWaiting,
                     onSafeSettings = safeSettings,
                     simple = chrome is AccountChrome.Refresh,
+                    onToggleUnlistedNfts = onToggleUnlistedNfts,
                 )
             }
         }
@@ -496,6 +506,7 @@ private fun Details(
     onSafeSettings: () -> Unit,
     /** Simple mode's chrome: the network on the blockie, the freshness line and the "can't check" banner. */
     simple: Boolean,
+    onToggleUnlistedNfts: () -> Unit,
 ) {
     // Each item ends with the space before the next, but an Activity's rows, which follow one another.
     val spaced = Modifier.padding(bottom = 16.dp)
@@ -598,7 +609,10 @@ private fun Details(
         item { SegmentChoice(state.segments, state.segment, state.queue, onSegment, spaced) }
         // The same predicate as the top bar's sort entry, so the menu sorts exactly when the rows are shown.
         when {
-            state.showsAssets -> item { Assets(state, onSend, onSwap, onCopyContract, onHideToken) }
+            state.showsAssets -> {
+                item { Assets(state, onSend, onSwap, onCopyContract, onHideToken) }
+                state.nfts?.let { nfts -> item { Nfts(nfts, onToggleUnlistedNfts, spaced) } }
+            }
             state.segment == DetailSegment.ACTIVITY -> activityItems(
                 state.activity,
                 onOpenActivity,
@@ -757,6 +771,74 @@ private fun Assets(
             Text(note, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
     }
+}
+
+/**
+ * The account's NFTs below its assets (docs/wallet-ux.md, *NFTs*; owner rulings, 2026-11-05, #246):
+ * the built-in collections' rows, then a row for the unlisted collections' NFTs, which [onToggle]
+ * opens and collapses, what the list covers, and that no image is shown: nothing is fetched that is
+ * not on chain.
+ */
+@Composable
+private fun Nfts(nfts: NftSection, onToggle: () -> Unit, modifier: Modifier) {
+    Column(
+        modifier.padding(top = 16.dp).testTag(ACCOUNT_NFTS_TAG),
+        verticalArrangement = Arrangement.spacedBy(4.dp),
+    ) {
+        Text("NFTs", style = MaterialTheme.typography.titleSmall)
+        nfts.empty?.let {
+            Text(it, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+        nfts.shown.forEach { NftItem(it, unconfirmed = false) }
+        if (nfts.unlisted.isNotEmpty()) {
+            val count = nfts.unlisted.distinctBy { it.contract }.size
+            ListItem(
+                modifier = Modifier.clickable(
+                    onClickLabel = if (nfts.unlistedOpen) "Collapse unlisted collections" else "Show unlisted collections",
+                    onClick = onToggle,
+                ),
+                headlineContent = { Text("Unlisted collections ($count)") },
+                supportingContent = {
+                    Text(
+                        "Not confirmed: anyone can send an NFT to any address, and a name is only " +
+                            "the contract's claim.",
+                        style = MaterialTheme.typography.labelSmall,
+                    )
+                },
+                trailingContent = { Text(if (nfts.unlistedOpen) "Hide" else "Show") },
+            )
+            if (nfts.unlistedOpen) nfts.unlisted.forEach { NftItem(it, unconfirmed = true) }
+        }
+        nfts.note?.let {
+            Text(it, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+        Text(NO_IMAGES, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+    }
+}
+
+/** Why no NFT shows an image (owner ruling, 2026-11-05, #246: on-chain metadata only). */
+private const val NO_IMAGES = "Images are not shown: nothing is fetched that is not on chain."
+
+
+/** One NFT: its collection, its id and an amount above one; [unconfirmed] for an unlisted collection's. */
+@Composable
+private fun NftItem(row: NftRow, unconfirmed: Boolean) {
+    ListItem(
+        modifier = Modifier.testTag(ACCOUNT_NFT_TAG),
+        headlineContent = { Text(row.title, maxLines = 1, overflow = TextOverflow.Ellipsis) },
+        supportingContent = {
+            val marks = listOfNotNull(
+                row.tokenId,
+                "not confirmed".takeIf { unconfirmed },
+                shortAddress(row.contract).takeIf { unconfirmed },
+                row.provenAt?.let { "verified at $it" },
+            )
+            Text(marks.joinToString(" · "), style = MaterialTheme.typography.bodySmall)
+        },
+        trailingContent = row.amount?.let { amount ->
+            @Composable { Text(amount, style = MaterialTheme.typography.bodyLarge) }
+        },
+    )
 }
 
 /**

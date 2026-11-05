@@ -32,6 +32,7 @@ import eth.serotine.ui.components.exactAmount
 import eth.serotine.ui.components.grouped
 import eth.serotine.ui.components.safeTxActionItem
 import eth.serotine.ui.components.shortAddress
+import eth.serotine.ui.components.shortDigits
 
 /**
  * What the account at [address] is told of each transaction and event of its history, in the
@@ -139,9 +140,8 @@ internal class ActivityRows(
     /** Which way a token moved, as the account sees it. */
     private enum class Direction { IN, OUT, ITSELF }
 
-    /** An NFT's id as screens show it: whole when short, its ends when long. */
-    fun tokenId(id: UInt256): String =
-        id.toDecimal().let { if (it.length > MAX_ID_DIGITS) it.take(6) + "…" + it.takeLast(4) else it }
+    /** An NFT's id as screens show it: whole when short, its ends when long ([shortDigits]). */
+    fun tokenId(id: UInt256): String = shortDigits(id)
 
     /** [other] as screens name it: the wallet's name for it and its short address, or the short address. */
     fun named(other: Address, names: Map<Address, String>): String {
@@ -448,7 +448,6 @@ internal class ActivityRows(
         }.associateBy { it.hash }
 
         private const val NATIVE_DECIMALS = 18
-        private const val MAX_ID_DIGITS = 12
         private const val ON_CHAIN = "On chain, from the Safe's verified logs"
         private const val TOKEN_ON_CHAIN = "On chain, from the token's verified logs"
         private const val UNLISTED =
