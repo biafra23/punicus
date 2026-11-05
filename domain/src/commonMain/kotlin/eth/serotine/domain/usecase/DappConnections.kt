@@ -2,14 +2,15 @@ package eth.serotine.domain.usecase
 
 import eth.serotine.domain.model.Account
 import eth.serotine.domain.model.AccountCustody
+import eth.serotine.domain.model.AccountId
 import eth.serotine.domain.model.AccountKind
-import eth.serotine.domain.model.Address
 import eth.serotine.domain.model.Network
 import eth.serotine.domain.repository.AccountList
 import eth.serotine.domain.repository.AccountRepository
 import eth.serotine.domain.repository.DappApproval
 import eth.serotine.domain.repository.DappConnections
 import eth.serotine.domain.repository.DappPairing
+import eth.serotine.domain.repository.DappProposal
 import eth.serotine.domain.repository.DappProposalId
 import eth.serotine.domain.repository.DappSessionId
 import eth.serotine.domain.repository.DappSessions
@@ -25,21 +26,44 @@ import kotlinx.coroutines.flow.first
  * (owner ruling, 2026-10-18, #55).
  */
 enum class DappOffer {
-    /** A Sepolia account that can sign here, or a Safe: it may be offered. */
+    /** An account that can sign here, or a Safe, on a network that is on: it may be offered. */
     OFFERED,
 
-    /** An account on Ethereum or Gnosis Chain: dApp sessions are on Sepolia alone for now (ruling 9). */
-    NOT_SEPOLIA,
+    /** An account on a network the dApp did not ask for. */
+    NOT_ASKED,
 
-    /** A Sepolia account while Sepolia is off: turning it on offers it. */
-    SEPOLIA_OFF,
+    /**
+     * An account of the other kind of funds than the dApp requires, or than an account already chosen: a
+     * session holds real funds or testnet, never both (owner ruling, 2026-11-05, on #22).
+     */
+    OTHER_FUNDS,
+
+    /** An account on a network that is off: turning it on offers it. */
+    NETWORK_OFF,
 
     /** An EOA watched with no key on this device: it can sign nothing here. */
     NO_KEY,
 }
 
-/** One of the wallet's accounts, and whether a dApp may be offered it. */
-data class DappAccountChoice(val account: Account, val offer: DappOffer)
+/** One of the wallet's accounts, and whether a dApp may be offered it, whatever the proposal asks. */
+data class DappAccountChoice(val account: Account, val offer: DappOffer) {
+    /**
+     * Whether [account] may be offered to [proposal]'s dApp, with the accounts [chosen] so far besides it
+     * (screen D3): as [dappOffer] answers, from the [offer] judged already.
+     */
+    fun offerTo(proposal: DappProposal, chosen: Collection<AccountId> = emptyList()): DappOffer =
+        proposalOffer(account, proposal, chosen) ?: offer
+}
+
+/** Why [account] may not be offered to [proposal]'s dApp beside [chosen], for what it asks; null otherwise. */
+private fun proposalOffer(account: Account, proposal: DappProposal, chosen: Collection<AccountId>): DappOffer? {
+    val kinds = (proposal.requiredNetworks + chosen.map { it.network }).map { it.testnet }.toSet()
+    return when {
+        account.network !in proposal.networks -> DappOffer.NOT_ASKED
+        kinds.any { it != account.network.testnet } -> DappOffer.OTHER_FUNDS
+        else -> null
+    }
+}
 
 /** The connections, and every account of the wallet with whether a dApp may be offered it. */
 data class DappOverview(
@@ -49,14 +73,25 @@ data class DappOverview(
     val accountsUnreadable: Boolean = false,
 )
 
-/** Whether [account] may be offered to a dApp, with the networks [enabled]. */
+/** Whether [account] may be offered to any dApp, with the networks [enabled]: whatever the proposal asks. */
 fun dappOffer(account: Account, enabled: Set<Network>): DappOffer = when {
-    account.network != Network.SEPOLIA -> DappOffer.NOT_SEPOLIA
-    Network.SEPOLIA !in enabled -> DappOffer.SEPOLIA_OFF
+    account.network !in enabled -> DappOffer.NETWORK_OFF
     // A watched Safe is offered: its owners sign for it, here or elsewhere.
     account.kind == AccountKind.EOA && account.custody == AccountCustody.Watched -> DappOffer.NO_KEY
     else -> DappOffer.OFFERED
 }
+
+/**
+ * Whether [account] may be offered to [proposal]'s dApp, with the networks [enabled] and the accounts
+ * [chosen] so far (screen D3): on a network it asks for, of the kind of funds it requires and the
+ * [chosen] ones are, and offered at all ([dappOffer]).
+ */
+fun dappOffer(
+    account: Account,
+    enabled: Set<Network>,
+    proposal: DappProposal,
+    chosen: Collection<AccountId> = emptyList(),
+): DappOffer = proposalOffer(account, proposal, chosen) ?: dappOffer(account, enabled)
 
 /** The dApp connections with the accounts a proposal may be approved with (screens D1 and D3). */
 class ObserveDappConnections(
@@ -80,21 +115,27 @@ class PairDapp(private val sessions: DappSessions) {
 }
 
 /**
- * Approves a proposal with [accounts]: each must be one of the wallet's accounts a dApp may be offered
- * ([dappOffer]), so that nothing a screen got wrong reaches the dApp ([DappApproval.InvalidAccounts]).
+ * Approves a proposal with [accounts]: each must be one of the wallet's accounts the proposal's dApp may be
+ * offered ([dappOffer]), on a network it asked for, all of one kind of funds with what it requires, so
+ * that nothing a screen got wrong reaches the dApp ([DappApproval.InvalidAccounts]).
  */
 class ApproveDappProposal(
     private val sessions: DappSessions,
     private val accounts: AccountRepository,
     private val networks: NetworkSettings,
 ) {
-    suspend operator fun invoke(proposal: DappProposalId, chosen: List<Address>): DappApproval {
+    suspend operator fun invoke(proposal: DappProposalId, chosen: List<AccountId>): DappApproval {
+        val asked = (sessions.observe().first() as? DappConnections.On)?.proposals?.find { it.id == proposal }
+            ?: return DappApproval.NoSuchProposal
         val list = accounts.observeAccounts().first() as? AccountList.Loaded ?: return DappApproval.InvalidAccounts
         val enabled = networks.observe().first()
-        val offered = list.accounts.filter { dappOffer(it, enabled) == DappOffer.OFFERED }.map { it.address }.toSet()
-        if (chosen.isEmpty() || chosen.toSet().size != chosen.size || !chosen.all { it in offered }) {
-            return DappApproval.InvalidAccounts
+        val wallet = list.accounts.associateBy { it.id }
+        // Each against the others chosen: one of the other kind of funds than any of them is refused.
+        val valid = chosen.isNotEmpty() && chosen.toSet().size == chosen.size && chosen.all { id ->
+            val account = wallet[id] ?: return@all false
+            dappOffer(account, enabled, asked, chosen - id) == DappOffer.OFFERED
         }
+        if (!valid) return DappApproval.InvalidAccounts
         return sessions.approve(proposal, chosen)
     }
 }
@@ -141,7 +182,7 @@ class FollowDappAccounts(
                 val judged = enabled + (Network.entries - seenOn)
                 val held = loaded.accounts
                     .filter { dappOffer(it, judged) == DappOffer.OFFERED }
-                    .map { it.address }
+                    .map { it.id }
                     .toSet()
                 for (session in on.sessions) {
                     val kept = session.accounts.filter { it in held }

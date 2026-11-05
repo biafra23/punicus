@@ -73,7 +73,7 @@ sealed interface DappTransactionQuoting {
 
 /**
  * Quotes a dApp's `eth_sendTransaction` from an account whose key is on this device (docs/walletconnect.md,
- * *Transactions*), on Sepolia, as Send quotes a transfer: the request reviewed again now
+ * *Transactions*), on the request's network, as Send quotes a transfer: the request reviewed again now
  * ([reviewDappMessage]), then its value and call data from its account to its recipient at [FeeLevel.NORMAL]'s
  * fees, run as a verified call that must not revert. The gas limit is the verified estimate, or the dApp's
  * own when it asks for one at least that large; one below it is refused, never raised. Nothing is quoted on
@@ -90,24 +90,27 @@ class QuoteDappTransaction(
     private val history: TransactionHistory,
     private val clock: () -> Long = ::epochSecondsNow,
 ) {
-    private val network = Network.SEPOLIA
-    private val quoter = CallQuoter(inputs, sentTransfers, network, clock)
+    /** One quoter per network: a request is quoted on its own network's verified state alone. */
+    private val quoters = Network.entries.associateWith { CallQuoter(inputs, sentTransfers, it, clock) }
 
     suspend operator fun invoke(id: DappRequestId, level: FeeLevel = FeeLevel.NORMAL): DappTransactionQuoting {
         val request = requests.observe().first().firstOrNull { it.id == id } ?: return DappTransactionQuoting.Gone
         val list = (accounts.observeAccounts().first() as? AccountList.Loaded)?.accounts
-        val pinned = tokens.observeTokens(network).first()
+        val pinned = request.network?.let { tokens.observeTokens(it).first() }.orEmpty()
         val review = reviewDappMessage(request, list, networks.observe().first(), clock(), pinned)
             ?: return DappTransactionQuoting.Gone
         val transaction = (review.content as? DappSignContent.Transaction)?.transaction
             ?: return DappTransactionQuoting.Gone
         // A Safe's is a Safe transaction (ProposeDappSafeTx), never quoted as an account's own.
         if (review.account?.kind == AccountKind.SAFE) return DappTransactionQuoting.Gone
-        // First: one signed already is that transaction, whatever the review says now (a key gone, Sepolia
-        // off): it needs nothing more to be retried, and must never be refused while it may be mined.
+        // First: one signed already is that transaction, whatever the review says now (a key gone, its
+        // network off): it needs nothing more to be retried, and must never be refused while it may be mined.
         signedFor(sentTransfers, history, id)?.let { return DappTransactionQuoting.AlreadySigned(it) }
         review.refusal?.let { return DappTransactionQuoting.Refused(it) }
         if (request.expiresAtSeconds <= clock()) return DappTransactionQuoting.Expired
+        // A review without a refusal names a network its session holds.
+        val network = request.network ?: return DappTransactionQuoting.Refused(DappSignRefusal.OTHER_CHAIN)
+        val quoter = quoters.getValue(network)
 
         quoter.heldBack(transaction.from)?.let { return DappTransactionQuoting.NotQuoted(it) }
         val native = when (val read = NativeRead.of(nativeBalances.observeBalance(network, transaction.from).first())) {
@@ -252,13 +255,18 @@ class SendDappTransaction(
     suspend operator fun invoke(quote: DappTransactionQuote, unlock: Unlock): DappTransactionSending {
         val request = requests.observe().first().firstOrNull { it.id == quote.id } ?: return DappTransactionSending.Gone
         // Reviewed again, now, as a message is before it is signed: an account removed, a key gone or
-        // Sepolia turned off since the quote refuses it.
+        // its network turned off since the quote refuses it.
         signedFor(sentTransfers, history, quote.id)?.let { return DappTransactionSending.AlreadySigned(it) }
         val list = (accounts.observeAccounts().first() as? AccountList.Loaded)?.accounts
         val review = reviewDappMessage(request, list, networks.observe().first(), clock())
         review?.refusal?.let { return DappTransactionSending.Refused(it) }
         if (review?.account?.kind == AccountKind.SAFE) return DappTransactionSending.Gone
         if (request.expiresAtSeconds <= clock()) return DappTransactionSending.Expired
+        // Sent on the network it was quoted on, which must be the request's: never signed for another chain.
+        val network = Network.ofChainId(quote.call.transaction.chainId)
+        if (network == null || network != request.network) {
+            return DappTransactionSending.Refused(DappSignRefusal.OTHER_CHAIN)
+        }
         val action = SentAction.DappCall(
             quote.call.transaction.to,
             quote.call.transaction.value,
@@ -266,7 +274,7 @@ class SendDappTransaction(
             quote.id,
         )
         val sending =
-            signAndSend(signer, broadcaster, sentTransfers, Network.SEPOLIA, quote.call, action, clock, unlock)
+            signAndSend(signer, broadcaster, sentTransfers, network, quote.call, action, clock, unlock)
         return answered(quote.id, sending)
     }
 

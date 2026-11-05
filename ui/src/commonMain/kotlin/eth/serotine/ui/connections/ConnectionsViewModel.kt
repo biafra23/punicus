@@ -2,6 +2,7 @@ package eth.serotine.ui.connections
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import eth.serotine.domain.model.Network
 import eth.serotine.domain.repository.DappConnections
 import eth.serotine.domain.repository.DappProposalId
 import eth.serotine.domain.repository.DappRequestId
@@ -90,7 +91,8 @@ class ConnectionsViewModel(
                             key = session.id.topic,
                             name = session.dapp.name,
                             url = session.dapp.url,
-                            line = "Sees $accounts · ${endsIn(session.expiresAtSeconds - now)}$confirmed",
+                            line = "${networksLine(session.networks)} · Sees $accounts · " +
+                                "${endsIn(session.expiresAtSeconds - now)}$confirmed",
                         )
                     },
                     notice = notice,
@@ -115,6 +117,20 @@ class ConnectionsViewModel(
 
     companion object {
         const val NOT_SAVED = "That could not be saved. Nothing was changed."
+
+        /**
+         * The networks a session holds, by name, with their kind of funds: one kind per session (owner ruling,
+         * 2026-11-05, on #22), and Sepolia keeps its testnet warning.
+         */
+        fun networksLine(networks: Set<Network>): String {
+            val held = Network.entries.filter { it in networks }
+            val names = when (held.size) {
+                0 -> return "On no network Serotine serves"
+                1 -> held.single().displayName
+                else -> held.dropLast(1).joinToString(", ") { it.displayName } + " and " + held.last().displayName
+            }
+            return if (held.all { it.testnet }) "On $names, a test network" else "On $names, real funds"
+        }
 
         /** A request as a route carries it: `topic/id`. */
         fun requestKey(id: DappRequestId): String = "${id.session.topic}/${id.id}"

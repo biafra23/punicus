@@ -73,8 +73,9 @@ fun DappProposalRoute(
 
 /**
  * A dApp's session proposal (docs/walletconnect.md, screen D3) as a pure function of [state]: what
- * the dApp says of itself, marked as its claim, the chain (Sepolia alone), what it asks to do, and
- * the accounts to choose, those a dApp may not be offered greyed out, a tap saying why. Approve and
+ * the dApp says of itself, marked as its claim, the networks the connection would hold, each with its kind
+ * of funds, what it asks to do, and the accounts to choose, each with its network, those this dApp may not
+ * be offered greyed out, a tap saying why. Approve and
  * Reject; a proposal that asks for too much can only be rejected, and says why.
  */
 @OptIn(ExperimentalMaterial3Api::class)
@@ -128,8 +129,18 @@ fun DappProposalScreen(
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
-            Heading("Network")
-            Text("Sepolia, a test network", Modifier.padding(horizontal = 16.dp))
+            if (state.networks.isNotEmpty()) {
+                Heading(if (state.networks.size == 1) "Network" else "Networks")
+                state.networks.forEach { Text(it, Modifier.padding(horizontal = 16.dp, vertical = 2.dp)) }
+                state.networksNote?.let {
+                    Text(
+                        it,
+                        Modifier.padding(horizontal = 16.dp, vertical = 4.dp),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+            }
             if (state.asks.isNotEmpty()) {
                 Heading("It may")
                 state.asks.forEach { Text("· $it", Modifier.padding(horizontal = 16.dp, vertical = 2.dp)) }
@@ -154,7 +165,13 @@ fun DappProposalScreen(
                         Checkbox(checked = account.chosen, onCheckedChange = null, enabled = !unavailable)
                     },
                     headlineContent = { Text(account.name, color = color) },
-                    supportingContent = { Text(account.unavailable ?: account.address, color = color) },
+                    supportingContent = {
+                        val where = when {
+                            account.network.isEmpty() -> account.address
+                            else -> "${account.network} · ${account.address}"
+                        }
+                        Text(account.unavailable ?: where, color = color)
+                    },
                     colors = ListItemDefaults.colors(),
                 )
             }

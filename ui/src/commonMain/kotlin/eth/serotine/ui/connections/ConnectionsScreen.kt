@@ -175,7 +175,8 @@ fun ConnectionsScreen(
                 "A dApp's name and address are what it says of itself: Serotine cannot check them. dApps " +
                     "connect through WalletConnect's relay, a service run by Reown and a selected group of " +
                     "operators. It carries encrypted messages: it sees this device's IP address and when it " +
-                    "is connected, never what you sign. dApp connections are on Sepolia only for now.",
+                    "is connected, never what you sign. A connection holds Ethereum and Gnosis Chain, or the " +
+                    "Sepolia test network alone, never both.",
                 Modifier.padding(16.dp),
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,

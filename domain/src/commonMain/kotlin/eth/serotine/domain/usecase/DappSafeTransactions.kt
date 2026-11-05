@@ -108,15 +108,15 @@ class ProposeDappSafeTx(
     private val queue: SafeTxQueue,
     private val clock: () -> Long = ::epochSecondsNow,
 ) {
-    private val network = Network.SEPOLIA
-
     suspend operator fun invoke(id: DappRequestId): DappSafeProposing = cancellingReads {
         val request = requests.observe().first().firstOrNull { it.id == id }
             ?: return@cancellingReads DappSafeProposing.Gone
         val list = (accounts.observeAccounts().first() as? AccountList.Loaded)?.accounts
-        val catalog = tokens.observeTokens(network).first()
+        val catalog = request.network?.let { tokens.observeTokens(it).first() }.orEmpty()
         val review = reviewDappMessage(request, list, networks.observe().first(), clock(), catalog)
             ?: return@cancellingReads DappSafeProposing.Gone
+        // Everything is read and proposed on the request's network: a review without a refusal has one.
+        val network = request.network ?: return@cancellingReads DappSafeProposing.Refused(DappSignRefusal.OTHER_CHAIN)
         val transaction = (review.content as? DappSignContent.Transaction)?.transaction
             ?: return@cancellingReads DappSafeProposing.Gone
         val safe = AccountId(network, transaction.from)
@@ -246,15 +246,20 @@ internal suspend fun queued(queue: SafeTxQueue, safe: AccountId, safeTx: Digest)
         ?.firstOrNull { it.network == safe.network && it.safe == safe.address && it.hash == safeTx }
 
 /**
- * The execution sent of the Safe transaction [safeTx], on Sepolia: an `execTransaction` of it in the sent
+ * The execution sent of the Safe transaction [safeTx], on [network]: an `execTransaction` of it in the sent
  * record or the history, with where it stands; of several (one sent again after another was dropped), the
  * one furthest along. What answers the dApp with the hash of the transaction sent, never the `safeTxHash`
  * (docs/walletconnect.md, *Transactions*).
  */
-internal fun executionFor(safeTx: Digest, sent: List<SentTransfer>, past: List<HistoryEntry>): SignedAnswer? {
+internal fun executionFor(
+    safeTx: Digest,
+    network: Network,
+    sent: List<SentTransfer>,
+    past: List<HistoryEntry>,
+): SignedAnswer? {
     fun executes(transfer: SentTransfer): Boolean {
         val request = (transfer.action as? SentAction.SafeExecution)?.request ?: return false
-        return transfer.network == Network.SEPOLIA && request.network == Network.SEPOLIA && request.hash == safeTx
+        return transfer.network == network && request.network == network && request.hash == safeTx
     }
     val hashes =
         (sent.filter(::executes).map { it.hash } + past.filter { executes(it.transfer) }.map { it.transfer.hash })

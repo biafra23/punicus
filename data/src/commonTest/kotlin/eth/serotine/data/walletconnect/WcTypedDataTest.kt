@@ -30,7 +30,7 @@ class WcTypedDataTest {
 
     private fun decode(typed: String, asString: Boolean = true): DappAsk {
         val second = if (asString) JsonPrimitive(typed) else Json.parseToJsonElement(typed)
-        return WcRequests.decode("eth_signTypedData_v4", JsonArray(listOf(JsonPrimitive(account.hex), second)))
+        return WcRequests.decode("eth_signTypedData_v4", JsonArray(listOf(JsonPrimitive(account.hex), second)), "eip155:11155111")
     }
 
     private fun digestOf(typed: String, asString: Boolean = true): Digest =
@@ -92,6 +92,6 @@ class WcTypedDataTest {
         // Brackets inside a string are no nesting.
         assertEquals(1, WcJson.depthOf("[\"[[[{\\\"[\"]"))
         // Exactly two parameters, the account first.
-        assertEquals(malformed, WcRequests.decode("eth_signTypedData_v4", JsonArray(listOf(JsonPrimitive(permit), JsonPrimitive(account.hex)))))
+        assertEquals(malformed, WcRequests.decode("eth_signTypedData_v4", JsonArray(listOf(JsonPrimitive(permit), JsonPrimitive(account.hex))), "eip155:11155111"))
     }
 }

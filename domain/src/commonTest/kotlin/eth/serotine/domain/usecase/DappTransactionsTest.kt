@@ -70,6 +70,7 @@ class DappTransactionsTest {
         override fun observe(): Flow<List<DappRequest>> = waiting
         override suspend fun answerSignature(request: DappRequestId, signature: Signature) = error("not used")
         override suspend fun answerNull(request: DappRequestId) = error("not used")
+        override suspend fun answerChainSwitch(request: DappRequestId, network: Network) = error("not used")
         override suspend fun refuse(request: DappRequestId, why: DappRequestError) = error("not used")
         override suspend fun recordSafeTx(request: DappRequestId, safeTx: eth.serotine.domain.model.Digest) =
             error("not used")
@@ -86,7 +87,7 @@ class DappTransactionsTest {
     private fun request(id: Long, transaction: DappTransactionRequest) = DappRequest(
         DappRequestId(DappSessionId("t"), id),
         DappMetadata("Example dApp", "https://app.example.org", ""),
-        listOf(held.address, safe.address),
+        listOf(held.id, safe.id),
         "eip155:11155111",
         DappAsk.SendTransaction(transaction),
         now + 300,

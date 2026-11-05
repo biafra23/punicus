@@ -11,6 +11,7 @@ import eth.serotine.domain.model.Token
 import eth.serotine.domain.model.EncodedTypedData
 import eth.serotine.domain.model.Digest
 import eth.serotine.domain.model.AccountCustody
+import eth.serotine.domain.model.AccountId
 import eth.serotine.domain.model.AccountKind
 import eth.serotine.domain.model.Address
 import eth.serotine.domain.model.Network
@@ -43,11 +44,9 @@ import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flow
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.withContext
 import kotlin.time.Duration.Companion.seconds
-
-/** The CAIP-2 id of the one chain a dApp session may name for now (docs/walletconnect.md, ruling 9). */
-internal val SEPOLIA_CHAIN: String = "eip155:${Network.SEPOLIA.chainId}"
 
 /**
  * Why a message cannot be signed (docs/walletconnect.md, *Signing in*): shown, and the request can
@@ -57,7 +56,7 @@ enum class DappSignRefusal(val error: DappRequestError) {
     /** It names an account the session does not give the dApp. */
     NOT_SESSION_ACCOUNT(DappRequestError.UNAUTHORIZED),
 
-    /** It names a chain other than Sepolia. */
+    /** It names a chain its session does not hold. */
     OTHER_CHAIN(DappRequestError.UNAUTHORIZED),
 
     /** The account is no longer in the wallet. */
@@ -69,8 +68,8 @@ enum class DappSignRefusal(val error: DappRequestError) {
     /** The account is watched with no key on this device. */
     NO_KEY(DappRequestError.UNAUTHORIZED),
 
-    /** Sepolia is off. */
-    SEPOLIA_OFF(DappRequestError.UNAUTHORIZED),
+    /** The network it names is off. */
+    NETWORK_OFF(DappRequestError.UNAUTHORIZED),
 
     /** A Safe: its messages (EIP-1271) come later, and until then it signs none. */
     SAFE(DappRequestError.UNSUPPORTED_METHOD),
@@ -168,7 +167,7 @@ data class DappMessageReview(
     val request: DappRequest,
     /** The account asked to sign. */
     val address: Address,
-    /** The wallet's account at [address] on Sepolia, when there is one. */
+    /** The wallet's account at [address] on the request's network, when there is one. */
     val account: Account?,
     val content: DappSignContent,
     val refusal: DappSignRefusal?,
@@ -195,7 +194,8 @@ data class DappMessageReview(
 /**
  * Reviews [request], when it asks to have something signed or sent (`personal_sign`,
  * `eth_signTypedData_v4`, `eth_sendTransaction`; null otherwise), against the wallet's [accounts] (null:
- * the list cannot be read), the networks [enabled] and the built-in [tokens] of Sepolia, at [nowSeconds]
+ * the list cannot be read), the networks [enabled] and the built-in [tokens] of the request's network, at
+ * [nowSeconds]
  * (docs/walletconnect.md, *Signing in*, *Typed data* and *Transactions*). A transaction's refusals are
  * here too: one to the zero address, and from a Safe a gas limit or a call of the Safe itself.
  */
@@ -222,11 +222,13 @@ fun reviewDappMessage(
         }
         else -> return null
     }
-    val account = accounts?.firstOrNull { it.network == Network.SEPOLIA && it.address == signer }
+    val network = request.network
+    val account = accounts?.firstOrNull { it.network == network && it.address == signer }
     val refusal = accountRefusal(request, signer, accounts, account, enabled, content is DappSignContent.Transaction)
         ?: when (content) {
-        is DappSignContent.Message -> signInRefusal(content.signIn, signer, nowSeconds)
-        is DappSignContent.Typed -> typedRefusal(content, signer)
+        // The account's refusal is null only for a network the session holds.
+        is DappSignContent.Message -> signInRefusal(content.signIn, signer, checkNotNull(network), nowSeconds)
+        is DappSignContent.Typed -> typedRefusal(content, signer, checkNotNull(network))
         is DappSignContent.Transaction -> when {
             content.transaction.to == Address.ZERO -> DappSignRefusal.TX_TO_ZERO_ADDRESS
             account?.kind == AccountKind.SAFE && content.transaction.to == signer -> DappSignRefusal.SAFE_SELF_CALL
@@ -261,34 +263,42 @@ private fun accountRefusal(
     account: Account?,
     enabled: Set<Network>,
     transaction: Boolean,
-): DappSignRefusal? = when {
-    request.chain != SEPOLIA_CHAIN -> DappSignRefusal.OTHER_CHAIN
-    signer !in request.sessionAccounts -> DappSignRefusal.NOT_SESSION_ACCOUNT
-    accounts == null -> DappSignRefusal.ACCOUNTS_UNREADABLE
-    account == null -> DappSignRefusal.NOT_IN_WALLET
-    // A Safe's transaction is a Safe transaction its owners sign, watched or not; its messages come later.
-    account.kind == AccountKind.SAFE && transaction ->
-        if (Network.SEPOLIA in enabled) null else DappSignRefusal.SEPOLIA_OFF
-    account.kind == AccountKind.SAFE -> DappSignRefusal.SAFE
-    account.custody == AccountCustody.Watched -> DappSignRefusal.NO_KEY
-    Network.SEPOLIA !in enabled -> DappSignRefusal.SEPOLIA_OFF
-    else -> null
+): DappSignRefusal? {
+    // A chain the session does not hold is refused, never read as another: the network is the request's.
+    val network = request.network?.takeIf { it in request.sessionNetworks } ?: return DappSignRefusal.OTHER_CHAIN
+    return when {
+        AccountId(network, signer) !in request.sessionAccounts -> DappSignRefusal.NOT_SESSION_ACCOUNT
+        accounts == null -> DappSignRefusal.ACCOUNTS_UNREADABLE
+        account == null -> DappSignRefusal.NOT_IN_WALLET
+        // A Safe's transaction is a Safe transaction its owners sign, watched or not; its messages come later.
+        account.kind == AccountKind.SAFE && transaction ->
+            if (network in enabled) null else DappSignRefusal.NETWORK_OFF
+        account.kind == AccountKind.SAFE -> DappSignRefusal.SAFE
+        account.custody == AccountCustody.Watched -> DappSignRefusal.NO_KEY
+        network !in enabled -> DappSignRefusal.NETWORK_OFF
+        else -> null
+    }
 }
 
-private fun signInRefusal(signIn: SignInMessage?, signer: Address, nowSeconds: Long): DappSignRefusal? = when {
+private fun signInRefusal(
+    signIn: SignInMessage?,
+    signer: Address,
+    network: Network,
+    nowSeconds: Long,
+): DappSignRefusal? = when {
     signIn == null -> null
     signIn.address != signer -> DappSignRefusal.SIGN_IN_OTHER_ADDRESS
-    signIn.chainId != Network.SEPOLIA.chainId -> DappSignRefusal.SIGN_IN_OTHER_CHAIN
+    signIn.chainId != network.chainId -> DappSignRefusal.SIGN_IN_OTHER_CHAIN
     signIn.expiresAtSeconds != null && signIn.expiresAtSeconds <= nowSeconds -> DappSignRefusal.SIGN_IN_EXPIRED
     signIn.notBeforeSeconds != null && signIn.notBeforeSeconds > nowSeconds -> DappSignRefusal.SIGN_IN_NOT_YET_VALID
     else -> null
 }
 
-private fun typedRefusal(content: DappSignContent.Typed, signer: Address): DappSignRefusal? {
+private fun typedRefusal(content: DappSignContent.Typed, signer: Address, network: Network): DappSignRefusal? {
     val chainId = content.typed.data.domain["chainId"]?.let(Eip712::unsignedOf)
     return when {
         Eip712.count(content.typed.data.message.values) > MAX_SHOWN_VALUES -> DappSignRefusal.TYPED_TOO_LARGE
-        chainId != null && chainId != UInt256.of(Network.SEPOLIA.chainId) -> DappSignRefusal.TYPED_OTHER_CHAIN
+        chainId != null && chainId != UInt256.of(network.chainId) -> DappSignRefusal.TYPED_OTHER_CHAIN
         (content.meaning as? TypedDataMeaning.Permit)?.owner?.let { it != signer } == true ->
             DappSignRefusal.PERMIT_OTHER_OWNER
         else -> null
@@ -361,12 +371,17 @@ class ObserveDappMessages(
             }
         }
         val accountLists = accounts.observeAccounts()
-        val known = tokens.observeTokens(Network.SEPOLIA)
+        // Each network's built-in tokens: a request's are its network's.
+        val known = combine(Network.entries.map { network -> tokens.observeTokens(network).map { network to it } }) {
+            it.toMap()
+        }
         val enabled = networks.observe()
         return combine(requests.observe(), accountLists, enabled, known, ticks) { waiting, list, on, pinned, _ ->
             val loaded = (list as? AccountList.Loaded)?.accounts
             val now = clock()
-            waiting.mapNotNull { request -> reviewDappMessage(request, loaded, on, now, pinned) }
+            waiting.mapNotNull { request ->
+                reviewDappMessage(request, loaded, on, now, request.network?.let(pinned::get).orEmpty())
+            }
         }.distinctUntilChanged()
     }
 }
@@ -453,9 +468,10 @@ class RefuseDappRequest(
 
 /**
  * Answers at once the requests that need no one's decision (docs/walletconnect.md, *The methods*):
- * `wallet_switchEthereumChain` to Sepolia with null and to any other chain with the unrecognized-chain
- * error; a method this version does not answer yet with the unsupported-method error; and parameters
- * that are not the method's as invalid. So no request is left unanswered while its session lives: an
+ * `wallet_switchEthereumChain` to a network the session holds as switched (null, then `chainChanged`) and to
+ * any other chain with the unrecognized-chain error, so never from testnet to real funds nor back; a method
+ * this version does not answer yet with the unsupported-method error; and parameters that are not the
+ * method's as invalid. So no request is left unanswered while its session lives: an
  * answer that could not be saved is tried again every [retrySeconds] until it is, or the request goes.
  * Returns only by cancellation; the host runs it while dApp messages arrive.
  */
@@ -504,17 +520,21 @@ class AnswerDappRequestsAtOnce(
         past: List<HistoryEntry>,
     ): DappAnswer? =
         when (val ask = request.ask) {
-            is DappAsk.SwitchChain -> if (ask.chainId == Network.SEPOLIA.chainId) {
-                requests.answerNull(request.id)
-            } else {
-                requests.refuse(request.id, DappRequestError.UNRECOGNIZED_CHAIN)
+            is DappAsk.SwitchChain -> {
+                val network = Network.ofChainId(ask.chainId)?.takeIf { it in request.sessionNetworks }
+                if (network != null) {
+                    requests.answerChainSwitch(request.id, network)
+                } else {
+                    requests.refuse(request.id, DappRequestError.UNRECOGNIZED_CHAIN)
+                }
             }
             is DappAsk.NotAnsweredYet -> requests.refuse(request.id, DappRequestError.UNSUPPORTED_METHOD)
             is DappAsk.Malformed -> requests.refuse(request.id, DappRequestError.INVALID_PARAMS)
             is DappAsk.SendTransaction -> {
                 // An EOA's transaction signed for it, or, from a Safe, the execution of the Safe transaction
                 // recorded for it: answered with the hash of the transaction sent, never the safeTxHash.
-                val answer = signedFor(sent, past, request.id) ?: request.safeTx?.let { executionFor(it, sent, past) }
+                val answer = signedFor(sent, past, request.id)
+                    ?: request.network?.let { network -> request.safeTx?.let { executionFor(it, network, sent, past) } }
                 answer?.takeIf { it.state == SignedState.SENT || it.state == SignedState.MINED }
                     ?.let { requests.answerTransaction(request.id, it.transfer.hash) }
             }

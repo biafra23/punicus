@@ -82,7 +82,7 @@ fun DappRequestRoute(
 
 /**
  * A dApp's request to sign (docs/walletconnect.md, screens D4 and D5) as a pure function of [state]:
- * who asks, marked as the dApp's claim; the account asked to sign, in full; Sepolia; a message, field
+ * who asks, marked as the dApp's claim; the account asked to sign, in full; its network; a message, field
  * by field when it is a sign-in, as text, or as hex marked "not text"; or typed data, what it lets
  * someone do when decoded, its domain and every field; the warnings;
  * and the unlock, with Refuse beside it. One that cannot be signed shows why, its Sign greyed out and
@@ -159,7 +159,7 @@ fun DappRequestScreen(
                     }
                 }
             }
-            Text("On Sepolia, a test network", Modifier.padding(horizontal = 16.dp, vertical = 4.dp))
+            Text(state.network, Modifier.padding(horizontal = 16.dp, vertical = 4.dp))
 
             if (state.typed) {
                 TypedDataSections(state)

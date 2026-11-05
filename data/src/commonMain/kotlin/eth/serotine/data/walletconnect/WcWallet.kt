@@ -1,5 +1,6 @@
 package eth.serotine.data.walletconnect
 
+import eth.serotine.domain.repository.dappNetworkOf
 import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.coroutineScope
@@ -46,17 +47,22 @@ internal data class WcProposalView(
     /** Why it can only be rejected, or null when it can be approved. */
     val refusal: WcProtocol.Error?,
     val expirySeconds: Long,
+    /** When its chains are why it can only be rejected, which of them. */
+    val chainRefusal: WcProtocol.ChainRefusal? = null,
 )
 
 /** A settled session, as the screens show it. */
 internal data class WcSessionView(
     val topic: String,
     val dapp: WcMetadata,
+    /** CAIP-10 accounts, each on one of [chains]. */
     val accounts: List<String>,
     val methods: List<String>,
     val events: List<String>,
     val expirySeconds: Long,
     val acknowledged: Boolean,
+    /** The CAIP-2 chains it holds, of one kind of funds. */
+    val chains: List<String> = listOf(WcProtocol.SEPOLIA),
 )
 
 /** A dApp's request waiting for its answer. Its [params] are the dApp's, untrusted, for the use case to decode. */
@@ -87,9 +93,9 @@ internal data class WcView(
  *   its topic before (a replay, or the relay delivering again), and only then handled. The state it
  *   leaves, the id among it, is saved before [onMessage] returns, so the relay's acknowledgement
  *   follows the save.
- * - **Sepolia alone, the closed list of methods** ([WcProtocol]): a proposal that requires more can
- *   only be rejected, and a request for another chain or another method is answered with an error
- *   at once, never shown.
+ * - **Real funds or testnet, the closed list of methods** ([WcProtocol]): a proposal that requires more
+ *   can only be rejected, a session holds Ethereum and Gnosis Chain or Sepolia alone, and a request for a
+ *   chain its session does not hold or for another method is answered with an error at once, never shown.
  * - **What it keeps is no account key**: the pairings' and sessions' keys, which protect messages
  *   only (ruling 8). The session's own X25519 private key exists only during [approve].
  * - **Every message this side sends is saved first**, in the state's outbox, in the same write as
@@ -290,20 +296,23 @@ internal class WcWallet(
         /** The proposal asks for what no session here may have ([WcProposalView.refusal]). */
         data class Refused(val why: WcProtocol.Error) : Approval
 
-        /** No account, an address out of shape, or one twice. */
+        /**
+         * No account, one out of shape or twice, on a chain the proposal did not ask for, or accounts of both
+         * kinds of funds, or of another kind than the chains it requires.
+         */
         data object InvalidAccounts : Approval
         data object NotSaved : Approval
     }
 
     /**
-     * Approves proposal [proposalId] on [pairingTopic] with the Sepolia accounts at [addresses] (`0x` and 40 hex
-     * digits): settles a session with the methods and events the proposal asks for that are on the
-     * lists, then answers the proposal with this side's public key.
+     * Approves proposal [proposalId] on [pairingTopic] with [accounts], CAIP-10 (`eip155:1:0x…`, the address in
+     * lower case), each on a chain the proposal asks for, all of one kind of funds with the chains it requires:
+     * settles a session holding the chains it requires and those of [accounts], with the methods and events the
+     * proposal asks for of them that are on the lists, then answers the proposal with this side's public key.
      */
-    suspend fun approve(pairingTopic: String, proposalId: Long, addresses: List<String>): Approval {
-        if (addresses.isEmpty() || addresses.toSet().size != addresses.size || !addresses.all(::isAddress)) {
-            return Approval.InvalidAccounts
-        }
+    suspend fun approve(pairingTopic: String, proposalId: Long, accounts: List<String>): Approval {
+        val parsed = accounts.map { WcProtocol.accountOf(it) ?: return Approval.InvalidAccounts }
+        if (accounts.isEmpty() || accounts.toSet().size != accounts.size) return Approval.InvalidAccounts
         val now = nowSeconds()
         val selfPrivate = WcKeys.newPrivateKey()
         try {
@@ -315,9 +324,19 @@ internal class WcWallet(
                 if (proposal.expirySeconds <= now) {
                     return@change Approval.Expired to state.copy(proposals = state.proposals - proposal)
                 }
-                val ask = WcProtocol.ask(proposal.requiredNamespaces, proposal.optionalNamespaces)
+                val asked = WcProtocol.ask(proposal.requiredNamespaces, proposal.optionalNamespaces)
                     ?: return@change Approval.Refused(WcProtocol.Error.UNSUPPORTED_NAMESPACE_KEY) to null
-                ask.refusal?.let { return@change Approval.Refused(it) to null }
+                asked.refusal?.let { return@change Approval.Refused(it) to null }
+                // Each account on a chain it asked for, all of one kind of funds with what it requires (ruling 9).
+                val accountChains = parsed.map { it.first }.toSet()
+                val funds = (accountChains + asked.requiredChains).map(WcProtocol::fundsOf).toSet()
+                if (!asked.chains.containsAll(accountChains) || funds.size != 1) {
+                    return@change Approval.InvalidAccounts to null
+                }
+                val chains = WcProtocol.CHAINS.filter { it in asked.requiredChains || it in accountChains }
+                val ask = checkNotNull(
+                    WcProtocol.ask(proposal.requiredNamespaces, proposal.optionalNamespaces, chains.toSet()),
+                )
                 val pairing = state.pairings.find { it.topic == proposal.pairingTopic }
                     ?: return@change Approval.NoSuchProposal to state.copy(proposals = state.proposals - proposal)
                 val pairingKey = checkNotNull(WcEncoding.hexOrNull(pairing.symKey, WC_KEY_BYTES))
@@ -326,7 +345,6 @@ internal class WcWallet(
                     ?: return@change Approval.Refused(WcProtocol.Error.SESSION_SETTLEMENT_FAILED) to null
                 val selfPublic = WcEncoding.hex(WcCrypto.x25519PublicKey(selfPrivate))
                 val topic = WcKeys.topicOf(symKey)
-                val accounts = addresses.map { "${WcProtocol.SEPOLIA}:${it.lowercase()}" }
                 val methods = ask.methods.sorted()
                 val events = ask.events.sorted()
                 val settleId = rpcId()
@@ -344,10 +362,11 @@ internal class WcWallet(
                     settleRequestId = settleId,
                     requiredNamespaces = proposal.requiredNamespaces,
                     optionalNamespaces = proposal.optionalNamespaces,
+                    chains = chains,
                 )
                 val settleParams = buildJsonObject {
                     putJsonObject("relay") { put("protocol", "irn") }
-                    put("namespaces", namespaces(accounts, methods, events))
+                    put("namespaces", namespaces(accounts, chains, methods, events))
                     putJsonObject("controller") {
                         put("publicKey", selfPublic)
                         put("metadata", Json.encodeToJsonElement(WcMetadata.serializer(), metadata))
@@ -446,7 +465,43 @@ internal class WcWallet(
     suspend fun respondError(topic: String, requestId: Long, why: WcProtocol.Error): Answer =
         answer(topic, requestId) { error(requestId, why) }
 
-    private suspend fun answer(topic: String, requestId: Long, payload: () -> ByteArray): Answer {
+    /**
+     * Answers request [requestId] on session [topic], a `wallet_switchEthereumChain`, as switched to [chain]: null,
+     * then, where the session carries it, the `chainChanged` event naming [chain], in one save. A [chain] the
+     * session does not hold is answered with the unrecognized-chain error instead (EIP-3326), never switched to.
+     */
+    suspend fun respondChainSwitch(topic: String, requestId: Long, chain: String): Answer =
+        answer(topic, requestId, event = { session ->
+            val chainId = dappNetworkOf(chain)?.chainId
+            if (chain !in session.chains || chainId == null || "chainChanged" !in session.events) {
+                null
+            } else {
+                buildJsonObject {
+                    putJsonObject("event") {
+                        put("name", "chainChanged")
+                        put("data", chainId)
+                    }
+                    put("chainId", chain)
+                }
+            }
+        }) { session ->
+            if (chain in session.chains) {
+                result(requestId, JsonNull)
+            } else {
+                error(requestId, WcProtocol.Error.PROVIDER_UNRECOGNIZED_CHAIN)
+            }
+        }
+
+    private suspend fun answer(topic: String, requestId: Long, payload: () -> ByteArray): Answer =
+        answer(topic, requestId, event = { null }) { payload() }
+
+    /** Answers with [payload], then the session event [event] gives, if any, in the same save. */
+    private suspend fun answer(
+        topic: String,
+        requestId: Long,
+        event: (WcStoredSession) -> JsonObject?,
+        payload: (WcStoredSession) -> ByteArray,
+    ): Answer {
         val now = nowSeconds()
         var message: Outgoing.Publish? = null
         val keys = mutableListOf<Long>()
@@ -463,11 +518,19 @@ internal class WcWallet(
             val key = checkNotNull(WcEncoding.hexOrNull(session.symKey, WC_KEY_BYTES))
             message = Outgoing.Publish(
                 topic,
-                WcEnvelope.sealType0(key, payload()),
+                WcEnvelope.sealType0(key, payload(session)),
                 WcProtocol.SESSION_REQUEST.ttlSeconds,
                 WcProtocol.SESSION_REQUEST.responseTag,
             )
-            Answer.DELIVERED to kept.queuing(listOfNotNull(message), now, keys)
+            val notice = event(session)?.let { params ->
+                Outgoing.Publish(
+                    topic,
+                    WcEnvelope.sealType0(key, request(rpcId(), WcProtocol.SESSION_EVENT.name, params)),
+                    WcProtocol.SESSION_EVENT.ttlSeconds,
+                    WcProtocol.SESSION_EVENT.requestTag,
+                )
+            }
+            Answer.DELIVERED to kept.queuing(listOfNotNull(message, notice), now, keys)
         }
         // Nothing goes out for a change that was not saved: the request would still be shown, and answerable again.
         if (outcome == Answer.NOT_SAVED || keys.isEmpty()) return outcome
@@ -534,19 +597,24 @@ internal class WcWallet(
     }
 
     /**
-     * Gives session [topic] the Sepolia accounts at [addresses] instead: a session update, then the
-     * `accountsChanged` event where the session carries it. True once saved: both are in the outbox then,
-     * sent now when the relay takes them, else on the next connection.
+     * Gives session [topic] the [accounts] instead, CAIP-10 (`eip155:1:0x…`, the address in lower case), each
+     * on one of the session's chains: a session update, then, where the session carries it, an
+     * `accountsChanged` event for each of its chains, naming the accounts it has there. True once saved: they
+     * are in the outbox then, sent now when the relay takes them, else on the next connection. False for an
+     * account out of shape, twice, or on a chain the session does not hold.
      */
-    suspend fun updateAccounts(topic: String, addresses: List<String>): Boolean {
-        if (addresses.isEmpty() || addresses.toSet().size != addresses.size || !addresses.all(::isAddress)) return false
+    suspend fun updateAccounts(topic: String, accounts: List<String>): Boolean {
+        val parsed = accounts.map { WcProtocol.accountOf(it) ?: return false }
+        if (accounts.isEmpty() || accounts.toSet().size != accounts.size) return false
         val messages = mutableListOf<Outgoing.Publish>()
         val keys = mutableListOf<Long>()
         val saved = store.change(false) { state ->
             val session = state.sessions.find { it.topic == topic } ?: return@change false to null
+            if (!session.chains.containsAll(parsed.map { it.first })) return@change false to null
             val key = checkNotNull(WcEncoding.hexOrNull(session.symKey, WC_KEY_BYTES))
-            val accounts = addresses.map { "${WcProtocol.SEPOLIA}:${it.lowercase()}" }
-            val update = buildJsonObject { put("namespaces", namespaces(accounts, session.methods, session.events)) }
+            val update = buildJsonObject {
+                put("namespaces", namespaces(accounts, session.chains, session.methods, session.events))
+            }
             messages += Outgoing.Publish(
                 topic,
                 WcEnvelope.sealType0(key, request(rpcId(), WcProtocol.SESSION_UPDATE.name, update)),
@@ -554,19 +622,23 @@ internal class WcWallet(
                 WcProtocol.SESSION_UPDATE.requestTag,
             )
             if ("accountsChanged" in session.events) {
-                val event = buildJsonObject {
-                    putJsonObject("event") {
-                        put("name", "accountsChanged")
-                        putJsonArray("data") { addresses.forEach { add(JsonPrimitive(it.lowercase())) } }
+                for (chain in session.chains) {
+                    val event = buildJsonObject {
+                        putJsonObject("event") {
+                            put("name", "accountsChanged")
+                            putJsonArray("data") {
+                                parsed.filter { it.first == chain }.forEach { add(JsonPrimitive(it.second)) }
+                            }
+                        }
+                        put("chainId", chain)
                     }
-                    put("chainId", WcProtocol.SEPOLIA)
+                    messages += Outgoing.Publish(
+                        topic,
+                        WcEnvelope.sealType0(key, request(rpcId(), WcProtocol.SESSION_EVENT.name, event)),
+                        WcProtocol.SESSION_EVENT.ttlSeconds,
+                        WcProtocol.SESSION_EVENT.requestTag,
+                    )
                 }
-                messages += Outgoing.Publish(
-                    topic,
-                    WcEnvelope.sealType0(key, request(rpcId(), WcProtocol.SESSION_EVENT.name, event)),
-                    WcProtocol.SESSION_EVENT.ttlSeconds,
-                    WcProtocol.SESSION_EVENT.requestTag,
-                )
             }
             true to state
                 .copy(sessions = state.sessions.map { if (it.topic == topic) it.copy(accounts = accounts) else it })
@@ -712,7 +784,8 @@ internal class WcWallet(
                 if (WcRequests.depthOf(params) > WcRequests.MAX_PARAMS_DEPTH) {
                     return listOf(reply(invalidParams(id))) to state
                 }
-                if (chainId != WcProtocol.SEPOLIA) {
+                // A chain the session does not hold is refused, never read as one it does.
+                if (chainId !in session.chains) {
                     return listOf(reply(error(id, WcProtocol.Error.UNSUPPORTED_CHAINS))) to state
                 }
                 if (name !in session.methods) {
@@ -804,10 +877,13 @@ internal class WcWallet(
                     events = ask?.events.orEmpty(),
                     refusal = ask?.refusal ?: if (ask == null) WcProtocol.Error.UNSUPPORTED_NAMESPACE_KEY else null,
                     expirySeconds = proposal.expirySeconds,
+                    chainRefusal = ask?.chainRefusal,
                 )
             },
             sessions = state.sessions.map {
-                WcSessionView(it.topic, it.dapp, it.accounts, it.methods, it.events, it.expirySeconds, it.acknowledged)
+                WcSessionView(
+                    it.topic, it.dapp, it.accounts, it.methods, it.events, it.expirySeconds, it.acknowledged, it.chains,
+                )
             },
             requests = state.requests.mapNotNull { request ->
                 val session = sessions[request.topic] ?: return@mapNotNull null
@@ -825,9 +901,14 @@ internal class WcWallet(
         )
     }
 
-    private fun namespaces(accounts: List<String>, methods: List<String>, events: List<String>) = buildJsonObject {
+    private fun namespaces(
+        accounts: List<String>,
+        chains: List<String>,
+        methods: List<String>,
+        events: List<String>,
+    ) = buildJsonObject {
         putJsonObject("eip155") {
-            putJsonArray("chains") { add(JsonPrimitive(WcProtocol.SEPOLIA)) }
+            putJsonArray("chains") { chains.forEach { add(JsonPrimitive(it)) } }
             putJsonArray("accounts") { accounts.forEach { add(JsonPrimitive(it)) } }
             putJsonArray("methods") { methods.forEach { add(JsonPrimitive(it)) } }
             putJsonArray("events") { events.forEach { add(JsonPrimitive(it)) } }

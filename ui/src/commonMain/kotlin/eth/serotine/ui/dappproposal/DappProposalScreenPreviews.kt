@@ -1,6 +1,7 @@
 package eth.serotine.ui.dappproposal
 
 import androidx.compose.runtime.Composable
+import eth.serotine.domain.model.Network
 import eth.serotine.domain.repository.DappRefusal
 import eth.serotine.domain.usecase.DappOffer
 import eth.serotine.ui.theme.SerotineTheme
@@ -9,23 +10,16 @@ import org.jetbrains.compose.ui.tooling.preview.Preview
 // A dApp's connection request in Android Studio's preview pane, one preview per state it draws
 // differently. DappProposalScreenPreviewsTest renders each one in dappProposalScreenPreviews, at the end.
 
+private fun option(key: String, name: String, address: String, network: Network, chosen: Boolean, offer: DappOffer) =
+    AccountOption(key, name, address, chosen, DappProposalViewModel.offerLine(offer, network), network.displayName)
+
+// A Sepolia account chosen: the connection is testnet's, and the accounts holding real funds are greyed out.
 private val accounts = listOf(
-    AccountOption("11155111:0x1", "Main", "0x52b4…91e0", chosen = true, unavailable = null),
-    AccountOption("11155111:0x2", "Team Safe", "0x8a3f…2c17", chosen = false, unavailable = null),
-    AccountOption(
-        "11155111:0x3",
-        "Watched",
-        "0x0f1c…9a44",
-        chosen = false,
-        unavailable = DappProposalViewModel.offerLine(DappOffer.NO_KEY),
-    ),
-    AccountOption(
-        "1:0x1",
-        "Savings",
-        "0x52b4…91e0",
-        chosen = false,
-        unavailable = DappProposalViewModel.offerLine(DappOffer.NOT_SEPOLIA),
-    ),
+    option("11155111:0x1", "Main", "0x52b4…91e0", Network.SEPOLIA, chosen = true, DappOffer.OFFERED),
+    option("11155111:0x2", "Team Safe", "0x8a3f…2c17", Network.SEPOLIA, chosen = false, DappOffer.OFFERED),
+    option("11155111:0x3", "Watched", "0x0f1c…9a44", Network.SEPOLIA, chosen = false, DappOffer.NO_KEY),
+    option("1:0x1", "Savings", "0x52b4…91e0", Network.ETHEREUM, chosen = false, DappOffer.OTHER_FUNDS),
+    option("100:0x4", "Gnosis Pay", "0x7c21…03bd", Network.GNOSIS, chosen = false, DappOffer.NOT_ASKED),
 )
 
 private val request = DappProposalUiState(
@@ -33,8 +27,33 @@ private val request = DappProposalUiState(
     name = "Uniswap Interface",
     url = "https://app.uniswap.org",
     description = "Swap, earn, and build on the leading decentralized crypto trading protocol.",
+    networks = listOf(DappProposalViewModel.networkLine(Network.SEPOLIA)),
     asks = listOf("personal_sign", "eth_sendTransaction").map(DappProposalViewModel::methodLine),
     accounts = accounts,
+)
+
+// Nothing chosen yet, the dApp asking for Ethereum and Sepolia: either kind, and the first account decides.
+private val eitherKind = request.copy(
+    networks = listOf(Network.ETHEREUM, Network.SEPOLIA).map(DappProposalViewModel::networkLine),
+    networksNote = DappProposalViewModel.BOTH_KINDS,
+    accounts = listOf(
+        option("11155111:0x1", "Main", "0x52b4…91e0", Network.SEPOLIA, chosen = false, DappOffer.OFFERED),
+        option("1:0x1", "Savings", "0x52b4…91e0", Network.ETHEREUM, chosen = false, DappOffer.OFFERED),
+        option("100:0x4", "Gnosis Pay", "0x7c21…03bd", Network.GNOSIS, chosen = false, DappOffer.NOT_ASKED),
+    ),
+)
+
+// Real funds chosen on both Ethereum and Gnosis Chain: one connection holding both, Sepolia greyed out.
+private val realFunds = request.copy(
+    networks = listOf(Network.ETHEREUM, Network.GNOSIS).map(DappProposalViewModel::networkLine),
+    asks = listOf("personal_sign", "eth_sendTransaction", "wallet_switchEthereumChain")
+        .map(DappProposalViewModel::methodLine),
+    accounts = listOf(
+        option("1:0x1", "Savings", "0x52b4…91e0", Network.ETHEREUM, chosen = true, DappOffer.OFFERED),
+        option("100:0x4", "Gnosis Pay", "0x7c21…03bd", Network.GNOSIS, chosen = true, DappOffer.OFFERED),
+        option("11155111:0x1", "Main", "0x52b4…91e0", Network.SEPOLIA, chosen = false, DappOffer.OTHER_FUNDS),
+        option("1:0x5", "Cold", "0x9e0a…5b12", Network.ETHEREUM, chosen = false, DappOffer.NETWORK_OFF),
+    ),
 )
 
 @Composable
@@ -54,6 +73,28 @@ private fun DappProposalRequestDarkPreview() = DappProposalPreview(request, dark
 
 @Preview
 @Composable
+private fun DappProposalEitherKindPreview() = DappProposalPreview(eitherKind)
+
+@Preview
+@Composable
+private fun DappProposalRealFundsPreview() = DappProposalPreview(realFunds)
+
+@Preview
+@Composable
+private fun DappProposalRealFundsDarkPreview() = DappProposalPreview(realFunds, darkTheme = true)
+
+@Preview
+@Composable
+private fun DappProposalMixedFundsRefusedPreview() = DappProposalPreview(
+    request.copy(
+        networks = emptyList(),
+        refusal = DappProposalViewModel.refusalLine(DappRefusal.MIXED_FUNDS),
+        accounts = accounts.map { it.copy(chosen = false) },
+    ),
+)
+
+@Preview
+@Composable
 private fun DappProposalNoneChosenPreview() =
     DappProposalPreview(request.copy(accounts = accounts.map { it.copy(chosen = false) }))
 
@@ -69,7 +110,12 @@ private fun DappProposalRefusedPreview() = DappProposalPreview(
 @Preview
 @Composable
 private fun DappProposalExplainingPreview() = DappProposalPreview(
-    request.copy(explaining = Explanation("Not offered to dApps", DappProposalViewModel.offerLine(DappOffer.NO_KEY)!!)),
+    request.copy(
+        explaining = Explanation(
+            "Not offered to this dApp",
+            DappProposalViewModel.offerLine(DappOffer.OTHER_FUNDS, Network.ETHEREUM)!!,
+        ),
+    ),
 )
 
 @Preview
@@ -95,6 +141,10 @@ internal val dappProposalScreenPreviews: List<@Composable () -> Unit> = listOf(
     { DappProposalRequestPreview() },
     { DappProposalRequestDarkPreview() },
     { DappProposalNoneChosenPreview() },
+    { DappProposalEitherKindPreview() },
+    { DappProposalRealFundsPreview() },
+    { DappProposalRealFundsDarkPreview() },
+    { DappProposalMixedFundsRefusedPreview() },
     { DappProposalRefusedPreview() },
     { DappProposalExplainingPreview() },
     { DappProposalNotSavedPreview() },

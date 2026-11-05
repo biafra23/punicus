@@ -102,6 +102,27 @@ private fun DappTransactionPaymentPreview() = DappTransactionPreview(payment)
 @Composable
 private fun DappTransactionPaymentDarkPreview() = DappTransactionPreview(payment, darkTheme = true)
 
+// A payment on Gnosis Chain, in a connection holding real funds: xDAI, no testnet mark.
+private val onGnosis = payment.copy(
+    network = DappRequestViewModel.onLine(eth.serotine.domain.model.Network.GNOSIS),
+    value = "0.5 XDAI",
+    quote = listOf(
+        SignInField("Fee, at most", "0.0000462 XDAI"),
+        SignInField("Left in the account, at least", "12.4999538 XDAI"),
+        SignInField("Verified run", "Runs without reverting at block 42,918,330"),
+        SignInField("Gas limit", "21000"),
+        SignInField("Nonce", "3"),
+    ),
+)
+
+@Preview
+@Composable
+private fun DappTransactionRealFundsPreview() = DappTransactionPreview(onGnosis)
+
+@Preview
+@Composable
+private fun DappTransactionRealFundsDarkPreview() = DappTransactionPreview(onGnosis, darkTheme = true)
+
 @Preview
 @Composable
 private fun DappTransactionTokenTransferPreview() = DappTransactionPreview(tokenTransfer)
@@ -233,4 +254,6 @@ internal val dappTransactionScreenPreviews: List<@Composable () -> Unit> = listO
     { DappTransactionExplainingPreview() },
     { DappTransactionEndedPreview() },
     { DappTransactionLoadingPreview() },
+    { DappTransactionRealFundsPreview() },
+    { DappTransactionRealFundsDarkPreview() },
 )

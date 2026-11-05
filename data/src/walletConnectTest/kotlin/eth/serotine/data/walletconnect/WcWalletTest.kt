@@ -45,6 +45,7 @@ class WcWalletTest {
     private val file = Path(directory, "walletconnect.json")
     private val relay = FakeRelay()
     private val account = "0x00000000000000000000000000000000000000a1"
+    private val sepoliaAccount = "${WcProtocol.SEPOLIA}:$account"
     private val sepoliaAsk = namespace(
         chains = listOf("eip155:1", WcProtocol.SEPOLIA),
         methods = listOf("eth_sendTransaction", "personal_sign", "eth_sign", "eth_signTransaction"),
@@ -100,7 +101,7 @@ class WcWalletTest {
         assertIs<WcWallet.Pairing.Paired>(running.wallet.pair(dapp.uri()))
         dapp.propose(1, JsonObject(emptyMap()), buildJsonObject { put("eip155", sepoliaAsk) })
         settle()
-        val approval = assertIs<WcWallet.Approval.Approved>(running.wallet.approve(dapp.pairingTopic, 1, listOf(account)))
+        val approval = assertIs<WcWallet.Approval.Approved>(running.wallet.approve(dapp.pairingTopic, 1, listOf(sepoliaAccount)))
         assertTrue(approval.delivered)
         settle()
         assertTrue(dapp.followSession(1))
@@ -126,7 +127,7 @@ class WcWalletTest {
         assertEquals(setOf("eth_sendTransaction", "personal_sign"), proposal.methods) // never eth_sign
         assertEquals(setOf("accountsChanged", "chainChanged"), proposal.events)
 
-        val approval = assertIs<WcWallet.Approval.Approved>(running.wallet.approve(dapp.pairingTopic, 1, listOf(account)))
+        val approval = assertIs<WcWallet.Approval.Approved>(running.wallet.approve(dapp.pairingTopic, 1, listOf(sepoliaAccount)))
         settle()
         // The dApp derives the same session key and topic from the wallet's answer.
         assertTrue(dapp.followSession(1))
@@ -153,10 +154,11 @@ class WcWalletTest {
         val dapp = dapp()
         dapp.subscribePairing()
         running.wallet.pair(dapp.uri())
-        dapp.propose(7, buildJsonObject { put("eip155", namespace(listOf("eip155:1"), listOf("personal_sign"), emptyList())) }, JsonObject(emptyMap()))
+        // Polygon: a chain Serotine has no dApp sessions on.
+        dapp.propose(7, buildJsonObject { put("eip155", namespace(listOf("eip155:137"), listOf("personal_sign"), emptyList())) }, JsonObject(emptyMap()))
         settle()
         assertEquals(WcProtocol.Error.UNSUPPORTED_CHAINS, running.view().proposals.single().refusal)
-        assertEquals(WcWallet.Approval.Refused(WcProtocol.Error.UNSUPPORTED_CHAINS), running.wallet.approve(dapp.pairingTopic, 7, listOf(account)))
+        assertEquals(WcWallet.Approval.Refused(WcProtocol.Error.UNSUPPORTED_CHAINS), running.wallet.approve(dapp.pairingTopic, 7, listOf(sepoliaAccount)))
         assertTrue(running.wallet.reject(dapp.pairingTopic, 7, WcProtocol.Error.UNSUPPORTED_CHAINS))
         settle()
         val answer = dapp.received.getValue(dapp.pairingTopic).single()
@@ -481,8 +483,71 @@ class WcWalletTest {
         settle()
         val proposal = running.view().proposals.single()
         assertNull(proposal.refusal)
-        assertEquals(setOf("personal_sign"), proposal.methods, "what is asked on chain 1 is not Sepolia's")
-        assertEquals(emptySet(), proposal.events)
+        // Either kind of funds may be chosen: what each chain asks is offered until then.
+        assertEquals(setOf("personal_sign", "eth_sendTransaction"), proposal.methods)
+        // Approved with a Sepolia account, the session is Sepolia's alone, and so is what it carries.
+        val approval = assertIs<WcWallet.Approval.Approved>(running.wallet.approve(dapp.pairingTopic, 1, listOf(sepoliaAccount)))
+        settle()
+        assertTrue(dapp.followSession(1))
+        settle()
+        val settleRequest = dapp.received.getValue(approval.topic).single()
+        val eip155 = settleRequest.getValue("params").jsonObject.getValue("namespaces").jsonObject.getValue("eip155").jsonObject
+        assertEquals(listOf(WcProtocol.SEPOLIA), eip155["chains"].strings())
+        assertEquals(listOf("personal_sign"), eip155["methods"].strings(), "what is asked on chain 1 is not Sepolia's")
+        assertEquals(emptyList(), eip155["events"].strings())
+    }
+
+    @Test
+    fun aSessionMayHoldEthereumAndGnosisChainButNeverTestnetBesideThem() = runTest {
+        val running = walletConnect()
+        val dapp = dapp()
+        dapp.subscribePairing()
+        assertIs<WcWallet.Pairing.Paired>(running.wallet.pair(dapp.uri()))
+        dapp.propose(
+            1,
+            JsonObject(emptyMap()),
+            buildJsonObject {
+                put("eip155", namespace(listOf("eip155:1", "eip155:100", WcProtocol.SEPOLIA), listOf("personal_sign"), listOf("accountsChanged")))
+            },
+        )
+        settle()
+        val ethereum = "eip155:1:$account"
+        val gnosis = "eip155:100:$account"
+        val invalid = WcWallet.Approval.InvalidAccounts
+        assertEquals(invalid, running.wallet.approve(dapp.pairingTopic, 1, listOf(ethereum, sepoliaAccount)), "both kinds")
+        assertEquals(invalid, running.wallet.approve(dapp.pairingTopic, 1, listOf("eip155:137:$account")), "not served")
+        assertEquals(invalid, running.wallet.approve(dapp.pairingTopic, 1, listOf(account)), "no chain")
+        assertEquals(invalid, running.wallet.approve(dapp.pairingTopic, 1, listOf("eip155:1:${account.uppercase().replace("0X", "0x")}")))
+        val approval = assertIs<WcWallet.Approval.Approved>(running.wallet.approve(dapp.pairingTopic, 1, listOf(ethereum, gnosis)))
+        settle()
+        assertTrue(dapp.followSession(1))
+        settle()
+        val settleRequest = dapp.received.getValue(approval.topic).single()
+        val eip155 = settleRequest.getValue("params").jsonObject.getValue("namespaces").jsonObject.getValue("eip155").jsonObject
+        assertEquals(listOf("eip155:1", "eip155:100"), eip155["chains"].strings())
+        assertEquals(listOf(ethereum, gnosis), eip155["accounts"].strings())
+        assertEquals(listOf("eip155:1", "eip155:100"), running.view().sessions.single().chains)
+        // Its accounts stay on its own chains: Sepolia is refused, Gnosis Chain's own taken, each chain told.
+        assertFalse(running.wallet.updateAccounts(approval.topic, listOf(sepoliaAccount)))
+        assertTrue(running.wallet.updateAccounts(approval.topic, listOf(gnosis)))
+        settle()
+        val events = dapp.received.getValue(approval.topic).filter { it["method"]?.jsonPrimitive?.content == "wc_sessionEvent" }
+            .map { it.getValue("params").jsonObject }
+        assertEquals(listOf("eip155:1", "eip155:100"), events.map { it.getValue("chainId").jsonPrimitive.content })
+        assertEquals(
+            listOf(emptyList(), listOf(account)),
+            events.map { it.getValue("event").jsonObject["data"].strings() },
+        )
+    }
+
+    @Test
+    fun aSessionStoredBeforeChainsWereKeptIsASepoliaSession() {
+        val stored = """{"topic": "t", "symKey": "${"00".repeat(32)}", "pairingTopic": "p", "selfPublicKey": "a",
+            "peerPublicKey": "b", "dapp": {"name": "dApp", "url": "https://dapp.test"},
+            "accounts": ["$sepoliaAccount"], "methods": ["personal_sign"], "events": [], "expirySeconds": 1,
+            "settleRequestId": 2}"""
+        val session = kotlinx.serialization.json.Json.decodeFromString(WcStoredSession.serializer(), stored)
+        assertEquals(listOf(WcProtocol.SEPOLIA), session.chains)
     }
 
     @Test

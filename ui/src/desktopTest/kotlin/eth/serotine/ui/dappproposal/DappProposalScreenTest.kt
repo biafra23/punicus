@@ -45,7 +45,7 @@ class DappProposalScreenTest {
         url = "https://a.test",
         accounts = listOf(
             AccountOption("11155111:0x1", "Main", "0x0000…0001", chosen = false, unavailable = null),
-            AccountOption("1:0x1", "Savings", "0x0000…0001", chosen = false, unavailable = "dApp connections are on Sepolia only for now."),
+            AccountOption("1:0x1", "Savings", "0x0000…0001", chosen = false, unavailable = "This dApp did not ask for Ethereum."),
         ),
     )
 
@@ -70,9 +70,9 @@ class DappProposalScreenTest {
 
     @Test
     fun anExplanationIsShownAndDismissed() {
-        show(state.copy(explaining = Explanation("Not offered to dApps", "dApp connections are on Sepolia only for now.")))
+        show(state.copy(explaining = Explanation("Not offered to this dApp", "This dApp did not ask for Ethereum.")))
 
-        rule.onNodeWithText("Not offered to dApps").assertExists()
+        rule.onNodeWithText("Not offered to this dApp").assertExists()
         rule.onNodeWithText("Close").performClick()
         assertEquals(1, dismissed)
     }

@@ -110,7 +110,7 @@ class DappRequestViewModelTest {
     private fun request(id: Long, text: String = signIn, url: String = "https://app.example.org") = DappRequest(
         DappRequestId(DappSessionId("t"), id),
         DappMetadata("Example dApp", url, ""),
-        listOf(held.address),
+        listOf(held.id),
         "eip155:11155111",
         DappAsk.PersonalSign(held.address, PersonalMessage.of(text.encodeToByteArray())!!),
         now + 300,
@@ -152,6 +152,26 @@ class DappRequestViewModelTest {
             ),
         )
         return request(id).copy(ask = DappAsk.SignTypedData(held.address, Eip712.encode(data)!!))
+    }
+
+    @Test
+    fun aRequestOnEthereumNamesItsNetworkAndIsSignedForItsAccountThere() = runTest {
+        val onEthereum = Account(Network.ETHEREUM, held.address, AccountKind.EOA, "Savings", AccountCustody.InKeyStore)
+        accounts.accounts.value = listOf(held, onEthereum)
+        networks.setEnabled(Network.ETHEREUM, true)
+        val text = signIn.replace("Chain ID: 11155111", "Chain ID: 1")
+        requests.waiting.value = listOf(
+            request(1, text).copy(
+                chain = "eip155:1",
+                sessionAccounts = listOf(onEthereum.id),
+                sessionNetworks = setOf(Network.ETHEREUM, Network.GNOSIS),
+            ),
+        )
+        val vm = viewModel()
+        val state = vm.uiState.value
+        assertEquals("On Ethereum, real funds", state.network)
+        assertEquals("Savings", state.accountName, "the account on the request's network, not its Sepolia twin")
+        assertNull(state.refusal)
     }
 
     private fun TestScope.viewModel(id: Long = 1): DappRequestViewModel {

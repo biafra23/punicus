@@ -1,7 +1,9 @@
 package eth.serotine.data.walletconnect
 
+import eth.serotine.domain.model.AccountId
 import eth.serotine.domain.model.Address
 import eth.serotine.domain.model.Digest
+import eth.serotine.domain.model.Network
 import eth.serotine.domain.model.Signature
 import eth.serotine.domain.repository.DappAnswer
 import eth.serotine.domain.repository.DappAsk
@@ -20,6 +22,8 @@ import eth.serotine.domain.repository.DappRequests
 import eth.serotine.domain.repository.DappSession
 import eth.serotine.domain.repository.DappSessionId
 import eth.serotine.domain.repository.DappSessions
+import eth.serotine.domain.repository.caip2
+import eth.serotine.domain.repository.dappNetworkOf
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.IO
@@ -102,9 +106,9 @@ class WalletConnectDapps internal constructor(
         }
     }
 
-    override suspend fun approve(proposal: DappProposalId, accounts: List<Address>): DappApproval {
+    override suspend fun approve(proposal: DappProposalId, accounts: List<AccountId>): DappApproval {
         val wallet = walletConnect?.wallet ?: return DappApproval.Off
-        return when (val approval = wallet.approve(proposal.pairing, proposal.id, accounts.map { it.hex })) {
+        return when (val approval = wallet.approve(proposal.pairing, proposal.id, accounts.map(::caip10))) {
             is WcWallet.Approval.Approved -> DappApproval.Approved(DappSessionId(approval.topic), approval.delivered)
             WcWallet.Approval.NoSuchProposal -> DappApproval.NoSuchProposal
             WcWallet.Approval.Expired -> DappApproval.Expired
@@ -128,8 +132,8 @@ class WalletConnectDapps internal constructor(
 
     override suspend fun extend(session: DappSessionId): Boolean = walletConnect?.wallet?.extend(session.topic) ?: false
 
-    override suspend fun updateAccounts(session: DappSessionId, accounts: List<Address>): Boolean =
-        walletConnect?.wallet?.updateAccounts(session.topic, accounts.map { it.hex }) ?: false
+    override suspend fun updateAccounts(session: DappSessionId, accounts: List<AccountId>): Boolean =
+        walletConnect?.wallet?.updateAccounts(session.topic, accounts.map(::caip10)) ?: false
 
     /** The requests dApps send over these sessions, and their answers. */
     val requests: DappRequests = object : DappRequests {
@@ -147,21 +151,21 @@ class WalletConnectDapps internal constructor(
         }
 
         private fun requestsOf(view: WcView, decoded: MutableMap<Pair<String, Long>, DappAsk>): List<DappRequest> {
-            val accounts = view.sessions.associate { session ->
-                session.topic to session.accounts.mapNotNull { Address.parse(it.substringAfterLast(':')) }
-            }
+            val sessions = view.sessions.associateBy { it.topic }
             decoded.keys.retainAll(view.requests.map { it.topic to it.id }.toSet())
             return view.requests.map { request ->
+                val session = sessions[request.topic]
                 DappRequest(
                     id = DappRequestId(DappSessionId(request.topic), request.id),
                     dapp = metadata(request.dapp),
-                    sessionAccounts = accounts[request.topic].orEmpty(),
+                    sessionAccounts = session?.accounts.orEmpty().mapNotNull(::accountId),
                     chain = request.chainId,
                     ask = decoded.getOrPut(request.topic to request.id) {
-                        WcRequests.decode(request.method, request.params)
+                        WcRequests.decode(request.method, request.params, request.chainId)
                     },
                     expiresAtSeconds = request.expirySeconds,
                     safeTx = request.safeTx?.let(Digest::parse),
+                    sessionNetworks = networksOf(session?.chains.orEmpty()),
                 )
             }
         }
@@ -180,6 +184,11 @@ class WalletConnectDapps internal constructor(
         override suspend fun answerNull(request: DappRequestId): DappAnswer {
             val wallet = walletConnect?.wallet ?: return DappAnswer.OFF
             return answer(wallet.respond(request.session.topic, request.id, JsonNull))
+        }
+
+        override suspend fun answerChainSwitch(request: DappRequestId, network: Network): DappAnswer {
+            val wallet = walletConnect?.wallet ?: return DappAnswer.OFF
+            return answer(wallet.respondChainSwitch(request.session.topic, request.id, network.caip2))
         }
 
         override suspend fun refuse(request: DappRequestId, why: DappRequestError): DappAnswer {
@@ -208,11 +217,13 @@ class WalletConnectDapps internal constructor(
         optionalChains = view.optionalChains,
         methods = view.methods,
         refusal = view.refusal?.let { why ->
-            // One error code for both: a chain other than Sepolia required, or Sepolia not asked for at all.
-            if (why == WcProtocol.Error.UNSUPPORTED_CHAINS && view.requiredChains.all { it == WcProtocol.SEPOLIA }) {
-                DappRefusal.NO_SEPOLIA
-            } else {
-                refusal(why)
+            // One error code for all three: a chain Serotine does not serve required, both kinds of funds
+            // required, or no chain it serves asked for at all.
+            when (view.chainRefusal) {
+                WcProtocol.ChainRefusal.MIXED -> DappRefusal.MIXED_FUNDS
+                WcProtocol.ChainRefusal.NONE -> DappRefusal.NO_NETWORK
+                WcProtocol.ChainRefusal.UNSUPPORTED -> DappRefusal.OTHER_CHAIN
+                null -> refusal(why)
             }
         },
         expiresAtSeconds = view.expirySeconds,
@@ -221,10 +232,11 @@ class WalletConnectDapps internal constructor(
     private fun session(view: WcSessionView) = DappSession(
         id = DappSessionId(view.topic),
         dapp = metadata(view.dapp),
-        accounts = view.accounts.mapNotNull { Address.parse(it.substringAfterLast(':')) },
+        accounts = view.accounts.mapNotNull(::accountId),
         methods = view.methods,
         expiresAtSeconds = view.expirySeconds,
         acknowledged = view.acknowledged,
+        networks = networksOf(view.chains),
     )
 
     companion object {
@@ -247,6 +259,17 @@ class WalletConnectDapps internal constructor(
             text.isNotEmpty() && text.all { it in 'a'..'z' || it in 'A'..'Z' || it in '0'..'9' }
 
         private fun metadata(stated: WcMetadata) = DappMetadata(stated.name, stated.url, stated.description)
+
+        /** [account] as CAIP-10, `eip155:1:0x…`, the address in lower case. */
+        private fun caip10(account: AccountId): String = "${account.network.caip2}:${account.address.hex.lowercase()}"
+
+        /** The account CAIP-10 [account] names, or null for one out of shape or on a chain Serotine does not serve. */
+        private fun accountId(account: String): AccountId? {
+            val (chain, address) = WcProtocol.accountOf(account) ?: return null
+            return AccountId(dappNetworkOf(chain) ?: return null, Address.parse(address) ?: return null)
+        }
+
+        private fun networksOf(chains: List<String>): Set<Network> = chains.mapNotNull(::dappNetworkOf).toSet()
 
         private fun refusal(why: WcProtocol.Error): DappRefusal = when (why) {
             WcProtocol.Error.UNSUPPORTED_METHODS -> DappRefusal.METHOD

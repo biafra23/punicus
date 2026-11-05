@@ -162,7 +162,7 @@ fun DappTransactionScreen(
             }
             Heading("From")
             Party(state.accountName, state.accountAddress)
-            Text("On Sepolia, a test network", Modifier.padding(horizontal = 16.dp, vertical = 4.dp))
+            Text(state.network, Modifier.padding(horizontal = 16.dp, vertical = 4.dp))
             if (state.fromSafe) {
                 Text(
                     DappTransactionViewModel.SAFE_NOTE,

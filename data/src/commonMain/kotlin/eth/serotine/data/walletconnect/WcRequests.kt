@@ -11,6 +11,7 @@ import eth.serotine.domain.model.PersonalMessage
 import eth.serotine.domain.model.Signature
 import eth.serotine.domain.repository.DappAsk
 import eth.serotine.domain.repository.DappRequestError
+import eth.serotine.domain.repository.dappNetworkOf
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonNull
@@ -26,12 +27,12 @@ import kotlinx.serialization.json.contentOrNull
  */
 internal object WcRequests {
 
-    /** What [method] with [params] asks. */
-    fun decode(method: String, params: JsonElement): DappAsk = when (method) {
+    /** What [method] with [params] asks, on [chain], the CAIP-2 chain its request names. */
+    fun decode(method: String, params: JsonElement, chain: String): DappAsk = when (method) {
         "personal_sign" -> personalSign(params) ?: DappAsk.Malformed(method)
         "wallet_switchEthereumChain" -> switchChain(params) ?: DappAsk.Malformed(method)
         "eth_signTypedData_v4" -> signTypedData(params) ?: DappAsk.Malformed(method)
-        "eth_sendTransaction" -> sendTransaction(params) ?: DappAsk.Malformed(method)
+        "eth_sendTransaction" -> sendTransaction(params, chain) ?: DappAsk.Malformed(method)
         else -> DappAsk.NotAnsweredYet(method)
     }
 
@@ -113,12 +114,12 @@ internal object WcRequests {
      * - applied: `from` and `to` (required; no contract creation), `value` (hex, 0 without one),
      *   `data` or `input` (hex; the same when both), `gas` or `gasLimit` (hex; the same when both), the
      *   limit the transaction is signed with when it covers the verified estimate;
-     * - checked: `chainId` Sepolia's, `type` `0x2`, an empty `accessList`;
+     * - checked: `chainId` the request's [chain]'s, `type` `0x2`, an empty `accessList`;
      * - refused: `nonce` (the wallet takes the account's next one), `gasPrice`, `maxFeePerGas` and
      *   `maxPriorityFeePerGas` (the fees are the wallet's own, from the verified fee history), and any
      *   other field.
      */
-    private fun sendTransaction(params: JsonElement): DappAsk.SendTransaction? {
+    private fun sendTransaction(params: JsonElement, chain: String): DappAsk.SendTransaction? {
         val fields = (params as? JsonArray)?.singleOrNull() as? JsonObject ?: return null
         if (!TRANSACTION_FIELDS.containsAll(fields.keys)) return null
         // A field given as anything but a string reads as "", which no check below takes.
@@ -141,7 +142,9 @@ internal object WcRequests {
         val gas = gases.singleOrNull()?.let { limit ->
             limit.toLongOrNull()?.takeIf { it in 1..MAX_GAS } ?: return null
         }
-        if ("chainId" in fields && quantity("chainId") != UInt256.of(SEPOLIA_CHAIN_ID)) return null
+        // The transaction's own chain, where it names one, is the request's: never signed for another.
+        val chainId = dappNetworkOf(chain)?.chainId ?: return null
+        if ("chainId" in fields && quantity("chainId") != UInt256.of(chainId)) return null
         if ("type" in fields && quantity("type") != UInt256.of(2)) return null
         if ("accessList" in fields && (fields["accessList"] as? JsonArray)?.isEmpty() != true) return null
         return DappAsk.SendTransaction(DappTransactionRequest(from, to, value, bytes, gas))
@@ -202,10 +205,12 @@ internal object WcRequests {
     private val TRANSACTION_FIELDS =
         setOf("from", "to", "value", "data", "input", "gas", "gasLimit", "chainId", "type", "accessList")
 
-    /** The largest gas limit a dApp may ask for: Sepolia's block gas limit is below it. */
-    private const val MAX_GAS = 60_000_000L
-
-    private const val SEPOLIA_CHAIN_ID = 11_155_111L
+    /**
+     * The largest gas limit a dApp may ask for, on every network: 2^24, EIP-7825's cap on a transaction's gas
+     * (Ethereum and Sepolia, since Fusaka), and above Gnosis Chain's block gas limit too. A larger one could
+     * never be included.
+     */
+    private const val MAX_GAS = 16_777_216L
 
     /** A JSON-RPC quantity: `0x` and at most 64 hex digits. */
     private val QUANTITY = Regex("^0x[0-9a-fA-F]{1,64}$")

@@ -86,13 +86,13 @@ class DappViewModelsTest {
         sessions.connections.value = DappConnections.On(
             DappRelayLink.CONNECTED,
             listOf(proposal()),
-            listOf(DappSession(DappSessionId("t1"), dapp, listOf(held.address), listOf("personal_sign"), 1_700_000_000 + 6 * 86_400 + 10, true)),
+            listOf(DappSession(DappSessionId("t1"), dapp, listOf(held.id), listOf("personal_sign"), 1_700_000_000 + 6 * 86_400 + 10, true)),
         )
         requests.waiting.value = listOf(
             DappRequest(
                 DappRequestId(DappSessionId("t1"), 9),
                 dapp,
-                listOf(held.address),
+                listOf(held.id),
                 "eip155:11155111",
                 DappAsk.PersonalSign(held.address, PersonalMessage.of("Hello".encodeToByteArray())!!),
                 1_700_000_300,
@@ -111,7 +111,8 @@ class DappViewModelsTest {
         assertEquals("Connected to WalletConnect's relay", state.link)
         assertEquals("${proposalId.pairing}/7", state.proposals.single().key)
         assertEquals(RequestRow("t1/9", "Test dApp", "https://dapp.test", "Asks you to sign a message · Review"), state.requests.single())
-        assertEquals("Sees 1 account · Ends in 6 days", state.sessions.single().line)
+        assertEquals("On Sepolia, a test network · Sees 1 account · Ends in 6 days", state.sessions.single().line)
+        assertEquals("On Ethereum and Gnosis Chain, real funds", ConnectionsViewModel.networksLine(setOf(Network.GNOSIS, Network.ETHEREUM)))
         vm.disconnect("t1")
         runCurrent()
         assertEquals(listOf(DappSessionId("t1")), sessions.disconnected)
@@ -174,7 +175,7 @@ class DappViewModelsTest {
 
         // A greyed-out account says why, and is not chosen.
         vm.toggle(key(watched))
-        assertEquals("Not offered to dApps", vm.uiState.value.explaining?.title)
+        assertEquals("Not offered to this dApp", vm.uiState.value.explaining?.title)
         vm.dismissExplanation()
         // Approve with nothing chosen says what is missing.
         vm.approve()
@@ -185,8 +186,56 @@ class DappViewModelsTest {
         assertFalse(vm.uiState.value.approveUnavailable)
         vm.approve()
         runCurrent()
-        assertEquals(listOf(proposalId to listOf(held.address)), sessions.approved)
+        assertEquals(listOf(proposalId to listOf(held.id)), sessions.approved)
         assertTrue(vm.uiState.value.done)
+    }
+
+    @Test
+    fun theFirstAccountChosenDecidesBetweenRealFundsAndTestnet() = runTest {
+        main()
+        val ethereum = account(Network.ETHEREUM, '1')
+        val gnosis = account(Network.GNOSIS, '3')
+        val wallet = FakeAccounts(held, ethereum, gnosis)
+        val on = MemoryNetworkSettings(setOf(Network.ETHEREUM, Network.GNOSIS, Network.SEPOLIA))
+        val everywhere = proposal().copy(optionalChains = setOf("eip155:1", "eip155:100", "eip155:11155111"))
+        sessions.connections.value = DappConnections.On(DappRelayLink.CONNECTED, listOf(everywhere), emptyList())
+        val vm = DappProposalViewModel(
+            "${proposalId.pairing}/7",
+            ObserveDappConnections(sessions, wallet, on),
+            ApproveDappProposal(sessions, wallet, on),
+            RejectDappProposal(sessions),
+        )
+        backgroundScope.launch { vm.uiState.collect {} }
+        runCurrent()
+        // Nothing chosen: either kind, and the screen says the first account decides.
+        assertEquals(
+            listOf("Ethereum, real funds", "Gnosis Chain, real funds", "Sepolia, a test network"),
+            vm.uiState.value.networks,
+        )
+        assertEquals(DappProposalViewModel.BOTH_KINDS, vm.uiState.value.networksNote)
+        assertEquals("Gnosis Chain", vm.uiState.value.accounts.first { it.key == key(gnosis) }.network)
+
+        // Sepolia chosen: the accounts holding real funds are greyed out, a tap saying why.
+        vm.toggle(key(held))
+        assertEquals(listOf("Sepolia, a test network"), vm.uiState.value.networks)
+        assertNull(vm.uiState.value.networksNote)
+        assertNotNull(vm.uiState.value.accounts.first { it.key == key(ethereum) }.unavailable)
+        vm.toggle(key(ethereum))
+        assertEquals(
+            DappProposalViewModel.offerLine(eth.serotine.domain.usecase.DappOffer.OTHER_FUNDS, Network.ETHEREUM),
+            vm.uiState.value.explaining?.reason,
+        )
+        vm.dismissExplanation()
+
+        // Unchosen, then both real-funds accounts: one connection holding Ethereum and Gnosis Chain.
+        vm.toggle(key(held))
+        vm.toggle(key(ethereum))
+        vm.toggle(key(gnosis))
+        assertEquals(listOf("Ethereum, real funds", "Gnosis Chain, real funds"), vm.uiState.value.networks)
+        assertNotNull(vm.uiState.value.accounts.first { it.key == key(held) }.unavailable)
+        vm.approve()
+        runCurrent()
+        assertEquals(listOf(proposalId to listOf(ethereum.id, gnosis.id)), sessions.approved)
     }
 
     @Test

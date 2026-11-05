@@ -4,6 +4,7 @@ import eth.serotine.domain.model.AccountCustody
 import eth.serotine.domain.model.Address
 import eth.serotine.domain.model.Digest
 import eth.serotine.domain.model.DappTransactionRequest
+import eth.serotine.domain.model.AccountId
 import eth.serotine.domain.model.Network
 import eth.serotine.domain.model.SafeSettingsCalls
 import eth.serotine.domain.model.SignedTransfer
@@ -51,6 +52,7 @@ class DappSafeTransactionsTest {
         override fun observe(): Flow<List<DappRequest>> = waiting
         override suspend fun answerSignature(request: DappRequestId, signature: Signature) = error("not used")
         override suspend fun answerNull(request: DappRequestId) = error("not used")
+        override suspend fun answerChainSwitch(request: DappRequestId, network: Network) = error("not used")
         override suspend fun refuse(request: DappRequestId, why: DappRequestError) = error("not used")
         override suspend fun answerTransaction(request: DappRequestId, hash: String): DappAnswer {
             hashes += request to hash
@@ -71,7 +73,7 @@ class DappSafeTransactionsTest {
     private fun request(transaction: DappTransactionRequest) = DappRequest(
         DappRequestId(DappSessionId("t"), 1),
         DappMetadata("Example dApp", "https://app.example.org", ""),
-        listOf(world.safe),
+        listOf(AccountId(Network.SEPOLIA, world.safe)),
         "eip155:11155111",
         DappAsk.SendTransaction(transaction),
         now + 300,
@@ -230,7 +232,9 @@ class DappSafeTransactionsTest {
             eth.serotine.domain.model.SafeTx.call(world.recipient, payment.value, ByteArray(0), 4),
         )
         val elsewhere = execution(safeTx).copy(network = Network.ETHEREUM)
-        assertEquals(null, executionFor(safeTx.hash, listOf(elsewhere), emptyList()))
+        assertEquals(null, executionFor(safeTx.hash, Network.SEPOLIA, listOf(elsewhere), emptyList()))
+        // On its own network, it is.
+        assertEquals(elsewhere.hash, executionFor(safeTx.hash, Network.ETHEREUM, listOf(elsewhere), emptyList())?.transfer?.hash)
     }
 
     @Test

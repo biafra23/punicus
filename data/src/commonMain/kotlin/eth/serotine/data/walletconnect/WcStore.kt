@@ -54,7 +54,7 @@ internal class WcStoredSession(
     val selfPublicKey: String,
     val peerPublicKey: String,
     val dapp: WcMetadata,
-    /** CAIP-10 accounts, `eip155:11155111:0x…`. */
+    /** CAIP-10 accounts, `eip155:11155111:0x…`, each on one of [chains]. */
     val accounts: List<String>,
     val methods: List<String>,
     val events: List<String>,
@@ -65,6 +65,11 @@ internal class WcStoredSession(
     val settleRequestId: Long,
     val requiredNamespaces: JsonObject = JsonObject(emptyMap()),
     val optionalNamespaces: JsonObject = JsonObject(emptyMap()),
+    /**
+     * The CAIP-2 chains it holds, of one kind of funds ([WcProtocol.fundsOf]): its requests may name these
+     * alone. A session stored before chains were kept was a Sepolia session, and reads as one.
+     */
+    val chains: List<String> = listOf(WcProtocol.SEPOLIA),
 ) {
     override fun toString(): String = "WcStoredSession(topic=$topic, symKey=redacted)"
 
@@ -74,7 +79,7 @@ internal class WcStoredSession(
         acknowledged: Boolean = this.acknowledged,
     ) = WcStoredSession(
         topic, symKey, pairingTopic, selfPublicKey, peerPublicKey, dapp, accounts, methods, events,
-        expirySeconds, acknowledged, settleRequestId, requiredNamespaces, optionalNamespaces,
+        expirySeconds, acknowledged, settleRequestId, requiredNamespaces, optionalNamespaces, chains,
     )
 }
 

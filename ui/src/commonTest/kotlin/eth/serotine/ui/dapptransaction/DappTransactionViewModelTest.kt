@@ -94,7 +94,7 @@ class DappTransactionViewModelTest {
     private fun request(id: Long, transaction: DappTransactionRequest) = DappRequest(
         DappRequestId(DappSessionId("t"), id),
         DappMetadata("Example dApp", "https://app.example.org", ""),
-        listOf(held.address),
+        listOf(held.id),
         "eip155:11155111",
         DappAsk.SendTransaction(transaction),
         now + 300,

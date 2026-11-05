@@ -297,7 +297,7 @@ class AppNavigationTest {
     private fun signInRequest(id: Long) = DappRequest(
         DappRequestId(DappSessionId("c".repeat(64)), id),
         DappMetadata("Example dApp", "https://app.example.org", ""),
-        listOf(Address.of("0x" + "0".repeat(39) + "1")),
+        listOf(eth.serotine.domain.model.AccountId(Network.SEPOLIA, Address.of("0x" + "0".repeat(39) + "1"))),
         "eip155:11155111",
         DappAsk.PersonalSign(Address.of("0x" + "0".repeat(39) + "1"), PersonalMessage.of("Hello".encodeToByteArray())!!),
         Long.MAX_VALUE / 2,

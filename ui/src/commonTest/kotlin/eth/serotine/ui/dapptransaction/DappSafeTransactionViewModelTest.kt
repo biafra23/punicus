@@ -67,7 +67,7 @@ class DappSafeTransactionViewModelTest {
     private fun request(id: Long, transaction: DappTransactionRequest = payment) = DappRequest(
         DappRequestId(DappSessionId("t"), id),
         DappMetadata("Example dApp", "https://app.example.org", ""),
-        listOf(world.safe),
+        listOf(eth.serotine.domain.model.AccountId(eth.serotine.domain.model.Network.SEPOLIA, world.safe)),
         "eip155:11155111",
         DappAsk.SendTransaction(transaction),
         now + 300,

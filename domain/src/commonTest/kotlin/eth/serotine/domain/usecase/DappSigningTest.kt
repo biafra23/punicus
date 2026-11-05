@@ -69,6 +69,7 @@ class DappSigningTest {
         }
         override suspend fun answerSignature(request: DappRequestId, signature: Signature) = done(request, signature)
         override suspend fun answerNull(request: DappRequestId) = done(request, null)
+        override suspend fun answerChainSwitch(request: DappRequestId, network: Network) = done(request, network)
         override suspend fun answerTransaction(request: DappRequestId, hash: String) = done(request, hash)
         override suspend fun refuse(request: DappRequestId, why: DappRequestError) = done(request, why)
         override suspend fun recordSafeTx(request: DappRequestId, safeTx: Digest) = error("not used")
@@ -110,10 +111,11 @@ class DappSigningTest {
         signer: Address = held.address,
         chain: String = "eip155:11155111",
         sessionAccounts: List<Address> = listOf(held.address, watched.address, safe.address),
+        sessionNetwork: Network = Network.SEPOLIA,
     ) = DappRequest(
         DappRequestId(DappSessionId("t"), id),
         dapp,
-        sessionAccounts,
+        sessionAccounts.map { eth.serotine.domain.model.AccountId(sessionNetwork, it) },
         chain,
         DappAsk.PersonalSign(signer, PersonalMessage.of(text.encodeToByteArray())!!),
         now + 300,
@@ -150,7 +152,7 @@ class DappSigningTest {
         assertEquals(DappSignRefusal.SIGN_IN_NOT_YET_VALID, review(later, nowSeconds = 1_793_700_599).refusal)
         assertNull(review(later, nowSeconds = 1_793_700_600).refusal)
         enabled.value = emptySet()
-        assertEquals(DappSignRefusal.SEPOLIA_OFF, review(request(1)).refusal)
+        assertEquals(DappSignRefusal.NETWORK_OFF, review(request(1)).refusal)
         assertEquals(DappSignRefusal.ACCOUNTS_UNREADABLE, reviewDappMessage(request(1), null, enabled.value, now)!!.refusal)
     }
 
@@ -308,7 +310,7 @@ class DappSigningTest {
         runCurrent()
         assertEquals<List<Pair<DappRequestId, Any?>>>(
             listOf(
-                request(2).id to null,
+                request(2).id to Network.SEPOLIA,
                 request(3).id to DappRequestError.UNRECOGNIZED_CHAIN,
                 request(4).id to DappRequestError.UNSUPPORTED_METHOD,
                 request(5).id to DappRequestError.INVALID_PARAMS,
@@ -317,6 +319,59 @@ class DappSigningTest {
         )
         assertEquals(listOf(request(1)), requests.waiting.value)
         answering.cancel()
+    }
+
+    @Test
+    fun aRealFundsSessionSwitchesBetweenItsNetworksAndNeverToTestnet() = runTest {
+        val mainnet = listOf(
+            eth.serotine.domain.model.AccountId(Network.ETHEREUM, held.address),
+            eth.serotine.domain.model.AccountId(Network.GNOSIS, held.address),
+        )
+        fun asking(id: Long, chainId: Long) =
+            request(id, chain = "eip155:1").copy(
+                sessionAccounts = mainnet,
+                sessionNetworks = setOf(Network.ETHEREUM, Network.GNOSIS),
+                ask = DappAsk.SwitchChain(chainId),
+            )
+        requests.waiting.value = listOf(asking(1, 100), asking(2, 1), asking(3, 11_155_111), asking(4, 137))
+        val answering = backgroundScope.launch { AnswerDappRequestsAtOnce(requests, MemorySentTransfers(), MemoryTransactionHistory())() }
+        runCurrent()
+        assertEquals<List<Pair<DappRequestId, Any?>>>(
+            listOf(
+                asking(1, 100).id to Network.GNOSIS,
+                asking(2, 1).id to Network.ETHEREUM,
+                asking(3, 11_155_111).id to DappRequestError.UNRECOGNIZED_CHAIN,
+                asking(4, 137).id to DappRequestError.UNRECOGNIZED_CHAIN,
+            ),
+            requests.answered,
+        )
+        answering.cancel()
+    }
+
+    @Test
+    fun aRequestIsReviewedOnItsOwnNetworkAgainstTheSessionsAccountsThere() {
+        val onEthereum = Account(Network.ETHEREUM, held.address, AccountKind.EOA, "Main", AccountCustody.InKeyStore)
+        val wallet = listOf(held, onEthereum)
+        val both = setOf(Network.ETHEREUM, Network.SEPOLIA)
+        fun reviewed(request: DappRequest) = reviewDappMessage(request, wallet, both, now)!!
+        val asked = request(1, signIn(chainId = 1), chain = "eip155:1", sessionNetwork = Network.ETHEREUM)
+        val review = reviewed(asked)
+        assertNull(review.refusal)
+        assertEquals(onEthereum, review.account, "the account on the request's network, not its Sepolia twin")
+        // A sign-in for Sepolia, asked on Ethereum, names another chain than the account's.
+        assertEquals(
+            DappSignRefusal.SIGN_IN_OTHER_CHAIN,
+            reviewed(request(1, chain = "eip155:1", sessionNetwork = Network.ETHEREUM)).refusal,
+        )
+        // A chain its session does not hold is refused, as is an account the session has on another network.
+        val onGnosis = request(1, signIn(chainId = 100), chain = "eip155:100", sessionNetwork = Network.ETHEREUM)
+        assertEquals(DappSignRefusal.OTHER_CHAIN, reviewed(onGnosis).refusal)
+        val gnosisOnly = asked.copy(
+            sessionAccounts = listOf(eth.serotine.domain.model.AccountId(Network.GNOSIS, held.address)),
+            sessionNetworks = setOf(Network.ETHEREUM, Network.GNOSIS),
+        )
+        assertEquals(DappSignRefusal.NOT_SESSION_ACCOUNT, reviewed(gnosisOnly).refusal)
+        assertEquals(DappSignRefusal.NETWORK_OFF, reviewDappMessage(asked, wallet, setOf(Network.SEPOLIA), now)!!.refusal)
     }
 
     @Test

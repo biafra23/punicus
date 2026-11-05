@@ -231,6 +231,20 @@ private fun DappRequestOtherNetworkPreview() = DappRequestPreview(
     ),
 )
 
+// A sign-in on Ethereum, in a connection holding real funds.
+private val signInOnEthereum = signIn.copy(
+    network = DappRequestViewModel.onLine(eth.serotine.domain.model.Network.ETHEREUM),
+    signIn = signIn.signIn.map { if (it.label == "Network") it.copy(value = "Ethereum (1)") else it },
+)
+
+@Preview
+@Composable
+private fun DappRequestRealFundsPreview() = DappRequestPreview(signInOnEthereum)
+
+@Preview
+@Composable
+private fun DappRequestRealFundsDarkPreview() = DappRequestPreview(signInOnEthereum, darkTheme = true)
+
 /** Every preview above, which DappRequestScreenPreviewsTest renders: a new preview goes in here too. */
 internal val dappRequestScreenPreviews: List<@Composable () -> Unit> = listOf(
     { DappRequestSignInPreview() },
@@ -251,4 +265,6 @@ internal val dappRequestScreenPreviews: List<@Composable () -> Unit> = listOf(
     { DappRequestSwapOrderPreview() },
     { DappRequestNotDecodedPreview() },
     { DappRequestOtherNetworkPreview() },
+    { DappRequestRealFundsPreview() },
+    { DappRequestRealFundsDarkPreview() },
 )
