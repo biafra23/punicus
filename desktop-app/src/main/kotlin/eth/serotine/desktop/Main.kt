@@ -217,7 +217,7 @@ private fun openWallet(dataDir: File) {
         LaunchedEffect(Unit) {
             // The requests that need no one's decision, answered at once. A failure ends it alone.
             try {
-                AnswerDappRequestsAtOnce(dapps.requests, sentTransfers, transactionHistory)()
+                AnswerDappRequestsAtOnce(dapps.requests, sentTransfers, transactionHistory, networkSettings)()
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {

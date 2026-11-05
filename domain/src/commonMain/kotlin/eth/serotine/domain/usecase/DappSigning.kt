@@ -468,8 +468,10 @@ class RefuseDappRequest(
 
 /**
  * Answers at once the requests that need no one's decision (docs/walletconnect.md, *The methods*):
- * `wallet_switchEthereumChain` to a network the session holds as switched (null, then `chainChanged`) and to
- * any other chain with the unrecognized-chain error, so never from testnet to real funds nor back; a method
+ * `wallet_switchEthereumChain` to a network the session holds as switched (null, then `chainChanged`), and
+ * with the unrecognized-chain error (4902) to any other chain, so never from testnet to real funds nor back,
+ * and to one it holds that is off ([networks]) or where it has no account left: a switch the wallet could not
+ * serve is never answered as made, and the session's chains stay as they are; a method
  * this version does not answer yet with the unsupported-method error; and parameters that are not the
  * method's as invalid. So no request is left unanswered while its session lives: an
  * answer that could not be saved is tried again every [retrySeconds] until it is, or the request goes.
@@ -479,6 +481,8 @@ class AnswerDappRequestsAtOnce(
     private val requests: DappRequests,
     private val sentTransfers: SentTransfers,
     private val history: TransactionHistory,
+    /** The networks that are on: a switch to one that is off is refused. */
+    private val networks: NetworkSettings,
     private val retrySeconds: Long = 30,
 ) {
     suspend operator fun invoke() {
@@ -499,10 +503,12 @@ class AnswerDappRequestsAtOnce(
     private suspend fun answerAll(waiting: List<DappRequest>, record: SentTransferList, entries: HistoryList): Boolean {
         val sent = (record as? SentTransferList.Loaded)?.transfers.orEmpty()
         val past = (entries as? HistoryList.Loaded)?.entries.orEmpty()
+        // Read as each list is answered: a switch is judged against the setting now.
+        val enabled = networks.observe().first()
         var notSaved = false
         for (request in waiting) {
             // Each answer runs to its end, its send included: a new list cancels only what follows it.
-            val answer = withContext(NonCancellable) { answerAtOnce(request, sent, past) } ?: continue
+            val answer = withContext(NonCancellable) { answerAtOnce(request, sent, past, enabled) } ?: continue
             if (answer == DappAnswer.NOT_SAVED) notSaved = true
         }
         return notSaved
@@ -518,10 +524,16 @@ class AnswerDappRequestsAtOnce(
         request: DappRequest,
         sent: List<SentTransfer>,
         past: List<HistoryEntry>,
+        enabled: Set<Network>,
     ): DappAnswer? =
         when (val ask = request.ask) {
             is DappAsk.SwitchChain -> {
-                val network = Network.ofChainId(ask.chainId)?.takeIf { it in request.sessionNetworks }
+                // Held by the session, on, and with an account of the session there: else nothing there could
+                // be served, and the switch is refused as one to a chain it cannot switch to (4902).
+                val network = Network.ofChainId(ask.chainId)?.takeIf { target ->
+                    target in request.sessionNetworks && target in enabled &&
+                        request.sessionAccounts.any { it.network == target }
+                }
                 if (network != null) {
                     requests.answerChainSwitch(request.id, network)
                 } else {

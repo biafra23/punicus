@@ -137,7 +137,7 @@ class DappTransactionsTest {
         accounts.setCustody(held.id, AccountCustody.InKeyStore)
         assertEquals(1, broadcaster.sent.size)
         // Sent by a retry from its status: the dApp is answered with its hash at once.
-        val answering = backgroundScope.launch { AnswerDappRequestsAtOnce(requests, sent, history)() }
+        val answering = backgroundScope.launch { AnswerDappRequestsAtOnce(requests, sent, history, networks)() }
         runCurrent()
         assertTrue(requests.hashes.isEmpty())
         sent.transfers.value = listOf(record.copy(maybeSent = false))
@@ -157,7 +157,7 @@ class DappTransactionsTest {
         history.entries.value = listOf(HistoryEntry(record, SentOutcome.Included(120, succeeded = true)))
         sent.transfers.value = emptyList()
         assertEquals(DappTransactionQuoting.AlreadySigned(SignedAnswer(record, SignedState.MINED)), quote()(quoted.id))
-        val answering = backgroundScope.launch { AnswerDappRequestsAtOnce(requests, sent, history)() }
+        val answering = backgroundScope.launch { AnswerDappRequestsAtOnce(requests, sent, history, networks)() }
         runCurrent()
         assertEquals(listOf(quoted.id to record.hash), requests.hashes)
         answering.cancel()

@@ -210,7 +210,7 @@ class DappSafeTransactionsTest {
             nonce = 7,
         )
         world.sent.record(older)
-        val answering = backgroundScope.launch { AnswerDappRequestsAtOnce(requests, world.sent, history)() }
+        val answering = backgroundScope.launch { AnswerDappRequestsAtOnce(requests, world.sent, history, networks)() }
         runCurrent()
         assertTrue(requests.hashes.isEmpty())
         assertIs<DappSafeSigning.Signed>(signed(proposed))

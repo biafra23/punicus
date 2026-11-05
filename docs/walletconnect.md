@@ -176,6 +176,10 @@ everything on the chain side: the verified `call`, `estimateGasDetailed`,
   does not hold (EIP-3326); -32602 for parameters that are not the method's.
 - A switch to a chain the session holds is answered with null, and then, where
   the session carries it, the `chainChanged` event names that chain.
+- A switch to a chain the session holds whose network is turned off, or where
+  the session has no account left, is refused with 4902 too: a switch the
+  wallet could not serve is never answered as made. The session keeps its
+  chains; turning the network on again makes the switch possible.
 - **What needs no one's decision is answered at once**, by the app while it
   runs: `wallet_switchEthereumChain`, and parameters out of shape.
 - JSON from outside the device (the relay's frames, a dApp's messages, typed

@@ -306,7 +306,7 @@ class DappSigningTest {
             asking(4, DappAsk.NotAnsweredYet("eth_sendTransaction")),
             asking(5, DappAsk.Malformed("personal_sign")),
         )
-        val answering = backgroundScope.launch { AnswerDappRequestsAtOnce(requests, MemorySentTransfers(), MemoryTransactionHistory())() }
+        val answering = backgroundScope.launch { AnswerDappRequestsAtOnce(requests, MemorySentTransfers(), MemoryTransactionHistory(), networks)() }
         runCurrent()
         assertEquals<List<Pair<DappRequestId, Any?>>>(
             listOf(
@@ -323,6 +323,7 @@ class DappSigningTest {
 
     @Test
     fun aRealFundsSessionSwitchesBetweenItsNetworksAndNeverToTestnet() = runTest {
+        enabled.value = setOf(Network.ETHEREUM, Network.GNOSIS, Network.SEPOLIA)
         val mainnet = listOf(
             eth.serotine.domain.model.AccountId(Network.ETHEREUM, held.address),
             eth.serotine.domain.model.AccountId(Network.GNOSIS, held.address),
@@ -334,7 +335,7 @@ class DappSigningTest {
                 ask = DappAsk.SwitchChain(chainId),
             )
         requests.waiting.value = listOf(asking(1, 100), asking(2, 1), asking(3, 11_155_111), asking(4, 137))
-        val answering = backgroundScope.launch { AnswerDappRequestsAtOnce(requests, MemorySentTransfers(), MemoryTransactionHistory())() }
+        val answering = backgroundScope.launch { AnswerDappRequestsAtOnce(requests, MemorySentTransfers(), MemoryTransactionHistory(), networks)() }
         runCurrent()
         assertEquals<List<Pair<DappRequestId, Any?>>>(
             listOf(
@@ -342,6 +343,35 @@ class DappSigningTest {
                 asking(2, 1).id to Network.ETHEREUM,
                 asking(3, 11_155_111).id to DappRequestError.UNRECOGNIZED_CHAIN,
                 asking(4, 137).id to DappRequestError.UNRECOGNIZED_CHAIN,
+            ),
+            requests.answered,
+        )
+        answering.cancel()
+    }
+
+    @Test
+    fun aSwitchToAHeldNetworkThatIsOffOrHasNoAccountLeftIsRefusedNeverAnsweredAsMade() = runTest {
+        val ethereum = eth.serotine.domain.model.AccountId(Network.ETHEREUM, held.address)
+        fun asking(id: Long, chainId: Long, accounts: List<eth.serotine.domain.model.AccountId>) =
+            request(id, chain = "eip155:1").copy(
+                sessionAccounts = accounts,
+                sessionNetworks = setOf(Network.ETHEREUM, Network.GNOSIS),
+                ask = DappAsk.SwitchChain(chainId),
+            )
+        val withGnosis = listOf(ethereum, eth.serotine.domain.model.AccountId(Network.GNOSIS, held.address))
+        // Gnosis Chain off: held by the session, but nothing there could be served.
+        enabled.value = setOf(Network.ETHEREUM)
+        // Its Gnosis Chain account removed: the session still holds the chain, with no account there.
+        requests.waiting.value = listOf(asking(1, 100, withGnosis), asking(2, 100, listOf(ethereum)), asking(3, 1, withGnosis))
+        val answering = backgroundScope.launch {
+            AnswerDappRequestsAtOnce(requests, MemorySentTransfers(), MemoryTransactionHistory(), networks)()
+        }
+        runCurrent()
+        assertEquals<List<Pair<DappRequestId, Any?>>>(
+            listOf(
+                asking(1, 100, withGnosis).id to DappRequestError.UNRECOGNIZED_CHAIN,
+                asking(2, 100, listOf(ethereum)).id to DappRequestError.UNRECOGNIZED_CHAIN,
+                asking(3, 1, withGnosis).id to Network.ETHEREUM,
             ),
             requests.answered,
         )
@@ -378,7 +408,7 @@ class DappSigningTest {
     fun anAnswerThatCouldNotBeSavedIsTriedAgainUntilItIs() = runTest {
         requests.answer = DappAnswer.NOT_SAVED
         requests.waiting.value = listOf(request(1).copy(ask = DappAsk.NotAnsweredYet("eth_sendTransaction")))
-        val answering = backgroundScope.launch { AnswerDappRequestsAtOnce(requests, MemorySentTransfers(), MemoryTransactionHistory(), retrySeconds = 30)() }
+        val answering = backgroundScope.launch { AnswerDappRequestsAtOnce(requests, MemorySentTransfers(), MemoryTransactionHistory(), networks, retrySeconds = 30)() }
         runCurrent()
         assertTrue(requests.answered.isEmpty())
         requests.answer = DappAnswer.DELIVERED
