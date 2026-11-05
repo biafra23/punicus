@@ -434,6 +434,7 @@ class MyotisHost private constructor(
             uniswap = VerifiedUniswapV3(chain, Dispatchers.IO, network),
             cow = VerifiedCow(chain, Dispatchers.IO, network),
             logIndex = EngineLogIndex(network, chain, Dispatchers.IO, POLL_INTERVAL),
+            nfts = VerifiedNftContracts(chain, Dispatchers.IO, network),
         )
 
         /** Starts the light client, unless it runs already. Control dispatcher; blocks while the engine starts it. */

@@ -248,6 +248,9 @@ rulings to the screens.
 - Swaps: Uniswap first, then CoW Protocol; the user chooses the venue (owner's
   directions, 2026-10-18 and 2026-10-22). CoW's order API is used only for a
   swap the user sends to CoW (owner ruling, 2026-10-22).
+- An account's NFTs are found in its verified log index and shown only once
+  proven held; on-chain metadata only; unlisted collections collapsed; older
+  NFTs added by contract and id (owner rulings, 2026-11-05, #246).
 - Where no Chainlink feed is pinned, a Uniswap pool's 30-minute average
   prices a token, labelled and counted in totals; a stale feed never falls
   back to it (owner ruling, 2026-10-29, #205).
