@@ -775,9 +775,9 @@ private fun Assets(
 
 /**
  * The account's NFTs below its assets (docs/wallet-ux.md, *NFTs*; owner rulings, 2026-11-05, #246):
- * the built-in collections' rows, then a row for the unlisted collections, which [onToggle] opens
- * and collapses, and what the list covers. Nothing is fetched to draw them: no image is shown that
- * is not on chain.
+ * the built-in collections' rows, then a row for the unlisted collections' NFTs, which [onToggle]
+ * opens and collapses, what the list covers, and that no image is shown: nothing is fetched that is
+ * not on chain.
  */
 @Composable
 private fun Nfts(nfts: NftSection, onToggle: () -> Unit, modifier: Modifier) {
@@ -794,13 +794,14 @@ private fun Nfts(nfts: NftSection, onToggle: () -> Unit, modifier: Modifier) {
             val count = nfts.unlisted.size
             ListItem(
                 modifier = Modifier.clickable(
-                    onClickLabel = if (nfts.unlistedOpen) "Collapse unlisted collections" else "Show unlisted collections",
+                    onClickLabel = if (nfts.unlistedOpen) "Collapse unlisted NFTs" else "Show unlisted NFTs",
                     onClick = onToggle,
                 ),
-                headlineContent = { Text("Unlisted collections ($count)") },
+                headlineContent = { Text("Unlisted NFTs ($count)") },
                 supportingContent = {
                     Text(
-                        "Not confirmed: anyone can send an NFT to any address, and a name is only the contract's claim.",
+                        "Not confirmed: anyone can send an NFT to any address, and a name is only " +
+                            "the contract's claim.",
                         style = MaterialTheme.typography.labelSmall,
                     )
                 },
@@ -811,8 +812,13 @@ private fun Nfts(nfts: NftSection, onToggle: () -> Unit, modifier: Modifier) {
         nfts.note?.let {
             Text(it, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
+        Text(NO_IMAGES, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
     }
 }
+
+/** Why no NFT shows an image (owner ruling, 2026-11-05, #246: on-chain metadata only). */
+private const val NO_IMAGES = "Images are not shown: nothing is fetched that is not on chain."
+
 
 /** One NFT: its collection, its id and an amount above one; [unconfirmed] for an unlisted collection's. */
 @Composable
@@ -821,10 +827,13 @@ private fun NftItem(row: NftRow, unconfirmed: Boolean) {
         modifier = Modifier.testTag(ACCOUNT_NFT_TAG),
         headlineContent = { Text(row.title, maxLines = 1, overflow = TextOverflow.Ellipsis) },
         supportingContent = {
-            Text(
-                if (unconfirmed) "${row.tokenId} · not confirmed · ${shortAddress(row.contract)}" else row.tokenId,
-                style = MaterialTheme.typography.bodySmall,
+            val marks = listOfNotNull(
+                row.tokenId,
+                "not confirmed".takeIf { unconfirmed },
+                shortAddress(row.contract).takeIf { unconfirmed },
+                row.provenAt?.let { "verified at $it" },
             )
+            Text(marks.joinToString(" · "), style = MaterialTheme.typography.bodySmall)
         },
         trailingContent = row.amount?.let { amount ->
             @Composable { Text(amount, style = MaterialTheme.typography.bodyLarge) }

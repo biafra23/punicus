@@ -83,5 +83,11 @@ private fun AccountDetailUiState.Ready.simple(): AccountDetailUiState.Ready = co
     assets = assets.map { it.copy(verifiedAt = null, lastKnown = it.ageNote ?: it.lastKnown) },
     activity = activity.simple(),
     safe = (safe as? SafeDetails.Shown)?.copy(checkedAt = "Checked on chain") ?: safe,
-    nfts = nfts?.let { it.copy(note = it.simpleNote) },
+    nfts = nfts?.let { section ->
+        section.copy(
+            note = section.simpleNote,
+            shown = section.shown.map { it.copy(provenAt = null) },
+            unlisted = section.unlisted.map { it.copy(provenAt = null) },
+        )
+    },
 )

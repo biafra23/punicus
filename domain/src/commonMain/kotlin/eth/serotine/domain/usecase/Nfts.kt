@@ -62,7 +62,8 @@ sealed interface NftHoldings {
 
     /**
      * The [nfts] proven held at the head: the built-in collections' first, then the most recently
-     * moved first (received or sent, as [ObserveNfts] checks them). They were found among the NFTs the account received in blocks [checked], and it
+     * moved first (received or sent, as [ObserveNfts] checks them). They were found among the NFTs
+     * the account received in blocks [checked], and it
      * is followed from block [start]: an NFT received before [start] is not found here (owner ruling,
      * 2026-11-05, #246). [unproven] were received and not proven held or not yet; [notChecked] were
      * received and not checked at all, past the [ObserveNfts.MAX_CHECKED] most recent.

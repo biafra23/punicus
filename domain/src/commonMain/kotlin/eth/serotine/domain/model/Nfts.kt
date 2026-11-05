@@ -81,7 +81,10 @@ enum class KnownNftKind {
     ENS_NAME_WRAPPER,
 }
 
-/** A collection built into the wallet: [address] on its network, of [standard], named [name], whose tokens are [kind]. */
+/**
+ * A collection built into the wallet: [address] on its network, of [standard], named [name], whose
+ * tokens are [kind].
+ */
 data class KnownNftCollection(
     val address: Address,
     val standard: NftStandard,

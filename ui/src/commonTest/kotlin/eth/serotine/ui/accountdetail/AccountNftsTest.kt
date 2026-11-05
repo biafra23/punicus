@@ -29,7 +29,9 @@ class AccountNftsTest {
     fun theBuiltInCollectionsAreShownAndTheUnlistedOnesSetApart() {
         val ens = NftCollection(registrar.address, registrar, null, null)
         val unlisted = NftCollection(art, null, "Art", "ART")
-        val longId = UInt256.of("98253155417735093419827374641934876012984101374925918283748577373519244107")
+        val longId = UInt256.of(
+            "98253155417735093419827374641934876012984101374925918283748577373519244107",
+        )
         val section = nftSection(
             NftHoldings.Read(
                 listOf(held(ens, longId), held(unlisted, UInt256.of(7), amount = 3)),
@@ -40,13 +42,40 @@ class AccountNftsTest {
             ),
             unlistedOpen = false,
         )
-        assertEquals(listOf(NftRow("ENS", "#982531…4107", null, "0x57f1887a8BF19b14fC0dF6Fd9B2acc9Af147eA85")), section.shown)
+        val registrarContract = "0x57f1887a8BF19b14fC0dF6Fd9B2acc9Af147eA85"
+        assertEquals(listOf(NftRow("ENS", "#982531…4107", null, registrarContract, "block 9,500")), section.shown)
         assertEquals(listOf("Art"), section.unlisted.map { it.title })
         assertEquals("×3", section.unlisted.single().amount)
         assertEquals(false, section.unlistedOpen)
         assertEquals(null, section.empty)
         assertEquals("Received since block 9,000 · 1 not proven held yet", section.note)
-        assertEquals("Received since this account was added here · 1 not proven held yet", section.simpleNote)
+        assertEquals(
+            "Received since this wallet began following this account · 1 not proven held yet",
+            section.simpleNote,
+        )
+    }
+
+    @Test
+    fun whileSomeAreStillToBeProvenItNeverSaysThereAreNone() {
+        val section = nftSection(
+            NftHoldings.Read(emptyList(), start = 9_000, checked = 9_000L..9_600L, unproven = 3, notChecked = 0),
+            unlistedOpen = false,
+        )
+        assertEquals("Checking NFTs…", section.empty)
+    }
+
+    @Test
+    fun whileItsNetworkIsOffTheyAreSaidToBeFromBefore() {
+        val ens = NftCollection(registrar.address, registrar, null, null)
+        val section = nftSection(
+            NftHoldings.Read(listOf(held(ens, UInt256.of(1))), 9_000, 9_000L..9_600L, unproven = 0, notChecked = 0),
+            unlistedOpen = false,
+            off = "Sepolia",
+        )
+        assertEquals(
+            "Sepolia is off: proven before, may have changed since · Received since block 9,000",
+            section.note,
+        )
     }
 
     @Test
@@ -55,9 +84,16 @@ class AccountNftsTest {
             NftHoldings.Read(emptyList(), start = 9_000, checked = 9_400L..9_600L, unproven = 0, notChecked = 4),
             unlistedOpen = false,
         )
-        assertEquals("No NFTs found", section.empty)
-        assertEquals("Received since block 9,000 · still checking blocks 9,000 to 9,399 · 4 more not checked", section.note)
-        assertEquals("Received since this account was added here · still checking older blocks · 4 more not checked", section.simpleNote)
+        assertEquals("None found yet", section.empty)
+        assertEquals(
+            "Received since block 9,000 · still checking blocks 9,000 to 9,399 · 4 more not checked",
+            section.note,
+        )
+        assertEquals(
+            "Received since this wallet began following this account · still checking older blocks · " +
+                "4 more not checked",
+            section.simpleNote,
+        )
     }
 
     @Test
@@ -82,6 +118,6 @@ class AccountNftsTest {
     @Test
     fun beforeAnythingIsReadTheSectionSaysWhy() {
         assertEquals("Checking NFTs…", nftSection(NftHoldings.Checking(9_000), unlistedOpen = false).empty)
-        assertEquals("NFTs cannot be read right now. Serotine keeps trying.", nftSection(NftHoldings.Unavailable, false).empty)
+        assertEquals("NFTs cannot be read right now.", nftSection(NftHoldings.Unavailable, false).empty)
     }
 }

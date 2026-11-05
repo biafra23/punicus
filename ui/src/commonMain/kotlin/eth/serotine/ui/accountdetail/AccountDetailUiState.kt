@@ -302,11 +302,14 @@ data class NftSection(
 /**
  * One NFT: its collection's [title] (a built-in collection's name, or what an unlisted contract says it
  * is), its token id ([tokenId], "#1234", shortened when long: "#982531…4107"), how many the account
- * holds when more than one ([amount], "×3"), and the collection's EIP-55 [contract].
+ * holds when more than one ([amount], "×3", shortened as the id is), the collection's EIP-55
+ * [contract], and the block it was proven held at ([provenAt], "block 9,500"; null where the engine
+ * did not name it, and in simple mode, which shows no block).
  */
 data class NftRow(
     val title: String,
     val tokenId: String,
     val amount: String?,
     val contract: String,
+    val provenAt: String? = null,
 )

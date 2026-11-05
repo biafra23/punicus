@@ -147,7 +147,7 @@ class AccountDetailScreenTest {
         rule.onNodeWithText("ENS", useUnmergedTree = true).assertExists()
         rule.onNodeWithText("Received since block 9,000", useUnmergedTree = true).assertExists()
         rule.onAllNodesWithTag(ACCOUNT_NFT_TAG).assertCountEquals(1)
-        rule.onNodeWithText("Unlisted collections (1)").performClick()
+        rule.onNodeWithText("Unlisted NFTs (1)").performClick()
         rule.onAllNodesWithTag(ACCOUNT_NFT_TAG).assertCountEquals(2)
         rule.onNodeWithText("#7 · not confirmed · 0xa7a7…a7a7", useUnmergedTree = true).assertExists()
         rule.onNodeWithText("×3", useUnmergedTree = true).assertExists()
