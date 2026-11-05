@@ -12,9 +12,9 @@ import kotlinx.coroutines.CoroutineDispatcher
  * ([EngineSnapshot.Running.readableHead]), and a block's transactions are the engine's verified
  * `getBlockByNumber` with full transactions ([TransactingChain.blockWithTransactions]), its body
  * checked by the engine against the header's transactions root. A block above that head is
- * [BlockReading.NotYet] without asking; an answer that cannot be read, or none, is
- * [ReadUnavailable.UNPROVEN] for that call, never an answer kept from before. Every call blocks on
- * [dispatcher], bounded by the engine.
+ * [BlockReading.NotYet] without asking, and so is one the engine answers it does not hold yet (its
+ * "null" literal); an answer that cannot be read, or none, is [ReadUnavailable.UNPROVEN] for that
+ * call, never an answer kept from before. Every call blocks on [dispatcher], bounded by the engine.
  */
 class EngineBlockTransactions internal constructor(
     private val served: Network,

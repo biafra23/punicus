@@ -548,6 +548,8 @@ class HandoffViewModel(
     private fun refusal(start: HandoffStart): String = when (start) {
         is HandoffStart.Opened -> error("an opened handoff is no refusal")
         HandoffStart.NoWallet -> NO_WALLET
+        HandoffStart.NotOpened -> "The wallet app that opens payment links on this device would not be opened, so " +
+            "nothing was handed over. Try another wallet app."
         HandoffStart.ToZeroAddress -> ZERO_ADDRESS
         HandoffStart.ToTokenContract ->
             "The token's own contract: nothing sent to it can ever be moved out, so it is refused."

@@ -21,7 +21,7 @@ interface BlockTransactions {
 
     /**
      * Every transaction of block [number] on [network], in the block's order, or
-     * [BlockReading.NotYet] for a block above the verified head.
+     * [BlockReading.NotYet] for a block there is no verified answer about yet.
      */
     suspend fun transactions(network: Network, number: Long): BlockReading
 }
@@ -42,7 +42,10 @@ sealed interface BlockReading {
     /** The block's [transactions], verified against its transactions root. */
     data class Read(val transactions: List<ChainTransaction>) : BlockReading
 
-    /** The block is above the verified head: there is no verified answer about it yet. */
+    /**
+     * There is no verified answer about the block yet: it is above the verified head, or the engine
+     * does not hold it yet though the head has passed it. Asked again later, it may be read.
+     */
     data object NotYet : BlockReading
 
     /** The block cannot be read verified now, for [reason]. */

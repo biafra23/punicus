@@ -53,6 +53,11 @@ class AndroidWalletHandoff(
             HandoffOpening.OPENED
         } catch (e: ActivityNotFoundException) {
             HandoffOpening.NO_WALLET
+        } catch (e: SecurityException) {
+            // A handler guarded by a permission Serotine does not hold: there, but not to be opened.
+            HandoffOpening.REFUSED
+        } catch (e: RuntimeException) {
+            HandoffOpening.REFUSED // the port never throws; anything else the platform throws opened nothing
         }
     }
 

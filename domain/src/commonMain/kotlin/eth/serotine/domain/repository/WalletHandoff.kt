@@ -21,7 +21,8 @@ interface WalletHandoff {
     /**
      * Opens [link], an `ethereum:` payment link, in another wallet app. [HandoffOpening.OPENED] once
      * the platform has handed it over (the user may still pick no app in the chooser, which this
-     * cannot tell); [HandoffOpening.NO_WALLET] when no app took it.
+     * cannot tell); [HandoffOpening.NO_WALLET] when no app takes it; [HandoffOpening.REFUSED] when
+     * the app that takes it would not be opened (a handler guarded by a permission Serotine lacks).
      */
     suspend fun open(link: String): HandoffOpening
 }
@@ -45,4 +46,7 @@ enum class HandoffOpening {
 
     /** No app took the link: nothing was handed over. */
     NO_WALLET,
+
+    /** An app takes the link but the platform would not open it: nothing was handed over. */
+    REFUSED,
 }

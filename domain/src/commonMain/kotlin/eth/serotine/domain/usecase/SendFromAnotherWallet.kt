@@ -116,6 +116,7 @@ class HandOffTransfer(private val wallets: WalletHandoff, private val blocks: Bl
         return when (ask { wallets.open(link) } ?: HandoffOpening.NO_WALLET) {
             HandoffOpening.OPENED -> HandoffStart.Opened(Handoff(account, asset, to, amount, head, link))
             HandoffOpening.NO_WALLET -> HandoffStart.NoWallet
+            HandoffOpening.REFUSED -> HandoffStart.NotOpened
         }
     }
 }
@@ -128,6 +129,9 @@ sealed interface HandoffStart {
 
     /** No app on this device took the link. Nothing was handed over. */
     data object NoWallet : HandoffStart
+
+    /** A wallet app takes the link, but the platform would not open it. Nothing was handed over. */
+    data object NotOpened : HandoffStart
 
     /** To the zero address: nobody can ever move out what is sent there. Nothing was handed over. */
     data object ToZeroAddress : HandoffStart

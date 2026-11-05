@@ -158,6 +158,13 @@ class SendFromAnotherWalletTest {
             UInt256.of(1L),
         )
         assertEquals(HandoffStart.NoWallet, start)
+        val refused = HandOffTransfer(Wallets(opening = HandoffOpening.REFUSED), Blocks())(
+            account,
+            TransferAsset.Native,
+            to,
+            UInt256.of(1L),
+        )
+        assertEquals(HandoffStart.NotOpened, refused, "a wallet that is there but not opened is not said to be missing")
     }
 
     // matchHandoff
