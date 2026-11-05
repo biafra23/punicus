@@ -1174,12 +1174,13 @@ they are helpful." The rulings (owner rulings, 2026-11-05, #246; the
   again, and the section says the NFTs were proven before and may have
   changed since. They are read only while the Assets tab is shown.
 - **Below the assets** (screen 4, in both views): the built-in collections'
-  rows, then "Unlisted NFTs (n)", collapsed until tapped, each of its rows
-  saying "not confirmed" with its contract. A line under them says what the
+  rows, then "Unlisted collections (n)", n the collections, collapsed until
+  tapped, each NFT's row under it saying "not confirmed" with its contract. A line under them says what the
   list covers ("Received since block 9,000 · 1 not proven held yet"; simple
   mode: "Received since this wallet began following this account"). While
   some are still to be proven and none is yet, it says "Checking NFTs…",
-  never that there are none.
+  never that there are none; past the cap, "None held among the NFTs
+  checked".
 - **Built in, or unlisted.** The built-in collections (`KnownNftCollections`)
   are ENS's: the .eth registrar (ERC-721) and the NameWrapper (ERC-1155), on
   Ethereum and Sepolia. Their NFTs are shown openly. Any other collection's

@@ -5,6 +5,7 @@ import eth.serotine.domain.usecase.HeldNft
 import eth.serotine.domain.usecase.NftHoldings
 import eth.serotine.ui.components.Eip55
 import eth.serotine.ui.components.grouped
+import eth.serotine.ui.components.shortDigits
 
 /**
  * [holdings] as the account screen draws them below its assets (docs/wallet-ux.md, *NFTs*; owner
@@ -38,6 +39,8 @@ internal fun nftSection(holdings: NftHoldings, unlistedOpen: Boolean, off: Strin
                     // Some received are still to be proven: none can be said to be held, nor none.
                     holdings.unproven > 0 -> CHECKING
                     !holdings.complete -> NONE_YET
+                    // Past the cap, some received were never proven either way.
+                    holdings.notChecked > 0 -> NONE_AMONG_CHECKED
                     else -> NONE
                 },
                 note = listOfNotNull(
@@ -64,26 +67,20 @@ private fun row(held: HeldNft): NftRow {
     val collection = held.collection
     return NftRow(
         title = collection.known?.name ?: collection.name ?: collection.symbol ?: UNNAMED,
-        tokenId = "#" + shortened(held.nft.tokenId),
-        amount = ("×" + shortened(held.amount)).takeIf { held.amount > UInt256.ONE },
+        tokenId = tokenId(held.nft.tokenId),
+        amount = ("×" + shortDigits(held.amount)).takeIf { held.amount > UInt256.ONE },
         contract = Eip55.format(collection.address),
         provenAt = held.blockNumber?.let { "block ${grouped(it)}" },
     )
 }
 
-/** [id] as "#1234", or its first and last digits around an ellipsis where it is long: an ENS id has 77. */
-internal fun tokenId(id: UInt256): String = "#" + shortened(id)
+/** [id] as "#1234", or its first and last digits around an ellipsis where it is long ([shortDigits]). */
+internal fun tokenId(id: UInt256): String = "#" + shortDigits(id)
 
-/** [number]'s digits, or its first six and last four around an ellipsis past [MAX_DIGITS]. */
-private fun shortened(number: UInt256): String {
-    val digits = number.toDecimal()
-    return if (digits.length <= MAX_DIGITS) digits else digits.take(6) + "…" + digits.takeLast(4)
-}
-
-private const val MAX_DIGITS = 12
 private const val UNNAMED = "Unnamed collection"
 private const val NONE = "No NFTs found"
 private const val NONE_YET = "None found yet"
+private const val NONE_AMONG_CHECKED = "None held among the NFTs checked"
 private const val CHECKING = "Checking NFTs…"
 private const val UNAVAILABLE = "NFTs cannot be read right now."
 private const val NOT_FOLLOWED = "NFTs are found once the light client is synced."

@@ -65,6 +65,15 @@ class AccountNftsTest {
     }
 
     @Test
+    fun pastTheCapItSaysNoneOnlyOfThoseChecked() {
+        val section = nftSection(
+            NftHoldings.Read(emptyList(), start = 9_000, checked = 9_000L..9_600L, unproven = 0, notChecked = 7),
+            unlistedOpen = false,
+        )
+        assertEquals("None held among the NFTs checked", section.empty)
+    }
+
+    @Test
     fun whileItsNetworkIsOffTheyAreSaidToBeFromBefore() {
         val ens = NftCollection(registrar.address, registrar, null, null)
         val section = nftSection(

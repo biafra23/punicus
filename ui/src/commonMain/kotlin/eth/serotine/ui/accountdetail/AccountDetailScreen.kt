@@ -791,13 +791,13 @@ private fun Nfts(nfts: NftSection, onToggle: () -> Unit, modifier: Modifier) {
         }
         nfts.shown.forEach { NftItem(it, unconfirmed = false) }
         if (nfts.unlisted.isNotEmpty()) {
-            val count = nfts.unlisted.size
+            val count = nfts.unlisted.distinctBy { it.contract }.size
             ListItem(
                 modifier = Modifier.clickable(
-                    onClickLabel = if (nfts.unlistedOpen) "Collapse unlisted NFTs" else "Show unlisted NFTs",
+                    onClickLabel = if (nfts.unlistedOpen) "Collapse unlisted collections" else "Show unlisted collections",
                     onClick = onToggle,
                 ),
-                headlineContent = { Text("Unlisted NFTs ($count)") },
+                headlineContent = { Text("Unlisted collections ($count)") },
                 supportingContent = {
                     Text(
                         "Not confirmed: anyone can send an NFT to any address, and a name is only " +
