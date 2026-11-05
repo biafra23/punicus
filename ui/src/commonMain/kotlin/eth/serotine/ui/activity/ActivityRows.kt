@@ -290,6 +290,16 @@ internal class ActivityRows(
                     figure(action.minimumOut, decimals, symbol)
                 Triple(title, action.router, "On Uniswap ·")
             }
+            is SentAction.Wrap -> {
+                val weth = TransferAsset.Erc20Token(action.weth)
+                val title = "Wrapped ${amount(action.amount, TransferAsset.Native)} into ${shown(weth).first}"
+                Triple(title, action.weth.address, "Through WETH9 ·")
+            }
+            is SentAction.Unwrap -> {
+                val weth = TransferAsset.Erc20Token(action.weth)
+                val title = "Unwrapped ${amount(action.amount, weth)} into ${network.nativeSymbol}"
+                Triple(title, action.weth.address, "Through WETH9 ·")
+            }
             is SentAction.SafeApproval -> safeCall("Approved", transfer.account, action.request)
             is SentAction.SafeExecution -> safeCall("Executed", transfer.account, action.request)
             is SentAction.SafeDeployment -> if (transfer.account == address) {

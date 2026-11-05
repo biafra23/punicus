@@ -4,6 +4,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import eth.serotine.domain.model.Network
 import eth.serotine.domain.model.TransferAsset
+import eth.serotine.domain.model.Token
 import eth.serotine.domain.model.UInt256
 import eth.serotine.domain.repository.AccountList
 import eth.serotine.domain.repository.Broadcast
@@ -203,6 +204,9 @@ class TransferStatusViewModel(
                 failed && transfer?.action is SentAction.Swap ->
                     "It failed: the swap reverted in its block, so nothing was swapped: the price moved past its " +
                         "minimum, or its deadline passed. Its fee is paid all the same."
+                failed && (transfer?.action is SentAction.Wrap || transfer?.action is SentAction.Unwrap) ->
+                    "It failed: the ${transfer?.let(::whatOf)} reverted in its block, so nothing was moved. Its fee " +
+                        "is paid all the same."
                 failed && transfer?.action is SentAction.SafeDeployment ->
                     "It failed: this transaction reverted in its block and created no Safe itself. Its fee is " +
                         "paid all the same."
@@ -214,7 +218,7 @@ class TransferStatusViewModel(
             safeTx = transfer?.let(::safeTxSummary),
             deployment = transfer?.let { deploymentSummary(it, progress, failed, list) },
             approval = transfer?.let(::approvalSummary),
-            swap = transfer?.let { swapSummary(it, status.received) },
+            swap = transfer?.let { swapSummary(it, status.received) ?: wrapSummary(it) },
             cancellation = transfer?.let(::cancellationSummary),
             // A retry turned away keeps the record: what it came to stays on screen with Try again.
             notSent = if (maybeSent) {
@@ -238,7 +242,7 @@ class TransferStatusViewModel(
 
     /**
      * What [transfer] is called in a sentence: "transfer", "approval", "execution", "deployment",
-     * "swap", "cancellation" or, for a dApp's, "transaction".
+     * "swap", "wrap", "unwrap", "cancellation" or, for a dApp's, "transaction".
      */
     private fun whatOf(transfer: SentTransfer): String = when (transfer.action) {
         is SentAction.Transfer -> "transfer"
@@ -247,6 +251,8 @@ class TransferStatusViewModel(
         is SentAction.SafeDeployment -> "deployment"
         is SentAction.TokenApproval -> "approval"
         is SentAction.Swap -> "swap"
+        is SentAction.Wrap -> "wrap"
+        is SentAction.Unwrap -> "unwrap"
         is SentAction.CowCancellation -> "cancellation"
         is SentAction.DappCall -> "transaction"
     }
@@ -382,6 +388,45 @@ class TransferStatusViewModel(
         )
     }
 
+    /** What [transfer] takes and pays, one for one through WETH9, when it is a wrap or an unwrap. */
+    private fun wrapSummary(transfer: SentTransfer): SwapSummary? = when (val action = transfer.action) {
+        is SentAction.Wrap -> {
+            val weth = TransferAsset.Erc20Token(action.weth)
+            wrapSummary(transfer, "Wrap", action.weth, action.amount, TransferAsset.Native, weth)
+        }
+        is SentAction.Unwrap -> {
+            val weth = TransferAsset.Erc20Token(action.weth)
+            wrapSummary(transfer, "Unwrap", action.weth, action.amount, weth, TransferAsset.Native)
+        }
+        else -> null
+    }
+
+    /** [transfer]'s [verb] of [amount] through [weth]: [sell] given, as much [buy] paid. */
+    private fun wrapSummary(
+        transfer: SentTransfer,
+        verb: String,
+        weth: Token,
+        amount: UInt256,
+        sell: TransferAsset,
+        buy: TransferAsset,
+    ): SwapSummary {
+        val (soldSymbol, soldDecimals, soldIcon) = shown(sell)
+        val (boughtSymbol, boughtDecimals, boughtIcon) = shown(buy)
+        val sold = "${amount.formatUnits(soldDecimals)} $soldSymbol"
+        return SwapSummary(
+            title = "$verb of $sold into $boughtSymbol",
+            sold = sold,
+            soldSymbol = soldSymbol,
+            soldIcon = soldIcon,
+            bought = "${amount.formatUnits(boughtDecimals)} $boughtSymbol",
+            boughtSymbol = boughtSymbol,
+            boughtIcon = boughtIcon,
+            router = Eip55.format(weth.address),
+            from = Eip55.format(transfer.account),
+            through = "Through WETH9, one for one",
+        )
+    }
+
     /** What [transfer] sent, when it is a transfer. */
     private fun summary(transfer: SentTransfer): SentSummary? {
         val sent = transfer.action as? SentAction.Transfer ?: return null
@@ -401,7 +446,8 @@ class TransferStatusViewModel(
             is SentAction.SafeApproval -> "Approval of a Safe transaction" to action.request
             is SentAction.SafeExecution -> "Execution of a Safe transaction" to action.request
             is SentAction.Transfer, is SentAction.SafeDeployment, is SentAction.TokenApproval,
-            is SentAction.Swap, is SentAction.CowCancellation, is SentAction.DappCall,
+            is SentAction.Swap, is SentAction.Wrap, is SentAction.Unwrap, is SentAction.CowCancellation,
+            is SentAction.DappCall,
             -> return null
         }
         return SafeTxSummary(

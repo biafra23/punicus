@@ -77,11 +77,13 @@ import eth.serotine.domain.usecase.PlaceCowOrder
 import eth.serotine.domain.usecase.QuoteCowSwap
 import eth.serotine.domain.usecase.QuoteSwap
 import eth.serotine.domain.usecase.QuoteTokenApproval
+import eth.serotine.domain.usecase.QuoteWrap
 import eth.serotine.domain.usecase.RebroadcastTransfer
 import eth.serotine.domain.usecase.RouteRanking
 import eth.serotine.domain.usecase.SWAP_DEADLINE_SECONDS
 import eth.serotine.domain.usecase.SendSwap
 import eth.serotine.domain.usecase.SendTokenApproval
+import eth.serotine.domain.usecase.SendWrap
 import eth.serotine.domain.usecase.WarmFeeHistory
 import eth.serotine.ui.FakeAccounts
 import eth.serotine.ui.FakeBalances
@@ -166,6 +168,7 @@ class SwapViewModelTest {
         weth9 = Address.of("0x" + "ff".repeat(20)),
     )
     private val router = deployment.swapRouter02
+    private val weth = Token(deployment.weth9, "WETH", "Wrapped Ether", 18, icon = "weth")
     private val pool = Address.of("0x" + "30".repeat(20))
     private val fortyUsdc = UInt256.of(40_000_000)
     private val headTime = 1_792_419_000L
@@ -215,6 +218,7 @@ class SwapViewModelTest {
         sell: Address? = null,
         fill: SwapFill? = null,
         continuing: Boolean = false,
+        listed: List<Token> = listOf(usdc, link),
     ): SwapViewModel {
         Dispatchers.setMain(UnconfinedTestDispatcher(testScheduler))
         val now = { headTime }
@@ -225,7 +229,7 @@ class SwapViewModelTest {
             ObserveAccountValue(
                 ObserveNativeBalance(balances),
                 ObserveTokenHoldings(
-                    ObserveKnownTokens(FakeTokenCatalog(usdc, link), MemoryUserTokens(), FakeMetadata()),
+                    ObserveKnownTokens(FakeTokenCatalog(*listed.toTypedArray()), MemoryUserTokens(), FakeMetadata()),
                     tokenBalances,
                 ),
                 ObserveUsdPrice(FakeFeeds()),
@@ -246,6 +250,8 @@ class SwapViewModelTest {
             ),
             EstimateSwap(FindUniswapRoute(uniswap, inputs), RouteRanking.NET_OF_FEES),
             SendSwap(inputs, signer, broadcaster, sent, now),
+            QuoteWrap(uniswap, inputs, balances, tokenBalances, sent, cowOrders, cowChain, light, Network.SEPOLIA, now),
+            SendWrap(signer, broadcaster, sent, now),
             QuoteTokenApproval(inputs, balances, sent, Network.SEPOLIA, now),
             SendTokenApproval(signer, broadcaster, sent, now),
             RebroadcastTransfer(broadcaster, sent, FakeReceipts()),
@@ -527,7 +533,29 @@ class SwapViewModelTest {
 
         viewModel.onToleranceChange("7")
         assertEquals("Between 0.1 % and 5 %, with at most two decimals (0.5).", viewModel.compose.toleranceError)
-        assertFalse(viewModel.compose.canReview)
+        // USDC for ETH could have been a wrap, which no tolerance applies to: asked, it is refused as a swap.
+        assertTrue(viewModel.compose.canReview)
+        viewModel.review()
+        runCurrent()
+        assertEquals("Between 0.1 % and 5 %, with at most two decimals (0.5).", viewModel.compose.error)
+        assertEquals(0, uniswap.quotes, "nothing was quoted")
+
+        viewModel.onBuyChange(link.address.hex)
+        assertFalse(viewModel.compose.canReview, "a token for a token is never a wrap")
+    }
+
+    @Test
+    fun aWrapNeedsNoToleranceTyped() = runTest {
+        tokenBalances.of(daily.address, weth.address).value =
+            TokenBalanceReading.Verified(TokenUnits.of("0"), 9_412_117)
+        val viewModel = viewModel(listed = listOf(usdc, link, weth))
+        viewModel.onBuyChange(weth.address.hex)
+        viewModel.onAmountChange("0.1")
+        viewModel.onToleranceChange("")
+        viewModel.review()
+        runCurrent()
+
+        assertIs<SwapUiState.WrapReview>(viewModel.uiState.value)
     }
 
     @Test
@@ -1083,6 +1111,76 @@ class SwapViewModelTest {
         assertTrue(uniswap.quotes > runs, "quoted again")
         assertIs<SwapUiState.SwapReview>(viewModel.uiState.value)
         assertTrue(signer.asked.isEmpty(), "nothing signed")
+    }
+
+    @Test
+    fun ethForWethIsReviewedAsAWrapOneForOneAndSentAsOne() = runTest {
+        tokenBalances.of(daily.address, weth.address).value =
+            TokenBalanceReading.Verified(TokenUnits.of("0"), 9_412_117)
+        val viewModel = viewModel(listed = listOf(usdc, link, weth))
+        viewModel.onBuyChange(weth.address.hex)
+        viewModel.onAmountChange("0.1")
+        viewModel.review()
+        runCurrent()
+
+        val review = assertIs<SwapUiState.WrapReview>(viewModel.uiState.value)
+        assertEquals("Review wrap", review.title)
+        assertEquals("Sign and wrap", review.signLabel)
+        assertEquals("0.1 ETH", review.sold)
+        assertEquals("0.1 WETH", review.receive)
+        assertTrue(review.explanation.startsWith("Not a swap: WETH9's own deposit"), review.explanation)
+        assertEquals(Eip55.format(weth.address), review.contract.address)
+        assertEquals(listOf("ETH balance", "WETH balance"), review.balances.map { it.what })
+        assertEquals("0.1 WETH", review.balances[1].after)
+        assertEquals(0, uniswap.quotes, "no pool is quoted for a wrap")
+
+        viewModel.onPasswordChange("made-up test password")
+        viewModel.sign()
+        runCurrent()
+
+        assertIs<SwapUiState.Sent>(viewModel.uiState.value)
+        assertEquals(SentAction.Wrap(weth, UInt256.of("100000000000000000")), sent.transfers.value.single().action)
+    }
+
+    @Test
+    fun wethForEthIsAnUnwrapAndCowIsNeverAskedEvenWhenChosen() = runTest {
+        cowReady()
+        tokenBalances.of(daily.address, weth.address).value =
+            TokenBalanceReading.Verified(TokenUnits.of("250000000000000000"), 9_412_117)
+        biometrics = BiometricUnlock.On
+        val viewModel = viewModel(sell = weth.address, listed = listOf(usdc, link, weth))
+        viewModel.onBuyChange(null)
+        viewModel.onAmountChange("0.1")
+        viewModel.review()
+        runCurrent()
+
+        val review = assertIs<SwapUiState.WrapReview>(viewModel.uiState.value)
+        assertEquals("Review unwrap", review.title)
+        assertEquals("0.1 WETH", review.sold)
+        assertEquals("0.1 ETH", review.receive)
+        assertEquals(listOf("WETH balance", "ETH balance, which pays the fee"), review.balances.map { it.what })
+        assertEquals("0.15 WETH", review.balances[0].after)
+        assertEquals(emptyList(), cowApi.quotes, "CoW never learns of a wrap")
+
+        viewModel.signWithBiometrics()
+        runCurrent()
+        val unlock = assertIs<Unlock.WithBiometrics>(signer.asked.single().second)
+        assertEquals("Unwrap 0.1 WETH into ETH", unlock.reason)
+        assertEquals(SentAction.Unwrap(weth, UInt256.of("100000000000000000")), sent.transfers.value.single().action)
+    }
+
+    @Test
+    fun anUnwrapOfMoreWethThanHeldIsSaidOnTheComposeStep() = runTest {
+        tokenBalances.of(daily.address, weth.address).value =
+            TokenBalanceReading.Verified(TokenUnits.of("50000000000000000"), 9_412_117)
+        val viewModel = viewModel(sell = weth.address, listed = listOf(usdc, link, weth))
+        viewModel.onBuyChange(null)
+        viewModel.onAmountChange("0.1")
+        viewModel.review()
+        runCurrent()
+
+        val error = viewModel.compose.error
+        assertTrue(error!!.startsWith("This account holds less WETH than that"), error)
     }
 
     @Test

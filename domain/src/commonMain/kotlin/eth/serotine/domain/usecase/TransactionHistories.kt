@@ -212,8 +212,8 @@ class ObserveSentToAddresses(private val history: TransactionHistory) {
         is SentAction.SafeApproval -> action.request.recipient()
         is SentAction.SafeExecution -> action.request.recipient()
         // A dApp's call names no recipient the app decoded itself: it vouches for no sender.
-        is SentAction.TokenApproval, is SentAction.Swap, is SentAction.SafeDeployment, is SentAction.CowCancellation,
-        is SentAction.DappCall,
+        is SentAction.TokenApproval, is SentAction.Swap, is SentAction.Wrap, is SentAction.Unwrap,
+        is SentAction.SafeDeployment, is SentAction.CowCancellation, is SentAction.DappCall,
         -> null
     }
 
@@ -229,8 +229,8 @@ fun HistoryEntry.concerns(id: AccountId): Boolean {
     if (transfer.accountId == id) return true
     if (transfer.network != id.network) return false
     return when (val action = transfer.action) {
-        is SentAction.Transfer, is SentAction.TokenApproval, is SentAction.Swap, is SentAction.CowCancellation,
-        is SentAction.DappCall,
+        is SentAction.Transfer, is SentAction.TokenApproval, is SentAction.Swap, is SentAction.Wrap,
+        is SentAction.Unwrap, is SentAction.CowCancellation, is SentAction.DappCall,
         -> false
         is SentAction.SafeApproval -> action.request.safe == id.address
         is SentAction.SafeExecution -> action.request.safe == id.address

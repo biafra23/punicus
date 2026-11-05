@@ -23,15 +23,17 @@ import kotlinx.serialization.json.JsonElement
 
 private const val APPROVAL = "approval"
 private const val EXECUTION = "execution"
+private const val WRAP = "wrap"
+private const val UNWRAP = "unwrap"
 
 /**
  * One transaction, sent on the network of [chain] (absent in a record written before networks:
  * Sepolia, the only one there was; one of a network this build does not know does not decode):
  * a transfer's [to], [token] (null: the native currency) and [amount], a
  * Safe transaction's approval or execution ([safe]), a Safe's deployment ([deployment]), a
- * token approval ([approval]), a swap ([swap]), a CoW order's cancellation on chain
- * ([cancellation]) or a dApp's transaction ([dappCall]) — exactly one of the seven, else the file is
- * damaged.
+ * token approval ([approval]), a swap ([swap]), a wrap or unwrap ([wrap]), a CoW order's
+ * cancellation on chain ([cancellation]) or a dApp's transaction ([dappCall]) — exactly one of the
+ * eight, else the file is damaged.
  */
 @Serializable
 internal class StoredTransfer(
@@ -45,6 +47,7 @@ internal class StoredTransfer(
     val deployment: StoredDeployment? = null,
     val approval: StoredApproval? = null,
     val swap: StoredSwap? = null,
+    val wrap: StoredWrap? = null,
     val cancellation: StoredCowCancellation? = null,
     val dappCall: StoredDappCall? = null,
     val maxCost: String,
@@ -64,7 +67,7 @@ internal class StoredTransfer(
     )
 
     private fun action(): SentAction {
-        val kinds = listOfNotNull(deployment, safe, approval, swap, cancellation, dappCall)
+        val kinds = listOfNotNull(deployment, safe, approval, swap, wrap, cancellation, dappCall)
         require(kinds.size <= 1) { "more than one kind of transaction" }
         val transferFields = to != null || token != null || amount != null
         require(kinds.isEmpty() || !transferFields) { "a transfer and another kind at once" }
@@ -72,6 +75,7 @@ internal class StoredTransfer(
         safe?.let { return it.toAction() }
         approval?.let { return it.toAction() }
         swap?.let { return it.toAction() }
+        wrap?.let { return it.toAction() }
         cancellation?.let { return it.toAction() }
         dappCall?.let { return it.toAction() }
         return SentAction.Transfer(
@@ -121,6 +125,16 @@ internal class StoredSwap(
         minimumOut = UInt256.of(minimumOut),
         weth = weth?.let(Address::of),
     )
+}
+
+/** A wrap ([WRAP]) or an unwrap ([UNWRAP]) of [amount] through the WETH9 [weth]. */
+@Serializable
+internal class StoredWrap(val kind: String, val weth: StoredToken, val amount: String) {
+    fun toAction(): SentAction = when (kind) {
+        WRAP -> SentAction.Wrap(weth.toToken(), UInt256.of(amount))
+        UNWRAP -> SentAction.Unwrap(weth.toToken(), UInt256.of(amount))
+        else -> throw IllegalArgumentException("a wrap of no kind")
+    }
 }
 
 /**
@@ -201,7 +215,8 @@ internal fun storedTransfer(transfer: SentTransfer): StoredTransfer {
             is SentAction.SafeApproval -> safeCall(APPROVAL, action.request)
             is SentAction.SafeExecution -> safeCall(EXECUTION, action.request)
             is SentAction.Transfer, is SentAction.SafeDeployment, is SentAction.TokenApproval,
-            is SentAction.Swap, is SentAction.CowCancellation, is SentAction.DappCall,
+            is SentAction.Swap, is SentAction.Wrap, is SentAction.Unwrap, is SentAction.CowCancellation,
+            is SentAction.DappCall,
             -> null
         },
         dappCall = (action as? SentAction.DappCall)?.let {
@@ -219,6 +234,11 @@ internal fun storedTransfer(transfer: SentTransfer): StoredTransfer {
                 it.minimumOut.toDecimal(),
                 it.weth?.hex,
             )
+        },
+        wrap = when (action) {
+            is SentAction.Wrap -> StoredWrap(WRAP, stored(action.weth), action.amount.toDecimal())
+            is SentAction.Unwrap -> StoredWrap(UNWRAP, stored(action.weth), action.amount.toDecimal())
+            else -> null
         },
         cancellation = (action as? SentAction.CowCancellation)?.let {
             StoredCowCancellation(it.settlement.hex, it.uid.hex)

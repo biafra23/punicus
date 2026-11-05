@@ -95,14 +95,15 @@ jobs:
       # Retry to ride out transient external-repo resolution blips. NOT --offline:
       # offline turns a single cache miss into a hard failure.
       - name: Build the debug + unsigned release APKs
-        # The Reown project IDs (docs/walletconnect.md, *Setting up the project ID*), which :data
-        # compiles into the app: this step builds the debug and the release APK, so both. Scoped
-        # to this step, the one that needs them, so no other step's action can read them.
-        # A pull request from a fork or Dependabot gets no secrets: its build has them empty, and so
-        # WalletConnect switched off, as a local build without them does.
+        # The Reown project ID (docs/walletconnect.md, *Setting up the project ID*), which :data
+        # compiles into the app: the repository's secret or variable WALLETCONNECT_PROJECT_ID, one
+        # ID for debug and release builds for now (owner ruling, 2026-11-05). This step builds the debug
+        # and the release APK, so it gets both properties.
+        # Scoped to this step, the one that needs it. Without it, the build has WalletConnect
+        # switched off, as a local build without one does.
         env:
-          ORG_GRADLE_PROJECT_walletConnectProjectIdDebug: ${{ secrets.WALLETCONNECT_PROJECT_ID_DEBUG }}
-          ORG_GRADLE_PROJECT_walletConnectProjectIdRelease: ${{ secrets.WALLETCONNECT_PROJECT_ID_RELEASE }}
+          ORG_GRADLE_PROJECT_walletConnectProjectIdDebug: ${{ secrets.WALLETCONNECT_PROJECT_ID || vars.WALLETCONNECT_PROJECT_ID }}
+          ORG_GRADLE_PROJECT_walletConnectProjectIdRelease: ${{ secrets.WALLETCONNECT_PROJECT_ID || vars.WALLETCONNECT_PROJECT_ID }}
         run: |
           for attempt in 1 2 3; do
             ./gradlew :android-app:assembleDebug :android-app:assembleRelease --stacktrace && exit 0
