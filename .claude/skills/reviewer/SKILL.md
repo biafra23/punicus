@@ -60,12 +60,14 @@ diff at step 2 of the Workflow.
 6. **UI conventions** (`.claude/rules/ui.md`). Flag: a screen without
    previews, or a new state without one; an action hidden where it should be
    greyed out with a reason; real-looking secrets in sample data.
-7. **The PR description.** Flag: a visible change without screenshots, or
-   with them missing a state the PR adds; a table of file names in place of
-   images; a screenshot committed to the repository; a description that is
-   not in English; a missing session link. A `## Screenshots` section that
-   links the session's artifact, or says the images were shown in the
-   session or await rendering with the command, counts as present.
+7. **The PR description.** CI writes the screenshots table between
+   `<!-- screenshots:start -->` and `<!-- screenshots:end -->` (the
+   screenshots skill); while the Screenshots check runs it may be missing,
+   which is not a finding. Flag: "No UI change" while the table lists
+   changed screenshots; a visible change whose table lacks a state the PR
+   adds; a PNG under `docs/screenshots/` changed by a commit that is not
+   `github-actions[bot]`'s; a rendered screenshot committed anywhere else;
+   a description that is not in English; a missing session link.
 8. **Kotlin.** Immutable data, sealed UI states, structured concurrency (no
    `GlobalScope`, no blocking on the main thread), SOLID as
    docs/architecture.md spells it out, KDoc on public types.

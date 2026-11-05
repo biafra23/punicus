@@ -27,6 +27,24 @@ internal object ScreenshotIndex {
         preview in the screen's previews list. A state's dark twin ends in `-dark`.
     """.trimIndent().lines().joinToString(" ") { it.trim() }
 
+    /** How to keep the images out of a clone, and the two ways to purge the folder (owner rulings, 2026-11-04). */
+    private val weight = listOf(
+        """
+            Clone without the images: `git clone --filter=blob:none https://github.com/biafra23/serotine.git`
+            fetches a file only when a command needs it, so the history of this folder costs nothing until it
+            is looked at. `git sparse-checkout set --no-cone '/*' '!/docs/screenshots/'` leaves it out of the
+            working tree as well.
+        """,
+        """
+            If the folder grows too much, there are two levers, both the owner's. Deleting the folder stops
+            the growth and keeps every past image in the history. Rewriting the history with
+            `git filter-repo --path docs/screenshots --invert-paths` drops them for good, but changes the
+            SHA of every commit since the first screenshot: tags, links to commits and every existing clone
+            must follow. CI fails a pull request once the folder holds more than 64 MiB, or one image more
+            than 512 KiB (`scripts/screenshots.py`).
+        """,
+    ).map { paragraph -> paragraph.trimIndent().lines().joinToString(" ") { it.trim() } }
+
     /** The README, as markdown. */
     fun markdown(screens: List<Screen>): String = buildString {
         appendLine("# Screenshots")
@@ -35,6 +53,10 @@ internal object ScreenshotIndex {
         appendLine()
         appendLine("[index.html](index.html) shows them all on one page from a checkout.")
         appendLine()
+        weight.forEach {
+            appendLine(it)
+            appendLine()
+        }
         appendLine("| Screen | Folder | States |")
         appendLine("|---|---|---|")
         screens.forEach { appendLine("| [${it.title}](#${it.slug}) | `${it.slug}/` | ${it.previews.size} |") }
@@ -74,7 +96,9 @@ internal object ScreenshotIndex {
         appendLine("</head>")
         appendLine("<body>")
         appendLine("<h1>Serotine screenshots</h1>")
-        appendLine("<p>${escape(intro).replace(Regex("`([^`]+)`"), "<code>$1</code>")}</p>")
+        (listOf(intro) + weight).forEach {
+            appendLine("<p>${escape(it).replace(Regex("`([^`]+)`"), "<code>$1</code>")}</p>")
+        }
         appendLine("<nav>" + screens.joinToString("") { "<a href=\"#${it.slug}\">${escape(it.title)}</a> " } + "</nav>")
         screens.forEach { screen ->
             appendLine("<section id=\"${screen.slug}\">")
