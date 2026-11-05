@@ -2,12 +2,15 @@ package eth.serotine.ui.platform
 
 import android.Manifest
 import android.content.pm.PackageManager
+import android.util.Size
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.camera.core.CameraSelector
 import androidx.camera.core.ImageAnalysis
 import androidx.camera.core.ImageProxy
 import androidx.camera.core.Preview
+import androidx.camera.core.resolutionselector.ResolutionSelector
+import androidx.camera.core.resolutionselector.ResolutionStrategy
 import androidx.camera.lifecycle.ProcessCameraProvider
 import androidx.camera.view.PreviewView
 import androidx.compose.foundation.layout.fillMaxSize
@@ -49,9 +52,12 @@ actual fun rememberQrScanner(onResult: (QrScan) -> Unit): (() -> Unit)? {
         if (granted) scanning = true else result(QrScan.CameraRefused)
     }
     if (scanning) {
+        // One per scan, flipped on the main thread by whichever of a read, the camera failing or Cancel
+        // comes first: the scan reports once.
+        val reported = remember { AtomicBoolean(false) }
         val cancel = {
             scanning = false
-            result(QrScan.Cancelled)
+            if (reported.compareAndSet(false, true)) result(QrScan.Cancelled)
         }
         Dialog(
             onDismissRequest = cancel,
@@ -59,6 +65,7 @@ actual fun rememberQrScanner(onResult: (QrScan) -> Unit): (() -> Unit)? {
         ) {
             QrScannerFrame(hint = "Point the camera at the dApp's WalletConnect QR code.", onCancel = cancel) {
                 CameraQrReader(
+                    reported = reported,
                     onRead = { text ->
                         scanning = false
                         result(QrScan.Read(text))
@@ -84,10 +91,11 @@ actual fun rememberQrScanner(onResult: (QrScan) -> Unit): (() -> Unit)? {
 
 /**
  * The camera's preview, its frames handed to [QrDecoder] off the main thread, the first text read to
- * [onRead] on it. [onUnavailable] when no back camera can be started.
+ * [onRead] on it. [onUnavailable] when no back camera can be started. Each reports only if it is the
+ * first to flip [reported], on the main thread, where Cancel flips it too.
  */
 @Composable
-private fun CameraQrReader(onRead: (String) -> Unit, onUnavailable: () -> Unit) {
+private fun CameraQrReader(reported: AtomicBoolean, onRead: (String) -> Unit, onUnavailable: () -> Unit) {
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
     val read by rememberUpdatedState(onRead)
@@ -96,7 +104,6 @@ private fun CameraQrReader(onRead: (String) -> Unit, onUnavailable: () -> Unit) 
     DisposableEffect(lifecycleOwner) {
         val analysisThread = Executors.newSingleThreadExecutor()
         val main = context.mainExecutor
-        val done = AtomicBoolean(false)
         val disposed = AtomicBoolean(false)
         val future = ProcessCameraProvider.getInstance(context)
         future.addListener({
@@ -104,26 +111,31 @@ private fun CameraQrReader(onRead: (String) -> Unit, onUnavailable: () -> Unit) 
             try {
                 val provider = future.get()
                 val preview = Preview.Builder().build().also { it.setSurfaceProvider(previewView.surfaceProvider) }
+                // A pairing link is a dense code (about 190 characters): asked for at 720p rather than
+                // the default 640x480, so each module gets enough pixels at an arm's length.
+                val resolution = ResolutionSelector.Builder()
+                    .setResolutionStrategy(
+                        ResolutionStrategy(Size(1280, 720), ResolutionStrategy.FALLBACK_RULE_CLOSEST_HIGHER_THEN_LOWER),
+                    )
+                    .build()
                 val analysis = ImageAnalysis.Builder()
+                    .setResolutionSelector(resolution)
                     .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
                     .build()
                 val decoder = QrDecoder()
                 analysis.setAnalyzer(analysisThread) { image ->
                     val text = try {
-                        if (done.get()) null else decoder.decode(image)
+                        if (reported.get()) null else decoder.decode(image)
                     } finally {
                         image.close()
                     }
-                    if (text != null && done.compareAndSet(false, true)) {
-                        // A scan cancelled meanwhile has reported already: it reports once.
-                        main.execute { if (!disposed.get()) read(text) }
-                    }
+                    if (text != null) main.execute { if (reported.compareAndSet(false, true)) read(text) }
                 }
                 provider.unbindAll()
                 provider.bindToLifecycle(lifecycleOwner, CameraSelector.DEFAULT_BACK_CAMERA, preview, analysis)
             } catch (_: Exception) {
                 // No back camera, or one another app holds: said, never a frozen preview.
-                if (done.compareAndSet(false, true)) unavailable()
+                if (reported.compareAndSet(false, true)) unavailable()
             }
         }, main)
         onDispose {
