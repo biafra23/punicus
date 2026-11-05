@@ -1,0 +1,873 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Serotine screenshots</title>
+<style>
+body { font-family: system-ui, sans-serif; margin: 1.5rem; color: #1a1a1a; background: #f4f4f6; }
+nav a { margin-right: .75rem; white-space: nowrap; }
+section { margin-top: 2.5rem; }
+h2 small { font-weight: normal; color: #666; font-size: .7em; }
+.shots { display: flex; flex-wrap: wrap; gap: .75rem; }
+figure { margin: 0; width: 206px; }
+img { width: 206px; height: auto; border: 1px solid #ccc; background: #fff; }
+figcaption { font: .75rem/1.3 monospace; text-align: center; word-break: break-word; }
+</style>
+</head>
+<body>
+<h1>Serotine screenshots</h1>
+<p>Every screen of Serotine in every state its previews draw, rendered headless from the previews (<code>ui/src/commonMain/kotlin/eth/serotine/ui/**/&lt;Feature&gt;ScreenPreviews.kt</code>). CI renders them on every pull request and commits the ones the PR changes, so the images come from one environment and a diff of this folder shows only real changes. The same screen is always at the same path, <code>&lt;screen&gt;/&lt;state&gt;.png</code>; the map of screens is <code>ui/src/desktopTest/kotlin/eth/serotine/ui/Screens.kt</code>, and a state's name sits beside its preview in the screen's previews list. A state's dark twin ends in <code>-dark</code>.</p>
+<nav><a href="#account-detail">Account detail</a> <a href="#accounts">Accounts</a> <a href="#activity-detail">Activity detail</a> <a href="#add-on-networks-dialog">Add on networks (dialog)</a> <a href="#add-token">Add token</a> <a href="#connections">Connected dApps</a> <a href="#cow-order">CoW order</a> <a href="#create-account">Create account</a> <a href="#create-safe">Create Safe</a> <a href="#currency">Display currency</a> <a href="#dapp-proposal">dApp connection request</a> <a href="#dapp-request">dApp signing request</a> <a href="#dapp-transaction">dApp transaction</a> <a href="#debug">Debug</a> <a href="#derive-account">Add account from the same phrase</a> <a href="#mnemonic-import">Import recovery phrase</a> <a href="#pair-dapp">Connect a dApp</a> <a href="#receive">Receive</a> <a href="#remove-account-dialog">Remove account (dialog)</a> <a href="#rename-account-dialog">Rename account (dialog)</a> <a href="#safe-import">Import Safe</a> <a href="#safe-propose">Propose Safe transaction</a> <a href="#safe-settings">Safe settings</a> <a href="#safe-swap">Safe swap</a> <a href="#safe-tx">Safe transaction</a> <a href="#screen-capture-warning-dialog">Screen capture warning (dialog)</a> <a href="#security">Security</a> <a href="#send">Send</a> <a href="#settings">Settings</a> <a href="#simple-account-detail">Account detail (simple mode)</a> <a href="#simple-accounts">Home (simple mode)</a> <a href="#simple-activity-detail">Activity detail (simple mode)</a> <a href="#simple-add-token">Add token (simple mode)</a> <a href="#simple-cow-order">CoW order (simple mode)</a> <a href="#simple-create-safe">Create Safe (simple mode)</a> <a href="#simple-safe-import">Import Safe (simple mode)</a> <a href="#simple-safe-propose">Propose Safe transaction (simple mode)</a> <a href="#simple-safe-settings">Safe settings (simple mode)</a> <a href="#simple-safe-swap">Safe swap (simple mode)</a> <a href="#simple-safe-tx">Safe transaction (simple mode)</a> <a href="#simple-send">Send (simple mode)</a> <a href="#simple-settings">Settings (simple mode)</a> <a href="#simple-swap">Swap (simple mode)</a> <a href="#simple-tokens">Tokens (simple mode)</a> <a href="#simple-transfer-status">Transfer status (simple mode)</a> <a href="#simple-watch">Watch address (simple mode)</a> <a href="#swap">Swap</a> <a href="#tokens">Tokens</a> <a href="#transfer-status">Transfer status</a> <a href="#update-required">Update required</a> <a href="#watch">Watch address</a> <a href="#widget-pair">Widget setup</a> </nav>
+<section id="account-detail">
+<h2>Account detail <small>account-detail/ · 35 states</small></h2>
+<div class="shots">
+<figure><a href="account-detail/assets.png"><img src="account-detail/assets.png" loading="lazy" alt="assets"></a><figcaption>assets</figcaption></figure>
+<figure><a href="account-detail/assets-dark.png"><img src="account-detail/assets-dark.png" loading="lazy" alt="assets-dark"></a><figcaption>assets-dark</figcaption></figure>
+<figure><a href="account-detail/checking.png"><img src="account-detail/checking.png" loading="lazy" alt="checking"></a><figcaption>checking</figcaption></figure>
+<figure><a href="account-detail/head-too-old.png"><img src="account-detail/head-too-old.png" loading="lazy" alt="head-too-old"></a><figcaption>head-too-old</figcaption></figure>
+<figure><a href="account-detail/by-name-with-impostor.png"><img src="account-detail/by-name-with-impostor.png" loading="lazy" alt="by-name-with-impostor"></a><figcaption>by-name-with-impostor</figcaption></figure>
+<figure><a href="account-detail/safe-assets.png"><img src="account-detail/safe-assets.png" loading="lazy" alt="safe-assets"></a><figcaption>safe-assets</figcaption></figure>
+<figure><a href="account-detail/safe-owners.png"><img src="account-detail/safe-owners.png" loading="lazy" alt="safe-owners"></a><figcaption>safe-owners</figcaption></figure>
+<figure><a href="account-detail/safe-queue.png"><img src="account-detail/safe-queue.png" loading="lazy" alt="safe-queue"></a><figcaption>safe-queue</figcaption></figure>
+<figure><a href="account-detail/safe-queue-dark.png"><img src="account-detail/safe-queue-dark.png" loading="lazy" alt="safe-queue-dark"></a><figcaption>safe-queue-dark</figcaption></figure>
+<figure><a href="account-detail/safe-queue-empty.png"><img src="account-detail/safe-queue-empty.png" loading="lazy" alt="safe-queue-empty"></a><figcaption>safe-queue-empty</figcaption></figure>
+<figure><a href="account-detail/safe-queue-unverified.png"><img src="account-detail/safe-queue-unverified.png" loading="lazy" alt="safe-queue-unverified"></a><figcaption>safe-queue-unverified</figcaption></figure>
+<figure><a href="account-detail/safe-queue-unreadable.png"><img src="account-detail/safe-queue-unreadable.png" loading="lazy" alt="safe-queue-unreadable"></a><figcaption>safe-queue-unreadable</figcaption></figure>
+<figure><a href="account-detail/safe-reading.png"><img src="account-detail/safe-reading.png" loading="lazy" alt="safe-reading"></a><figcaption>safe-reading</figcaption></figure>
+<figure><a href="account-detail/not-a-safe.png"><img src="account-detail/not-a-safe.png" loading="lazy" alt="not-a-safe"></a><figcaption>not-a-safe</figcaption></figure>
+<figure><a href="account-detail/loading.png"><img src="account-detail/loading.png" loading="lazy" alt="loading"></a><figcaption>loading</figcaption></figure>
+<figure><a href="account-detail/list-unavailable.png"><img src="account-detail/list-unavailable.png" loading="lazy" alt="list-unavailable"></a><figcaption>list-unavailable</figcaption></figure>
+<figure><a href="account-detail/ens-name-moved.png"><img src="account-detail/ens-name-moved.png" loading="lazy" alt="ens-name-moved"></a><figcaption>ens-name-moved</figcaption></figure>
+<figure><a href="account-detail/activity.png"><img src="account-detail/activity.png" loading="lazy" alt="activity"></a><figcaption>activity</figcaption></figure>
+<figure><a href="account-detail/activity-dark.png"><img src="account-detail/activity-dark.png" loading="lazy" alt="activity-dark"></a><figcaption>activity-dark</figcaption></figure>
+<figure><a href="account-detail/waiting-swap.png"><img src="account-detail/waiting-swap.png" loading="lazy" alt="waiting-swap"></a><figcaption>waiting-swap</figcaption></figure>
+<figure><a href="account-detail/waiting-swap-dark.png"><img src="account-detail/waiting-swap-dark.png" loading="lazy" alt="waiting-swap-dark"></a><figcaption>waiting-swap-dark</figcaption></figure>
+<figure><a href="account-detail/activity-empty.png"><img src="account-detail/activity-empty.png" loading="lazy" alt="activity-empty"></a><figcaption>activity-empty</figcaption></figure>
+<figure><a href="account-detail/activity-loading.png"><img src="account-detail/activity-loading.png" loading="lazy" alt="activity-loading"></a><figcaption>activity-loading</figcaption></figure>
+<figure><a href="account-detail/activity-unavailable.png"><img src="account-detail/activity-unavailable.png" loading="lazy" alt="activity-unavailable"></a><figcaption>activity-unavailable</figcaption></figure>
+<figure><a href="account-detail/activity-tokens.png"><img src="account-detail/activity-tokens.png" loading="lazy" alt="activity-tokens"></a><figcaption>activity-tokens</figcaption></figure>
+<figure><a href="account-detail/safe-activity.png"><img src="account-detail/safe-activity.png" loading="lazy" alt="safe-activity"></a><figcaption>safe-activity</figcaption></figure>
+<figure><a href="account-detail/safe-activity-dark.png"><img src="account-detail/safe-activity-dark.png" loading="lazy" alt="safe-activity-dark"></a><figcaption>safe-activity-dark</figcaption></figure>
+<figure><a href="account-detail/narrow.png"><img src="account-detail/narrow.png" loading="lazy" alt="narrow"></a><figcaption>narrow</figcaption></figure>
+<figure><a href="account-detail/safe-queue-reading.png"><img src="account-detail/safe-queue-reading.png" loading="lazy" alt="safe-queue-reading"></a><figcaption>safe-queue-reading</figcaption></figure>
+<figure><a href="account-detail/checking-dark.png"><img src="account-detail/checking-dark.png" loading="lazy" alt="checking-dark"></a><figcaption>checking-dark</figcaption></figure>
+<figure><a href="account-detail/ethereum.png"><img src="account-detail/ethereum.png" loading="lazy" alt="ethereum"></a><figcaption>ethereum</figcaption></figure>
+<figure><a href="account-detail/network-off.png"><img src="account-detail/network-off.png" loading="lazy" alt="network-off"></a><figcaption>network-off</figcaption></figure>
+<figure><a href="account-detail/safe-owners-network-off.png"><img src="account-detail/safe-owners-network-off.png" loading="lazy" alt="safe-owners-network-off"></a><figcaption>safe-owners-network-off</figcaption></figure>
+<figure><a href="account-detail/assets-hidden.png"><img src="account-detail/assets-hidden.png" loading="lazy" alt="assets-hidden"></a><figcaption>assets-hidden</figcaption></figure>
+<figure><a href="account-detail/assets-hidden-dark.png"><img src="account-detail/assets-hidden-dark.png" loading="lazy" alt="assets-hidden-dark"></a><figcaption>assets-hidden-dark</figcaption></figure>
+</div>
+</section>
+<section id="accounts">
+<h2>Accounts <small>accounts/ · 32 states</small></h2>
+<div class="shots">
+<figure><a href="accounts/accounts.png"><img src="accounts/accounts.png" loading="lazy" alt="accounts"></a><figcaption>accounts</figcaption></figure>
+<figure><a href="accounts/accounts-dark.png"><img src="accounts/accounts-dark.png" loading="lazy" alt="accounts-dark"></a><figcaption>accounts-dark</figcaption></figure>
+<figure><a href="accounts/catching-up.png"><img src="accounts/catching-up.png" loading="lazy" alt="catching-up"></a><figcaption>catching-up</figcaption></figure>
+<figure><a href="accounts/head-too-old.png"><img src="accounts/head-too-old.png" loading="lazy" alt="head-too-old"></a><figcaption>head-too-old</figcaption></figure>
+<figure><a href="accounts/head-too-old-dark.png"><img src="accounts/head-too-old-dark.png" loading="lazy" alt="head-too-old-dark"></a><figcaption>head-too-old-dark</figcaption></figure>
+<figure><a href="accounts/no-accounts.png"><img src="accounts/no-accounts.png" loading="lazy" alt="no-accounts"></a><figcaption>no-accounts</figcaption></figure>
+<figure><a href="accounts/create-safe-greyed-out.png"><img src="accounts/create-safe-greyed-out.png" loading="lazy" alt="create-safe-greyed-out"></a><figcaption>create-safe-greyed-out</figcaption></figure>
+<figure><a href="accounts/create-safe-reason.png"><img src="accounts/create-safe-reason.png" loading="lazy" alt="create-safe-reason"></a><figcaption>create-safe-reason</figcaption></figure>
+<figure><a href="accounts/send-reason.png"><img src="accounts/send-reason.png" loading="lazy" alt="send-reason"></a><figcaption>send-reason</figcaption></figure>
+<figure><a href="accounts/loading.png"><img src="accounts/loading.png" loading="lazy" alt="loading"></a><figcaption>loading</figcaption></figure>
+<figure><a href="accounts/loading-create-safe-greyed-out.png"><img src="accounts/loading-create-safe-greyed-out.png" loading="lazy" alt="loading-create-safe-greyed-out"></a><figcaption>loading-create-safe-greyed-out</figcaption></figure>
+<figure><a href="accounts/list-set-aside.png"><img src="accounts/list-set-aside.png" loading="lazy" alt="list-set-aside"></a><figcaption>list-set-aside</figcaption></figure>
+<figure><a href="accounts/upgrade-ahead.png"><img src="accounts/upgrade-ahead.png" loading="lazy" alt="upgrade-ahead"></a><figcaption>upgrade-ahead</figcaption></figure>
+<figure><a href="accounts/upgrade-activated-dark.png"><img src="accounts/upgrade-activated-dark.png" loading="lazy" alt="upgrade-activated-dark"></a><figcaption>upgrade-activated-dark</figcaption></figure>
+<figure><a href="accounts/list-unavailable.png"><img src="accounts/list-unavailable.png" loading="lazy" alt="list-unavailable"></a><figcaption>list-unavailable</figcaption></figure>
+<figure><a href="accounts/catching-up-dark.png"><img src="accounts/catching-up-dark.png" loading="lazy" alt="catching-up-dark"></a><figcaption>catching-up-dark</figcaption></figure>
+<figure><a href="accounts/narrow.png"><img src="accounts/narrow.png" loading="lazy" alt="narrow"></a><figcaption>narrow</figcaption></figure>
+<figure><a href="accounts/ens-names.png"><img src="accounts/ens-names.png" loading="lazy" alt="ens-names"></a><figcaption>ens-names</figcaption></figure>
+<figure><a href="accounts/three-networks.png"><img src="accounts/three-networks.png" loading="lazy" alt="three-networks"></a><figcaption>three-networks</figcaption></figure>
+<figure><a href="accounts/three-networks-dark.png"><img src="accounts/three-networks-dark.png" loading="lazy" alt="three-networks-dark"></a><figcaption>three-networks-dark</figcaption></figure>
+<figure><a href="accounts/one-network-catching-up.png"><img src="accounts/one-network-catching-up.png" loading="lazy" alt="one-network-catching-up"></a><figcaption>one-network-catching-up</figcaption></figure>
+<figure><a href="accounts/network-off.png"><img src="accounts/network-off.png" loading="lazy" alt="network-off"></a><figcaption>network-off</figcaption></figure>
+<figure><a href="accounts/network-off-dark.png"><img src="accounts/network-off-dark.png" loading="lazy" alt="network-off-dark"></a><figcaption>network-off-dark</figcaption></figure>
+<figure><a href="accounts/send-needs-network.png"><img src="accounts/send-needs-network.png" loading="lazy" alt="send-needs-network"></a><figcaption>send-needs-network</figcaption></figure>
+<figure><a href="accounts/network-blocked.png"><img src="accounts/network-blocked.png" loading="lazy" alt="network-blocked"></a><figcaption>network-blocked</figcaption></figure>
+<figure><a href="accounts/no-rate-on-a-network.png"><img src="accounts/no-rate-on-a-network.png" loading="lazy" alt="no-rate-on-a-network"></a><figcaption>no-rate-on-a-network</figcaption></figure>
+<figure><a href="accounts/network-blocked-dark.png"><img src="accounts/network-blocked-dark.png" loading="lazy" alt="network-blocked-dark"></a><figcaption>network-blocked-dark</figcaption></figure>
+<figure><a href="accounts/stale-anchor.png"><img src="accounts/stale-anchor.png" loading="lazy" alt="stale-anchor"></a><figcaption>stale-anchor</figcaption></figure>
+<figure><a href="accounts/stale-anchor-dark.png"><img src="accounts/stale-anchor-dark.png" loading="lazy" alt="stale-anchor-dark"></a><figcaption>stale-anchor-dark</figcaption></figure>
+<figure><a href="accounts/stale-anchor-dialog.png"><img src="accounts/stale-anchor-dialog.png" loading="lazy" alt="stale-anchor-dialog"></a><figcaption>stale-anchor-dialog</figcaption></figure>
+<figure><a href="accounts/hidden.png"><img src="accounts/hidden.png" loading="lazy" alt="hidden"></a><figcaption>hidden</figcaption></figure>
+<figure><a href="accounts/hidden-dark.png"><img src="accounts/hidden-dark.png" loading="lazy" alt="hidden-dark"></a><figcaption>hidden-dark</figcaption></figure>
+</div>
+</section>
+<section id="activity-detail">
+<h2>Activity detail <small>activity-detail/ · 10 states</small></h2>
+<div class="shots">
+<figure><a href="activity-detail/sent.png"><img src="activity-detail/sent.png" loading="lazy" alt="sent"></a><figcaption>sent</figcaption></figure>
+<figure><a href="activity-detail/sent-dark.png"><img src="activity-detail/sent-dark.png" loading="lazy" alt="sent-dark"></a><figcaption>sent-dark</figcaption></figure>
+<figure><a href="activity-detail/unconfirmed.png"><img src="activity-detail/unconfirmed.png" loading="lazy" alt="unconfirmed"></a><figcaption>unconfirmed</figcaption></figure>
+<figure><a href="activity-detail/unlisted-token.png"><img src="activity-detail/unlisted-token.png" loading="lazy" alt="unlisted-token"></a><figcaption>unlisted-token</figcaption></figure>
+<figure><a href="activity-detail/safe-event.png"><img src="activity-detail/safe-event.png" loading="lazy" alt="safe-event"></a><figcaption>safe-event</figcaption></figure>
+<figure><a href="activity-detail/loading.png"><img src="activity-detail/loading.png" loading="lazy" alt="loading"></a><figcaption>loading</figcaption></figure>
+<figure><a href="activity-detail/unavailable.png"><img src="activity-detail/unavailable.png" loading="lazy" alt="unavailable"></a><figcaption>unavailable</figcaption></figure>
+<figure><a href="activity-detail/unfamiliar-sender.png"><img src="activity-detail/unfamiliar-sender.png" loading="lazy" alt="unfamiliar-sender"></a><figcaption>unfamiliar-sender</figcaption></figure>
+<figure><a href="activity-detail/hidden.png"><img src="activity-detail/hidden.png" loading="lazy" alt="hidden"></a><figcaption>hidden</figcaption></figure>
+<figure><a href="activity-detail/hidden-dark.png"><img src="activity-detail/hidden-dark.png" loading="lazy" alt="hidden-dark"></a><figcaption>hidden-dark</figcaption></figure>
+</div>
+</section>
+<section id="add-on-networks-dialog">
+<h2>Add on networks (dialog) <small>add-on-networks-dialog/ · 5 states</small></h2>
+<div class="shots">
+<figure><a href="add-on-networks-dialog/choose.png"><img src="add-on-networks-dialog/choose.png" loading="lazy" alt="choose"></a><figcaption>choose</figcaption></figure>
+<figure><a href="add-on-networks-dialog/choose-dark.png"><img src="add-on-networks-dialog/choose-dark.png" loading="lazy" alt="choose-dark"></a><figcaption>choose-dark</figcaption></figure>
+<figure><a href="add-on-networks-dialog/not-saved.png"><img src="add-on-networks-dialog/not-saved.png" loading="lazy" alt="not-saved"></a><figcaption>not-saved</figcaption></figure>
+<figure><a href="add-on-networks-dialog/on-every-network.png"><img src="add-on-networks-dialog/on-every-network.png" loading="lazy" alt="on-every-network"></a><figcaption>on-every-network</figcaption></figure>
+<figure><a href="add-on-networks-dialog/safe.png"><img src="add-on-networks-dialog/safe.png" loading="lazy" alt="safe"></a><figcaption>safe</figcaption></figure>
+</div>
+</section>
+<section id="add-token">
+<h2>Add token <small>add-token/ · 11 states</small></h2>
+<div class="shots">
+<figure><a href="add-token/empty.png"><img src="add-token/empty.png" loading="lazy" alt="empty"></a><figcaption>empty</figcaption></figure>
+<figure><a href="add-token/reading.png"><img src="add-token/reading.png" loading="lazy" alt="reading"></a><figcaption>reading</figcaption></figure>
+<figure><a href="add-token/claim.png"><img src="add-token/claim.png" loading="lazy" alt="claim"></a><figcaption>claim</figcaption></figure>
+<figure><a href="add-token/claim-dark.png"><img src="add-token/claim-dark.png" loading="lazy" alt="claim-dark"></a><figcaption>claim-dark</figcaption></figure>
+<figure><a href="add-token/impostor.png"><img src="add-token/impostor.png" loading="lazy" alt="impostor"></a><figcaption>impostor</figcaption></figure>
+<figure><a href="add-token/known.png"><img src="add-token/known.png" loading="lazy" alt="known"></a><figcaption>known</figcaption></figure>
+<figure><a href="add-token/not-a-token.png"><img src="add-token/not-a-token.png" loading="lazy" alt="not-a-token"></a><figcaption>not-a-token</figcaption></figure>
+<figure><a href="add-token/invalid-address.png"><img src="add-token/invalid-address.png" loading="lazy" alt="invalid-address"></a><figcaption>invalid-address</figcaption></figure>
+<figure><a href="add-token/adding.png"><img src="add-token/adding.png" loading="lazy" alt="adding"></a><figcaption>adding</figcaption></figure>
+<figure><a href="add-token/not-saved.png"><img src="add-token/not-saved.png" loading="lazy" alt="not-saved"></a><figcaption>not-saved</figcaption></figure>
+<figure><a href="add-token/networks.png"><img src="add-token/networks.png" loading="lazy" alt="networks"></a><figcaption>networks</figcaption></figure>
+</div>
+</section>
+<section id="connections">
+<h2>Connected dApps <small>connections/ · 6 states</small></h2>
+<div class="shots">
+<figure><a href="connections/connected.png"><img src="connections/connected.png" loading="lazy" alt="connected"></a><figcaption>connected</figcaption></figure>
+<figure><a href="connections/connected-dark.png"><img src="connections/connected-dark.png" loading="lazy" alt="connected-dark"></a><figcaption>connected-dark</figcaption></figure>
+<figure><a href="connections/none-yet.png"><img src="connections/none-yet.png" loading="lazy" alt="none-yet"></a><figcaption>none-yet</figcaption></figure>
+<figure><a href="connections/not-saved.png"><img src="connections/not-saved.png" loading="lazy" alt="not-saved"></a><figcaption>not-saved</figcaption></figure>
+<figure><a href="connections/off.png"><img src="connections/off.png" loading="lazy" alt="off"></a><figcaption>off</figcaption></figure>
+<figure><a href="connections/loading.png"><img src="connections/loading.png" loading="lazy" alt="loading"></a><figcaption>loading</figcaption></figure>
+</div>
+</section>
+<section id="cow-order">
+<h2>CoW order <small>cow-order/ · 16 states</small></h2>
+<div class="shots">
+<figure><a href="cow-order/live.png"><img src="cow-order/live.png" loading="lazy" alt="live"></a><figcaption>live</figcaption></figure>
+<figure><a href="cow-order/live-dark.png"><img src="cow-order/live-dark.png" loading="lazy" alt="live-dark"></a><figcaption>live-dark</figcaption></figure>
+<figure><a href="cow-order/past-validity.png"><img src="cow-order/past-validity.png" loading="lazy" alt="past-validity"></a><figcaption>past-validity</figcaption></figure>
+<figure><a href="cow-order/cancellation-on-its-way.png"><img src="cow-order/cancellation-on-its-way.png" loading="lazy" alt="cancellation-on-its-way"></a><figcaption>cancellation-on-its-way</figcaption></figure>
+<figure><a href="cow-order/quoting-cancellation.png"><img src="cow-order/quoting-cancellation.png" loading="lazy" alt="quoting-cancellation"></a><figcaption>quoting-cancellation</figcaption></figure>
+<figure><a href="cow-order/cancel-refused.png"><img src="cow-order/cancel-refused.png" loading="lazy" alt="cancel-refused"></a><figcaption>cancel-refused</figcaption></figure>
+<figure><a href="cow-order/filled.png"><img src="cow-order/filled.png" loading="lazy" alt="filled"></a><figcaption>filled</figcaption></figure>
+<figure><a href="cow-order/not-filled.png"><img src="cow-order/not-filled.png" loading="lazy" alt="not-filled"></a><figcaption>not-filled</figcaption></figure>
+<figure><a href="cow-order/cancelled.png"><img src="cow-order/cancelled.png" loading="lazy" alt="cancelled"></a><figcaption>cancelled</figcaption></figure>
+<figure><a href="cow-order/not-provable.png"><img src="cow-order/not-provable.png" loading="lazy" alt="not-provable"></a><figcaption>not-provable</figcaption></figure>
+<figure><a href="cow-order/cancel-review.png"><img src="cow-order/cancel-review.png" loading="lazy" alt="cancel-review"></a><figcaption>cancel-review</figcaption></figure>
+<figure><a href="cow-order/cancel-not-sent.png"><img src="cow-order/cancel-not-sent.png" loading="lazy" alt="cancel-not-sent"></a><figcaption>cancel-not-sent</figcaption></figure>
+<figure><a href="cow-order/cancel-sent.png"><img src="cow-order/cancel-sent.png" loading="lazy" alt="cancel-sent"></a><figcaption>cancel-sent</figcaption></figure>
+<figure><a href="cow-order/missing.png"><img src="cow-order/missing.png" loading="lazy" alt="missing"></a><figcaption>missing</figcaption></figure>
+<figure><a href="cow-order/loading.png"><img src="cow-order/loading.png" loading="lazy" alt="loading"></a><figcaption>loading</figcaption></figure>
+<figure><a href="cow-order/key-not-here.png"><img src="cow-order/key-not-here.png" loading="lazy" alt="key-not-here"></a><figcaption>key-not-here</figcaption></figure>
+</div>
+</section>
+<section id="create-account">
+<h2>Create account <small>create-account/ · 16 states</small></h2>
+<div class="shots">
+<figure><a href="create-account/preparing.png"><img src="create-account/preparing.png" loading="lazy" alt="preparing"></a><figcaption>preparing</figcaption></figure>
+<figure><a href="create-account/showing.png"><img src="create-account/showing.png" loading="lazy" alt="showing"></a><figcaption>showing</figcaption></figure>
+<figure><a href="create-account/showing-dark.png"><img src="create-account/showing-dark.png" loading="lazy" alt="showing-dark"></a><figcaption>showing-dark</figcaption></figure>
+<figure><a href="create-account/checking.png"><img src="create-account/checking.png" loading="lazy" alt="checking"></a><figcaption>checking</figcaption></figure>
+<figure><a href="create-account/checked-wrong.png"><img src="create-account/checked-wrong.png" loading="lazy" alt="checked-wrong"></a><figcaption>checked-wrong</figcaption></figure>
+<figure><a href="create-account/new-password.png"><img src="create-account/new-password.png" loading="lazy" alt="new-password"></a><figcaption>new-password</figcaption></figure>
+<figure><a href="create-account/password-hint.png"><img src="create-account/password-hint.png" loading="lazy" alt="password-hint"></a><figcaption>password-hint</figcaption></figure>
+<figure><a href="create-account/wrong-password.png"><img src="create-account/wrong-password.png" loading="lazy" alt="wrong-password"></a><figcaption>wrong-password</figcaption></figure>
+<figure><a href="create-account/creating.png"><img src="create-account/creating.png" loading="lazy" alt="creating"></a><figcaption>creating</figcaption></figure>
+<figure><a href="create-account/key-store-stopped.png"><img src="create-account/key-store-stopped.png" loading="lazy" alt="key-store-stopped"></a><figcaption>key-store-stopped</figcaption></figure>
+<figure><a href="create-account/created.png"><img src="create-account/created.png" loading="lazy" alt="created"></a><figcaption>created</figcaption></figure>
+<figure><a href="create-account/created-stepped-down.png"><img src="create-account/created-stepped-down.png" loading="lazy" alt="created-stepped-down"></a><figcaption>created-stepped-down</figcaption></figure>
+<figure><a href="create-account/restart.png"><img src="create-account/restart.png" loading="lazy" alt="restart"></a><figcaption>restart</figcaption></figure>
+<figure><a href="create-account/not-listed.png"><img src="create-account/not-listed.png" loading="lazy" alt="not-listed"></a><figcaption>not-listed</figcaption></figure>
+<figure><a href="create-account/key-store-unavailable.png"><img src="create-account/key-store-unavailable.png" loading="lazy" alt="key-store-unavailable"></a><figcaption>key-store-unavailable</figcaption></figure>
+<figure><a href="create-account/no-network.png"><img src="create-account/no-network.png" loading="lazy" alt="no-network"></a><figcaption>no-network</figcaption></figure>
+</div>
+</section>
+<section id="create-safe">
+<h2>Create Safe <small>create-safe/ · 19 states</small></h2>
+<div class="shots">
+<figure><a href="create-safe/owners.png"><img src="create-safe/owners.png" loading="lazy" alt="owners"></a><figcaption>owners</figcaption></figure>
+<figure><a href="create-safe/owners-dark.png"><img src="create-safe/owners-dark.png" loading="lazy" alt="owners-dark"></a><figcaption>owners-dark</figcaption></figure>
+<figure><a href="create-safe/typing-an-owner.png"><img src="create-safe/typing-an-owner.png" loading="lazy" alt="typing-an-owner"></a><figcaption>typing-an-owner</figcaption></figure>
+<figure><a href="create-safe/owners-refused.png"><img src="create-safe/owners-refused.png" loading="lazy" alt="owners-refused"></a><figcaption>owners-refused</figcaption></figure>
+<figure><a href="create-safe/threshold.png"><img src="create-safe/threshold.png" loading="lazy" alt="threshold"></a><figcaption>threshold</figcaption></figure>
+<figure><a href="create-safe/threshold-dark.png"><img src="create-safe/threshold-dark.png" loading="lazy" alt="threshold-dark"></a><figcaption>threshold-dark</figcaption></figure>
+<figure><a href="create-safe/threshold-refused.png"><img src="create-safe/threshold-refused.png" loading="lazy" alt="threshold-refused"></a><figcaption>threshold-refused</figcaption></figure>
+<figure><a href="create-safe/review.png"><img src="create-safe/review.png" loading="lazy" alt="review"></a><figcaption>review</figcaption></figure>
+<figure><a href="create-safe/review-dark.png"><img src="create-safe/review-dark.png" loading="lazy" alt="review-dark"></a><figcaption>review-dark</figcaption></figure>
+<figure><a href="create-safe/review-typed.png"><img src="create-safe/review-typed.png" loading="lazy" alt="review-typed"></a><figcaption>review-typed</figcaption></figure>
+<figure><a href="create-safe/review-quoting.png"><img src="create-safe/review-quoting.png" loading="lazy" alt="review-quoting"></a><figcaption>review-quoting</figcaption></figure>
+<figure><a href="create-safe/review-refused.png"><img src="create-safe/review-refused.png" loading="lazy" alt="review-refused"></a><figcaption>review-refused</figcaption></figure>
+<figure><a href="create-safe/review-biometrics.png"><img src="create-safe/review-biometrics.png" loading="lazy" alt="review-biometrics"></a><figcaption>review-biometrics</figcaption></figure>
+<figure><a href="create-safe/not-sent.png"><img src="create-safe/not-sent.png" loading="lazy" alt="not-sent"></a><figcaption>not-sent</figcaption></figure>
+<figure><a href="create-safe/review-signing.png"><img src="create-safe/review-signing.png" loading="lazy" alt="review-signing"></a><figcaption>review-signing</figcaption></figure>
+<figure><a href="create-safe/sent.png"><img src="create-safe/sent.png" loading="lazy" alt="sent"></a><figcaption>sent</figcaption></figure>
+<figure><a href="create-safe/cannot-create.png"><img src="create-safe/cannot-create.png" loading="lazy" alt="cannot-create"></a><figcaption>cannot-create</figcaption></figure>
+<figure><a href="create-safe/loading.png"><img src="create-safe/loading.png" loading="lazy" alt="loading"></a><figcaption>loading</figcaption></figure>
+<figure><a href="create-safe/networks.png"><img src="create-safe/networks.png" loading="lazy" alt="networks"></a><figcaption>networks</figcaption></figure>
+</div>
+</section>
+<section id="currency">
+<h2>Display currency <small>currency/ · 4 states</small></h2>
+<div class="shots">
+<figure><a href="currency/chosen.png"><img src="currency/chosen.png" loading="lazy" alt="chosen"></a><figcaption>chosen</figcaption></figure>
+<figure><a href="currency/chosen-dark.png"><img src="currency/chosen-dark.png" loading="lazy" alt="chosen-dark"></a><figcaption>chosen-dark</figcaption></figure>
+<figure><a href="currency/set-aside.png"><img src="currency/set-aside.png" loading="lazy" alt="set-aside"></a><figcaption>set-aside</figcaption></figure>
+<figure><a href="currency/unreadable.png"><img src="currency/unreadable.png" loading="lazy" alt="unreadable"></a><figcaption>unreadable</figcaption></figure>
+</div>
+</section>
+<section id="dapp-proposal">
+<h2>dApp connection request <small>dapp-proposal/ · 8 states</small></h2>
+<div class="shots">
+<figure><a href="dapp-proposal/request.png"><img src="dapp-proposal/request.png" loading="lazy" alt="request"></a><figcaption>request</figcaption></figure>
+<figure><a href="dapp-proposal/request-dark.png"><img src="dapp-proposal/request-dark.png" loading="lazy" alt="request-dark"></a><figcaption>request-dark</figcaption></figure>
+<figure><a href="dapp-proposal/none-chosen.png"><img src="dapp-proposal/none-chosen.png" loading="lazy" alt="none-chosen"></a><figcaption>none-chosen</figcaption></figure>
+<figure><a href="dapp-proposal/refused.png"><img src="dapp-proposal/refused.png" loading="lazy" alt="refused"></a><figcaption>refused</figcaption></figure>
+<figure><a href="dapp-proposal/explaining.png"><img src="dapp-proposal/explaining.png" loading="lazy" alt="explaining"></a><figcaption>explaining</figcaption></figure>
+<figure><a href="dapp-proposal/not-saved.png"><img src="dapp-proposal/not-saved.png" loading="lazy" alt="not-saved"></a><figcaption>not-saved</figcaption></figure>
+<figure><a href="dapp-proposal/ended.png"><img src="dapp-proposal/ended.png" loading="lazy" alt="ended"></a><figcaption>ended</figcaption></figure>
+<figure><a href="dapp-proposal/loading.png"><img src="dapp-proposal/loading.png" loading="lazy" alt="loading"></a><figcaption>loading</figcaption></figure>
+</div>
+</section>
+<section id="dapp-request">
+<h2>dApp signing request <small>dapp-request/ · 18 states</small></h2>
+<div class="shots">
+<figure><a href="dapp-request/sign-in.png"><img src="dapp-request/sign-in.png" loading="lazy" alt="sign-in"></a><figcaption>sign-in</figcaption></figure>
+<figure><a href="dapp-request/sign-in-dark.png"><img src="dapp-request/sign-in-dark.png" loading="lazy" alt="sign-in-dark"></a><figcaption>sign-in-dark</figcaption></figure>
+<figure><a href="dapp-request/biometrics.png"><img src="dapp-request/biometrics.png" loading="lazy" alt="biometrics"></a><figcaption>biometrics</figcaption></figure>
+<figure><a href="dapp-request/other-site.png"><img src="dapp-request/other-site.png" loading="lazy" alt="other-site"></a><figcaption>other-site</figcaption></figure>
+<figure><a href="dapp-request/message.png"><img src="dapp-request/message.png" loading="lazy" alt="message"></a><figcaption>message</figcaption></figure>
+<figure><a href="dapp-request/hex.png"><img src="dapp-request/hex.png" loading="lazy" alt="hex"></a><figcaption>hex</figcaption></figure>
+<figure><a href="dapp-request/refused.png"><img src="dapp-request/refused.png" loading="lazy" alt="refused"></a><figcaption>refused</figcaption></figure>
+<figure><a href="dapp-request/wrong-password.png"><img src="dapp-request/wrong-password.png" loading="lazy" alt="wrong-password"></a><figcaption>wrong-password</figcaption></figure>
+<figure><a href="dapp-request/signing.png"><img src="dapp-request/signing.png" loading="lazy" alt="signing"></a><figcaption>signing</figcaption></figure>
+<figure><a href="dapp-request/explaining.png"><img src="dapp-request/explaining.png" loading="lazy" alt="explaining"></a><figcaption>explaining</figcaption></figure>
+<figure><a href="dapp-request/ended.png"><img src="dapp-request/ended.png" loading="lazy" alt="ended"></a><figcaption>ended</figcaption></figure>
+<figure><a href="dapp-request/loading.png"><img src="dapp-request/loading.png" loading="lazy" alt="loading"></a><figcaption>loading</figcaption></figure>
+<figure><a href="dapp-request/approval.png"><img src="dapp-request/approval.png" loading="lazy" alt="approval"></a><figcaption>approval</figcaption></figure>
+<figure><a href="dapp-request/approval-dark.png"><img src="dapp-request/approval-dark.png" loading="lazy" alt="approval-dark"></a><figcaption>approval-dark</figcaption></figure>
+<figure><a href="dapp-request/unlimited.png"><img src="dapp-request/unlimited.png" loading="lazy" alt="unlimited"></a><figcaption>unlimited</figcaption></figure>
+<figure><a href="dapp-request/swap-order.png"><img src="dapp-request/swap-order.png" loading="lazy" alt="swap-order"></a><figcaption>swap-order</figcaption></figure>
+<figure><a href="dapp-request/not-decoded.png"><img src="dapp-request/not-decoded.png" loading="lazy" alt="not-decoded"></a><figcaption>not-decoded</figcaption></figure>
+<figure><a href="dapp-request/other-network.png"><img src="dapp-request/other-network.png" loading="lazy" alt="other-network"></a><figcaption>other-network</figcaption></figure>
+</div>
+</section>
+<section id="dapp-transaction">
+<h2>dApp transaction <small>dapp-transaction/ · 18 states</small></h2>
+<div class="shots">
+<figure><a href="dapp-transaction/payment.png"><img src="dapp-transaction/payment.png" loading="lazy" alt="payment"></a><figcaption>payment</figcaption></figure>
+<figure><a href="dapp-transaction/payment-dark.png"><img src="dapp-transaction/payment-dark.png" loading="lazy" alt="payment-dark"></a><figcaption>payment-dark</figcaption></figure>
+<figure><a href="dapp-transaction/token-transfer.png"><img src="dapp-transaction/token-transfer.png" loading="lazy" alt="token-transfer"></a><figcaption>token-transfer</figcaption></figure>
+<figure><a href="dapp-transaction/approval.png"><img src="dapp-transaction/approval.png" loading="lazy" alt="approval"></a><figcaption>approval</figcaption></figure>
+<figure><a href="dapp-transaction/not-decoded.png"><img src="dapp-transaction/not-decoded.png" loading="lazy" alt="not-decoded"></a><figcaption>not-decoded</figcaption></figure>
+<figure><a href="dapp-transaction/quoting.png"><img src="dapp-transaction/quoting.png" loading="lazy" alt="quoting"></a><figcaption>quoting</figcaption></figure>
+<figure><a href="dapp-transaction/not-quoted.png"><img src="dapp-transaction/not-quoted.png" loading="lazy" alt="not-quoted"></a><figcaption>not-quoted</figcaption></figure>
+<figure><a href="dapp-transaction/refused.png"><img src="dapp-transaction/refused.png" loading="lazy" alt="refused"></a><figcaption>refused</figcaption></figure>
+<figure><a href="dapp-transaction/safe.png"><img src="dapp-transaction/safe.png" loading="lazy" alt="safe"></a><figcaption>safe</figcaption></figure>
+<figure><a href="dapp-transaction/safe-dark.png"><img src="dapp-transaction/safe-dark.png" loading="lazy" alt="safe-dark"></a><figcaption>safe-dark</figcaption></figure>
+<figure><a href="dapp-transaction/safe-no-owner.png"><img src="dapp-transaction/safe-no-owner.png" loading="lazy" alt="safe-no-owner"></a><figcaption>safe-no-owner</figcaption></figure>
+<figure><a href="dapp-transaction/safe-signing.png"><img src="dapp-transaction/safe-signing.png" loading="lazy" alt="safe-signing"></a><figcaption>safe-signing</figcaption></figure>
+<figure><a href="dapp-transaction/safe-queued.png"><img src="dapp-transaction/safe-queued.png" loading="lazy" alt="safe-queued"></a><figcaption>safe-queued</figcaption></figure>
+<figure><a href="dapp-transaction/sending.png"><img src="dapp-transaction/sending.png" loading="lazy" alt="sending"></a><figcaption>sending</figcaption></figure>
+<figure><a href="dapp-transaction/not-sent.png"><img src="dapp-transaction/not-sent.png" loading="lazy" alt="not-sent"></a><figcaption>not-sent</figcaption></figure>
+<figure><a href="dapp-transaction/explaining.png"><img src="dapp-transaction/explaining.png" loading="lazy" alt="explaining"></a><figcaption>explaining</figcaption></figure>
+<figure><a href="dapp-transaction/ended.png"><img src="dapp-transaction/ended.png" loading="lazy" alt="ended"></a><figcaption>ended</figcaption></figure>
+<figure><a href="dapp-transaction/loading.png"><img src="dapp-transaction/loading.png" loading="lazy" alt="loading"></a><figcaption>loading</figcaption></figure>
+</div>
+</section>
+<section id="debug">
+<h2>Debug <small>debug/ · 6 states</small></h2>
+<div class="shots">
+<figure><a href="debug/info.png"><img src="debug/info.png" loading="lazy" alt="info"></a><figcaption>info</figcaption></figure>
+<figure><a href="debug/info-dark.png"><img src="debug/info-dark.png" loading="lazy" alt="info-dark"></a><figcaption>info-dark</figcaption></figure>
+<figure><a href="debug/detail.png"><img src="debug/detail.png" loading="lazy" alt="detail"></a><figcaption>detail</figcaption></figure>
+<figure><a href="debug/empty.png"><img src="debug/empty.png" loading="lazy" alt="empty"></a><figcaption>empty</figcaption></figure>
+<figure><a href="debug/filtered.png"><img src="debug/filtered.png" loading="lazy" alt="filtered"></a><figcaption>filtered</figcaption></figure>
+<figure><a href="debug/no-match.png"><img src="debug/no-match.png" loading="lazy" alt="no-match"></a><figcaption>no-match</figcaption></figure>
+</div>
+</section>
+<section id="derive-account">
+<h2>Add account from the same phrase <small>derive-account/ · 10 states</small></h2>
+<div class="shots">
+<figure><a href="derive-account/ask.png"><img src="derive-account/ask.png" loading="lazy" alt="ask"></a><figcaption>ask</figcaption></figure>
+<figure><a href="derive-account/ask-dark.png"><img src="derive-account/ask-dark.png" loading="lazy" alt="ask-dark"></a><figcaption>ask-dark</figcaption></figure>
+<figure><a href="derive-account/typed.png"><img src="derive-account/typed.png" loading="lazy" alt="typed"></a><figcaption>typed</figcaption></figure>
+<figure><a href="derive-account/deriving.png"><img src="derive-account/deriving.png" loading="lazy" alt="deriving"></a><figcaption>deriving</figcaption></figure>
+<figure><a href="derive-account/wrong-password.png"><img src="derive-account/wrong-password.png" loading="lazy" alt="wrong-password"></a><figcaption>wrong-password</figcaption></figure>
+<figure><a href="derive-account/added.png"><img src="derive-account/added.png" loading="lazy" alt="added"></a><figcaption>added</figcaption></figure>
+<figure><a href="derive-account/added-stepped-down.png"><img src="derive-account/added-stepped-down.png" loading="lazy" alt="added-stepped-down"></a><figcaption>added-stepped-down</figcaption></figure>
+<figure><a href="derive-account/added-dark.png"><img src="derive-account/added-dark.png" loading="lazy" alt="added-dark"></a><figcaption>added-dark</figcaption></figure>
+<figure><a href="derive-account/unavailable.png"><img src="derive-account/unavailable.png" loading="lazy" alt="unavailable"></a><figcaption>unavailable</figcaption></figure>
+<figure><a href="derive-account/loading.png"><img src="derive-account/loading.png" loading="lazy" alt="loading"></a><figcaption>loading</figcaption></figure>
+</div>
+</section>
+<section id="mnemonic-import">
+<h2>Import recovery phrase <small>mnemonic-import/ · 12 states</small></h2>
+<div class="shots">
+<figure><a href="mnemonic-import/checking.png"><img src="mnemonic-import/checking.png" loading="lazy" alt="checking"></a><figcaption>checking</figcaption></figure>
+<figure><a href="mnemonic-import/new-password.png"><img src="mnemonic-import/new-password.png" loading="lazy" alt="new-password"></a><figcaption>new-password</figcaption></figure>
+<figure><a href="mnemonic-import/new-password-dark.png"><img src="mnemonic-import/new-password-dark.png" loading="lazy" alt="new-password-dark"></a><figcaption>new-password-dark</figcaption></figure>
+<figure><a href="mnemonic-import/password-hint.png"><img src="mnemonic-import/password-hint.png" loading="lazy" alt="password-hint"></a><figcaption>password-hint</figcaption></figure>
+<figure><a href="mnemonic-import/wrong-password.png"><img src="mnemonic-import/wrong-password.png" loading="lazy" alt="wrong-password"></a><figcaption>wrong-password</figcaption></figure>
+<figure><a href="mnemonic-import/invalid-words.png"><img src="mnemonic-import/invalid-words.png" loading="lazy" alt="invalid-words"></a><figcaption>invalid-words</figcaption></figure>
+<figure><a href="mnemonic-import/not-enough-memory.png"><img src="mnemonic-import/not-enough-memory.png" loading="lazy" alt="not-enough-memory"></a><figcaption>not-enough-memory</figcaption></figure>
+<figure><a href="mnemonic-import/importing.png"><img src="mnemonic-import/importing.png" loading="lazy" alt="importing"></a><figcaption>importing</figcaption></figure>
+<figure><a href="mnemonic-import/key-store-unavailable.png"><img src="mnemonic-import/key-store-unavailable.png" loading="lazy" alt="key-store-unavailable"></a><figcaption>key-store-unavailable</figcaption></figure>
+<figure><a href="mnemonic-import/imported.png"><img src="mnemonic-import/imported.png" loading="lazy" alt="imported"></a><figcaption>imported</figcaption></figure>
+<figure><a href="mnemonic-import/imported-stepped-down.png"><img src="mnemonic-import/imported-stepped-down.png" loading="lazy" alt="imported-stepped-down"></a><figcaption>imported-stepped-down</figcaption></figure>
+<figure><a href="mnemonic-import/no-network.png"><img src="mnemonic-import/no-network.png" loading="lazy" alt="no-network"></a><figcaption>no-network</figcaption></figure>
+</div>
+</section>
+<section id="pair-dapp">
+<h2>Connect a dApp <small>pair-dapp/ · 6 states</small></h2>
+<div class="shots">
+<figure><a href="pair-dapp/empty.png"><img src="pair-dapp/empty.png" loading="lazy" alt="empty"></a><figcaption>empty</figcaption></figure>
+<figure><a href="pair-dapp/pasted.png"><img src="pair-dapp/pasted.png" loading="lazy" alt="pasted"></a><figcaption>pasted</figcaption></figure>
+<figure><a href="pair-dapp/pasted-dark.png"><img src="pair-dapp/pasted-dark.png" loading="lazy" alt="pasted-dark"></a><figcaption>pasted-dark</figcaption></figure>
+<figure><a href="pair-dapp/busy.png"><img src="pair-dapp/busy.png" loading="lazy" alt="busy"></a><figcaption>busy</figcaption></figure>
+<figure><a href="pair-dapp/expired.png"><img src="pair-dapp/expired.png" loading="lazy" alt="expired"></a><figcaption>expired</figcaption></figure>
+<figure><a href="pair-dapp/unreadable.png"><img src="pair-dapp/unreadable.png" loading="lazy" alt="unreadable"></a><figcaption>unreadable</figcaption></figure>
+</div>
+</section>
+<section id="receive">
+<h2>Receive <small>receive/ · 7 states</small></h2>
+<div class="shots">
+<figure><a href="receive/account.png"><img src="receive/account.png" loading="lazy" alt="account"></a><figcaption>account</figcaption></figure>
+<figure><a href="receive/account-dark.png"><img src="receive/account-dark.png" loading="lazy" alt="account-dark"></a><figcaption>account-dark</figcaption></figure>
+<figure><a href="receive/safe-without-share.png"><img src="receive/safe-without-share.png" loading="lazy" alt="safe-without-share"></a><figcaption>safe-without-share</figcaption></figure>
+<figure><a href="receive/loading.png"><img src="receive/loading.png" loading="lazy" alt="loading"></a><figcaption>loading</figcaption></figure>
+<figure><a href="receive/list-unavailable.png"><img src="receive/list-unavailable.png" loading="lazy" alt="list-unavailable"></a><figcaption>list-unavailable</figcaption></figure>
+<figure><a href="receive/gnosis.png"><img src="receive/gnosis.png" loading="lazy" alt="gnosis"></a><figcaption>gnosis</figcaption></figure>
+<figure><a href="receive/network-off.png"><img src="receive/network-off.png" loading="lazy" alt="network-off"></a><figcaption>network-off</figcaption></figure>
+</div>
+</section>
+<section id="remove-account-dialog">
+<h2>Remove account (dialog) <small>remove-account-dialog/ · 7 states</small></h2>
+<div class="shots">
+<figure><a href="remove-account-dialog/keyed.png"><img src="remove-account-dialog/keyed.png" loading="lazy" alt="keyed"></a><figcaption>keyed</figcaption></figure>
+<figure><a href="remove-account-dialog/keyed-dark.png"><img src="remove-account-dialog/keyed-dark.png" loading="lazy" alt="keyed-dark"></a><figcaption>keyed-dark</figcaption></figure>
+<figure><a href="remove-account-dialog/watched.png"><img src="remove-account-dialog/watched.png" loading="lazy" alt="watched"></a><figcaption>watched</figcaption></figure>
+<figure><a href="remove-account-dialog/removing.png"><img src="remove-account-dialog/removing.png" loading="lazy" alt="removing"></a><figcaption>removing</figcaption></figure>
+<figure><a href="remove-account-dialog/key-kept.png"><img src="remove-account-dialog/key-kept.png" loading="lazy" alt="key-kept"></a><figcaption>key-kept</figcaption></figure>
+<figure><a href="remove-account-dialog/loading.png"><img src="remove-account-dialog/loading.png" loading="lazy" alt="loading"></a><figcaption>loading</figcaption></figure>
+<figure><a href="remove-account-dialog/key-stays.png"><img src="remove-account-dialog/key-stays.png" loading="lazy" alt="key-stays"></a><figcaption>key-stays</figcaption></figure>
+</div>
+</section>
+<section id="rename-account-dialog">
+<h2>Rename account (dialog) <small>rename-account-dialog/ · 6 states</small></h2>
+<div class="shots">
+<figure><a href="rename-account-dialog/editing.png"><img src="rename-account-dialog/editing.png" loading="lazy" alt="editing"></a><figcaption>editing</figcaption></figure>
+<figure><a href="rename-account-dialog/editing-dark.png"><img src="rename-account-dialog/editing-dark.png" loading="lazy" alt="editing-dark"></a><figcaption>editing-dark</figcaption></figure>
+<figure><a href="rename-account-dialog/blank.png"><img src="rename-account-dialog/blank.png" loading="lazy" alt="blank"></a><figcaption>blank</figcaption></figure>
+<figure><a href="rename-account-dialog/saving.png"><img src="rename-account-dialog/saving.png" loading="lazy" alt="saving"></a><figcaption>saving</figcaption></figure>
+<figure><a href="rename-account-dialog/list-unavailable.png"><img src="rename-account-dialog/list-unavailable.png" loading="lazy" alt="list-unavailable"></a><figcaption>list-unavailable</figcaption></figure>
+<figure><a href="rename-account-dialog/loading.png"><img src="rename-account-dialog/loading.png" loading="lazy" alt="loading"></a><figcaption>loading</figcaption></figure>
+</div>
+</section>
+<section id="safe-import">
+<h2>Import Safe <small>safe-import/ · 7 states</small></h2>
+<div class="shots">
+<figure><a href="safe-import/empty.png"><img src="safe-import/empty.png" loading="lazy" alt="empty"></a><figcaption>empty</figcaption></figure>
+<figure><a href="safe-import/empty-dark.png"><img src="safe-import/empty-dark.png" loading="lazy" alt="empty-dark"></a><figcaption>empty-dark</figcaption></figure>
+<figure><a href="safe-import/pasted.png"><img src="safe-import/pasted.png" loading="lazy" alt="pasted"></a><figcaption>pasted</figcaption></figure>
+<figure><a href="safe-import/checking.png"><img src="safe-import/checking.png" loading="lazy" alt="checking"></a><figcaption>checking</figcaption></figure>
+<figure><a href="safe-import/refused.png"><img src="safe-import/refused.png" loading="lazy" alt="refused"></a><figcaption>refused</figcaption></figure>
+<figure><a href="safe-import/imported.png"><img src="safe-import/imported.png" loading="lazy" alt="imported"></a><figcaption>imported</figcaption></figure>
+<figure><a href="safe-import/wrong-network.png"><img src="safe-import/wrong-network.png" loading="lazy" alt="wrong-network"></a><figcaption>wrong-network</figcaption></figure>
+</div>
+</section>
+<section id="safe-propose">
+<h2>Propose Safe transaction <small>safe-propose/ · 13 states</small></h2>
+<div class="shots">
+<figure><a href="safe-propose/compose.png"><img src="safe-propose/compose.png" loading="lazy" alt="compose"></a><figcaption>compose</figcaption></figure>
+<figure><a href="safe-propose/compose-dark.png"><img src="safe-propose/compose-dark.png" loading="lazy" alt="compose-dark"></a><figcaption>compose-dark</figcaption></figure>
+<figure><a href="safe-propose/refused.png"><img src="safe-propose/refused.png" loading="lazy" alt="refused"></a><figcaption>refused</figcaption></figure>
+<figure><a href="safe-propose/proposing.png"><img src="safe-propose/proposing.png" loading="lazy" alt="proposing"></a><figcaption>proposing</figcaption></figure>
+<figure><a href="safe-propose/review.png"><img src="safe-propose/review.png" loading="lazy" alt="review"></a><figcaption>review</figcaption></figure>
+<figure><a href="safe-propose/review-dark.png"><img src="safe-propose/review-dark.png" loading="lazy" alt="review-dark"></a><figcaption>review-dark</figcaption></figure>
+<figure><a href="safe-propose/review-queued-not-simulated.png"><img src="safe-propose/review-queued-not-simulated.png" loading="lazy" alt="review-queued-not-simulated"></a><figcaption>review-queued-not-simulated</figcaption></figure>
+<figure><a href="safe-propose/review-not-saved.png"><img src="safe-propose/review-not-saved.png" loading="lazy" alt="review-not-saved"></a><figcaption>review-not-saved</figcaption></figure>
+<figure><a href="safe-propose/review-asking-to-drop.png"><img src="safe-propose/review-asking-to-drop.png" loading="lazy" alt="review-asking-to-drop"></a><figcaption>review-asking-to-drop</figcaption></figure>
+<figure><a href="safe-propose/review-signing.png"><img src="safe-propose/review-signing.png" loading="lazy" alt="review-signing"></a><figcaption>review-signing</figcaption></figure>
+<figure><a href="safe-propose/review-checking.png"><img src="safe-propose/review-checking.png" loading="lazy" alt="review-checking"></a><figcaption>review-checking</figcaption></figure>
+<figure><a href="safe-propose/loading.png"><img src="safe-propose/loading.png" loading="lazy" alt="loading"></a><figcaption>loading</figcaption></figure>
+<figure><a href="safe-propose/watch-only.png"><img src="safe-propose/watch-only.png" loading="lazy" alt="watch-only"></a><figcaption>watch-only</figcaption></figure>
+</div>
+</section>
+<section id="safe-settings">
+<h2>Safe settings <small>safe-settings/ · 17 states</small></h2>
+<div class="shots">
+<figure><a href="safe-settings/overview.png"><img src="safe-settings/overview.png" loading="lazy" alt="overview"></a><figcaption>overview</figcaption></figure>
+<figure><a href="safe-settings/overview-dark.png"><img src="safe-settings/overview-dark.png" loading="lazy" alt="overview-dark"></a><figcaption>overview-dark</figcaption></figure>
+<figure><a href="safe-settings/modules-and-guard.png"><img src="safe-settings/modules-and-guard.png" loading="lazy" alt="modules-and-guard"></a><figcaption>modules-and-guard</figcaption></figure>
+<figure><a href="safe-settings/watch-only.png"><img src="safe-settings/watch-only.png" loading="lazy" alt="watch-only"></a><figcaption>watch-only</figcaption></figure>
+<figure><a href="safe-settings/add-owner.png"><img src="safe-settings/add-owner.png" loading="lazy" alt="add-owner"></a><figcaption>add-owner</figcaption></figure>
+<figure><a href="safe-settings/add-owner-proposing.png"><img src="safe-settings/add-owner-proposing.png" loading="lazy" alt="add-owner-proposing"></a><figcaption>add-owner-proposing</figcaption></figure>
+<figure><a href="safe-settings/replace-owner.png"><img src="safe-settings/replace-owner.png" loading="lazy" alt="replace-owner"></a><figcaption>replace-owner</figcaption></figure>
+<figure><a href="safe-settings/remove-owner-refused.png"><img src="safe-settings/remove-owner-refused.png" loading="lazy" alt="remove-owner-refused"></a><figcaption>remove-owner-refused</figcaption></figure>
+<figure><a href="safe-settings/remove-guard.png"><img src="safe-settings/remove-guard.png" loading="lazy" alt="remove-guard"></a><figcaption>remove-guard</figcaption></figure>
+<figure><a href="safe-settings/review.png"><img src="safe-settings/review.png" loading="lazy" alt="review"></a><figcaption>review</figcaption></figure>
+<figure><a href="safe-settings/review-dark.png"><img src="safe-settings/review-dark.png" loading="lazy" alt="review-dark"></a><figcaption>review-dark</figcaption></figure>
+<figure><a href="safe-settings/review-queued.png"><img src="safe-settings/review-queued.png" loading="lazy" alt="review-queued"></a><figcaption>review-queued</figcaption></figure>
+<figure><a href="safe-settings/review-not-saved.png"><img src="safe-settings/review-not-saved.png" loading="lazy" alt="review-not-saved"></a><figcaption>review-not-saved</figcaption></figure>
+<figure><a href="safe-settings/review-asking-to-drop.png"><img src="safe-settings/review-asking-to-drop.png" loading="lazy" alt="review-asking-to-drop"></a><figcaption>review-asking-to-drop</figcaption></figure>
+<figure><a href="safe-settings/review-checking.png"><img src="safe-settings/review-checking.png" loading="lazy" alt="review-checking"></a><figcaption>review-checking</figcaption></figure>
+<figure><a href="safe-settings/loading.png"><img src="safe-settings/loading.png" loading="lazy" alt="loading"></a><figcaption>loading</figcaption></figure>
+<figure><a href="safe-settings/unavailable.png"><img src="safe-settings/unavailable.png" loading="lazy" alt="unavailable"></a><figcaption>unavailable</figcaption></figure>
+</div>
+</section>
+<section id="safe-swap">
+<h2>Safe swap <small>safe-swap/ · 13 states</small></h2>
+<div class="shots">
+<figure><a href="safe-swap/compose.png"><img src="safe-swap/compose.png" loading="lazy" alt="compose"></a><figcaption>compose</figcaption></figure>
+<figure><a href="safe-swap/compose-dark.png"><img src="safe-swap/compose-dark.png" loading="lazy" alt="compose-dark"></a><figcaption>compose-dark</figcaption></figure>
+<figure><a href="safe-swap/refused.png"><img src="safe-swap/refused.png" loading="lazy" alt="refused"></a><figcaption>refused</figcaption></figure>
+<figure><a href="safe-swap/propose-again.png"><img src="safe-swap/propose-again.png" loading="lazy" alt="propose-again"></a><figcaption>propose-again</figcaption></figure>
+<figure><a href="safe-swap/review.png"><img src="safe-swap/review.png" loading="lazy" alt="review"></a><figcaption>review</figcaption></figure>
+<figure><a href="safe-swap/review-dark.png"><img src="safe-swap/review-dark.png" loading="lazy" alt="review-dark"></a><figcaption>review-dark</figcaption></figure>
+<figure><a href="safe-swap/review-swap-only.png"><img src="safe-swap/review-swap-only.png" loading="lazy" alt="review-swap-only"></a><figcaption>review-swap-only</figcaption></figure>
+<figure><a href="safe-swap/review-reset-first.png"><img src="safe-swap/review-reset-first.png" loading="lazy" alt="review-reset-first"></a><figcaption>review-reset-first</figcaption></figure>
+<figure><a href="safe-swap/review-replaces.png"><img src="safe-swap/review-replaces.png" loading="lazy" alt="review-replaces"></a><figcaption>review-replaces</figcaption></figure>
+<figure><a href="safe-swap/review-signing.png"><img src="safe-swap/review-signing.png" loading="lazy" alt="review-signing"></a><figcaption>review-signing</figcaption></figure>
+<figure><a href="safe-swap/review-half-signed.png"><img src="safe-swap/review-half-signed.png" loading="lazy" alt="review-half-signed"></a><figcaption>review-half-signed</figcaption></figure>
+<figure><a href="safe-swap/loading.png"><img src="safe-swap/loading.png" loading="lazy" alt="loading"></a><figcaption>loading</figcaption></figure>
+<figure><a href="safe-swap/watch-only.png"><img src="safe-swap/watch-only.png" loading="lazy" alt="watch-only"></a><figcaption>watch-only</figcaption></figure>
+</div>
+</section>
+<section id="safe-tx">
+<h2>Safe transaction <small>safe-tx/ · 34 states</small></h2>
+<div class="shots">
+<figure><a href="safe-tx/overview.png"><img src="safe-tx/overview.png" loading="lazy" alt="overview"></a><figcaption>overview</figcaption></figure>
+<figure><a href="safe-tx/overview-dark.png"><img src="safe-tx/overview-dark.png" loading="lazy" alt="overview-dark"></a><figcaption>overview-dark</figcaption></figure>
+<figure><a href="safe-tx/share.png"><img src="safe-tx/share.png" loading="lazy" alt="share"></a><figcaption>share</figcaption></figure>
+<figure><a href="safe-tx/share-as-text.png"><img src="safe-tx/share-as-text.png" loading="lazy" alt="share-as-text"></a><figcaption>share-as-text</figcaption></figure>
+<figure><a href="safe-tx/signed.png"><img src="safe-tx/signed.png" loading="lazy" alt="signed"></a><figcaption>signed</figcaption></figure>
+<figure><a href="safe-tx/not-next.png"><img src="safe-tx/not-next.png" loading="lazy" alt="not-next"></a><figcaption>not-next</figcaption></figure>
+<figure><a href="safe-tx/delegate-call.png"><img src="safe-tx/delegate-call.png" loading="lazy" alt="delegate-call"></a><figcaption>delegate-call</figcaption></figure>
+<figure><a href="safe-tx/unpinned-fallback-handler.png"><img src="safe-tx/unpinned-fallback-handler.png" loading="lazy" alt="unpinned-fallback-handler"></a><figcaption>unpinned-fallback-handler</figcaption></figure>
+<figure><a href="safe-tx/module-enabled.png"><img src="safe-tx/module-enabled.png" loading="lazy" alt="module-enabled"></a><figcaption>module-enabled</figcaption></figure>
+<figure><a href="safe-tx/execute-reason.png"><img src="safe-tx/execute-reason.png" loading="lazy" alt="execute-reason"></a><figcaption>execute-reason</figcaption></figure>
+<figure><a href="safe-tx/gas-terms.png"><img src="safe-tx/gas-terms.png" loading="lazy" alt="gas-terms"></a><figcaption>gas-terms</figcaption></figure>
+<figure><a href="safe-tx/owners-checking.png"><img src="safe-tx/owners-checking.png" loading="lazy" alt="owners-checking"></a><figcaption>owners-checking</figcaption></figure>
+<figure><a href="safe-tx/owners-unavailable.png"><img src="safe-tx/owners-unavailable.png" loading="lazy" alt="owners-unavailable"></a><figcaption>owners-unavailable</figcaption></figure>
+<figure><a href="safe-tx/quoting.png"><img src="safe-tx/quoting.png" loading="lazy" alt="quoting"></a><figcaption>quoting</figcaption></figure>
+<figure><a href="safe-tx/signing.png"><img src="safe-tx/signing.png" loading="lazy" alt="signing"></a><figcaption>signing</figcaption></figure>
+<figure><a href="safe-tx/signing-dark.png"><img src="safe-tx/signing-dark.png" loading="lazy" alt="signing-dark"></a><figcaption>signing-dark</figcaption></figure>
+<figure><a href="safe-tx/signing-wrong-password.png"><img src="safe-tx/signing-wrong-password.png" loading="lazy" alt="signing-wrong-password"></a><figcaption>signing-wrong-password</figcaption></figure>
+<figure><a href="safe-tx/signing-runs.png"><img src="safe-tx/signing-runs.png" loading="lazy" alt="signing-runs"></a><figcaption>signing-runs</figcaption></figure>
+<figure><a href="safe-tx/signing-checking.png"><img src="safe-tx/signing-checking.png" loading="lazy" alt="signing-checking"></a><figcaption>signing-checking</figcaption></figure>
+<figure><a href="safe-tx/review-execution.png"><img src="safe-tx/review-execution.png" loading="lazy" alt="review-execution"></a><figcaption>review-execution</figcaption></figure>
+<figure><a href="safe-tx/review-execution-dark.png"><img src="safe-tx/review-execution-dark.png" loading="lazy" alt="review-execution-dark"></a><figcaption>review-execution-dark</figcaption></figure>
+<figure><a href="safe-tx/review-approval.png"><img src="safe-tx/review-approval.png" loading="lazy" alt="review-approval"></a><figcaption>review-approval</figcaption></figure>
+<figure><a href="safe-tx/review-refreshing.png"><img src="safe-tx/review-refreshing.png" loading="lazy" alt="review-refreshing"></a><figcaption>review-refreshing</figcaption></figure>
+<figure><a href="safe-tx/review-signing.png"><img src="safe-tx/review-signing.png" loading="lazy" alt="review-signing"></a><figcaption>review-signing</figcaption></figure>
+<figure><a href="safe-tx/review-not-sent.png"><img src="safe-tx/review-not-sent.png" loading="lazy" alt="review-not-sent"></a><figcaption>review-not-sent</figcaption></figure>
+<figure><a href="safe-tx/loading.png"><img src="safe-tx/loading.png" loading="lazy" alt="loading"></a><figcaption>loading</figcaption></figure>
+<figure><a href="safe-tx/not-queued.png"><img src="safe-tx/not-queued.png" loading="lazy" alt="not-queued"></a><figcaption>not-queued</figcaption></figure>
+<figure><a href="safe-tx/swap.png"><img src="safe-tx/swap.png" loading="lazy" alt="swap"></a><figcaption>swap</figcaption></figure>
+<figure><a href="safe-tx/swap-minimum-behind.png"><img src="safe-tx/swap-minimum-behind.png" loading="lazy" alt="swap-minimum-behind"></a><figcaption>swap-minimum-behind</figcaption></figure>
+<figure><a href="safe-tx/swap-expired.png"><img src="safe-tx/swap-expired.png" loading="lazy" alt="swap-expired"></a><figcaption>swap-expired</figcaption></figure>
+<figure><a href="safe-tx/swap-not-uniswap.png"><img src="safe-tx/swap-not-uniswap.png" loading="lazy" alt="swap-not-uniswap"></a><figcaption>swap-not-uniswap</figcaption></figure>
+<figure><a href="safe-tx/swap-approval.png"><img src="safe-tx/swap-approval.png" loading="lazy" alt="swap-approval"></a><figcaption>swap-approval</figcaption></figure>
+<figure><a href="safe-tx/swap-propose-again-greyed.png"><img src="safe-tx/swap-propose-again-greyed.png" loading="lazy" alt="swap-propose-again-greyed"></a><figcaption>swap-propose-again-greyed</figcaption></figure>
+<figure><a href="safe-tx/fallback-handler-removed.png"><img src="safe-tx/fallback-handler-removed.png" loading="lazy" alt="fallback-handler-removed"></a><figcaption>fallback-handler-removed</figcaption></figure>
+</div>
+</section>
+<section id="screen-capture-warning-dialog">
+<h2>Screen capture warning (dialog) <small>screen-capture-warning-dialog/ · 3 states</small></h2>
+<div class="shots">
+<figure><a href="screen-capture-warning-dialog/screenshot.png"><img src="screen-capture-warning-dialog/screenshot.png" loading="lazy" alt="screenshot"></a><figcaption>screenshot</figcaption></figure>
+<figure><a href="screen-capture-warning-dialog/screenshot-dark.png"><img src="screen-capture-warning-dialog/screenshot-dark.png" loading="lazy" alt="screenshot-dark"></a><figcaption>screenshot-dark</figcaption></figure>
+<figure><a href="screen-capture-warning-dialog/recording.png"><img src="screen-capture-warning-dialog/recording.png" loading="lazy" alt="recording"></a><figcaption>recording</figcaption></figure>
+</div>
+</section>
+<section id="security">
+<h2>Security <small>security/ · 15 states</small></h2>
+<div class="shots">
+<figure><a href="security/off.png"><img src="security/off.png" loading="lazy" alt="off"></a><figcaption>off</figcaption></figure>
+<figure><a href="security/off-dark.png"><img src="security/off-dark.png" loading="lazy" alt="off-dark"></a><figcaption>off-dark</figcaption></figure>
+<figure><a href="security/asking-password.png"><img src="security/asking-password.png" loading="lazy" alt="asking-password"></a><figcaption>asking-password</figcaption></figure>
+<figure><a href="security/wrong-password.png"><img src="security/wrong-password.png" loading="lazy" alt="wrong-password"></a><figcaption>wrong-password</figcaption></figure>
+<figure><a href="security/turning-on.png"><img src="security/turning-on.png" loading="lazy" alt="turning-on"></a><figcaption>turning-on</figcaption></figure>
+<figure><a href="security/on.png"><img src="security/on.png" loading="lazy" alt="on"></a><figcaption>on</figcaption></figure>
+<figure><a href="security/invalidated.png"><img src="security/invalidated.png" loading="lazy" alt="invalidated"></a><figcaption>invalidated</figcaption></figure>
+<figure><a href="security/turning-off.png"><img src="security/turning-off.png" loading="lazy" alt="turning-off"></a><figcaption>turning-off</figcaption></figure>
+<figure><a href="security/weak-only.png"><img src="security/weak-only.png" loading="lazy" alt="weak-only"></a><figcaption>weak-only</figcaption></figure>
+<figure><a href="security/desktop.png"><img src="security/desktop.png" loading="lazy" alt="desktop"></a><figcaption>desktop</figcaption></figure>
+<figure><a href="security/less-memory.png"><img src="security/less-memory.png" loading="lazy" alt="less-memory"></a><figcaption>less-memory</figcaption></figure>
+<figure><a href="security/not-enough-memory.png"><img src="security/not-enough-memory.png" loading="lazy" alt="not-enough-memory"></a><figcaption>not-enough-memory</figcaption></figure>
+<figure><a href="security/no-keys.png"><img src="security/no-keys.png" loading="lazy" alt="no-keys"></a><figcaption>no-keys</figcaption></figure>
+<figure><a href="security/loading.png"><img src="security/loading.png" loading="lazy" alt="loading"></a><figcaption>loading</figcaption></figure>
+<figure><a href="security/unavailable.png"><img src="security/unavailable.png" loading="lazy" alt="unavailable"></a><figcaption>unavailable</figcaption></figure>
+</div>
+</section>
+<section id="send">
+<h2>Send <small>send/ · 23 states</small></h2>
+<div class="shots">
+<figure><a href="send/compose-empty.png"><img src="send/compose-empty.png" loading="lazy" alt="compose-empty"></a><figcaption>compose-empty</figcaption></figure>
+<figure><a href="send/compose-empty-dark.png"><img src="send/compose-empty-dark.png" loading="lazy" alt="compose-empty-dark"></a><figcaption>compose-empty-dark</figcaption></figure>
+<figure><a href="send/composed-token-to-name.png"><img src="send/composed-token-to-name.png" loading="lazy" alt="composed-token-to-name"></a><figcaption>composed-token-to-name</figcaption></figure>
+<figure><a href="send/compose-resolving.png"><img src="send/compose-resolving.png" loading="lazy" alt="compose-resolving"></a><figcaption>compose-resolving</figcaption></figure>
+<figure><a href="send/compose-input-errors.png"><img src="send/compose-input-errors.png" loading="lazy" alt="compose-input-errors"></a><figcaption>compose-input-errors</figcaption></figure>
+<figure><a href="send/compose-gnosis-no-names.png"><img src="send/compose-gnosis-no-names.png" loading="lazy" alt="compose-gnosis-no-names"></a><figcaption>compose-gnosis-no-names</figcaption></figure>
+<figure><a href="send/compose-name-unavailable.png"><img src="send/compose-name-unavailable.png" loading="lazy" alt="compose-name-unavailable"></a><figcaption>compose-name-unavailable</figcaption></figure>
+<figure><a href="send/compose-quoting.png"><img src="send/compose-quoting.png" loading="lazy" alt="compose-quoting"></a><figcaption>compose-quoting</figcaption></figure>
+<figure><a href="send/compose-refused.png"><img src="send/compose-refused.png" loading="lazy" alt="compose-refused"></a><figcaption>compose-refused</figcaption></figure>
+<figure><a href="send/compose-earlier-maybe-sent.png"><img src="send/compose-earlier-maybe-sent.png" loading="lazy" alt="compose-earlier-maybe-sent"></a><figcaption>compose-earlier-maybe-sent</figcaption></figure>
+<figure><a href="send/compose-token-not-found.png"><img src="send/compose-token-not-found.png" loading="lazy" alt="compose-token-not-found"></a><figcaption>compose-token-not-found</figcaption></figure>
+<figure><a href="send/review.png"><img src="send/review.png" loading="lazy" alt="review"></a><figcaption>review</figcaption></figure>
+<figure><a href="send/review-dark.png"><img src="send/review-dark.png" loading="lazy" alt="review-dark"></a><figcaption>review-dark</figcaption></figure>
+<figure><a href="send/review-token-with-biometrics.png"><img src="send/review-token-with-biometrics.png" loading="lazy" alt="review-token-with-biometrics"></a><figcaption>review-token-with-biometrics</figcaption></figure>
+<figure><a href="send/review-wrong-password.png"><img src="send/review-wrong-password.png" loading="lazy" alt="review-wrong-password"></a><figcaption>review-wrong-password</figcaption></figure>
+<figure><a href="send/review-biometrics-cancelled.png"><img src="send/review-biometrics-cancelled.png" loading="lazy" alt="review-biometrics-cancelled"></a><figcaption>review-biometrics-cancelled</figcaption></figure>
+<figure><a href="send/review-signing.png"><img src="send/review-signing.png" loading="lazy" alt="review-signing"></a><figcaption>review-signing</figcaption></figure>
+<figure><a href="send/review-refreshing.png"><img src="send/review-refreshing.png" loading="lazy" alt="review-refreshing"></a><figcaption>review-refreshing</figcaption></figure>
+<figure><a href="send/review-not-sent.png"><img src="send/review-not-sent.png" loading="lazy" alt="review-not-sent"></a><figcaption>review-not-sent</figcaption></figure>
+<figure><a href="send/review-rejected.png"><img src="send/review-rejected.png" loading="lazy" alt="review-rejected"></a><figcaption>review-rejected</figcaption></figure>
+<figure><a href="send/loading.png"><img src="send/loading.png" loading="lazy" alt="loading"></a><figcaption>loading</figcaption></figure>
+<figure><a href="send/watch-only.png"><img src="send/watch-only.png" loading="lazy" alt="watch-only"></a><figcaption>watch-only</figcaption></figure>
+<figure><a href="send/sent.png"><img src="send/sent.png" loading="lazy" alt="sent"></a><figcaption>sent</figcaption></figure>
+</div>
+</section>
+<section id="settings">
+<h2>Settings <small>settings/ · 17 states</small></h2>
+<div class="shots">
+<figure><a href="settings/synced.png"><img src="settings/synced.png" loading="lazy" alt="synced"></a><figcaption>synced</figcaption></figure>
+<figure><a href="settings/synced-dark.png"><img src="settings/synced-dark.png" loading="lazy" alt="synced-dark"></a><figcaption>synced-dark</figcaption></figure>
+<figure><a href="settings/starting.png"><img src="settings/starting.png" loading="lazy" alt="starting"></a><figcaption>starting</figcaption></figure>
+<figure><a href="settings/unreadable.png"><img src="settings/unreadable.png" loading="lazy" alt="unreadable"></a><figcaption>unreadable</figcaption></figure>
+<figure><a href="settings/head-too-old.png"><img src="settings/head-too-old.png" loading="lazy" alt="head-too-old"></a><figcaption>head-too-old</figcaption></figure>
+<figure><a href="settings/head-too-old-dark.png"><img src="settings/head-too-old-dark.png" loading="lazy" alt="head-too-old-dark"></a><figcaption>head-too-old-dark</figcaption></figure>
+<figure><a href="settings/debug-build.png"><img src="settings/debug-build.png" loading="lazy" alt="debug-build"></a><figcaption>debug-build</figcaption></figure>
+<figure><a href="settings/debug-build-capture-allowed.png"><img src="settings/debug-build-capture-allowed.png" loading="lazy" alt="debug-build-capture-allowed"></a><figcaption>debug-build-capture-allowed</figcaption></figure>
+<figure><a href="settings/debug-screen.png"><img src="settings/debug-screen.png" loading="lazy" alt="debug-screen"></a><figcaption>debug-screen</figcaption></figure>
+<figure><a href="settings/debug-screen-not-saved.png"><img src="settings/debug-screen-not-saved.png" loading="lazy" alt="debug-screen-not-saved"></a><figcaption>debug-screen-not-saved</figcaption></figure>
+<figure><a href="settings/idle.png"><img src="settings/idle.png" loading="lazy" alt="idle"></a><figcaption>idle</figcaption></figure>
+<figure><a href="settings/network-not-saved.png"><img src="settings/network-not-saved.png" loading="lazy" alt="network-not-saved"></a><figcaption>network-not-saved</figcaption></figure>
+<figure><a href="settings/turn-off.png"><img src="settings/turn-off.png" loading="lazy" alt="turn-off"></a><figcaption>turn-off</figcaption></figure>
+<figure><a href="settings/stale-anchor.png"><img src="settings/stale-anchor.png" loading="lazy" alt="stale-anchor"></a><figcaption>stale-anchor</figcaption></figure>
+<figure><a href="settings/detailed-view.png"><img src="settings/detailed-view.png" loading="lazy" alt="detailed-view"></a><figcaption>detailed-view</figcaption></figure>
+<figure><a href="settings/detailed-view-not-saved.png"><img src="settings/detailed-view-not-saved.png" loading="lazy" alt="detailed-view-not-saved"></a><figcaption>detailed-view-not-saved</figcaption></figure>
+<figure><a href="settings/connections-off.png"><img src="settings/connections-off.png" loading="lazy" alt="connections-off"></a><figcaption>connections-off</figcaption></figure>
+</div>
+</section>
+<section id="simple-account-detail">
+<h2>Account detail (simple mode) <small>simple-account-detail/ · 10 states</small></h2>
+<div class="shots">
+<figure><a href="simple-account-detail/assets.png"><img src="simple-account-detail/assets.png" loading="lazy" alt="assets"></a><figcaption>assets</figcaption></figure>
+<figure><a href="simple-account-detail/assets-dark.png"><img src="simple-account-detail/assets-dark.png" loading="lazy" alt="assets-dark"></a><figcaption>assets-dark</figcaption></figure>
+<figure><a href="simple-account-detail/last-verified.png"><img src="simple-account-detail/last-verified.png" loading="lazy" alt="last-verified"></a><figcaption>last-verified</figcaption></figure>
+<figure><a href="simple-account-detail/syncing.png"><img src="simple-account-detail/syncing.png" loading="lazy" alt="syncing"></a><figcaption>syncing</figcaption></figure>
+<figure><a href="simple-account-detail/activity.png"><img src="simple-account-detail/activity.png" loading="lazy" alt="activity"></a><figcaption>activity</figcaption></figure>
+<figure><a href="simple-account-detail/waiting-swap.png"><img src="simple-account-detail/waiting-swap.png" loading="lazy" alt="waiting-swap"></a><figcaption>waiting-swap</figcaption></figure>
+<figure><a href="simple-account-detail/safe.png"><img src="simple-account-detail/safe.png" loading="lazy" alt="safe"></a><figcaption>safe</figcaption></figure>
+<figure><a href="simple-account-detail/network-off.png"><img src="simple-account-detail/network-off.png" loading="lazy" alt="network-off"></a><figcaption>network-off</figcaption></figure>
+<figure><a href="simple-account-detail/hidden.png"><img src="simple-account-detail/hidden.png" loading="lazy" alt="hidden"></a><figcaption>hidden</figcaption></figure>
+<figure><a href="simple-account-detail/hidden-dark.png"><img src="simple-account-detail/hidden-dark.png" loading="lazy" alt="hidden-dark"></a><figcaption>hidden-dark</figcaption></figure>
+</div>
+</section>
+<section id="simple-accounts">
+<h2>Home (simple mode) <small>simple-accounts/ · 13 states</small></h2>
+<div class="shots">
+<figure><a href="simple-accounts/everyday.png"><img src="simple-accounts/everyday.png" loading="lazy" alt="everyday"></a><figcaption>everyday</figcaption></figure>
+<figure><a href="simple-accounts/everyday-dark.png"><img src="simple-accounts/everyday-dark.png" loading="lazy" alt="everyday-dark"></a><figcaption>everyday-dark</figcaption></figure>
+<figure><a href="simple-accounts/refreshing.png"><img src="simple-accounts/refreshing.png" loading="lazy" alt="refreshing"></a><figcaption>refreshing</figcaption></figure>
+<figure><a href="simple-accounts/syncing.png"><img src="simple-accounts/syncing.png" loading="lazy" alt="syncing"></a><figcaption>syncing</figcaption></figure>
+<figure><a href="simple-accounts/unreachable.png"><img src="simple-accounts/unreachable.png" loading="lazy" alt="unreachable"></a><figcaption>unreachable</figcaption></figure>
+<figure><a href="simple-accounts/live.png"><img src="simple-accounts/live.png" loading="lazy" alt="live"></a><figcaption>live</figcaption></figure>
+<figure><a href="simple-accounts/stale-anchor.png"><img src="simple-accounts/stale-anchor.png" loading="lazy" alt="stale-anchor"></a><figcaption>stale-anchor</figcaption></figure>
+<figure><a href="simple-accounts/empty.png"><img src="simple-accounts/empty.png" loading="lazy" alt="empty"></a><figcaption>empty</figcaption></figure>
+<figure><a href="simple-accounts/loading.png"><img src="simple-accounts/loading.png" loading="lazy" alt="loading"></a><figcaption>loading</figcaption></figure>
+<figure><a href="simple-accounts/set-aside.png"><img src="simple-accounts/set-aside.png" loading="lazy" alt="set-aside"></a><figcaption>set-aside</figcaption></figure>
+<figure><a href="simple-accounts/list-unavailable.png"><img src="simple-accounts/list-unavailable.png" loading="lazy" alt="list-unavailable"></a><figcaption>list-unavailable</figcaption></figure>
+<figure><a href="simple-accounts/hidden.png"><img src="simple-accounts/hidden.png" loading="lazy" alt="hidden"></a><figcaption>hidden</figcaption></figure>
+<figure><a href="simple-accounts/hidden-dark.png"><img src="simple-accounts/hidden-dark.png" loading="lazy" alt="hidden-dark"></a><figcaption>hidden-dark</figcaption></figure>
+</div>
+</section>
+<section id="simple-activity-detail">
+<h2>Activity detail (simple mode) <small>simple-activity-detail/ · 4 states</small></h2>
+<div class="shots">
+<figure><a href="simple-activity-detail/sent.png"><img src="simple-activity-detail/sent.png" loading="lazy" alt="sent"></a><figcaption>sent</figcaption></figure>
+<figure><a href="simple-activity-detail/sent-dark.png"><img src="simple-activity-detail/sent-dark.png" loading="lazy" alt="sent-dark"></a><figcaption>sent-dark</figcaption></figure>
+<figure><a href="simple-activity-detail/hidden.png"><img src="simple-activity-detail/hidden.png" loading="lazy" alt="hidden"></a><figcaption>hidden</figcaption></figure>
+<figure><a href="simple-activity-detail/hidden-dark.png"><img src="simple-activity-detail/hidden-dark.png" loading="lazy" alt="hidden-dark"></a><figcaption>hidden-dark</figcaption></figure>
+</div>
+</section>
+<section id="simple-add-token">
+<h2>Add token (simple mode) <small>simple-add-token/ · 2 states</small></h2>
+<div class="shots">
+<figure><a href="simple-add-token/claim.png"><img src="simple-add-token/claim.png" loading="lazy" alt="claim"></a><figcaption>claim</figcaption></figure>
+<figure><a href="simple-add-token/claim-dark.png"><img src="simple-add-token/claim-dark.png" loading="lazy" alt="claim-dark"></a><figcaption>claim-dark</figcaption></figure>
+</div>
+</section>
+<section id="simple-cow-order">
+<h2>CoW order (simple mode) <small>simple-cow-order/ · 3 states</small></h2>
+<div class="shots">
+<figure><a href="simple-cow-order/filled.png"><img src="simple-cow-order/filled.png" loading="lazy" alt="filled"></a><figcaption>filled</figcaption></figure>
+<figure><a href="simple-cow-order/filled-dark.png"><img src="simple-cow-order/filled-dark.png" loading="lazy" alt="filled-dark"></a><figcaption>filled-dark</figcaption></figure>
+<figure><a href="simple-cow-order/cancel-review.png"><img src="simple-cow-order/cancel-review.png" loading="lazy" alt="cancel-review"></a><figcaption>cancel-review</figcaption></figure>
+</div>
+</section>
+<section id="simple-create-safe">
+<h2>Create Safe (simple mode) <small>simple-create-safe/ · 3 states</small></h2>
+<div class="shots">
+<figure><a href="simple-create-safe/owners.png"><img src="simple-create-safe/owners.png" loading="lazy" alt="owners"></a><figcaption>owners</figcaption></figure>
+<figure><a href="simple-create-safe/review.png"><img src="simple-create-safe/review.png" loading="lazy" alt="review"></a><figcaption>review</figcaption></figure>
+<figure><a href="simple-create-safe/review-dark.png"><img src="simple-create-safe/review-dark.png" loading="lazy" alt="review-dark"></a><figcaption>review-dark</figcaption></figure>
+</div>
+</section>
+<section id="simple-safe-import">
+<h2>Import Safe (simple mode) <small>simple-safe-import/ · 3 states</small></h2>
+<div class="shots">
+<figure><a href="simple-safe-import/empty.png"><img src="simple-safe-import/empty.png" loading="lazy" alt="empty"></a><figcaption>empty</figcaption></figure>
+<figure><a href="simple-safe-import/empty-dark.png"><img src="simple-safe-import/empty-dark.png" loading="lazy" alt="empty-dark"></a><figcaption>empty-dark</figcaption></figure>
+<figure><a href="simple-safe-import/refused.png"><img src="simple-safe-import/refused.png" loading="lazy" alt="refused"></a><figcaption>refused</figcaption></figure>
+</div>
+</section>
+<section id="simple-safe-propose">
+<h2>Propose Safe transaction (simple mode) <small>simple-safe-propose/ · 4 states</small></h2>
+<div class="shots">
+<figure><a href="simple-safe-propose/compose.png"><img src="simple-safe-propose/compose.png" loading="lazy" alt="compose"></a><figcaption>compose</figcaption></figure>
+<figure><a href="simple-safe-propose/refused.png"><img src="simple-safe-propose/refused.png" loading="lazy" alt="refused"></a><figcaption>refused</figcaption></figure>
+<figure><a href="simple-safe-propose/review.png"><img src="simple-safe-propose/review.png" loading="lazy" alt="review"></a><figcaption>review</figcaption></figure>
+<figure><a href="simple-safe-propose/review-dark.png"><img src="simple-safe-propose/review-dark.png" loading="lazy" alt="review-dark"></a><figcaption>review-dark</figcaption></figure>
+</div>
+</section>
+<section id="simple-safe-settings">
+<h2>Safe settings (simple mode) <small>simple-safe-settings/ · 5 states</small></h2>
+<div class="shots">
+<figure><a href="simple-safe-settings/overview.png"><img src="simple-safe-settings/overview.png" loading="lazy" alt="overview"></a><figcaption>overview</figcaption></figure>
+<figure><a href="simple-safe-settings/overview-dark.png"><img src="simple-safe-settings/overview-dark.png" loading="lazy" alt="overview-dark"></a><figcaption>overview-dark</figcaption></figure>
+<figure><a href="simple-safe-settings/refused.png"><img src="simple-safe-settings/refused.png" loading="lazy" alt="refused"></a><figcaption>refused</figcaption></figure>
+<figure><a href="simple-safe-settings/review.png"><img src="simple-safe-settings/review.png" loading="lazy" alt="review"></a><figcaption>review</figcaption></figure>
+<figure><a href="simple-safe-settings/review-refused.png"><img src="simple-safe-settings/review-refused.png" loading="lazy" alt="review-refused"></a><figcaption>review-refused</figcaption></figure>
+</div>
+</section>
+<section id="simple-safe-swap">
+<h2>Safe swap (simple mode) <small>simple-safe-swap/ · 4 states</small></h2>
+<div class="shots">
+<figure><a href="simple-safe-swap/compose.png"><img src="simple-safe-swap/compose.png" loading="lazy" alt="compose"></a><figcaption>compose</figcaption></figure>
+<figure><a href="simple-safe-swap/refused.png"><img src="simple-safe-swap/refused.png" loading="lazy" alt="refused"></a><figcaption>refused</figcaption></figure>
+<figure><a href="simple-safe-swap/review.png"><img src="simple-safe-swap/review.png" loading="lazy" alt="review"></a><figcaption>review</figcaption></figure>
+<figure><a href="simple-safe-swap/review-dark.png"><img src="simple-safe-swap/review-dark.png" loading="lazy" alt="review-dark"></a><figcaption>review-dark</figcaption></figure>
+</div>
+</section>
+<section id="simple-safe-tx">
+<h2>Safe transaction (simple mode) <small>simple-safe-tx/ · 7 states</small></h2>
+<div class="shots">
+<figure><a href="simple-safe-tx/overview.png"><img src="simple-safe-tx/overview.png" loading="lazy" alt="overview"></a><figcaption>overview</figcaption></figure>
+<figure><a href="simple-safe-tx/overview-dark.png"><img src="simple-safe-tx/overview-dark.png" loading="lazy" alt="overview-dark"></a><figcaption>overview-dark</figcaption></figure>
+<figure><a href="simple-safe-tx/review.png"><img src="simple-safe-tx/review.png" loading="lazy" alt="review"></a><figcaption>review</figcaption></figure>
+<figure><a href="simple-safe-tx/swap.png"><img src="simple-safe-tx/swap.png" loading="lazy" alt="swap"></a><figcaption>swap</figcaption></figure>
+<figure><a href="simple-safe-tx/refused.png"><img src="simple-safe-tx/refused.png" loading="lazy" alt="refused"></a><figcaption>refused</figcaption></figure>
+<figure><a href="simple-safe-tx/signing.png"><img src="simple-safe-tx/signing.png" loading="lazy" alt="signing"></a><figcaption>signing</figcaption></figure>
+<figure><a href="simple-safe-tx/approval.png"><img src="simple-safe-tx/approval.png" loading="lazy" alt="approval"></a><figcaption>approval</figcaption></figure>
+</div>
+</section>
+<section id="simple-send">
+<h2>Send (simple mode) <small>simple-send/ · 5 states</small></h2>
+<div class="shots">
+<figure><a href="simple-send/compose.png"><img src="simple-send/compose.png" loading="lazy" alt="compose"></a><figcaption>compose</figcaption></figure>
+<figure><a href="simple-send/syncing.png"><img src="simple-send/syncing.png" loading="lazy" alt="syncing"></a><figcaption>syncing</figcaption></figure>
+<figure><a href="simple-send/review.png"><img src="simple-send/review.png" loading="lazy" alt="review"></a><figcaption>review</figcaption></figure>
+<figure><a href="simple-send/review-dark.png"><img src="simple-send/review-dark.png" loading="lazy" alt="review-dark"></a><figcaption>review-dark</figcaption></figure>
+<figure><a href="simple-send/compose-refused.png"><img src="simple-send/compose-refused.png" loading="lazy" alt="compose-refused"></a><figcaption>compose-refused</figcaption></figure>
+</div>
+</section>
+<section id="simple-settings">
+<h2>Settings (simple mode) <small>simple-settings/ · 3 states</small></h2>
+<div class="shots">
+<figure><a href="simple-settings/default.png"><img src="simple-settings/default.png" loading="lazy" alt="default"></a><figcaption>default</figcaption></figure>
+<figure><a href="simple-settings/default-dark.png"><img src="simple-settings/default-dark.png" loading="lazy" alt="default-dark"></a><figcaption>default-dark</figcaption></figure>
+<figure><a href="simple-settings/off.png"><img src="simple-settings/off.png" loading="lazy" alt="off"></a><figcaption>off</figcaption></figure>
+</div>
+</section>
+<section id="simple-swap">
+<h2>Swap (simple mode) <small>simple-swap/ · 11 states</small></h2>
+<div class="shots">
+<figure><a href="simple-swap/compose.png"><img src="simple-swap/compose.png" loading="lazy" alt="compose"></a><figcaption>compose</figcaption></figure>
+<figure><a href="simple-swap/compose-dark.png"><img src="simple-swap/compose-dark.png" loading="lazy" alt="compose-dark"></a><figcaption>compose-dark</figcaption></figure>
+<figure><a href="simple-swap/approval.png"><img src="simple-swap/approval.png" loading="lazy" alt="approval"></a><figcaption>approval</figcaption></figure>
+<figure><a href="simple-swap/approval-dark.png"><img src="simple-swap/approval-dark.png" loading="lazy" alt="approval-dark"></a><figcaption>approval-dark</figcaption></figure>
+<figure><a href="simple-swap/pending.png"><img src="simple-swap/pending.png" loading="lazy" alt="pending"></a><figcaption>pending</figcaption></figure>
+<figure><a href="simple-swap/step-two.png"><img src="simple-swap/step-two.png" loading="lazy" alt="step-two"></a><figcaption>step-two</figcaption></figure>
+<figure><a href="simple-swap/cow.png"><img src="simple-swap/cow.png" loading="lazy" alt="cow"></a><figcaption>cow</figcaption></figure>
+<figure><a href="simple-swap/reset-first.png"><img src="simple-swap/reset-first.png" loading="lazy" alt="reset-first"></a><figcaption>reset-first</figcaption></figure>
+<figure><a href="simple-swap/earlier-failed.png"><img src="simple-swap/earlier-failed.png" loading="lazy" alt="earlier-failed"></a><figcaption>earlier-failed</figcaption></figure>
+<figure><a href="simple-swap/one-step.png"><img src="simple-swap/one-step.png" loading="lazy" alt="one-step"></a><figcaption>one-step</figcaption></figure>
+<figure><a href="simple-swap/not-sent.png"><img src="simple-swap/not-sent.png" loading="lazy" alt="not-sent"></a><figcaption>not-sent</figcaption></figure>
+</div>
+</section>
+<section id="simple-tokens">
+<h2>Tokens (simple mode) <small>simple-tokens/ · 2 states</small></h2>
+<div class="shots">
+<figure><a href="simple-tokens/list.png"><img src="simple-tokens/list.png" loading="lazy" alt="list"></a><figcaption>list</figcaption></figure>
+<figure><a href="simple-tokens/list-dark.png"><img src="simple-tokens/list-dark.png" loading="lazy" alt="list-dark"></a><figcaption>list-dark</figcaption></figure>
+</div>
+</section>
+<section id="simple-transfer-status">
+<h2>Transfer status (simple mode) <small>simple-transfer-status/ · 5 states</small></h2>
+<div class="shots">
+<figure><a href="simple-transfer-status/confirmed.png"><img src="simple-transfer-status/confirmed.png" loading="lazy" alt="confirmed"></a><figcaption>confirmed</figcaption></figure>
+<figure><a href="simple-transfer-status/confirmed-dark.png"><img src="simple-transfer-status/confirmed-dark.png" loading="lazy" alt="confirmed-dark"></a><figcaption>confirmed-dark</figcaption></figure>
+<figure><a href="simple-transfer-status/final.png"><img src="simple-transfer-status/final.png" loading="lazy" alt="final"></a><figcaption>final</figcaption></figure>
+<figure><a href="simple-transfer-status/failed.png"><img src="simple-transfer-status/failed.png" loading="lazy" alt="failed"></a><figcaption>failed</figcaption></figure>
+<figure><a href="simple-transfer-status/maybe-sent.png"><img src="simple-transfer-status/maybe-sent.png" loading="lazy" alt="maybe-sent"></a><figcaption>maybe-sent</figcaption></figure>
+</div>
+</section>
+<section id="simple-watch">
+<h2>Watch address (simple mode) <small>simple-watch/ · 9 states</small></h2>
+<div class="shots">
+<figure><a href="simple-watch/account.png"><img src="simple-watch/account.png" loading="lazy" alt="account"></a><figcaption>account</figcaption></figure>
+<figure><a href="simple-watch/account-dark.png"><img src="simple-watch/account-dark.png" loading="lazy" alt="account-dark"></a><figcaption>account-dark</figcaption></figure>
+<figure><a href="simple-watch/safe.png"><img src="simple-watch/safe.png" loading="lazy" alt="safe"></a><figcaption>safe</figcaption></figure>
+<figure><a href="simple-watch/name-resolved.png"><img src="simple-watch/name-resolved.png" loading="lazy" alt="name-resolved"></a><figcaption>name-resolved</figcaption></figure>
+<figure><a href="simple-watch/name-on-one-registry.png"><img src="simple-watch/name-on-one-registry.png" loading="lazy" alt="name-on-one-registry"></a><figcaption>name-on-one-registry</figcaption></figure>
+<figure><a href="simple-watch/name-unverified-on-one-registry.png"><img src="simple-watch/name-unverified-on-one-registry.png" loading="lazy" alt="name-unverified-on-one-registry"></a><figcaption>name-unverified-on-one-registry</figcaption></figure>
+<figure><a href="simple-watch/every-network.png"><img src="simple-watch/every-network.png" loading="lazy" alt="every-network"></a><figcaption>every-network</figcaption></figure>
+<figure><a href="simple-watch/syncing.png"><img src="simple-watch/syncing.png" loading="lazy" alt="syncing"></a><figcaption>syncing</figcaption></figure>
+<figure><a href="simple-watch/syncing-dark.png"><img src="simple-watch/syncing-dark.png" loading="lazy" alt="syncing-dark"></a><figcaption>syncing-dark</figcaption></figure>
+</div>
+</section>
+<section id="swap">
+<h2>Swap <small>swap/ · 35 states</small></h2>
+<div class="shots">
+<figure><a href="swap/compose-empty.png"><img src="swap/compose-empty.png" loading="lazy" alt="compose-empty"></a><figcaption>compose-empty</figcaption></figure>
+<figure><a href="swap/compose-empty-dark.png"><img src="swap/compose-empty-dark.png" loading="lazy" alt="compose-empty-dark"></a><figcaption>compose-empty-dark</figcaption></figure>
+<figure><a href="swap/composed.png"><img src="swap/composed.png" loading="lazy" alt="composed"></a><figcaption>composed</figcaption></figure>
+<figure><a href="swap/compose-estimate-checking.png"><img src="swap/compose-estimate-checking.png" loading="lazy" alt="compose-estimate-checking"></a><figcaption>compose-estimate-checking</figcaption></figure>
+<figure><a href="swap/compose-estimate-unavailable.png"><img src="swap/compose-estimate-unavailable.png" loading="lazy" alt="compose-estimate-unavailable"></a><figcaption>compose-estimate-unavailable</figcaption></figure>
+<figure><a href="swap/compose-high-impact.png"><img src="swap/compose-high-impact.png" loading="lazy" alt="compose-high-impact"></a><figcaption>compose-high-impact</figcaption></figure>
+<figure><a href="swap/compose-quoting.png"><img src="swap/compose-quoting.png" loading="lazy" alt="compose-quoting"></a><figcaption>compose-quoting</figcaption></figure>
+<figure><a href="swap/compose-input-errors.png"><img src="swap/compose-input-errors.png" loading="lazy" alt="compose-input-errors"></a><figcaption>compose-input-errors</figcaption></figure>
+<figure><a href="swap/compose-no-route.png"><img src="swap/compose-no-route.png" loading="lazy" alt="compose-no-route"></a><figcaption>compose-no-route</figcaption></figure>
+<figure><a href="swap/compose-cow-orders-unreadable.png"><img src="swap/compose-cow-orders-unreadable.png" loading="lazy" alt="compose-cow-orders-unreadable"></a><figcaption>compose-cow-orders-unreadable</figcaption></figure>
+<figure><a href="swap/compose-on-cow.png"><img src="swap/compose-on-cow.png" loading="lazy" alt="compose-on-cow"></a><figcaption>compose-on-cow</figcaption></figure>
+<figure><a href="swap/compose-cow-did-not-answer.png"><img src="swap/compose-cow-did-not-answer.png" loading="lazy" alt="compose-cow-did-not-answer"></a><figcaption>compose-cow-did-not-answer</figcaption></figure>
+<figure><a href="swap/compose-earlier-order-live.png"><img src="swap/compose-earlier-order-live.png" loading="lazy" alt="compose-earlier-order-live"></a><figcaption>compose-earlier-order-live</figcaption></figure>
+<figure><a href="swap/compose-approval-sent.png"><img src="swap/compose-approval-sent.png" loading="lazy" alt="compose-approval-sent"></a><figcaption>compose-approval-sent</figcaption></figure>
+<figure><a href="swap/compose-earlier-maybe-sent.png"><img src="swap/compose-earlier-maybe-sent.png" loading="lazy" alt="compose-earlier-maybe-sent"></a><figcaption>compose-earlier-maybe-sent</figcaption></figure>
+<figure><a href="swap/compose-token-not-found.png"><img src="swap/compose-token-not-found.png" loading="lazy" alt="compose-token-not-found"></a><figcaption>compose-token-not-found</figcaption></figure>
+<figure><a href="swap/approval.png"><img src="swap/approval.png" loading="lazy" alt="approval"></a><figcaption>approval</figcaption></figure>
+<figure><a href="swap/approval-reset-first.png"><img src="swap/approval-reset-first.png" loading="lazy" alt="approval-reset-first"></a><figcaption>approval-reset-first</figcaption></figure>
+<figure><a href="swap/review.png"><img src="swap/review.png" loading="lazy" alt="review"></a><figcaption>review</figcaption></figure>
+<figure><a href="swap/review-dark.png"><img src="swap/review-dark.png" loading="lazy" alt="review-dark"></a><figcaption>review-dark</figcaption></figure>
+<figure><a href="swap/review-through-weth-with-biometrics.png"><img src="swap/review-through-weth-with-biometrics.png" loading="lazy" alt="review-through-weth-with-biometrics"></a><figcaption>review-through-weth-with-biometrics</figcaption></figure>
+<figure><a href="swap/review-wrong-password.png"><img src="swap/review-wrong-password.png" loading="lazy" alt="review-wrong-password"></a><figcaption>review-wrong-password</figcaption></figure>
+<figure><a href="swap/review-signing.png"><img src="swap/review-signing.png" loading="lazy" alt="review-signing"></a><figcaption>review-signing</figcaption></figure>
+<figure><a href="swap/review-refreshing.png"><img src="swap/review-refreshing.png" loading="lazy" alt="review-refreshing"></a><figcaption>review-refreshing</figcaption></figure>
+<figure><a href="swap/review-not-sent.png"><img src="swap/review-not-sent.png" loading="lazy" alt="review-not-sent"></a><figcaption>review-not-sent</figcaption></figure>
+<figure><a href="swap/cow-review.png"><img src="swap/cow-review.png" loading="lazy" alt="cow-review"></a><figcaption>cow-review</figcaption></figure>
+<figure><a href="swap/cow-review-dark.png"><img src="swap/cow-review-dark.png" loading="lazy" alt="cow-review-dark"></a><figcaption>cow-review-dark</figcaption></figure>
+<figure><a href="swap/cow-review-uniswap-gives-more.png"><img src="swap/cow-review-uniswap-gives-more.png" loading="lazy" alt="cow-review-uniswap-gives-more"></a><figcaption>cow-review-uniswap-gives-more</figcaption></figure>
+<figure><a href="swap/order-placed.png"><img src="swap/order-placed.png" loading="lazy" alt="order-placed"></a><figcaption>order-placed</figcaption></figure>
+<figure><a href="swap/loading.png"><img src="swap/loading.png" loading="lazy" alt="loading"></a><figcaption>loading</figcaption></figure>
+<figure><a href="swap/watch-only.png"><img src="swap/watch-only.png" loading="lazy" alt="watch-only"></a><figcaption>watch-only</figcaption></figure>
+<figure><a href="swap/sent.png"><img src="swap/sent.png" loading="lazy" alt="sent"></a><figcaption>sent</figcaption></figure>
+<figure><a href="swap/approval-pending.png"><img src="swap/approval-pending.png" loading="lazy" alt="approval-pending"></a><figcaption>approval-pending</figcaption></figure>
+<figure><a href="swap/review-step-two.png"><img src="swap/review-step-two.png" loading="lazy" alt="review-step-two"></a><figcaption>review-step-two</figcaption></figure>
+<figure><a href="swap/approval-earlier-failed.png"><img src="swap/approval-earlier-failed.png" loading="lazy" alt="approval-earlier-failed"></a><figcaption>approval-earlier-failed</figcaption></figure>
+</div>
+</section>
+<section id="tokens">
+<h2>Tokens <small>tokens/ · 7 states</small></h2>
+<div class="shots">
+<figure><a href="tokens/list.png"><img src="tokens/list.png" loading="lazy" alt="list"></a><figcaption>list</figcaption></figure>
+<figure><a href="tokens/list-dark.png"><img src="tokens/list-dark.png" loading="lazy" alt="list-dark"></a><figcaption>list-dark</figcaption></figure>
+<figure><a href="tokens/checks.png"><img src="tokens/checks.png" loading="lazy" alt="checks"></a><figcaption>checks</figcaption></figure>
+<figure><a href="tokens/unreadable.png"><img src="tokens/unreadable.png" loading="lazy" alt="unreadable"></a><figcaption>unreadable</figcaption></figure>
+<figure><a href="tokens/built-in.png"><img src="tokens/built-in.png" loading="lazy" alt="built-in"></a><figcaption>built-in</figcaption></figure>
+<figure><a href="tokens/built-in-rest.png"><img src="tokens/built-in-rest.png" loading="lazy" alt="built-in-rest"></a><figcaption>built-in-rest</figcaption></figure>
+<figure><a href="tokens/gnosis.png"><img src="tokens/gnosis.png" loading="lazy" alt="gnosis"></a><figcaption>gnosis</figcaption></figure>
+</div>
+</section>
+<section id="transfer-status">
+<h2>Transfer status <small>transfer-status/ · 25 states</small></h2>
+<div class="shots">
+<figure><a href="transfer-status/pending.png"><img src="transfer-status/pending.png" loading="lazy" alt="pending"></a><figcaption>pending</figcaption></figure>
+<figure><a href="transfer-status/pending-dark.png"><img src="transfer-status/pending-dark.png" loading="lazy" alt="pending-dark"></a><figcaption>pending-dark</figcaption></figure>
+<figure><a href="transfer-status/included.png"><img src="transfer-status/included.png" loading="lazy" alt="included"></a><figcaption>included</figcaption></figure>
+<figure><a href="transfer-status/finalized.png"><img src="transfer-status/finalized.png" loading="lazy" alt="finalized"></a><figcaption>finalized</figcaption></figure>
+<figure><a href="transfer-status/failed.png"><img src="transfer-status/failed.png" loading="lazy" alt="failed"></a><figcaption>failed</figcaption></figure>
+<figure><a href="transfer-status/unavailable.png"><img src="transfer-status/unavailable.png" loading="lazy" alt="unavailable"></a><figcaption>unavailable</figcaption></figure>
+<figure><a href="transfer-status/no-record.png"><img src="transfer-status/no-record.png" loading="lazy" alt="no-record"></a><figcaption>no-record</figcaption></figure>
+<figure><a href="transfer-status/safe-execution.png"><img src="transfer-status/safe-execution.png" loading="lazy" alt="safe-execution"></a><figcaption>safe-execution</figcaption></figure>
+<figure><a href="transfer-status/safe-deployment.png"><img src="transfer-status/safe-deployment.png" loading="lazy" alt="safe-deployment"></a><figcaption>safe-deployment</figcaption></figure>
+<figure><a href="transfer-status/safe-listed.png"><img src="transfer-status/safe-listed.png" loading="lazy" alt="safe-listed"></a><figcaption>safe-listed</figcaption></figure>
+<figure><a href="transfer-status/safe-listed-dark.png"><img src="transfer-status/safe-listed-dark.png" loading="lazy" alt="safe-listed-dark"></a><figcaption>safe-listed-dark</figcaption></figure>
+<figure><a href="transfer-status/safe-not-listed.png"><img src="transfer-status/safe-not-listed.png" loading="lazy" alt="safe-not-listed"></a><figcaption>safe-not-listed</figcaption></figure>
+<figure><a href="transfer-status/maybe-sent.png"><img src="transfer-status/maybe-sent.png" loading="lazy" alt="maybe-sent"></a><figcaption>maybe-sent</figcaption></figure>
+<figure><a href="transfer-status/retrying.png"><img src="transfer-status/retrying.png" loading="lazy" alt="retrying"></a><figcaption>retrying</figcaption></figure>
+<figure><a href="transfer-status/turned-away.png"><img src="transfer-status/turned-away.png" loading="lazy" alt="turned-away"></a><figcaption>turned-away</figcaption></figure>
+<figure><a href="transfer-status/loading.png"><img src="transfer-status/loading.png" loading="lazy" alt="loading"></a><figcaption>loading</figcaption></figure>
+<figure><a href="transfer-status/swap.png"><img src="transfer-status/swap.png" loading="lazy" alt="swap"></a><figcaption>swap</figcaption></figure>
+<figure><a href="transfer-status/swap-failed.png"><img src="transfer-status/swap-failed.png" loading="lazy" alt="swap-failed"></a><figcaption>swap-failed</figcaption></figure>
+<figure><a href="transfer-status/approval.png"><img src="transfer-status/approval.png" loading="lazy" alt="approval"></a><figcaption>approval</figcaption></figure>
+<figure><a href="transfer-status/allowance-reset.png"><img src="transfer-status/allowance-reset.png" loading="lazy" alt="allowance-reset"></a><figcaption>allowance-reset</figcaption></figure>
+<figure><a href="transfer-status/swap-dark.png"><img src="transfer-status/swap-dark.png" loading="lazy" alt="swap-dark"></a><figcaption>swap-dark</figcaption></figure>
+<figure><a href="transfer-status/swap-received.png"><img src="transfer-status/swap-received.png" loading="lazy" alt="swap-received"></a><figcaption>swap-received</figcaption></figure>
+<figure><a href="transfer-status/nonce-used.png"><img src="transfer-status/nonce-used.png" loading="lazy" alt="nonce-used"></a><figcaption>nonce-used</figcaption></figure>
+<figure><a href="transfer-status/maybe-sent-nonce-used.png"><img src="transfer-status/maybe-sent-nonce-used.png" loading="lazy" alt="maybe-sent-nonce-used"></a><figcaption>maybe-sent-nonce-used</figcaption></figure>
+<figure><a href="transfer-status/cow-cancellation.png"><img src="transfer-status/cow-cancellation.png" loading="lazy" alt="cow-cancellation"></a><figcaption>cow-cancellation</figcaption></figure>
+</div>
+</section>
+<section id="update-required">
+<h2>Update required <small>update-required/ · 2 states</small></h2>
+<div class="shots">
+<figure><a href="update-required/required.png"><img src="update-required/required.png" loading="lazy" alt="required"></a><figcaption>required</figcaption></figure>
+<figure><a href="update-required/required-dark.png"><img src="update-required/required-dark.png" loading="lazy" alt="required-dark"></a><figcaption>required-dark</figcaption></figure>
+</div>
+</section>
+<section id="watch">
+<h2>Watch address <small>watch/ · 25 states</small></h2>
+<div class="shots">
+<figure><a href="watch/empty.png"><img src="watch/empty.png" loading="lazy" alt="empty"></a><figcaption>empty</figcaption></figure>
+<figure><a href="watch/checking.png"><img src="watch/checking.png" loading="lazy" alt="checking"></a><figcaption>checking</figcaption></figure>
+<figure><a href="watch/account.png"><img src="watch/account.png" loading="lazy" alt="account"></a><figcaption>account</figcaption></figure>
+<figure><a href="watch/account-dark.png"><img src="watch/account-dark.png" loading="lazy" alt="account-dark"></a><figcaption>account-dark</figcaption></figure>
+<figure><a href="watch/delegated-account.png"><img src="watch/delegated-account.png" loading="lazy" alt="delegated-account"></a><figcaption>delegated-account</figcaption></figure>
+<figure><a href="watch/safe.png"><img src="watch/safe.png" loading="lazy" alt="safe"></a><figcaption>safe</figcaption></figure>
+<figure><a href="watch/not-a-safe.png"><img src="watch/not-a-safe.png" loading="lazy" alt="not-a-safe"></a><figcaption>not-a-safe</figcaption></figure>
+<figure><a href="watch/in-wallet.png"><img src="watch/in-wallet.png" loading="lazy" alt="in-wallet"></a><figcaption>in-wallet</figcaption></figure>
+<figure><a href="watch/unavailable.png"><img src="watch/unavailable.png" loading="lazy" alt="unavailable"></a><figcaption>unavailable</figcaption></figure>
+<figure><a href="watch/invalid-address.png"><img src="watch/invalid-address.png" loading="lazy" alt="invalid-address"></a><figcaption>invalid-address</figcaption></figure>
+<figure><a href="watch/name-too-long.png"><img src="watch/name-too-long.png" loading="lazy" alt="name-too-long"></a><figcaption>name-too-long</figcaption></figure>
+<figure><a href="watch/gnosis-no-names.png"><img src="watch/gnosis-no-names.png" loading="lazy" alt="gnosis-no-names"></a><figcaption>gnosis-no-names</figcaption></figure>
+<figure><a href="watch/adding.png"><img src="watch/adding.png" loading="lazy" alt="adding"></a><figcaption>adding</figcaption></figure>
+<figure><a href="watch/not-saved.png"><img src="watch/not-saved.png" loading="lazy" alt="not-saved"></a><figcaption>not-saved</figcaption></figure>
+<figure><a href="watch/resolving-name.png"><img src="watch/resolving-name.png" loading="lazy" alt="resolving-name"></a><figcaption>resolving-name</figcaption></figure>
+<figure><a href="watch/name-resolved.png"><img src="watch/name-resolved.png" loading="lazy" alt="name-resolved"></a><figcaption>name-resolved</figcaption></figure>
+<figure><a href="watch/name-on-one-registry.png"><img src="watch/name-on-one-registry.png" loading="lazy" alt="name-on-one-registry"></a><figcaption>name-on-one-registry</figcaption></figure>
+<figure><a href="watch/name-unverified-on-one-registry.png"><img src="watch/name-unverified-on-one-registry.png" loading="lazy" alt="name-unverified-on-one-registry"></a><figcaption>name-unverified-on-one-registry</figcaption></figure>
+<figure><a href="watch/name-moved.png"><img src="watch/name-moved.png" loading="lazy" alt="name-moved"></a><figcaption>name-moved</figcaption></figure>
+<figure><a href="watch/name-unavailable.png"><img src="watch/name-unavailable.png" loading="lazy" alt="name-unavailable"></a><figcaption>name-unavailable</figcaption></figure>
+<figure><a href="watch/name-resolved-no-name.png"><img src="watch/name-resolved-no-name.png" loading="lazy" alt="name-resolved-no-name"></a><figcaption>name-resolved-no-name</figcaption></figure>
+<figure><a href="watch/every-network.png"><img src="watch/every-network.png" loading="lazy" alt="every-network"></a><figcaption>every-network</figcaption></figure>
+<figure><a href="watch/choose-networks.png"><img src="watch/choose-networks.png" loading="lazy" alt="choose-networks"></a><figcaption>choose-networks</figcaption></figure>
+<figure><a href="watch/safe-on-one-network.png"><img src="watch/safe-on-one-network.png" loading="lazy" alt="safe-on-one-network"></a><figcaption>safe-on-one-network</figcaption></figure>
+<figure><a href="watch/no-network.png"><img src="watch/no-network.png" loading="lazy" alt="no-network"></a><figcaption>no-network</figcaption></figure>
+</div>
+</section>
+<section id="widget-pair">
+<h2>Widget setup <small>widget-pair/ · 9 states</small></h2>
+<div class="shots">
+<figure><a href="widget-pair/networks.png"><img src="widget-pair/networks.png" loading="lazy" alt="networks"></a><figcaption>networks</figcaption></figure>
+<figure><a href="widget-pair/networks-dark.png"><img src="widget-pair/networks-dark.png" loading="lazy" alt="networks-dark"></a><figcaption>networks-dark</figcaption></figure>
+<figure><a href="widget-pair/none-on.png"><img src="widget-pair/none-on.png" loading="lazy" alt="none-on"></a><figcaption>none-on</figcaption></figure>
+<figure><a href="widget-pair/bases.png"><img src="widget-pair/bases.png" loading="lazy" alt="bases"></a><figcaption>bases</figcaption></figure>
+<figure><a href="widget-pair/bases-filtered.png"><img src="widget-pair/bases-filtered.png" loading="lazy" alt="bases-filtered"></a><figcaption>bases-filtered</figcaption></figure>
+<figure><a href="widget-pair/bases-no-match.png"><img src="widget-pair/bases-no-match.png" loading="lazy" alt="bases-no-match"></a><figcaption>bases-no-match</figcaption></figure>
+<figure><a href="widget-pair/bases-filtered-dark.png"><img src="widget-pair/bases-filtered-dark.png" loading="lazy" alt="bases-filtered-dark"></a><figcaption>bases-filtered-dark</figcaption></figure>
+<figure><a href="widget-pair/quotes.png"><img src="widget-pair/quotes.png" loading="lazy" alt="quotes"></a><figcaption>quotes</figcaption></figure>
+<figure><a href="widget-pair/quotes-dark.png"><img src="widget-pair/quotes-dark.png" loading="lazy" alt="quotes-dark"></a><figcaption>quotes-dark</figcaption></figure>
+</div>
+</section>
+</body>
+</html>
