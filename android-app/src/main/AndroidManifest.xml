@@ -9,6 +9,15 @@
          (the key store's library declares it too, for its own checks). -->
     <uses-permission android:name="android.permission.USE_BIOMETRIC" />
 
+    <!-- Send from another wallet (#255): the wallet apps that open `ethereum:` payment links, which
+         Android 11 and later shows the package manager only when they are asked for here. -->
+    <queries>
+        <intent>
+            <action android:name="android.intent.action.VIEW" />
+            <data android:scheme="ethereum" />
+        </intent>
+    </queries>
+
     <application
         android:name=".SerotineApplication"
         android:label="@string/app_name"

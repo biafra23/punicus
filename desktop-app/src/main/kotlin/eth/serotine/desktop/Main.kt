@@ -12,6 +12,7 @@ import eth.serotine.data.account.FileAccountRepository
 import eth.serotine.data.cow.FileCowOrders
 import eth.serotine.data.cow.HttpCowApi
 import eth.serotine.data.engine.MyotisHost
+import eth.serotine.data.handoff.NoWalletHandoff
 import eth.serotine.data.history.FileHistoryStarts
 import eth.serotine.data.keys.EnvelopeKeyStore
 import eth.serotine.data.keys.Secp256k1Recovery
@@ -370,6 +371,9 @@ private fun openWallet(dataDir: File) {
                 transactionInputs = node.transactionInputs,
                 broadcaster = node.broadcaster,
                 receipts = node.receipts,
+                blockTransactions = node.blockTransactions,
+                // A computer hands no payment link to another wallet (#255): Send from another wallet is left out.
+                walletHandoff = NoWalletHandoff,
                 names = node.names,
                 signer = keyStore,
                 sentTransfers = sentTransfers,

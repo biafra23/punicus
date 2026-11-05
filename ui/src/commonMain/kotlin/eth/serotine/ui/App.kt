@@ -70,6 +70,7 @@ import eth.serotine.ui.pairdapp.PairDappRoute
 import eth.serotine.ui.debug.DebugRoute
 import eth.serotine.ui.debug.DebugViewModel
 import eth.serotine.ui.deriveaccount.DeriveAccountRoute
+import eth.serotine.ui.handoff.HandoffRoute
 import eth.serotine.ui.lightclient.LightClientViewModel
 import eth.serotine.ui.mnemonicimport.MnemonicImportRoute
 import eth.serotine.ui.mode.LocalInterfaceMode
@@ -380,6 +381,7 @@ private fun Destinations(
                     onSafeSettings = { navController.safeSettings(account) },
                     onOpenActivity = { key -> navController.openActivityDetail(account, key) },
                     onContinueSwap = { sell -> navController.continueSwap(account, sell) },
+                    onSendElsewhere = { contract -> navController.sendElsewhere(account, contract) },
                 )
             }
             composable(
@@ -633,6 +635,30 @@ private fun Destinations(
                 LaunchedEffect(Unit) { navController.popBackStack(SEND_ROUTE, inclusive = true) }
             }
         }
+        // Send from another wallet (#255): handed to another wallet app, then followed on the chain.
+        composable(
+            HANDOFF_ROUTE,
+            arguments = listOf(
+                navArgument(ASSET) {
+                    type = NavType.StringType
+                    nullable = true
+                    defaultValue = null
+                },
+            ),
+        ) { entry ->
+            val account = entry.account()
+            val asked = entry.savedStateHandle.get<String>(ASSET)
+            val asset = asked?.let(Address::parse)
+            if (account != null && (asked == null || asset != null)) {
+                HandoffRoute(
+                    viewModel = viewModel { graph.handoffViewModel(account, asset) },
+                    lightClient = lightClient.item(account.network),
+                    onBack = { navController.popBackStack(HANDOFF_ROUTE, inclusive = true) },
+                )
+            } else {
+                LaunchedEffect(Unit) { navController.popBackStack(HANDOFF_ROUTE, inclusive = true) }
+            }
+        }
         // Swap, and then where the swap stands: the transaction's flow, over the bar too.
         composable(
             SWAP_ROUTE,
@@ -841,6 +867,7 @@ private fun NavController.open(action: AccountAction) {
     val account = AccountId(network, Address.parse(action.address) ?: return)
     val route = when (action) {
         is AccountAction.Send -> return send(account, asset = null)
+        is AccountAction.SendElsewhere -> return sendElsewhere(account, asset = null)
         is AccountAction.Propose -> return propose(account, asset = null)
         is AccountAction.Open -> Destination.ACCOUNT
         is AccountAction.Receive -> Destination.RECEIVE
@@ -865,6 +892,17 @@ private fun NavController.send(account: AccountId, asset: String?) {
     if (currentDestination?.route == SEND_ROUTE) return
     val token = asset?.let { Address.parse(it) ?: return }
     navigate("${Destination.SEND}/${account.route}" + (token?.let { "?$ASSET=${it.hex}" } ?: ""))
+}
+
+/**
+ * Opens Send from another wallet (#255) from the [account], with the token at [asset] chosen (null:
+ * the network's currency); both in lower case, as identifiers.
+ */
+private fun NavController.sendElsewhere(account: AccountId, asset: String?) {
+    // A second tap while the first one's screen is opening: one screen, the first one asked for.
+    if (currentDestination?.route == HANDOFF_ROUTE) return
+    val token = asset?.let { Address.parse(it) ?: return }
+    navigate("${Destination.SEND_ELSEWHERE}/${account.route}" + (token?.let { "?$ASSET=${it.hex}" } ?: ""))
 }
 
 /**
@@ -1106,6 +1144,7 @@ private object Destination {
     const val CREATE_ACCOUNT = "create-account"
     const val CREATE_SAFE = "create-safe"
     const val SEND = "send"
+    const val SEND_ELSEWHERE = "send-elsewhere"
     const val SWAP = "swap"
     const val TRANSFER = "transfer"
     const val SAFE = "safe"
@@ -1144,6 +1183,9 @@ private const val IMPORTED = "imported"
 
 /** Send from an account, with a token chosen or not. */
 private const val SEND_ROUTE = "${Destination.SEND}/{$CHAIN}/{$ADDRESS}?$ASSET={$ASSET}"
+
+/** Send from another wallet (#255), with a token chosen or not. */
+private const val HANDOFF_ROUTE = "${Destination.SEND_ELSEWHERE}/{$CHAIN}/{$ADDRESS}?$ASSET={$ASSET}"
 
 /** Swap's optional route arguments, all three or none: what it buys, the amount as text, the venue. */
 private const val BUY = "buy"

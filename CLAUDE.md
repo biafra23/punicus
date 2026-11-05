@@ -254,3 +254,6 @@ rulings to the screens.
 - dApps connect over WalletConnect v2, whose relay never supplies chain
   state; a dApp session names Sepolia alone for now; the project ID is never
   committed (owner rulings, 2026-11-03, #22; docs/walletconnect.md).
+- Send from another wallet hands a transfer to another wallet app as an
+  `ethereum:` payment link; nothing comes back, and the outcome is read from
+  verified blocks alone (owner rulings, 2026-11-05, #255).

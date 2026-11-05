@@ -226,7 +226,8 @@ upgrades*).
    as the ways to get one (owner ruling, 2026-10-18, #55).
 3. **Account menu**: Send (greyed out when watch-only, a tap saying why;
    for a Safe, usable once an owner of it is held here, and it opens the
-   proposal of a Safe transaction, 16) · Receive · Copy address · Rename · New
+   proposal of a Safe transaction, 16) · Send from another wallet (7H; an
+   EOA whose key is not on this device) · Receive · Copy address · Rename · New
    account from the same phrase (an EOA's; greyed out when watch-only, a tap
    saying why) · Remove. Removing an account the user
    holds a key for says that only its recovery phrase brings it back, and
@@ -265,6 +266,7 @@ upgrades*).
    - Footnote: the price source ("Chainlink, testnet prices") and the block
      the balances were verified at.
 5. **Asset menu**: Send ‹symbol› (7 with the asset chosen; greyed out as in 3) ·
+   Send ‹symbol› from another wallet (7H, as in 3) ·
    Swap ‹symbol› (22 with the asset sold chosen; as Swap in 4) · Copy
    contract address · Hide token. The native currency's row has the menu
    too, with Send and Swap alone.
@@ -334,6 +336,41 @@ upgrades*).
      for a new one. Nothing is signed twice. One no peer answered may have
      reached one all the same, so it is recorded as maybe sent: leaving the
      screen, or the app, keeps its bytes for Try again on its status (9).
+7H. **Send from another wallet** (issue #255; owner rulings, 2026-11-05).
+   For an EOA whose key is not on this device: a watched EOA, or later a
+   proxy key of #254 without a live session. Serotine signs nothing: another
+   wallet app on the phone signs and sends, and nothing comes back through
+   the link.
+   - Where: the account menu (3) and the asset menu (5) ("Send ‹symbol› from
+     another wallet"). The visible way is the greyed-out Send's explanation on
+     the account (4), which offers it as its way out. Greyed out, a tap saying
+     why, while no app takes `ethereum:` links or the network is off (with
+     Turn on). Left out for a Safe, an account whose key is held here, and on
+     a platform that hands no link over: the desktop, and iOS for now.
+   - Compose: as Send's (7), with no fee level: the fee is the other wallet's.
+     An amount above the verified balance is refused there.
+   - Review: the amount, the recipient in full, the account, the network, and
+     what to know before the wallet opens: Serotine signs nothing; choose this
+     account in the wallet, which sends from whichever is chosen; its provider
+     learns the transfer and the IP address; Serotine checks the chain for 10
+     minutes. Sepolia keeps its testnet line. From 1,000 ETH up it says that
+     MetaMask cannot open the link (#255's spike). A name is resolved again
+     before the link is made.
+   - The link (`PaymentLinks`): `ethereum:` (EIP-681), the EIP-55 target and
+     the decimal chain id always, whole amounts, nothing else. Never MetaMask's
+     `https://` form, which falls back to its website (decision 3).
+   - Waiting: every verified block after the handoff is read, its body
+     checked against its transactions root (`BlockTransactions`), until the
+     transfer is in one or 10 minutes have passed with every block up to the
+     head read. A block that cannot be read is said and read again, never
+     skipped. The link is never handed over a second time, which could pay
+     twice.
+   - Outcome, from verified blocks alone: Sent (its receipt verified); It
+     failed (it reverted); Not what you handed over (another amount from the
+     account to the recipient); Not from this account (that amount from
+     another address, which is not counted as this account's); No matching
+     transfer seen yet. Not recorded in Activity: the record of sent
+     transactions holds signed bytes, and none are signed here.
 9. **Send, status**: what was sent (amount, asset, recipient, from this
    device's record; for a Safe's deployment "Deployment of a Safe", the Safe
    with its `t/n`, its version and the account that paid), then Signed → Broadcast → Included (receipt verified,

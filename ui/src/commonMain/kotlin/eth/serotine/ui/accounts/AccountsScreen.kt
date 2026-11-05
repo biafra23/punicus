@@ -53,6 +53,7 @@ import eth.serotine.ui.components.LightClientHealthDot
 import eth.serotine.ui.components.MenuAction
 import eth.serotine.ui.components.NameWithControlBadge
 import eth.serotine.ui.components.NetworkMark
+import eth.serotine.ui.components.SEND_FROM_ANOTHER_WALLET
 import eth.serotine.ui.components.SerotineIcons
 import eth.serotine.ui.components.SpeedDialAction
 import eth.serotine.ui.components.SpeedDialFab
@@ -456,6 +457,22 @@ internal fun accountMenu(
                 sendNotice != null -> onUnavailable(sendNotice)
                 account.kind == AccountKind.SAFE -> act(AccountAction.Propose(chainId, address))
                 else -> act(AccountAction.Send(chainId, address))
+            }
+        },
+        // Send from another wallet (#255): for an EOA whose key is not here, beside the greyed-out Send.
+        account.handoff?.let { handoff ->
+            MenuAction(SEND_FROM_ANOTHER_WALLET, Icons.AutoMirrored.Filled.Send, unavailable = !handoff.available) {
+                val reason = handoff.reason
+                val off = account.networkOff
+                when {
+                    reason == null -> act(AccountAction.SendElsewhere(chainId, address))
+                    off != null -> onUnavailable(
+                        networkOffNotice("$SEND_FROM_ANOTHER_WALLET needs $off", reason, off) {
+                            onTurnOnNetwork(chainId)
+                        },
+                    )
+                    else -> onUnavailable(UnavailableNotice(SEND_FROM_ANOTHER_WALLET, reason))
+                }
             }
         },
         MenuAction("Receive", SerotineIcons.QrCode) { act(AccountAction.Receive(chainId, address)) },
