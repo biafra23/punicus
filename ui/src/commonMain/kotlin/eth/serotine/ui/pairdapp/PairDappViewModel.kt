@@ -4,6 +4,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import eth.serotine.domain.repository.DappPairing
 import eth.serotine.domain.usecase.PairDapp
+import eth.serotine.ui.platform.QrScan
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -23,14 +24,20 @@ data class PairDappUiState(
     val busy: Boolean = false,
     val message: String? = null,
     val paired: Boolean = false,
+    /**
+     * The camera was refused, or could not be started: Scan is greyed out, still tappable, and [message]
+     * says why (owner ruling, 2026-10-18, #55). A tap asks again.
+     */
+    val cameraUnavailable: Boolean = false,
 ) {
     /** Connect is greyed out, still tappable, until a link is pasted (owner ruling, 2026-10-18, #55). */
     val missingLink: Boolean get() = text.isBlank()
 }
 
 /**
- * Pair's ViewModel: pairs with the dApp of the pasted `wc:` link, or of the one the platform opened
- * the app with ([incoming]), which it fills in and pairs with only on Connect.
+ * Pair's ViewModel: pairs with the dApp of the pasted `wc:` link, of the one the platform opened the
+ * app with ([incoming]), or of one a QR code scan read ([scanned]). A link that arrives or is scanned
+ * is filled in, and paired with only on Connect.
  */
 class PairDappViewModel(private val pairDapp: PairDapp, incoming: IncomingDappLink? = null) : ViewModel() {
 
@@ -56,6 +63,27 @@ class PairDappViewModel(private val pairDapp: PairDapp, incoming: IncomingDappLi
 
     fun edit(text: String) = state.update { it.copy(text = text, message = null) }
 
+    /**
+     * What a QR code scan came to. A `wc:` link fills the field, to be paired with on Connect, as a pasted
+     * one is; any other code is refused with what it is not. Nothing while a Connect is under way.
+     */
+    fun scanned(scan: QrScan) {
+        if (state.value.busy) return
+        when (scan) {
+            is QrScan.Read -> {
+                val text = scan.text.trim()
+                if (text.startsWith("wc:", ignoreCase = true)) {
+                    state.update { it.copy(text = text, message = null, cameraUnavailable = false) }
+                } else {
+                    state.update { it.copy(message = NOT_A_LINK, cameraUnavailable = false) }
+                }
+            }
+            QrScan.CameraRefused -> state.update { it.copy(message = CAMERA_REFUSED, cameraUnavailable = true) }
+            QrScan.CameraUnavailable -> state.update { it.copy(message = NO_CAMERA, cameraUnavailable = true) }
+            QrScan.Cancelled -> Unit
+        }
+    }
+
     fun connect() {
         val text = state.value.text
         if (state.value.busy) return
@@ -74,6 +102,11 @@ class PairDappViewModel(private val pairDapp: PairDapp, incoming: IncomingDappLi
 
     companion object {
         const val PASTE_FIRST = "Paste the WalletConnect link the dApp shows first."
+        const val NOT_A_LINK = "That QR code is not a WalletConnect link. Scan the one the dApp shows under " +
+            "WalletConnect."
+        const val CAMERA_REFUSED = "Serotine may not use the camera. Allow it in the system's settings for " +
+            "Serotine to scan, or copy the dApp's link and paste it here."
+        const val NO_CAMERA = "The camera could not be started. Copy the dApp's link and paste it here instead."
 
         fun message(pairing: DappPairing): String? = when (pairing) {
             is DappPairing.Paired -> null

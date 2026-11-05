@@ -184,6 +184,16 @@ kotlin {
                 implementation(compose.components.uiToolingPreview)
             }
         }
+        // The QR code scanner of Connect a dApp (platform/QrScanning.android.kt): the camera through
+        // CameraX, each frame decoded on the device by ZXing, and the camera permission asked for
+        // through activity-compose. Android alone: the other platforms have no scanner yet.
+        androidMain.dependencies {
+            implementation(libs.androidx.activity.compose)
+            implementation(libs.androidx.camera.camera2)
+            implementation(libs.androidx.camera.lifecycle)
+            implementation(libs.androidx.camera.view)
+            implementation(libs.zxing.core)
+        }
         commonTest.dependencies {
             implementation(kotlin("test"))
             implementation(libs.kotlinx.coroutines.test)

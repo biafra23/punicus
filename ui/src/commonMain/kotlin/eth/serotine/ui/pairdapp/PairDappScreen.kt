@@ -14,6 +14,7 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
@@ -23,16 +24,22 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import eth.serotine.ui.components.Unavailable
 import eth.serotine.ui.components.unavailable
+import eth.serotine.ui.platform.rememberQrScanner
 
-/** Test tag of the link field, for UI tests. */
+/** Test tags of the link field and of the Scan button, for UI tests. */
 const val PAIR_DAPP_FIELD_TAG = "pair-dapp-field"
+const val PAIR_DAPP_SCAN_TAG = "pair-dapp-scan"
 
-/** Binds [PairDappScreen] to its ViewModel; a pairing that took ends the screen through [onPaired]. */
+/**
+ * Binds [PairDappScreen] to its ViewModel; a pairing that took ends the screen through [onPaired]. The
+ * platform's QR code scanner, where it has one, reports to the ViewModel.
+ */
 @Composable
 fun PairDappRoute(
     viewModel: PairDappViewModel,
@@ -45,18 +52,21 @@ fun PairDappRoute(
     LaunchedEffect(state.paired) {
         if (state.paired) paired()
     }
+    val scan = rememberQrScanner(onResult = viewModel::scanned)
     PairDappScreen(
         state,
         onEdit = viewModel::edit,
         onConnect = viewModel::connect,
         onBack = onBack,
+        onScan = scan,
         modifier = modifier,
     )
 }
 
 /**
  * Pair (docs/walletconnect.md, screen D2) as a pure function of [state]: the `wc:` link the dApp
- * shows, pasted, and Connect. What pairing answered, when it did not take, below.
+ * shows, scanned from its QR code where the platform has a scanner ([onScan] not null) or pasted, and
+ * Connect. What pairing or the scan answered, when it did not take, below.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -66,6 +76,7 @@ fun PairDappScreen(
     onConnect: () -> Unit,
     onBack: () -> Unit,
     modifier: Modifier = Modifier,
+    onScan: (() -> Unit)? = null,
 ) {
     Scaffold(
         modifier = modifier,
@@ -82,9 +93,28 @@ fun PairDappScreen(
     ) { padding ->
         Column(Modifier.padding(padding).fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp)) {
             Text(
-                "In the dApp, choose WalletConnect and copy its link. Paste it here. The dApp then asks to " +
-                    "connect, and you choose which accounts it sees.",
+                if (onScan != null) {
+                    "In the dApp, choose WalletConnect, then scan its QR code, or copy its link and paste it " +
+                        "here. The dApp then asks to connect, and you choose which accounts it sees."
+                } else {
+                    "In the dApp, choose WalletConnect and copy its link. Paste it here. The dApp then asks to " +
+                        "connect, and you choose which accounts it sees."
+                },
             )
+            if (onScan != null) {
+                // Greyed out while the camera is refused or cannot start, and still tappable: it asks again.
+                OutlinedButton(
+                    onClick = onScan,
+                    enabled = !state.busy,
+                    modifier = Modifier.fillMaxWidth().padding(top = 16.dp).unavailable(state.cameraUnavailable)
+                        .testTag(PAIR_DAPP_SCAN_TAG),
+                ) {
+                    Text(
+                        "Scan the QR code",
+                        color = if (state.cameraUnavailable) Unavailable.contentColor() else Color.Unspecified,
+                    )
+                }
+            }
             OutlinedTextField(
                 value = state.text,
                 onValueChange = onEdit,
