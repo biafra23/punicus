@@ -123,7 +123,8 @@ everything on the chain side: the verified `call`, `estimateGasDetailed`,
     code*. Refused, or with no camera to start, Scan is greyed out and says
     why, and a tap asks again. The camera is not required to install the
     app.
-  - A code that is no `wc:` link is refused with what it is not.
+  - A code that is no `wc:` link, the scheme in lower case as the pairing
+    parser reads it, is refused with what it is not.
   - iOS and the desktop have no scanner yet, and offer no Scan button.
 - A proposal whose required namespaces name any chain but Sepolia is
   rejected. Optional namespaces are approved with Sepolia alone (ruling 9):

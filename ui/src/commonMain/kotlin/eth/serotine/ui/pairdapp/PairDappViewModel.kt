@@ -65,14 +65,16 @@ class PairDappViewModel(private val pairDapp: PairDapp, incoming: IncomingDappLi
 
     /**
      * What a QR code scan came to. A `wc:` link fills the field, to be paired with on Connect, as a pasted
-     * one is; any other code is refused with what it is not. Nothing while a Connect is under way.
+     * one is; any other code is refused with what it is not. A scan that ran, cancelled or not, clears a greyed-out
+     * Scan. Nothing while a Connect is under way.
      */
     fun scanned(scan: QrScan) {
         if (state.value.busy) return
         when (scan) {
             is QrScan.Read -> {
                 val text = scan.text.trim()
-                if (text.startsWith("wc:", ignoreCase = true)) {
+                // Exact case, as the pairing parser reads it: a link this lets in is never refused on Connect as none.
+                if (text.startsWith("wc:")) {
                     state.update { it.copy(text = text, message = null, cameraUnavailable = false) }
                 } else {
                     state.update { it.copy(message = NOT_A_LINK, cameraUnavailable = false) }
@@ -80,7 +82,10 @@ class PairDappViewModel(private val pairDapp: PairDapp, incoming: IncomingDappLi
             }
             QrScan.CameraRefused -> state.update { it.copy(message = CAMERA_REFUSED, cameraUnavailable = true) }
             QrScan.CameraUnavailable -> state.update { it.copy(message = NO_CAMERA, cameraUnavailable = true) }
-            QrScan.Cancelled -> Unit
+            // Only an open scanner cancels, so the camera was allowed and started: no longer greyed out.
+            QrScan.Cancelled -> state.update {
+                if (it.cameraUnavailable) it.copy(message = null, cameraUnavailable = false) else it
+            }
         }
     }
 

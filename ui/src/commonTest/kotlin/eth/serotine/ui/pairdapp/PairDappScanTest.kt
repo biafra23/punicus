@@ -53,6 +53,14 @@ class PairDappScanTest {
     }
 
     @Test
+    fun anUppercaseSchemeIsRefusedAtTheScanAsTheParserWouldOnConnect() = runTest {
+        val vm = viewModel()
+        vm.scanned(QrScan.Read("WC:ABC@2?RELAY-PROTOCOL=IRN&SYMKEY=00"))
+        assertEquals("", vm.uiState.value.text)
+        assertEquals(PairDappViewModel.NOT_A_LINK, vm.uiState.value.message)
+    }
+
+    @Test
     fun aRefusedOrMissingCameraGreysScanOutWithItsReasonUntilAScanWorks() = runTest {
         val vm = viewModel()
         vm.scanned(QrScan.CameraRefused)
@@ -72,5 +80,17 @@ class PairDappScanTest {
         vm.scanned(QrScan.Cancelled)
         assertEquals("wc:typed@2", vm.uiState.value.text)
         assertNull(vm.uiState.value.message)
+    }
+
+    @Test
+    fun aScannerThatRanAndWasCancelledClearsAGreyedOutScan() = runTest {
+        val vm = viewModel()
+        vm.scanned(QrScan.CameraRefused)
+        vm.edit("wc:typed@2")
+        vm.scanned(QrScan.CameraRefused)
+        vm.scanned(QrScan.Cancelled)
+        assertFalse(vm.uiState.value.cameraUnavailable)
+        assertNull(vm.uiState.value.message)
+        assertEquals("wc:typed@2", vm.uiState.value.text)
     }
 }
