@@ -27,6 +27,7 @@
 # before it is pushed; if the push is rejected (the branch moved), the run on the new head redoes
 # both.
 #
+# It never pushes to main: a PR whose head branch is main is treated like one without the key.
 # A fork PR gets no secrets (.claude/rules/github-workflows.md, "Fork PRs"): it renders and compares,
 # and fails with a message when the screens differ, since it cannot push them; a maintainer renders
 # them on a branch of this repository. Its description is left alone too (read-only token).
@@ -58,8 +59,10 @@ jobs:
       contents: read
       pull-requests: write
     env:
-      # Empty on a fork PR (no secrets there) and where the key is not configured: nothing is pushed then.
-      HAS_DEPLOY_KEY: ${{ secrets.SCREENSHOTS_DEPLOY_KEY != '' }}
+      # Whether this run may push the render to the PR's branch: not on a fork PR (no secrets there),
+      # not where the key is not configured, and never when the PR's head branch is main, which this
+      # workflow only verifies (a PR opened straight from main into a feature branch).
+      CAN_PUSH: ${{ secrets.SCREENSHOTS_DEPLOY_KEY != '' && github.event.pull_request.head.ref != 'main' }}
 
     steps:
       # Full history: :ui stamps the app's version from the nearest v* tag (ci.yml), and the base's
@@ -130,7 +133,7 @@ jobs:
         run: python3 scripts/screenshots.py budget
 
       - name: Commit the changed screenshots
-        if: github.event_name == 'pull_request' && steps.changes.outputs.any == 'true' && env.HAS_DEPLOY_KEY == 'true'
+        if: github.event_name == 'pull_request' && steps.changes.outputs.any == 'true' && env.CAN_PUSH == 'true'
         env:
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}
         run: |
@@ -162,7 +165,7 @@ jobs:
         if: >-
           github.event_name == 'pull_request'
           && github.event.pull_request.head.repo.full_name == github.repository
-          && (steps.changes.outputs.any == 'false' || env.HAS_DEPLOY_KEY == 'true')
+          && (steps.changes.outputs.any == 'false' || env.CAN_PUSH == 'true')
         env:
           GH_TOKEN: ${{ github.token }}
           BASE_SHA: ${{ github.event.pull_request.base.sha }}
@@ -177,7 +180,7 @@ jobs:
                 --base-sha "$before" --head-sha "$(git rev-parse HEAD)"
 
       - name: Push the screenshots to the PR's branch
-        if: github.event_name == 'pull_request' && steps.changes.outputs.any == 'true' && env.HAS_DEPLOY_KEY == 'true'
+        if: github.event_name == 'pull_request' && steps.changes.outputs.any == 'true' && env.CAN_PUSH == 'true'
         env:
           HEAD_REF: ${{ github.event.pull_request.head.ref }}
         run: |
@@ -188,11 +191,12 @@ jobs:
           }
 
       - name: Fail when the screens differ and this run cannot push the render
-        if: github.event_name == 'pull_request' && steps.changes.outputs.any == 'true' && env.HAS_DEPLOY_KEY != 'true'
+        if: github.event_name == 'pull_request' && steps.changes.outputs.any == 'true' && env.CAN_PUSH != 'true'
         run: |
           echo "::error::the screens render differently from the committed screenshots (listed above)," \
                "and this run cannot push the render: no SCREENSHOTS_DEPLOY_KEY (a fork PR, or the secret" \
-               "is not set). A maintainer renders them on a branch of this repository, or sets the secret."
+               "is not set), or the PR's head branch is main, which this workflow never writes." \
+               "A maintainer renders them on a branch of this repository, or sets the secret."
           exit 1
 
       - name: Verify main's screenshots match its render
