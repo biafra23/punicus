@@ -25,7 +25,7 @@ class MainActivity : ComponentActivity() {
         setContent {
             App(graph)
         }
-        // A `wc:` link opened the app: not again when the activity is only recreated.
+        // A `wc:` link, or Serotine's deep link carrying one, opened the app: not again when the activity is only recreated.
         if (savedInstanceState == null) offerDappLink(intent)
         if (savedInstanceState == null) askForNotifications()
     }
@@ -38,8 +38,9 @@ class MainActivity : ComponentActivity() {
 
 
     /**
-     * Hands a `wc:` link the activity was opened with to Connect a dApp, which shows it filled in and
-     * pairs only on the user's Connect (docs/walletconnect.md, part 1.2a). Nothing else is read.
+     * Hands a `wc:` link the activity was opened with, or the one a `serotine://wc?uri=` deep link
+     * carries, to Connect a dApp, which shows it filled in and pairs only on the user's Connect
+     * (docs/walletconnect.md, part 1.2a). Nothing else is read.
      */
     private fun offerDappLink(intent: Intent?) {
         if (intent?.action != Intent.ACTION_VIEW) return

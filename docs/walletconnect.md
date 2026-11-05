@@ -115,7 +115,10 @@ everything on the chain side: the verified `call`, `estimateGasDetailed`,
 ### Pairing and the session proposal
 
 - The user pastes a `wc:` URI, opens one from a `wc:` link on Android, or
-  scans the dApp's QR code on Android. Each fills Connect a dApp's field,
+  scans the dApp's QR code on Android. On Android, Serotine's own deep link
+  `serotine://wc?uri=` with the `wc:` link percent-encoded, the form a
+  wallet picker opens for a wallet it lists, carries one in the same way;
+  such a link with no `uri`, or one not well encoded, offers nothing. Each fills Connect a dApp's field,
   and the pairing starts only on Connect.
   - **The scanner** is CameraX, with each frame decoded on the device by
     ZXing: no Google Play services, and nothing leaves the device.
@@ -535,8 +538,9 @@ the first thing that does.
    number of sessions, and reads the terms (*Risks to check early*).
 
 Not needed, since rulings 7 and 9 leave them out: the Verify API, push and
-Link Mode need no registration. The `wc:` scheme on Android is a manifest
-entry, with no domain to verify. A listing in WalletGuide, WalletConnect's
+Link Mode need no registration. The `wc:` scheme and Serotine's deep link
+`serotine://wc` on Android are manifest entries, with no domain to verify.
+The deep link is the native link a WalletGuide listing names. A listing in WalletGuide, WalletConnect's
 directory of wallets, is what puts Serotine in the wallet pickers dApps
 show. It is optional, reviewed by WalletConnect, and asked for by the owner
 when the time comes, likely not before dApp sessions reach Ethereum. Until
@@ -549,8 +553,8 @@ their mockups come with the PR that builds each.
 
 - **D1 Connections** (Settings): the dApp sessions, and in direction 2 the
   external wallets; each can be disconnected.
-- **D2 Pair**: paste a `wc:` URI, arrive from a `wc:` link, or scan the
-  dApp's QR code (Android).
+- **D2 Pair**: paste a `wc:` URI, arrive from a `wc:` link or a
+  `serotine://wc` deep link, or scan the dApp's QR code (Android).
 - **D3 Session proposal**: the dApp's stated name and URL, marked as not
   verified; the chain; the methods it asks for, those outside the closed list
   marked as refused; the accounts to choose from; Approve and Reject.
