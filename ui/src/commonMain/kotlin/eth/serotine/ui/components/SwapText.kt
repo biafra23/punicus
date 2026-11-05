@@ -59,9 +59,10 @@ internal fun priceHintText(network: Network): String? = if (network.testnet) {
     null
 }
 
-/** [sell] and [buy], one token on Uniswap. */
+/** [sell] and [buy], one token on Uniswap, as a Safe's swap says it: a wrap, which a Safe cannot propose yet. */
 internal fun notASwapText(sell: String, buy: String): String =
-    "$sell and $buy are one token on Uniswap: ETH for WETH and back is a wrap, not a swap."
+    "$sell and $buy are one token on Uniswap: ETH for WETH and back is a wrap, not a swap, and a Safe cannot " +
+        "propose a wrap here yet."
 
 /** No pool for [sell] and [buy]. */
 internal fun noRouteText(sell: String, buy: String): String =
@@ -152,6 +153,21 @@ internal fun swapEstimateItem(
         is SwapEstimating.Unavailable -> SwapEstimateItem(label, note = estimateUnavailableText(estimating.reason))
     }
 }
+
+/**
+ * What the compose step shows for [amount] of [sell] for [buy] when the two are one token on Uniswap
+ * (ETH and its pinned WETH9): a wrap through WETH9, one for one (docs/swaps.md, *Wrapping ETH*), with
+ * no pool, price or tolerance. Its network fee comes with the review.
+ */
+internal fun wrapEstimateItem(amount: UInt256, sell: AssetOption, buy: AssetOption): SwapEstimateItem =
+    SwapEstimateItem(
+        label = "You receive",
+        receive = exactAmount(amount, buy.decimals, buy.symbol),
+        rate = "1 ${sell.symbol} = 1 ${buy.symbol}",
+        note = "A wrap through WETH9, one for one: no pool, no price and no tolerance. The review quotes its " +
+            "network fee.",
+        simpleNote = "A wrap, one for one. The review shows its network fee.",
+    )
 
 /** Why the compose step has no estimate when a read it needs could not be had, for [reason]. */
 private fun estimateUnavailableText(reason: ReadUnavailable): String = when (reason) {

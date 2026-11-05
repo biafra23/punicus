@@ -15,6 +15,7 @@ import eth.serotine.domain.model.Token
 import eth.serotine.domain.model.TransferAsset
 import eth.serotine.domain.model.UInt256
 import eth.serotine.domain.model.WalletPassword
+import eth.serotine.domain.model.WrapDirection
 import eth.serotine.domain.repository.AccountList
 import eth.serotine.domain.repository.Broadcast
 import eth.serotine.domain.repository.CowOrderRecord
@@ -49,10 +50,12 @@ import eth.serotine.domain.usecase.QuoteCowSwap
 import eth.serotine.domain.usecase.QuoteFigure
 import eth.serotine.domain.usecase.QuoteSwap
 import eth.serotine.domain.usecase.QuoteTokenApproval
+import eth.serotine.domain.usecase.QuoteWrap
 import eth.serotine.domain.usecase.RebroadcastTransfer
 import eth.serotine.domain.usecase.SWAP_DEADLINE_SECONDS
 import eth.serotine.domain.usecase.SendSwap
 import eth.serotine.domain.usecase.SendTokenApproval
+import eth.serotine.domain.usecase.SendWrap
 import eth.serotine.domain.usecase.SwapEstimating
 import eth.serotine.domain.usecase.SwapQuote
 import eth.serotine.domain.usecase.SwapQuoting
@@ -60,6 +63,8 @@ import eth.serotine.domain.usecase.SwapSending
 import eth.serotine.domain.usecase.TokenApprovalQuote
 import eth.serotine.domain.usecase.TransferSending
 import eth.serotine.domain.usecase.WarmFeeHistory
+import eth.serotine.domain.usecase.WrapQuote
+import eth.serotine.domain.usecase.WrapQuoting
 import eth.serotine.ui.components.AssetOption
 import eth.serotine.ui.components.BalanceChange
 import eth.serotine.ui.components.Eip55
@@ -75,6 +80,7 @@ import eth.serotine.ui.components.SpenderItem
 import eth.serotine.ui.components.SwapEstimateItem
 import eth.serotine.ui.components.SwapForm
 import eth.serotine.ui.components.SwapPick
+import eth.serotine.ui.components.TOLERANCE_ERROR
 import eth.serotine.ui.components.TOO_SMALL
 import eth.serotine.ui.components.UnlockStep
 import eth.serotine.ui.components.amountHint
@@ -87,7 +93,6 @@ import eth.serotine.ui.components.figureText
 import eth.serotine.ui.components.grouped
 import eth.serotine.ui.components.noRouteText
 import eth.serotine.ui.components.noVenueText
-import eth.serotine.ui.components.notASwapText
 import eth.serotine.ui.components.notSentItem
 import eth.serotine.ui.components.notSignedText
 import eth.serotine.ui.components.priceHintText
@@ -97,6 +102,7 @@ import eth.serotine.ui.components.redatedWhile
 import eth.serotine.ui.components.routeSteps
 import eth.serotine.ui.components.sellNote
 import eth.serotine.ui.components.swapEstimateItem
+import eth.serotine.ui.components.wrapEstimateItem
 import eth.serotine.ui.components.swapOptions
 import eth.serotine.ui.components.toleranceError
 import eth.serotine.ui.components.typedAmount
@@ -146,6 +152,10 @@ import kotlinx.coroutines.withContext
  * - **On CoW**, it is quoted ([QuoteCowSwap]: CoW's estimate beside the verified Uniswap net) and
  *   its order signed and handed to CoW ([PlaceCowOrder]). CoW is asked only once the user chose
  *   it and asked for the review (CLAUDE.md, *Data sources*).
+ * - **ETH for WETH, or back,** is no swap but a wrap (docs/swaps.md, *Wrapping ETH*), on neither
+ *   venue: WETH9's own `deposit` or `withdraw`, one for one, quoted ([QuoteWrap]) and signed and
+ *   broadcast ([SendWrap]). It is asked for first, for every pair of ETH and a token, so that
+ *   neither venue is (CoW never learns of a wrap).
  * - A swap whose router, or CoW's vault relayer, may not take the amount yet first gets its approval
  *   ([QuoteTokenApproval], [SendTokenApproval]), its own transaction: once it is sent, the screen waits
  *   for its block and quotes the next step for the user to confirm. One signed but not broadcast is
@@ -176,6 +186,8 @@ class SwapViewModel(
     private val quoteSwap: QuoteSwap,
     private val estimateSwap: EstimateSwap,
     private val sendSwap: SendSwap,
+    private val quoteWrap: QuoteWrap,
+    private val sendWrap: SendWrap,
     private val quoteTokenApproval: QuoteTokenApproval,
     private val sendTokenApproval: SendTokenApproval,
     private val rebroadcastTransfer: RebroadcastTransfer,
@@ -243,15 +255,23 @@ class SwapViewModel(
         val cowUnavailable: String?,
     )
 
-    /** A swap the compose step can have quoted, exactly as it has it, on [venue]. */
+    /**
+     * A swap the compose step can have quoted, exactly as it has it, on [venue]. [tolerance] is null
+     * only for a pair of ETH and a token, which may be a wrap, where it does not apply: a swap of
+     * it is refused until one is typed.
+     */
     private data class Request(
         val inputs: Inputs,
         val sell: AssetOption,
         val buy: AssetOption,
         val amount: UInt256,
-        val tolerance: SlippageTolerance,
+        val tolerance: SlippageTolerance?,
         val venue: SwapVenue,
-    )
+    ) {
+        /** ETH against a token: a wrap, when the token is the pinned WETH9. */
+        val mayWrap: Boolean
+            get() = (sell.asset == TransferAsset.Native) != (buy.asset == TransferAsset.Native)
+    }
 
     /** The compose step's swap as far as an estimate needs it: [sell] for [buy], [amount] of it. */
     private data class EstimateKey(val sell: TransferAsset, val buy: TransferAsset, val amount: UInt256)
@@ -262,11 +282,13 @@ class SwapViewModel(
     /** What a quote comes to: something to review ([Quoted]), or the compose step saying why not. */
     private sealed interface Next
 
-    /** What a review signs: the approval first, the swap on Uniswap, or the CoW order. */
+    /** What a review signs: the approval first, the swap on Uniswap, the wrap, or the CoW order. */
     private sealed interface Quoted : Next {
         data class Approval(val quote: TokenApprovalQuote) : Quoted
 
         data class Swap(val quote: SwapQuote) : Quoted
+
+        data class Wrap(val quote: WrapQuote) : Quoted
 
         data class Cow(val quote: CowSwapQuote) : Quoted
     }
@@ -676,6 +698,8 @@ class SwapViewModel(
         val prompt = when (val quoted = current.quoted) {
             is Quoted.Approval -> "Allow ${Eip55.format(quoted.quote.spender)} to take ${sold(quoted.quote.amount)}"
             is Quoted.Swap -> "Swap ${sold(quoted.quote.amountIn)} for at least ${bought(quoted.quote.minimumOut)}"
+            is Quoted.Wrap ->
+                "${verbOf(quoted.quote.direction)} ${sold(quoted.quote.amount)} into ${request.buy.symbol}"
             is Quoted.Cow ->
                 "Sign a CoW order: ${sold(quoted.quote.amountIn)} for at least ${bought(quoted.quote.minimumOut)}"
         }
@@ -793,7 +817,9 @@ class SwapViewModel(
                     sell = token,
                     buy = (request.buy.asset as? TransferAsset.Erc20Token)?.token?.address,
                     amount = request.amount,
-                    tolerance = request.tolerance,
+                    // Only a swap's approval waits, and a swap is quoted with a tolerance: a wrap has none
+                    // and no approval. Without one there is no swap to keep.
+                    tolerance = request.tolerance ?: return,
                     venue = request.venue,
                     approval = now.hash,
                     step = now.sent.first + 1,
@@ -893,6 +919,7 @@ class SwapViewModel(
                     return@launch
                 }
                 is Quoted.Approval -> safely { sendTokenApproval(quoted.quote, unlock) }
+                is Quoted.Wrap -> safely { sendWrap(quoted.quote, unlock) }
                 is Quoted.Swap -> when (val swapped = safely { sendSwap(quoted.quote, unlock) }) {
                     is SwapSending.Done -> swapped.sending
                     is SwapSending.NoLongerMet -> {
@@ -967,11 +994,17 @@ class SwapViewModel(
 
     /**
      * Where [review] goes once its transaction's signature or broadcast came to [sending]: a swap
-     * broadcast is sent; an approval broadcast is back at the compose step, which says so and
+     * or a wrap broadcast is sent; an approval broadcast is back at the compose step, which says so and
      * quotes the swap once a block has it; the rest stays in the review, saying why.
      */
     private fun after(review: Step.Reviewing, sending: TransferSending?): Step {
         val approval = review.quoted is Quoted.Approval
+        val failed = when (val quoted = review.quoted) {
+            is Quoted.Approval -> APPROVAL_FAILED
+            is Quoted.Wrap -> "Serotine could not finish this ${verbOf(quoted.quote.direction).lowercase()}. Check " +
+                "the account's balances before you try again."
+            is Quoted.Swap, is Quoted.Cow -> SWAP_FAILED
+        }
         return when (sending) {
             // The approval is step 1 of 2: the swap waits for it, and is quoted on its own once a block has it.
             is TransferSending.Sent -> if (approval) {
@@ -989,7 +1022,7 @@ class SwapViewModel(
             is TransferSending.NotSigned -> review.copy(
                 signing = false,
                 unlock = review.unlock.copy(
-                    error = notSignedText(sending.signing, if (approval) APPROVAL_FAILED else SWAP_FAILED),
+                    error = notSignedText(sending.signing, failed),
                     biometrics = review.unlock.biometrics && biometricsStillOffered(sending.signing),
                 ),
             )
@@ -1001,7 +1034,7 @@ class SwapViewModel(
             )
             null -> review.copy(
                 signing = false,
-                unlock = review.unlock.copy(error = if (approval) APPROVAL_FAILED else SWAP_FAILED),
+                unlock = review.unlock.copy(error = failed),
             )
         }
     }
@@ -1019,12 +1052,34 @@ class SwapViewModel(
         return Step.Reviewing(request, quoted, readFrom, unlock ?: UnlockStep(biometrics = biometricsOffered()), sender)
     }
 
+    /**
+     * What [request] comes to: the wrap it is, when it is ETH against the pinned WETH9, whatever the
+     * venue; else on its venue, its quote, the approval it needs first, or why neither.
+     */
+    private suspend fun quoteOf(request: Request): Next {
+        // Only a pair of ETH and a token may be a wrap: no other is asked, so no other waits for it.
+        if (request.mayWrap) {
+            when (val wrapping = askWrap(request)) {
+                WrapQuoting.NotAWrap -> Unit
+                is WrapQuoting.Quoted -> return Quoted.Wrap(wrapping.quote)
+                is WrapQuoting.EarlierMaybeSent -> return Step.Composing(
+                    error = EARLIER_MAYBE_SENT,
+                    earlier = EarlierItem(wrapping.hash, "Open the earlier transaction", waiting = false),
+                )
+                else -> return Step.Composing(error = wrapRefusal(wrapping, request))
+            }
+        }
+        // A swap, not a wrap: its tolerance applies, and one not typed right is no swap to quote.
+        val tolerance = request.tolerance ?: return Step.Composing(error = TOLERANCE_ERROR)
+        return onVenue(request, tolerance)
+    }
+
     /** What [request] comes to on its venue: its quote, the approval it needs first, or why neither. */
-    private suspend fun quoteOf(request: Request): Next = when (request.venue) {
-        SwapVenue.UNISWAP -> when (val swapping = askSwap(request)) {
+    private suspend fun onVenue(request: Request, tolerance: SlippageTolerance): Next = when (request.venue) {
+        SwapVenue.UNISWAP -> when (val swapping = askSwap(request, tolerance)) {
             is SwapQuoting.Quoted -> Quoted.Swap(swapping.quote)
             is SwapQuoting.NeedsApproval -> approvalFirst(swapping.token, swapping.spender, request) {
-                when (val again = askSwap(request)) {
+                when (val again = askSwap(request, tolerance)) {
                     is SwapQuoting.Quoted -> Quoted.Swap(again.quote)
                     else -> composing(again, request)
                 }
@@ -1032,10 +1087,10 @@ class SwapViewModel(
             else -> composing(swapping, request)
         }
         // CoW is asked only here: the user chose it, and asked for the review.
-        SwapVenue.COW -> when (val ordering = askCow(request)) {
+        SwapVenue.COW -> when (val ordering = askCow(request, tolerance)) {
             is CowSwapQuoting.Quoted -> Quoted.Cow(ordering.quote)
             is CowSwapQuoting.NeedsApproval -> approvalFirst(ordering.token, ordering.spender, request) {
-                when (val again = askCow(request)) {
+                when (val again = askCow(request, tolerance)) {
                     is CowSwapQuoting.Quoted -> Quoted.Cow(again.quote)
                     else -> cowComposing(again, request)
                 }
@@ -1075,16 +1130,24 @@ class SwapViewModel(
         )
     }
 
-    private suspend fun askSwap(request: Request): SwapQuoting = try {
-        quoteSwap(from, request.sell.asset, request.buy.asset, request.amount, request.tolerance, request.inputs.fee)
+    private suspend fun askSwap(request: Request, tolerance: SlippageTolerance): SwapQuoting = try {
+        quoteSwap(from, request.sell.asset, request.buy.asset, request.amount, tolerance, request.inputs.fee)
     } catch (e: CancellationException) {
         throw e
     } catch (e: Exception) {
         SwapQuoting.Unavailable(ReadUnavailable.UNPROVEN) // the use case promises not to throw; the backstop
     }
 
-    private suspend fun askCow(request: Request): CowSwapQuoting = try {
-        quoteCowSwap(from, request.sell.asset, request.buy.asset, request.amount, request.tolerance)
+    private suspend fun askWrap(request: Request): WrapQuoting = try {
+        quoteWrap(from, request.sell.asset, request.buy.asset, request.amount, request.inputs.fee)
+    } catch (e: CancellationException) {
+        throw e
+    } catch (e: Exception) {
+        WrapQuoting.Unavailable(ReadUnavailable.UNPROVEN) // the use case promises not to throw; the backstop
+    }
+
+    private suspend fun askCow(request: Request, tolerance: SlippageTolerance): CowSwapQuoting = try {
+        quoteCowSwap(from, request.sell.asset, request.buy.asset, request.amount, tolerance)
     } catch (e: CancellationException) {
         throw e
     } catch (e: Exception) {
@@ -1236,8 +1299,13 @@ class SwapViewModel(
     /** What the compose step shows of [estimate], when it is of the swap [model] has. */
     private fun estimateItem(model: Model, estimate: Estimate?): SwapEstimateItem? {
         val key = estimateKeyOf(model) ?: return null
+        val estimating = estimate?.takeIf { it.key == key }?.estimating
+        // ETH for the pinned WETH9 and back is one token on Uniswap: here, a wrap, one for one.
+        if (estimating == SwapEstimating.NotASwap) {
+            return wrapEstimateItem(key.amount, checkNotNull(model.sell), checkNotNull(model.buy))
+        }
         return swapEstimateItem(
-            estimating = estimate?.takeIf { it.key == key }?.estimating,
+            estimating = estimating,
             sell = checkNotNull(model.sell),
             buy = checkNotNull(model.buy),
             tolerance = toleranceOf(model.inputs),
@@ -1324,6 +1392,7 @@ class SwapViewModel(
     private fun review(step: Step.Reviewing): SwapUiState = when (val quoted = step.quoted) {
         is Quoted.Approval -> approvalReview(step, quoted.quote)
         is Quoted.Swap -> swapReview(step, quoted.quote).copy(step = step.position?.let(::stepText))
+        is Quoted.Wrap -> wrapReview(step, quoted.quote)
         is Quoted.Cow -> cowReview(step, quoted.quote).copy(step = step.position?.let(::stepText))
     }
 
@@ -1494,6 +1563,99 @@ class SwapViewModel(
     }
 
     /**
+     * ETH for WETH or back (docs/swaps.md, *Wrapping ETH*): what it takes and pays, one for one,
+     * through the pinned WETH9, and the balances it leaves.
+     */
+    private fun wrapReview(step: Step.Reviewing, quote: WrapQuote): SwapUiState.WrapReview {
+        val sell = step.request.sell
+        val buy = step.request.buy
+        val native = network.nativeSymbol
+        val verb = verbOf(quote.direction)
+        val wethOption = if (quote.direction == WrapDirection.WRAP) buy else sell
+        val weth = { units: UInt256 -> exactAmount(units, wethOption.decimals, wethOption.symbol) }
+        val ether = { units: UInt256 -> exactAmount(units, NATIVE_DECIMALS, native) }
+        val ran = quote.simulationBlock?.let { "at block ${grouped(it)}" } ?: "at the head"
+        val nativeChange = BalanceChange(
+            what = "$native balance" + if (quote.direction == WrapDirection.UNWRAP) ", which pays the fee" else "",
+            before = ether(quote.nativeBefore),
+            after = "at least " + ether(quote.nativeAfter),
+            verifiedAt = verifiedAt(quote.balanceBlock),
+        )
+        val wethChange = BalanceChange(
+            what = "${wethOption.symbol} balance",
+            before = weth(quote.wethBefore),
+            after = weth(quote.wethAfter),
+            verifiedAt = verifiedAt(quote.tokenBalanceBlock),
+        )
+        val explanation = when (quote.direction) {
+            WrapDirection.WRAP -> "Not a swap: WETH9's own deposit takes the $native and credits as much " +
+                "${wethOption.symbol}, one for one."
+            WrapDirection.UNWRAP -> "Not a swap: WETH9's own withdraw takes the ${wethOption.symbol} and pays as " +
+                "much $native, one for one."
+        } + " No pool, no price, no slippage and no approval: only the network fee."
+        return SwapUiState.WrapReview(
+            network = network.displayName,
+            title = "Review ${verb.lowercase()}",
+            signLabel = "Sign and ${verb.lowercase()}",
+            from = step.sender,
+            sell = sell.choice(),
+            sold = exactAmount(quote.amount, sell.decimals, sell.symbol),
+            buy = buy.choice(),
+            receive = exactAmount(quote.amount, buy.decimals, buy.symbol),
+            explanation = explanation,
+            ranAt = "The ${verb.lowercase()}, run as a verified call from this account $ran, goes through.",
+            contract = SpenderItem(WETH9_NAME, Eip55.format(quote.weth.address)),
+            maxFee = ether(quote.maxFee),
+            feeDetail = feeDetail(quote.level, quote.transaction, quote.feeBlock),
+            balances = when (quote.direction) {
+                WrapDirection.WRAP -> listOf(nativeChange, wethChange)
+                WrapDirection.UNWRAP -> listOf(wethChange, nativeChange)
+            },
+            pending = pendingText(quote.pendingWeth, quote.pendingCost, quote.heldByOrders, wethOption),
+            unlock = step.unlock,
+            refreshing = step.refreshing,
+            signing = step.signing,
+            notSent = step.notSent?.let {
+                notSentItem(it.broadcast, it.unverified, what = verb.lowercase(), maybeSent = it.transfer.maybeSent)
+            },
+        )
+    }
+
+    /** "Wrap" or "Unwrap". */
+    private fun verbOf(direction: WrapDirection) = when (direction) {
+        WrapDirection.WRAP -> "Wrap"
+        WrapDirection.UNWRAP -> "Unwrap"
+    }
+
+    /** Why the wrap of [request] came to [quoting], not a quote, in a sentence. */
+    private fun wrapRefusal(quoting: WrapQuoting, request: Request): String {
+        val verb = if (request.sell.asset == TransferAsset.Native) "wrap" else "unwrap"
+        return when (quoting) {
+            is WrapQuoting.Quoted, WrapQuoting.NotAWrap, is WrapQuoting.EarlierMaybeSent ->
+                error("not a refusal said as text")
+            WrapQuoting.NothingToWrap -> "There is nothing to $verb: enter an amount above zero."
+            WrapQuoting.InsufficientFunds -> if (request.sell.asset == TransferAsset.Native) {
+                "Not enough ${network.nativeSymbol} for this amount and the most the fee can be: wrap less, to leave " +
+                    "room for the fee. Transactions not mined yet count too."
+            } else {
+                "Not enough ${network.nativeSymbol} for the most the fee can be. Transactions not mined yet count too."
+            }
+            WrapQuoting.InsufficientToken -> "This account holds less ${request.sell.symbol} than that, once what " +
+                "its transactions not mined yet and its CoW orders that may still fill can take is set aside."
+            WrapQuoting.CowOrdersUnreadable -> ORDERS_UNREADABLE
+            is WrapQuoting.Infeasible -> "This $verb cannot succeed: ${quoting.detail}"
+            is WrapQuoting.Reverts -> {
+                val at = quoting.blockNumber?.let { " at block ${grouped(it)}" }.orEmpty()
+                "The $verb reverts, run as a verified call$at. Nothing was signed."
+            }
+            WrapQuoting.NotAToken -> NOT_A_TOKEN
+            WrapQuoting.Refused -> "The light client on this device cannot quote this $verb."
+            WrapQuoting.Syncing -> "The light client is not synced yet: try again in a moment."
+            is WrapQuoting.Unavailable -> unavailableText(quoting.reason, quoting.figure)
+        }
+    }
+
+    /**
      * Screen 23 for a CoW order (docs/swaps.md, *The user's choice of venue*): CoW's estimate, not
      * verified, beside the verified Uniswap net, which gives more, and the minimum signed.
      */
@@ -1578,13 +1740,25 @@ class SwapViewModel(
     }
 
     /** What this account's earlier transactions, not mined yet, and its CoW orders may still take, when anything. */
-    private fun pendingText(quote: SwapQuote, sell: AssetOption): String? {
+    private fun pendingText(quote: SwapQuote, sell: AssetOption): String? =
+        pendingText(quote.pendingSell, quote.pendingCost, quote.heldByOrders, sell)
+
+    /**
+     * What earlier transactions not mined yet may still take ([pendingToken] of [token], [pendingCost]
+     * of the network's currency) and what CoW orders hold back of [token] ([held]), when anything.
+     */
+    private fun pendingText(
+        pendingToken: UInt256?,
+        pendingCost: UInt256,
+        held: UInt256?,
+        token: AssetOption,
+    ): String? {
         val native = network.nativeSymbol
         val parts = listOfNotNull(
-            quote.pendingSell?.takeUnless { it.isZero }?.let { exactAmount(it, sell.decimals, sell.symbol) },
-            quote.pendingCost.takeUnless { it.isZero }?.let { "up to " + exactAmount(it, NATIVE_DECIMALS, native) },
+            pendingToken?.takeUnless { it.isZero }?.let { exactAmount(it, token.decimals, token.symbol) },
+            pendingCost.takeUnless { it.isZero }?.let { "up to " + exactAmount(it, NATIVE_DECIMALS, native) },
         )
-        val held = quote.heldByOrders?.takeUnless { it.isZero }?.let { exactAmount(it, sell.decimals, sell.symbol) }
+        val held = held?.takeUnless { it.isZero }?.let { exactAmount(it, token.decimals, token.symbol) }
         val sentences = listOfNotNull(
             parts.takeIf { it.isNotEmpty() }?.let {
                 "Earlier transactions from this account, not mined yet, may still take ${it.joinToString(" and ")}."
@@ -1598,14 +1772,18 @@ class SwapViewModel(
     /** The tolerance [inputs] has typed, or null when it is none: what the review signs and the estimate says. */
     private fun toleranceOf(inputs: Inputs): SlippageTolerance? = SlippageTolerance.parsePercent(inputs.tolerance.trim())
 
-    /** The compose step's swap, when it is complete: what a quote is asked for. */
+    /**
+     * The compose step's swap, when it is complete: what a quote is asked for. A pair of ETH and a
+     * token may be a wrap, which no tolerance applies to: it is complete without one.
+     */
     private fun requestOf(model: Model): Request? {
         if (model.swapper !is Swapper.From) return null
         val sell = model.sell ?: return null
         val buy = model.buy ?: return null
         val amount = typedAmount(model.inputs.amount, sell).units ?: return null
-        val tolerance = toleranceOf(model.inputs) ?: return null
+        val tolerance = toleranceOf(model.inputs)
         return Request(model.inputs, sell, buy, amount, tolerance, model.venue)
+            .takeIf { tolerance != null || it.mayWrap }
     }
 
     private fun swapRefusal(quoting: SwapQuoting, request: Request): String = when (quoting) {
@@ -1613,7 +1791,7 @@ class SwapViewModel(
         is SwapQuoting.EarlierSwapPending, is SwapQuoting.EarlierMaybeSent,
         -> error("not a refusal said as text")
         SwapQuoting.NothingToSwap -> "There is nothing to swap: enter an amount above zero."
-        SwapQuoting.NotASwap -> notASwapText(request.sell.symbol, request.buy.symbol)
+        SwapQuoting.NotASwap -> sameTokenText(request.sell.symbol, request.buy.symbol)
         SwapQuoting.NoRoute -> noRouteText(request.sell.symbol, request.buy.symbol)
         is SwapQuoting.NoVenue -> noVenueText(quoting.contract, network)
         SwapQuoting.TooSmall -> TOO_SMALL
@@ -1657,7 +1835,7 @@ class SwapViewModel(
         is CowSwapQuoting.EarlierMaybeSent,
         -> error("not a refusal said as text")
         CowSwapQuoting.NothingToSwap -> "There is nothing to swap: enter an amount above zero."
-        CowSwapQuoting.NotASwap -> notASwapText(request.sell.symbol, request.buy.symbol)
+        CowSwapQuoting.NotASwap -> sameTokenText(request.sell.symbol, request.buy.symbol)
         is CowSwapQuoting.NotOffered -> when (quoting.why) {
             CowNotOffered.NOT_ON_THIS_DEVICE -> NOT_ON_THIS_DEVICE
             CowNotOffered.SELLS_ETHER -> SELLS_ETHER
@@ -1703,6 +1881,9 @@ class SwapViewModel(
             CowUnavailable.TIMEOUT, CowUnavailable.NO_CONNECTION, CowUnavailable.SERVER_ERROR -> "CoW did not answer."
         }
     }
+
+    /** [sell] and [buy], one token: no swap and no wrap. */
+    private fun sameTokenText(sell: String, buy: String) = "$sell and $buy are one token: there is nothing to swap."
 
     private fun earlierOrderText(request: Request) =
         "An earlier CoW order selling ${request.sell.symbol} may still fill: one order of a token at a time, since " +
@@ -1808,6 +1989,7 @@ class SwapViewModel(
         const val SELLS_ETHER = "CoW Protocol is offered for tokens sold: selling ETH would go through CoW's " +
             "ETH-flow contract, which this wallet does not use yet. Sell WETH on CoW, or swap ETH on Uniswap."
         const val VAULT_RELAYER_NAME = "CoW's vault relayer"
+        const val WETH9_NAME = "WETH9, the wrapped ether contract"
         const val SETTLEMENT_NAME = "CoW's settlement contract"
         const val APPROVAL_FAILED = "Serotine could not finish this approval. Try again."
         const val LIST_UNAVAILABLE =

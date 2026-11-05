@@ -293,12 +293,13 @@ class QuoteTransfer(
 private val UNPROVEN = TransferQuoting.Unavailable(ReadUnavailable.UNPROVEN, QuoteFigure.BALANCE)
 
 /**
- * What this transaction moves of the token at [token] out of the account: a transfer's amount, or
- * what a swap sells, of that token.
+ * What this transaction moves of the token at [token] out of the account: a transfer's amount,
+ * what a swap sells, or what an unwrap takes, of that token.
  */
 internal fun SentTransfer.tokenAmount(token: Address): UInt256? = when (val action = action) {
     is SentAction.Transfer -> action.amount.takeIf { action.asset.isToken(token) }
     is SentAction.Swap -> action.amountIn.takeIf { action.sell.isToken(token) }
+    is SentAction.Unwrap -> action.amount.takeIf { action.weth.address == token }
     else -> null
 }
 

@@ -365,6 +365,26 @@ private fun TransferStatusCowCancellationPreview() = TransferStatusPreview(
     ),
 )
 
+@Preview
+@Composable
+private fun TransferStatusWrapPreview() = TransferStatusPreview(
+    pending.copy(
+        sent = null,
+        swap = SwapSummary(
+            title = "Wrap of 0.1 ETH into WETH",
+            sold = "0.1 ETH",
+            soldSymbol = "ETH",
+            soldIcon = "eth",
+            bought = "0.1 WETH",
+            boughtSymbol = "WETH",
+            boughtIcon = "weth",
+            router = "0x8617E340B3D01FA5F11F306F4090FD50E238070D",
+            from = "0x5aAeb6053F3E94C9b9A09f33669435E7Ef1BeAed",
+            through = "Through WETH9, one for one",
+        ),
+    ),
+)
+
 internal val transferStatusScreenPreviews: List<@Composable () -> Unit> = listOf(
     { TransferStatusPendingPreview() },
     { TransferStatusPendingDarkPreview() },
@@ -391,4 +411,5 @@ internal val transferStatusScreenPreviews: List<@Composable () -> Unit> = listOf
     { TransferStatusNonceUsedPreview() },
     { TransferStatusMaybeSentNonceUsedPreview() },
     { TransferStatusCowCancellationPreview() },
+    { TransferStatusWrapPreview() },
 )
