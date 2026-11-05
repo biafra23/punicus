@@ -38,13 +38,8 @@ internal fun keccak256(bytes: ByteArray): ByteArray = Keccak256().digest(bytes)
 internal fun hasValidChecksum(text: String): Boolean {
     val digits = text.trim().let { if (it.startsWith("0x") || it.startsWith("0X")) it.drop(2) else it }
     if (digits == digits.lowercase() || digits == digits.uppercase()) return true
-    val lower = digits.lowercase()
-    val hash = keccak256(lower.encodeToByteArray())
-    return digits.indices.all { i ->
-        val nibble = (hash[i / 2].toInt() shr (if (i % 2 == 0) 4 else 0)) and 0x0f
-        val digit = lower[i]
-        digits[i] == if (digit in 'a'..'f' && nibble >= 8) digit.uppercaseChar() else digit
-    }
+    val address = Address.parse("0x$digits") ?: return false
+    return checksummed(address).drop(2) == digits
 }
 
 /**

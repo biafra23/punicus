@@ -196,7 +196,7 @@ class SendFromAnotherWalletTest {
         val seen = watch.toList()
         assertEquals(HandoffWatch.Watching(100), seen.first())
         assertEquals(
-            HandoffWatch.Seen(HandoffMatch.Exact, "0x" + "c".repeat(64), 102, succeeded = true),
+            HandoffWatch.Seen(HandoffMatch.Exact, "0x" + "c".repeat(64), 105, succeeded = true),
             seen.last(),
         )
         assertEquals(listOf(101L, 102L), blocks.read, "never the handoff's own block, and nothing past the find")
@@ -208,7 +208,49 @@ class SendFromAnotherWalletTest {
         blocks.bodies[101] = listOf(native(other, to, 1_000, hash = 'd'), native(from, to, 1_000, hash = 'e'))
         val deadline = testScheduler.timeSource.markNow().plus(10.minutes)
         val last = WatchHandoff(blocks, Receipts())(handoff(), deadline).toList().last()
-        assertEquals(HandoffWatch.Seen(HandoffMatch.Exact, "0x" + "e".repeat(64), 101, succeeded = true), last)
+        assertEquals(HandoffWatch.Seen(HandoffMatch.Exact, "0x" + "e".repeat(64), 105, succeeded = true), last)
+    }
+
+    @Test
+    fun `a near transfer is kept while the account's own may still come, and answers at the deadline`() = runTest {
+        val blocks = Blocks(HeadReading.At(102))
+        blocks.bodies[101] = listOf(native(other, to, 1_000, hash = 'd'))
+        blocks.bodies[102] = listOf(native(from, to, 1_000, hash = 'e'))
+        val deadline = testScheduler.timeSource.markNow().plus(10.minutes)
+        val last = WatchHandoff(blocks, Receipts())(handoff(), deadline).toList().last()
+        assertEquals(HandoffWatch.Seen(HandoffMatch.Exact, "0x" + "e".repeat(64), 105, succeeded = true), last)
+
+        val alone = Blocks(HeadReading.At(101))
+        alone.bodies[101] = listOf(native(other, to, 1_000, hash = 'd'))
+        val start = testScheduler.timeSource.markNow()
+        val updates = WatchHandoff(alone, Receipts())(handoff(), start.plus(1.minutes)).toList()
+        assertTrue(HandoffWatch.Watching(101, nearBlock = 101) in updates, "said while it keeps looking")
+        assertEquals(HandoffMatch.OtherSender(other), assertIs<HandoffWatch.Seen>(updates.last()).match)
+        assertTrue(start.elapsedNow() >= 1.minutes, "not before the deadline")
+    }
+
+    @Test
+    fun `a receipt that cannot be verified ends with no verdict, never an exception`() = runTest {
+        val blocks = Blocks(HeadReading.At(101))
+        blocks.bodies[101] = listOf(native(from, to, 1_000))
+        val gone = object : ReceiptTracker {
+            override fun observe(network: Network, hash: String): Flow<TransactionProgress> =
+                flowOf(TransactionProgress.Unavailable(ReadUnavailable.NO_ENGINE))
+        }
+        val deadline = testScheduler.timeSource.markNow().plus(10.minutes)
+        val updates = WatchHandoff(blocks, gone)(handoff(), deadline).toList()
+        assertTrue(updates.any { it is HandoffWatch.Found && it.unavailable == ReadUnavailable.NO_ENGINE })
+        assertNull(assertIs<HandoffWatch.Seen>(updates.last()).succeeded)
+    }
+
+    @Test
+    fun `blocks that stay unreadable end the watch after its grace, with why`() = runTest {
+        val blocks = Blocks(HeadReading.Unavailable(ReadUnavailable.NETWORK_OFF))
+        val start = testScheduler.timeSource.markNow()
+        val watch = WatchHandoff(blocks, Receipts(), pollInterval = 30.seconds, catchUp = 5.minutes)
+        val last = watch(handoff(), start.plus(1.minutes)).toList().last()
+        assertEquals(HandoffWatch.NotSeen(100, ReadUnavailable.NETWORK_OFF), last)
+        assertTrue(start.elapsedNow() >= 6.minutes)
     }
 
     @Test

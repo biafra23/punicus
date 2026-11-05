@@ -269,7 +269,7 @@ upgrades*).
    Send ‹symbol› from another wallet (7H, as in 3) ·
    Swap ‹symbol› (22 with the asset sold chosen; as Swap in 4) · Copy
    contract address · Hide token. The native currency's row has the menu
-   too, with Send and Swap alone.
+   too, with Send, Send from another wallet where it applies, and Swap.
 6. **Receive**: a QR code of the EIP-55 address, "Only send Sepolia assets"
    (for a Safe: "This Safe exists only on Sepolia"), Copy and Share.
 7. **Send, compose**

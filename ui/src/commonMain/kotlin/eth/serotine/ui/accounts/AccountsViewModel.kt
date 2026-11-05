@@ -388,6 +388,8 @@ class AccountsViewModel(
                         ?.takeIf { isOn }
                     // A row from the start, "Checking…" until its first reading: an account just
                     // added, or a screen just back, never waits for every proof.
+                    // Which apps take payment links: asked once for the whole list, not once per row.
+                    val handoffs = offerHandoff?.availability()
                     val items = accounts.map { account ->
                         val value = portfolio.values[account.id]
                         // In the currency the value was computed in: just after a change of
@@ -406,7 +408,8 @@ class AccountsViewModel(
                             total = value?.total,
                         ).let { item -> if (blocked != null) item.copy(networkBlocked = blocked) else item }
                             .let { item ->
-                                val offer = offerHandoff?.invoke(account) ?: return@let item
+                                val availability = handoffs ?: return@let item
+                                val offer = offerHandoff?.invoke(account, availability) ?: return@let item
                                 item.copy(handoff = handoffChoice(offer, item.networkOff))
                             }
                     }

@@ -28,9 +28,11 @@ import kotlin.time.TimeMark
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.filter
-import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.catch
+import kotlinx.coroutines.flow.emitAll
 import kotlinx.coroutines.flow.flow
+import kotlinx.coroutines.flow.transformWhile
+import kotlinx.coroutines.withTimeoutOrNull
 
 // Send from another wallet (issue #255; owner rulings, 2026-11-05): a transfer from an EOA whose key
 // this device does not hold, handed to another wallet app as a payment link, which that wallet signs
@@ -59,13 +61,13 @@ sealed interface HandoffOffer {
 /**
  * Whether [account] gets Send from another wallet ([HandoffOffer]): an EOA whose key this device
  * does not hold, on a device that hands payment links to other wallets. Watched still means
- * Serotine signs nothing (decision 5 of #255): the other wallet must hold the key. Asks [wallets]
- * anew on each call; never throws.
+ * Serotine signs nothing (decision 5 of #255): the other wallet must hold the key. [availability]
+ * is asked of [wallets] anew unless the caller asked once for many accounts; never throws.
  */
 class OfferHandoff(private val wallets: WalletHandoff) {
-    operator fun invoke(account: Account): HandoffOffer {
+    operator fun invoke(account: Account, availability: HandoffAvailability = availability()): HandoffOffer {
         if (account.kind != AccountKind.EOA || account.custody == AccountCustody.InKeyStore) return HandoffOffer.LeftOut
-        return when (availability()) {
+        return when (availability) {
             HandoffAvailability.AVAILABLE -> HandoffOffer.Offered
             HandoffAvailability.NO_WALLET -> HandoffOffer.NoWallet
             HandoffAvailability.NOT_ON_THIS_DEVICE -> HandoffOffer.LeftOut
@@ -195,43 +197,53 @@ sealed interface HandoffMatch {
 
 /**
  * Follows [handoff] on the chain until [deadline]: every [pollInterval], each verified block above
- * [Handoff.afterBlock] up to the verified head is read ([BlockTransactions]), and the first
- * transaction that is the transfer, or nearly ([matchHandoff]), is the answer: within one block an
- * exact match wins. Its verified receipt then says whether it succeeded ([ReceiptTracker]).
+ * [Handoff.afterBlock] up to the verified head is read ([BlockTransactions]) for the transfer
+ * ([matchHandoff]). The first exact match ends the search. A near one (another amount, or another
+ * sender) is kept, and the search goes on for an exact one until [deadline]: a stranger's payment of
+ * the same amount to a busy recipient is no answer while the account's own may still come. The
+ * transaction found then waits for its verified receipt ([ReceiptTracker]), which says whether it
+ * succeeded and the block it is in.
  *
- * Emits [HandoffWatch.Watching] while it looks (with the block it has read up to, and why a block
- * cannot be read now, when that is so); [HandoffWatch.Found] once a block has the transaction and
- * its receipt is awaited; then [HandoffWatch.Seen], and ends. Past [deadline] with every block up
- * to the head read and nothing found, [HandoffWatch.NotSeen], and ends: the deadline never ends a
- * watch that is still behind the head, since the blocks it has not read may hold the transfer.
- * Never throws.
+ * Emits [HandoffWatch.Watching] while it looks (the block it has read up to, why the next cannot be
+ * read now when that is so, and the block of a near match kept); [HandoffWatch.Found] while the
+ * receipt of the transaction found is awaited (with why it cannot be read now); then
+ * [HandoffWatch.Seen] or [HandoffWatch.NotSeen], and ends.
+ *
+ * Past [deadline] with every block up to the head read, the near match kept is the answer, or
+ * [HandoffWatch.NotSeen]: the deadline does not end a watch that is behind the head, since the
+ * blocks it has not read may hold the transfer. That grace has a bound: [catchUp] past [deadline], a
+ * watch that still cannot read every block ends as [HandoffWatch.NotSeen] with the reason, and a
+ * receipt not verified by then ends as [HandoffWatch.Seen] with no verdict. Never throws.
  */
 class WatchHandoff(
     private val blocks: BlockTransactions,
     private val receipts: ReceiptTracker,
     private val pollInterval: Duration = 4.seconds,
+    private val catchUp: Duration = 10.minutes,
 ) {
     operator fun invoke(handoff: Handoff, deadline: TimeMark): Flow<HandoffWatch> = flow {
         val network = handoff.account.network
+        val lastWord = deadline + catchUp
         var readUpTo = handoff.afterBlock
+        var near: Found? = null
         emit(HandoffWatch.Watching(readUpTo))
         while (true) {
             val head = ask { blocks.head(network) } ?: HeadReading.Unavailable(UNPROVEN)
             var unavailable: ReadUnavailable? = (head as? HeadReading.Unavailable)?.reason
+            var caughtUp = false
             if (head is HeadReading.At) {
                 while (readUpTo < head.number) {
                     val number = readUpTo + 1
                     val block = ask { blocks.transactions(network, number) } ?: BlockReading.Unavailable(UNPROVEN)
                     when (block) {
                         is BlockReading.Read -> {
-                            val found = firstMatch(handoff, block.transactions)
-                            if (found != null) {
-                                val (match, transaction) = found
-                                emit(HandoffWatch.Found(match, transaction.hash, number))
-                                val succeeded = succeeded(network, transaction.hash)
-                                emit(HandoffWatch.Seen(match, transaction.hash, number, succeeded))
+                            val matches = matchesIn(handoff, block.transactions, number)
+                            val exact = matches.firstOrNull { it.match == HandoffMatch.Exact }
+                            if (exact != null) {
+                                emitAll(seen(network, exact, lastWord))
                                 return@flow
                             }
+                            if (near == null) near = matches.firstOrNull()
                             readUpTo = number
                         }
                         BlockReading.NotYet -> break // the head moved back under it: asked again next time
@@ -241,52 +253,105 @@ class WatchHandoff(
                         }
                     }
                 }
-                if (readUpTo >= head.number && deadline.hasPassedNow()) {
+                caughtUp = readUpTo >= head.number
+            }
+            val kept = near
+            when {
+                caughtUp && deadline.hasPassedNow() && kept != null -> {
+                    emitAll(seen(network, kept, lastWord))
+                    return@flow
+                }
+                caughtUp && deadline.hasPassedNow() -> {
                     emit(HandoffWatch.NotSeen(readUpTo))
                     return@flow
                 }
+                lastWord.hasPassedNow() -> {
+                    emit(HandoffWatch.NotSeen(readUpTo, unavailable ?: UNPROVEN))
+                    return@flow
+                }
             }
-            emit(HandoffWatch.Watching(readUpTo, unavailable))
+            emit(HandoffWatch.Watching(readUpTo, unavailable, nearBlock = kept?.block))
             delay(pollInterval)
         }
     }
 
-    /** The first transaction of [transactions] that is [handoff]'s transfer, an exact one before any near one. */
-    private fun firstMatch(
-        handoff: Handoff,
-        transactions: List<ChainTransaction>,
-    ): Pair<HandoffMatch, ChainTransaction>? {
-        val matches = transactions.mapNotNull { transaction ->
-            matchHandoff(handoff, transaction)?.let { it to transaction }
-        }
-        return matches.firstOrNull { it.first == HandoffMatch.Exact } ?: matches.firstOrNull()
-    }
+    /** A transaction of block [block] that is [match] to the handoff. */
+    private class Found(val match: HandoffMatch, val transaction: ChainTransaction, val block: Long)
 
-    /** Whether the transaction [hash], which a verified block includes, succeeded: its verified receipt's word. */
-    private suspend fun succeeded(network: Network, hash: String): Boolean =
-        receipts.observe(network, hash)
-            .filter { it is TransactionProgress.Included || it is TransactionProgress.Finalized }
-            .first()
-            .let { (it as? TransactionProgress.Included)?.succeeded ?: (it as TransactionProgress.Finalized).succeeded }
+    /** The transactions of [transactions], block [block], that are [handoff]'s transfer or near it, in order. */
+    private fun matchesIn(handoff: Handoff, transactions: List<ChainTransaction>, block: Long): List<Found> =
+        transactions.mapNotNull { transaction ->
+            matchHandoff(handoff, transaction)?.let { Found(it, transaction, block) }
+        }
+
+    /**
+     * [found] while its verified receipt is awaited, then [HandoffWatch.Seen]: with the receipt's
+     * block and verdict, or with no verdict when none could be verified by [lastWord] or the receipt
+     * tracker ended without one.
+     */
+    private fun seen(network: Network, found: Found, lastWord: TimeMark): Flow<HandoffWatch> = flow {
+        val hash = found.transaction.hash
+        emit(HandoffWatch.Found(found.match, hash, found.block))
+        val wait = maxOf(-lastWord.elapsedNow(), pollInterval)
+        val receipt = withTimeoutOrNull(wait) {
+            var verdict: Pair<Long, Boolean>? = null
+            // The port promises not to throw; one that does ends the wait with no verdict.
+            // Up to and with the first verdict: the tracker's flow may never end by itself.
+            val untilVerdict = receipts.observe(network, hash).catch { }.transformWhile { progress ->
+                emit(progress)
+                progress !is TransactionProgress.Included && progress !is TransactionProgress.Finalized
+            }
+            untilVerdict.collect { progress ->
+                when (progress) {
+                    is TransactionProgress.Included -> verdict = progress.blockNumber to progress.succeeded
+                    is TransactionProgress.Finalized -> verdict = progress.blockNumber to progress.succeeded
+                    is TransactionProgress.Unavailable ->
+                        emit(HandoffWatch.Found(found.match, hash, found.block, progress.reason))
+                    TransactionProgress.Pending -> Unit
+                }
+            }
+            verdict
+        }
+        emit(HandoffWatch.Seen(found.match, hash, receipt?.first ?: found.block, receipt?.second))
+    }
 }
 
 /** What [WatchHandoff] has found so far. */
 sealed interface HandoffWatch {
 
     /**
-     * Looking: every block up to [readUpTo] was read and holds no such transfer; [unavailable] why
-     * the next one cannot be read now, when that is so.
+     * Looking: every block up to [readUpTo] was read and holds no such transfer from the account;
+     * [unavailable] why the next one cannot be read now, when that is so; [nearBlock] the block of a
+     * near match kept meanwhile (another amount, or another sender), if any.
      */
-    data class Watching(val readUpTo: Long, val unavailable: ReadUnavailable? = null) : HandoffWatch
+    data class Watching(
+        val readUpTo: Long,
+        val unavailable: ReadUnavailable? = null,
+        val nearBlock: Long? = null,
+    ) : HandoffWatch
 
-    /** Block [block] includes transaction [hash], which is [match]; its receipt is being read. */
-    data class Found(val match: HandoffMatch, val hash: String, val block: Long) : HandoffWatch
+    /**
+     * Block [block] includes transaction [hash], which is [match]; its receipt is being read, and
+     * [unavailable] says why it cannot be now, when that is so.
+     */
+    data class Found(
+        val match: HandoffMatch,
+        val hash: String,
+        val block: Long,
+        val unavailable: ReadUnavailable? = null,
+    ) : HandoffWatch
 
-    /** Block [block] includes transaction [hash], which is [match]; its verified receipt says if it [succeeded]. */
-    data class Seen(val match: HandoffMatch, val hash: String, val block: Long, val succeeded: Boolean) : HandoffWatch
+    /**
+     * Transaction [hash], which is [match], is in block [block] (its verified receipt's, when one was
+     * read); the receipt says whether it [succeeded], null when none could be verified in time.
+     */
+    data class Seen(val match: HandoffMatch, val hash: String, val block: Long, val succeeded: Boolean?) : HandoffWatch
 
-    /** The window passed with every block up to [readUpTo] read and no such transfer in any. */
-    data class NotSeen(val readUpTo: Long) : HandoffWatch
+    /**
+     * No such transfer in any block up to [readUpTo]: the window passed with every block read, or,
+     * with [unavailable] its reason, the grace after it passed with blocks still unread.
+     */
+    data class NotSeen(val readUpTo: Long, val unavailable: ReadUnavailable? = null) : HandoffWatch
 }
 
 private val UNPROVEN = ReadUnavailable.UNPROVEN

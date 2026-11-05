@@ -4,6 +4,7 @@ import android.app.Activity
 import android.content.ActivityNotFoundException
 import android.content.Context
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.net.Uri
 import eth.serotine.domain.repository.HandoffAvailability
 import eth.serotine.domain.repository.HandoffOpening
@@ -29,7 +30,8 @@ class AndroidWalletHandoff(
 
     override fun availability(): HandoffAvailability = try {
         @Suppress("DEPRECATION") // the flags overload is API 33; this one covers minSdk 29 on
-        val handlers = context.packageManager.queryIntentActivities(view(PROBE), 0)
+        // As startActivity resolves an implicit intent: only activities in the DEFAULT category count.
+        val handlers = context.packageManager.queryIntentActivities(view(PROBE), PackageManager.MATCH_DEFAULT_ONLY)
         if (handlers.any { it.activityInfo?.packageName !in SEROTINE_PACKAGES }) {
             HandoffAvailability.AVAILABLE
         } else {

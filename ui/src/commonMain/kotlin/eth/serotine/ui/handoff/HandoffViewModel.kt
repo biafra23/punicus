@@ -387,11 +387,14 @@ class HandoffViewModel(
             "${network.displayName} is a test network: its ${network.nativeSymbol} has no value."
                 .takeIf { network.testnet },
         )
-        val beyondMetaMask = request.amount >= PaymentLinks.METAMASK_MAX_WEI_EXCLUSIVE
-        val limit = if (option.asset == TransferAsset.Native && beyondMetaMask) {
-            "MetaMask cannot open a payment link for 1,000 ${network.nativeSymbol} or more. Another wallet may."
-        } else {
-            null
+        // MetaMask's parser turns 10^21 smallest units and more into an exponent, and refuses it, for the
+        // network's currency's wei and a token's uint256 alike (#255's spike).
+        val limit = when {
+            request.amount < PaymentLinks.METAMASK_MAX_WEI_EXCLUSIVE -> null
+            option.asset == TransferAsset.Native ->
+                "MetaMask cannot open a payment link for 1,000 ${network.nativeSymbol} or more. Another wallet may."
+            else -> "MetaMask cannot open a payment link for an amount this large of a token with " +
+                "${option.decimals} decimals. Another wallet may."
         }
         return HandoffUiState.Review(
             network = network.displayName,
@@ -416,12 +419,21 @@ class HandoffViewModel(
                 "“${request.sender.label}”, as handed over.",
             progress = when (watch) {
                 null -> "Reading the newest verified block…"
-                is HandoffWatch.Watching -> "No block up to ${grouped(watch.readUpTo)} has it yet. Serotine " +
-                    "keeps looking for ${HANDOFF_WINDOW.inWholeMinutes} minutes after the handoff."
+                is HandoffWatch.Watching -> listOfNotNull(
+                    "No block up to ${grouped(watch.readUpTo)} has it from this account yet. Serotine keeps " +
+                        "looking for ${HANDOFF_WINDOW.inWholeMinutes} minutes after the handoff.",
+                    watch.nearBlock?.let {
+                        "Block ${grouped(it)} has a transfer like it, of another amount or from another account."
+                    },
+                ).joinToString(" ")
                 is HandoffWatch.Found -> "Block ${grouped(watch.block)} has a transfer: reading its verified receipt…"
                 is HandoffWatch.Seen, is HandoffWatch.NotSeen -> ""
             },
-            problem = (watch as? HandoffWatch.Watching)?.unavailable?.let(::unreadable),
+            problem = when (watch) {
+                is HandoffWatch.Watching -> watch.unavailable?.let(::unreadable)
+                is HandoffWatch.Found -> watch.unavailable?.let(::receiptUnreadable)
+                else -> null
+            },
         )
     }
 
@@ -433,7 +445,18 @@ class HandoffViewModel(
             is HandoffWatch.Seen -> {
                 val block = grouped(watch.block)
                 when (val match = watch.match) {
-                    HandoffMatch.Exact -> if (watch.succeeded) {
+                    HandoffMatch.Exact -> if (watch.succeeded == null) {
+                        HandoffUiState.Outcome(
+                            name,
+                            OutcomeKind.NOT_SEEN,
+                            "Its receipt could not be checked",
+                            "$asked from “${request.sender.label}” to $recipient is in block $block, but its " +
+                                "receipt could not be verified in time, so whether it went through is not known. " +
+                                "The account's balance shows it.",
+                            hash = watch.hash,
+                            block = block,
+                        )
+                    } else if (watch.succeeded == true) {
                         HandoffUiState.Outcome(
                             name,
                             OutcomeKind.SENT,
@@ -459,7 +482,7 @@ class HandoffViewModel(
                         OutcomeKind.NOT_THE_ONE,
                         "Not what you handed over",
                         "${amountOf(request, match.amount)}, not $asked, went from “${request.sender.label}” to " +
-                            "$recipient in block $block" + if (watch.succeeded) "." else ", and it reverted.",
+                            "$recipient in block $block" + if (watch.succeeded == false) ", and it reverted." else ".",
                         hash = watch.hash,
                         block = block,
                     )
@@ -480,6 +503,7 @@ class HandoffViewModel(
                 OutcomeKind.NOT_SEEN,
                 "No matching transfer seen yet",
                 "No block up to ${grouped(watch.readUpTo)} has $asked from “${request.sender.label}” to $recipient. " +
+                    (watch.unavailable?.let { "The blocks after it could not be checked: ${unreadable(it)} " } ?: "") +
                     "If it is sent later, the account's balance shows it once a block has it.",
             )
             else -> error("not an outcome: $watch")
@@ -530,6 +554,10 @@ class HandoffViewModel(
         ReadUnavailable.REFUSED ->
             "The light client on this device cannot read blocks, so the transfer cannot be checked."
     }
+
+    /** Why the receipt of the transaction found cannot be verified now. */
+    private fun receiptUnreadable(reason: ReadUnavailable): String =
+        "Its receipt cannot be verified now: " + unreadable(reason).replaceFirstChar { it.lowercase() }
 
     /** What [text] names, resolved; never throws. */
     private suspend fun lookUp(text: String): RecipientLookup = try {

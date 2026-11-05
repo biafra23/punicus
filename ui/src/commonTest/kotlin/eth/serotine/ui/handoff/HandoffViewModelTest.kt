@@ -181,6 +181,12 @@ class HandoffViewModelTest {
         receipts.of("0x" + "b".repeat(64)).value = TransactionProgress.Included(101, succeeded = true)
         advanceTimeBy(5.seconds)
         runCurrent()
+        // Kept while the account's own transfer may still come: said, and the answer once the window has passed.
+        val waiting = assertIs<HandoffUiState.Waiting>(viewModel.uiState.value)
+        assertTrue("Block 101 has a transfer like it" in waiting.progress, waiting.progress)
+        clock += 10.minutes
+        advanceTimeBy(5.seconds)
+        runCurrent()
 
         val outcome = assertIs<HandoffUiState.Outcome>(viewModel.uiState.value)
         assertEquals(OutcomeKind.NOT_THE_ONE, outcome.kind)
