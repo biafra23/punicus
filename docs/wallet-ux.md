@@ -1154,10 +1154,12 @@ they are helpful." The rulings (owner rulings, 2026-11-05, #246; the
   engine's log index holds (`ObserveNfts`). It is listed only once a verified
   call at the head says the account holds it: `ownerOf(id)` names it, or
   `balanceOf(account, id)` is above zero. One passed on or burned drops out
-  at its next proof. An NFT is proven again only when a log naming it and
-  the account appears, or its last proof had no answer. At most the 100 most
-  recently moved are checked; the rest are counted, so a flood of airdrops
-  cannot flood the light client with calls.
+  at its next proof. An NFT is proven again when a log naming it and the
+  account appears, when its last proof had no answer, and within the hour in
+  any case: an ENS name changes holder at expiry with no log. At most 100 are
+  checked, the built-in collections' first, then the most recently moved;
+  the rest are counted, so a flood of airdrops can neither flood the light
+  client with calls nor push the user's ENS names out.
 - **Where its coverage starts.** The index covers the account from its
   history's start. The list says so ("NFTs received since block n"), and
   offers *Add an NFT*: a contract and a token id, kept once the account is

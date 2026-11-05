@@ -86,12 +86,16 @@ sealed interface NftHoldings {
  * `TransferBatch` to it at topic 3), each then proven held at the head ([NftContracts.holding]).
  * A log alone never makes an NFT held: one received and passed on, or burned, drops out once its
  * proof says so. The logs that name the account as the sender (topic 1, or 2 for ERC-1155) are read
- * too, so that a move away is proven again.
+ * too: an ERC-721 whose last move took it away is not checked, and an ERC-1155 that left is proven
+ * again.
  *
- * An NFT is proven again only when a log naming it and the account appeared since its last proof,
- * or its last proof had no answer: holding it changes only through such a log. At most
- * [MAX_CHECKED] NFTs are checked, the most recently moved first, so that a flood of airdrops cannot
- * flood the light client with calls. Each collection's name is read once, while this runs.
+ * An NFT is proven again when a log naming it and the account appeared since its last proof, when
+ * its last proof had no answer or was made at a block before its last move, and in any case once
+ * it is [REPROVE_AFTER_SECONDS] old: holding can change with no log (an ENS name expiring). At most
+ * [MAX_CHECKED] NFTs are checked, the built-in collections' first, then the most recently moved, so
+ * that a flood of airdrops can neither flood the light client with calls nor push out the user's
+ * ENS names. Each unlisted collection's name is read once, right after its first NFT is proven
+ * held, while this runs.
  */
 class ObserveNfts(
     private val index: LogIndex,
@@ -137,29 +141,35 @@ class ObserveNfts(
                         // the events are in block order, so the last one written stays.
                         val last = mutableMapOf<NftRef, NftMove>()
                         for (move in moves) move.nfts.forEach { last[it] = move }
-                        val received = moves.flatMap { it.received }.toSet()
+                        // An ERC-721 whose last move took it away is gone: only a log naming the account
+                        // brings it back. An ERC-1155 may have left in part, and is checked.
+                        val received = moves.flatMap { it.received }.toSet().filterNot { nft ->
+                            nft.standard == NftStandard.ERC721 && nft !in last.getValue(nft).received
+                        }
+                        // The built-in collections' first, so that no flood of airdrops pushes them out
+                        // of the NFTs checked; within each part, the most recently moved first.
                         val ordered = received.sortedWith(
-                            compareByDescending<NftRef> { last.getValue(it).blockNumber }
+                            compareBy<NftRef> { KnownNftCollections.find(account.network, it.collection) == null }
+                                .thenByDescending { last.getValue(it).blockNumber }
                                 .thenByDescending { last.getValue(it).logIndex },
                         )
                         val checking = ordered.take(MAX_CHECKED)
+                        val head = history.checked.last
+                        val reproveAfter = REPROVE_AFTER_SECONDS / account.network.secondsPerSlot
                         fun shown() = holdings(account, history, checking, ordered.size, proofs, names)
                         emit(shown())
                         for (nft in checking) {
-                            val move = last.getValue(nft).let { it.transactionHash to it.logIndex }
-                            val before = proofs[nft]
-                            if (before != null && before.move == move && before.holding !is NftHolding.Unavailable) {
-                                continue
+                            val move = last.getValue(nft)
+                            if (proofs[nft]?.standsFor(move, head, reproveAfter) == true) continue
+                            val holding = contracts.holding(account.network, address, nft)
+                            proofs[nft] = Proof(move.transactionHash to move.logIndex, head, holding)
+                            val collection = nft.collection
+                            val unnamed = collection !in names &&
+                                KnownNftCollections.find(account.network, collection) == null
+                            if (holding is NftHolding.Held && unnamed) {
+                                val reading = contracts.collection(account.network, collection)
+                                if (reading is NftCollectionReading.Read) names[collection] = reading
                             }
-                            proofs[nft] = Proof(move, contracts.holding(account.network, address, nft))
-                        }
-                        val held = checking.filter { proofs[it]?.holding is NftHolding.Held }.map { it.collection }
-                        for (collection in held.distinct()) {
-                            if (collection in names || KnownNftCollections.find(account.network, collection) != null) {
-                                continue
-                            }
-                            val reading = contracts.collection(account.network, collection)
-                            if (reading is NftCollectionReading.Read) names[collection] = reading
                         }
                         emit(shown())
                     }
@@ -212,12 +222,38 @@ class ObserveNfts(
         return NftMove(nfts, received, log.blockNumber, log.transactionHash, log.logIndex, log.blockTimestamp)
     }
 
-    /** The last move [move] (its transaction and log) an NFT's [holding] was proven after. */
-    private data class Proof(val move: Pair<String, Int>, val holding: NftHolding)
+    /**
+     * An NFT's [holding], proven after its last move [move] (its transaction and log), while the index
+     * covered up to block [checkedTo]: the proof's age where the engine did not name its block.
+     */
+    private data class Proof(val move: Pair<String, Int>, val checkedTo: Long, val holding: NftHolding) {
+
+        /**
+         * Whether this proof still stands for [last], the NFT's last move, at [head]: proven after that
+         * very move, at or after its block, fewer than [reproveAfter] blocks ago, and answered.
+         */
+        fun standsFor(last: NftMove, head: Long, reproveAfter: Long): Boolean {
+            val block = when (holding) {
+                is NftHolding.Held -> holding.blockNumber
+                is NftHolding.NotHeld -> holding.blockNumber
+                is NftHolding.Unavailable -> return false
+            } ?: checkedTo
+            return move == (last.transactionHash to last.logIndex) && block >= last.blockNumber &&
+                head - block < reproveAfter
+        }
+    }
 
     companion object {
-        /** The most NFTs proven per account: the most recently moved; the rest are counted, not checked. */
+        /** The most NFTs proven per account: the built-in collections' first, then the most recently moved. */
         const val MAX_CHECKED: Int = 100
+
+        /**
+         * How long a proof stands with no log naming its NFT: an hour. Holding can change with no log at
+         * all, as an ENS name does when it expires and when it is renewed after its grace period, and a
+         * call can revert for a while (a paused contract); a log out of shape, such as a batch too long
+         * to read, is missed. So each NFT is proven again within the hour regardless.
+         */
+        const val REPROVE_AFTER_SECONDS: Long = 3_600
     }
 }
 

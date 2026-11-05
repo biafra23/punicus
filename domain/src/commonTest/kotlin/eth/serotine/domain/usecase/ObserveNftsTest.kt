@@ -107,8 +107,9 @@ class ObserveNftsTest {
         assertEquals(0, read.unproven)
         assertEquals(0, read.notChecked)
         assertEquals(true, read.complete)
-        // Token 6 was received and passed on: checked, and not held. Only the unlisted collection's name is read.
-        assertEquals(4, contracts.holdingCalls)
+        // Token 6 was received and passed on: its last move took it away, so it is not checked. Only the
+        // unlisted collection's name is read.
+        assertEquals(3, contracts.holdingCalls)
         assertEquals(listOf(art), contracts.collectionCalls)
     }
 
@@ -126,12 +127,39 @@ class ObserveNftsTest {
         runCurrent()
         assertEquals(1, contracts.holdingCalls)
 
-        logs = logs + erc721(alice, bob, 5, 9_350)
-        contracts.held -= nft(art, 5, NftStandard.ERC721)
-        covered(9_400)
+        covered(9_499) // just short of an hour of Sepolia's slots since the proof at 9,200
+        runCurrent()
+        assertEquals(1, contracts.holdingCalls)
+
+        covered(9_500) // an hour on: proven again, a log or none (an ENS name expires with none)
         runCurrent()
         assertEquals(2, contracts.holdingCalls)
+
+        logs = logs + erc721(alice, bob, 5, 9_550)
+        contracts.held -= nft(art, 5, NftStandard.ERC721)
+        covered(9_600)
+        runCurrent()
+        assertEquals(2, contracts.holdingCalls, "an ERC-721 whose last move took it away is not checked")
         assertEquals(emptyList(), assertIs<NftHoldings.Read>(seen.last()).nfts)
+    }
+
+    @Test
+    fun theBuiltInCollectionsAreCheckedBeforeAFloodOfAirdrops() = runTest {
+        val spam = Address.of("0x" + "5b".repeat(20))
+        logs = listOf(batchTo(alice, listOf(1), 9_010)) +
+            (1..ObserveNfts.MAX_CHECKED + 5).map { id ->
+                log(spam, listOf(TokenTransfers.TRANSFER, topic(bob), topic(alice), "0x" + word(id.toLong())), "0x", 9_100L + id, 0)
+            }
+        contracts.held += nft(wrapper, 1, NftStandard.ERC1155)
+        covered(9_300)
+        val seen = mutableListOf<NftHoldings>()
+        backgroundScope.launch { ObserveNfts(index, starts, contracts)(alice.onSepolia).collect { seen += it } }
+        runCurrent()
+
+        val read = assertIs<NftHoldings.Read>(seen.last())
+        assertEquals(listOf(nft(wrapper, 1, NftStandard.ERC1155)), read.nfts.map { it.nft })
+        assertEquals(6, read.notChecked)
+        assertEquals(ObserveNfts.MAX_CHECKED, contracts.holdingCalls)
     }
 
     @Test

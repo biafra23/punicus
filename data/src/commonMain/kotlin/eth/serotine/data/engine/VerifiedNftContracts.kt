@@ -57,7 +57,12 @@ class VerifiedNftContracts internal constructor(
                 outcomes += outcome
             }
             val (name, symbol) = outcomes.map { (it as? CallOutcome.Returned)?.let { said -> text(said.hex) } }
-            NftCollectionReading.Read(name, symbol, (outcomes.first() as? CallOutcome.Returned)?.blockNumber)
+            val block = when (val first = outcomes.first()) {
+                is CallOutcome.Returned -> first.blockNumber
+                is CallOutcome.Reverted -> first.blockNumber
+                CallOutcome.Refused -> null
+            }
+            NftCollectionReading.Read(name, symbol, block)
         }
     }
 
