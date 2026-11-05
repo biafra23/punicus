@@ -40,8 +40,8 @@ internal object ScreenshotIndex {
             the growth and keeps every past image in the history. Rewriting the history with
             `git filter-repo --path docs/screenshots --invert-paths` drops them for good, but changes the
             SHA of every commit since the first screenshot: tags, links to commits and every existing clone
-            must follow. CI fails a pull request once the folder holds more than 64 MiB, or one image more
-            than 512 KiB (`scripts/screenshots.py`).
+            must follow. CI fails a pull request once the folder, or one image, passes its size budget
+            (`scripts/screenshots.py`).
         """,
     ).map { paragraph -> paragraph.trimIndent().lines().joinToString(" ") { it.trim() } }
 

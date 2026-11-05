@@ -64,6 +64,11 @@ The table is the check: a PR that says "No UI change" while its table lists
 changed screenshots, or a changed screen whose table lacks a state the PR
 adds, is a finding.
 
+**A change the previews cannot draw** (navigation, an animation, a host's
+window or notification) has no screenshot: the section's line says in words
+what changes. Whether a capture of the running app should go with it, and
+where, is open; the owner decides.
+
 ## Looking at them locally
 
 ```bash
@@ -79,7 +84,7 @@ commit's image: `git show <rev>:docs/screenshots/<screen>/<state>.png`.
 
 | The message says | What it means, and what to do |
 |---|---|
-| this run cannot push the render | A fork PR, or the `SCREENSHOTS_DEPLOY_KEY` secret is not set. A maintainer renders on a branch of this repository, or the owner sets the secret. |
+| this run cannot push the render | A fork PR, the `SCREENSHOTS_DEPLOY_KEY` secret is not set, or the PR's head branch is `main`, which the workflow never writes. A maintainer renders on a branch of this repository, or the owner sets the secret. |
 | a preview is not deterministic | The render differs right after CI's own commit. A preview draws the clock or randomness: give it fixed sample data. |
 | the push was rejected | The branch moved while the run worked. The run on the new head renders again. |
 | over its budget | The folder, or one image, is too large. The way out is in the message and in the folder's README. |
@@ -92,4 +97,5 @@ write deploy key of this repository; the public half is under Settings →
 Deploy keys. Creating, rotating or removing it is the owner's action. A
 push with `GITHUB_TOKEN` would start no workflow, which is why a key is
 used. `main` has no branch protection today, so the key could push there
-too; a rule that lets only PRs into `main` would confine it to PR branches.
+too, though the workflow never does; a rule that lets only PRs into `main`
+would confine it to PR branches. That setting is the owner's.
