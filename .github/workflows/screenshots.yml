@@ -10,7 +10,8 @@
 #   2. Render every preview into docs/screenshots/ (`-Pscreenshots`), which also writes the README.md
 #      and index.html overviews. The renderer keeps a file whose pixels did not change, so only a
 #      real change shows in `git status`, whatever bytes the optimizer left in the file.
-#   3. Optimize the PNGs that changed, losslessly (optipng), and commit them to the PR's branch as
+#   3. Optimize the PNGs that changed, losslessly (optipng), and check the folder's size budget before
+#      anything is committed, so an image over it never enters history. Commit them to the PR's branch as
 #      github-actions[bot], pushed with the SCREENSHOTS_DEPLOY_KEY deploy key. Why a deploy key: a
 #      push made with GITHUB_TOKEN starts no workflow, so the new head would get neither Build and
 #      Test nor this check; a deploy key's push does. The run that push starts renders again and
@@ -18,9 +19,9 @@
 #      is a write deploy key of this repository and nothing else.
 #   4. Write the before/after table into the PR's description, between `<!-- screenshots:start -->`
 #      and `<!-- screenshots:end -->`: one row per screenshot the PR adds, changes or removes, the
-#      images by raw URL at the base's commit and at the new head, so they stay as long as the
-#      commits do. Rewritten from the whole diff on every run, so it never keeps a stale row.
-#   5. Check the folder's size budget, so growth is noticed before every clone pays for it.
+#      images by raw URL at the branch point (the merge base with the base branch, as GitHub's own
+#      Files changed view compares) and at the new head, so they stay as long as the commits do.
+#      Rewritten from the whole diff on every run, so it never keeps a stale row.
 # The push comes last: the run it starts shares this concurrency group and cancels a run still in
 # progress, so everything that must happen happens before it. The table therefore names the commit
 # before it is pushed; if the push is rejected (the branch moved), the run on the new head redoes
@@ -124,6 +125,10 @@ jobs:
             echo "every screen renders as committed"
           fi
 
+      # Before the commit: an image over budget never enters the branch's history.
+      - name: Check the folder's size budget
+        run: python3 scripts/screenshots.py budget
+
       - name: Commit the changed screenshots
         if: github.event_name == 'pull_request' && steps.changes.outputs.any == 'true' && env.HAS_DEPLOY_KEY == 'true'
         env:
@@ -149,7 +154,8 @@ jobs:
             -m "Rendered by the Screenshots workflow from $HEAD_SHA. Every other screen draws the same pixels."
           git log --oneline -1
 
-      # The base's commit for the before images; HEAD, committed above or not, for the after images.
+      # The branch point for the before images, so a screenshot changed on the base since then is not
+      # shown as this PR's; HEAD, committed above or not, for the after images.
       # Not when the render differs and could not be committed: HEAD would not show it, and the
       # table would say nothing changed. The failing step below says what happened instead.
       - name: Write the before/after table into the PR description
@@ -165,9 +171,10 @@ jobs:
           set -o pipefail
           # Fails the step, rather than an empty diff reading as "no screenshot changed".
           git cat-file -e "$BASE_SHA^{commit}" 2>/dev/null || git fetch -q origin "$BASE_SHA"
-          git diff --name-status --no-renames "$BASE_SHA" HEAD -- docs/screenshots \
+          before=$(git merge-base "$BASE_SHA" HEAD)
+          git diff --name-status --no-renames "$before" HEAD -- docs/screenshots \
             | python3 scripts/screenshots.py table --repo "$GITHUB_REPOSITORY" --pr "$PR_NUMBER" \
-                --base-sha "$BASE_SHA" --head-sha "$(git rev-parse HEAD)"
+                --base-sha "$before" --head-sha "$(git rev-parse HEAD)"
 
       - name: Push the screenshots to the PR's branch
         if: github.event_name == 'pull_request' && steps.changes.outputs.any == 'true' && env.HAS_DEPLOY_KEY == 'true'
@@ -179,9 +186,6 @@ jobs:
                  "The run on its new head renders again."
             exit 1
           }
-
-      - name: Check the folder's size budget
-        run: python3 scripts/screenshots.py budget
 
       - name: Fail when the screens differ and this run cannot push the render
         if: github.event_name == 'pull_request' && steps.changes.outputs.any == 'true' && env.HAS_DEPLOY_KEY != 'true'

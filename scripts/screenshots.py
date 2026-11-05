@@ -4,7 +4,7 @@
     screenshots.py table --repo OWNER/REPO --pr N --base-sha SHA --head-sha SHA [--dry-run] < name-status
     screenshots.py budget [--dir docs/screenshots]
 
-`table` reads `git diff --name-status --no-renames <base> <head> -- docs/screenshots` on stdin and writes
+`table` reads `git diff --name-status --no-renames <branch point> <head> -- docs/screenshots` on stdin and writes
 the before/after table of the screenshots the PR changed into the PR's description, between the
 markers `<!-- screenshots:start -->` and `<!-- screenshots:end -->`. A description without the markers
 gets them under its `## Screenshots` heading; without that heading, above its session link, the last
@@ -82,7 +82,7 @@ def table(changes: list[Change], repo: str, base_sha: str, head_sha: str, max_ro
     lines = [START]
     if not changes:
         lines.append(
-            f"No screenshot changed: every screen renders as on the base "
+            f"No screenshot changed: every screen renders as where this branch left its base "
             f"(CI render of {head_sha[:7]}, compared with {base_sha[:7]})."
         )
         lines.append(END)
@@ -92,7 +92,8 @@ def table(changes: list[Change], repo: str, base_sha: str, head_sha: str, max_ro
     folder_url = f"https://github.com/{repo}/tree/{head_sha}/{FOLDER}"
     lines.append(
         f"{len(changes)} screenshot{'s' if len(changes) != 1 else ''}: {summary} "
-        f"([`{FOLDER}/`]({folder_url}), CI render of {head_sha[:7]}; the before images are {base_sha[:7]}'s)."
+        f"([`{FOLDER}/`]({folder_url}), CI render of {head_sha[:7]}; the before images are the branch point's, "
+        f"{base_sha[:7]})."
     )
     lines.append("")
     lines.append("| Screen / state | Before | After |")
@@ -135,7 +136,8 @@ def splice(body: str, block: str) -> str:
 
 
 def gh(*args: str, stdin: str | None = None) -> str:
-    return subprocess.run(["gh", *args], check=True, capture_output=True, text=True, input=stdin).stdout
+    """gh's output; its error messages go to the step's log, so a failed call says why."""
+    return subprocess.run(["gh", *args], check=True, stdout=subprocess.PIPE, text=True, input=stdin).stdout
 
 
 def update_description(repo: str, pr: int, block: str, dry_run: bool) -> str:
