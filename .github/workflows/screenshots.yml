@@ -5,23 +5,27 @@
 # of screens and the renderer: ui/src/desktopTest/kotlin/eth/serotine/ui/Screens.kt and
 # RenderPreviews.kt. The helper script: scripts/screenshots.py.
 #
-# On a pull request:
-#   1. Check out the PR's BRANCH, not the merge ref: what is rendered is committed back to it.
+# On a pull request, two jobs. `render` runs the PR's code and holds no write credential:
+#   1. Check out the PR's head commit, not the merge ref: what is rendered is committed on top of it.
 #   2. Render every preview into docs/screenshots/ (`-Pscreenshots`), which also writes the README.md
 #      and index.html overviews. The renderer keeps a file whose pixels did not change, so only a
 #      real change shows in `git status`, whatever bytes the optimizer left in the file.
 #   3. Optimize the PNGs that changed, losslessly (optipng), and check the folder's size budget before
-#      anything is committed, so an image over it never enters history. Commit them to the PR's branch as
-#      github-actions[bot], pushed with the SCREENSHOTS_DEPLOY_KEY deploy key. Why a deploy key: a
-#      push made with GITHUB_TOKEN starts no workflow, so the new head would get neither Build and
-#      Test nor this check; a deploy key's push does. The run that push starts renders again and
-#      finds nothing to commit, which is the proof that the committed set matches the code. The key
-#      is a write deploy key of this repository and nothing else.
+#      anything is committed, so an image over it never enters history. Commit them as
+#      github-actions[bot] and hand the commit to `push` as a git bundle.
 #   4. Write the before/after table into the PR's description, between `<!-- screenshots:start -->`
-#      and `<!-- screenshots:end -->`: one row per screenshot the PR adds, changes or removes, the
-#      images by raw URL at the branch point (the merge base with the base branch, as GitHub's own
-#      Files changed view compares) and at the new head, so they stay as long as the commits do.
-#      Rewritten from the whole diff on every run, so it never keeps a stale row.
+#      and `<!-- screenshots:end -->`, each on a line of its own: one row per screenshot the PR adds,
+#      changes or removes, the images by raw URL at the branch point (the merge base with the base
+#      branch, as GitHub's own Files changed view compares) and at the new head, so they stay as long
+#      as the commits do. Rewritten from the whole diff on every run, so it never keeps a stale row.
+# `push` runs none of the PR's code. It checks out the PR's branch with the SCREENSHOTS_DEPLOY_KEY
+# deploy key, takes the bundle, checks that it is one commit on top of the PR's head that changes
+# nothing outside docs/screenshots/, and pushes it. The key never reaches the runner that ran the
+# PR's build: a build script there could read it from disk, or leave a process behind that reads it
+# when a later step writes it. Why a deploy key: a push made with GITHUB_TOKEN starts no workflow,
+# so the new head would get neither Build and Test nor this check; a deploy key's push does. The run
+# that push starts renders again and finds nothing to commit, which is the proof that the committed
+# set matches the code. The key is a write deploy key of this repository and nothing else.
 # The push comes last: the run it starts shares this concurrency group and cancels a run still in
 # progress, so everything that must happen happens before it. The table therefore names the commit
 # before it is pushed; if the push is rejected (the branch moved), the run on the new head redoes
@@ -34,7 +38,8 @@
 #
 # On a push to main: render and verify that the committed set equals the render. A difference fails
 # the run, naming the files. It happens when a PR merged with a head its screenshots run had not
-# finished on; the fix is a PR, whose run commits the render.
+# finished on, or when the runner's renderer changed (its image or its JDK); the fix is a PR from a
+# new branch off main, whose run commits the render.
 #
 # The trigger is unscoped (any base branch), like ci.yml's: a part PR of a multi-PR plan needs its
 # screenshots too. PR-controlled values (the head ref, the shas) reach the scripts through `env:`,
@@ -58,6 +63,8 @@ jobs:
     permissions:
       contents: read
       pull-requests: write
+    outputs:
+      any: ${{ steps.changes.outputs.any }}
     env:
       # Whether this run may push the render to the PR's branch: not on a fork PR (no secrets there),
       # not where the key is not configured, and never when the PR's head branch is main, which this
@@ -66,14 +73,15 @@ jobs:
 
     steps:
       # Full history: :ui stamps the app's version from the nearest v* tag (ci.yml), and the base's
-      # commit is diffed against below.
-      - name: Checkout the PR's branch
+      # commit is diffed against below. No credential is left in .git/config: this job runs the PR's
+      # code, and the repository is public, so the fetch below needs none.
+      - name: Checkout the PR's head
         if: github.event_name == 'pull_request'
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
           repository: ${{ github.event.pull_request.head.repo.full_name }}
-          ref: ${{ github.event.pull_request.head.ref }}
-          ssh-key: ${{ secrets.SCREENSHOTS_DEPLOY_KEY }}
+          ref: ${{ github.event.pull_request.head.sha }}
+          persist-credentials: false
           fetch-depth: 0
 
       - name: Checkout main
@@ -137,12 +145,23 @@ jobs:
         env:
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}
         run: |
-          # The head is this workflow's own commit, and the render still differs: a preview draws
-          # something else on every run (a clock, randomness). Committing again would loop forever.
-          if [ "$(git log -1 --format=%an)" = "github-actions[bot]" ]; then
-            echo "::error::the render differs from the screenshots this workflow committed one run ago" \
-                 "(listed above): a preview is not deterministic. Give it fixed sample data."
-            exit 1
+          # Each commit records the renderer that drew it: the runner's image and the JDK.
+          renderer="${ImageOS:-unknown} ${ImageVersion:-unknown}, $(java -version 2>&1 | head -n 1)"
+          # The head is this workflow's own commit, and the render still differs. Under the same
+          # renderer a preview draws something else on every run (a clock, randomness): committing
+          # again would loop forever. Under another renderer the new render is committed once; the run
+          # after it compares under the same renderer.
+          if [ "$(git log -1 --format=%an)" = "github-actions[bot]" ] \
+             && [ "$(git log -1 --format=%s | cut -c 1-13)" = "Screenshots: " ]; then
+            last=$(git log -1 --format='%(trailers:key=Renderer,valueonly,unfold)')
+            if [ "$last" = "$renderer" ]; then
+              echo "::error::the render differs from the screenshots this workflow committed one run ago" \
+                   "with the same renderer ($renderer), listed above: a preview is not deterministic." \
+                   "Give it fixed sample data."
+              exit 1
+            fi
+            echo "::notice::the renderer changed since this workflow's last commit" \
+                 "(${last:-not recorded} -> $renderer): committing the new render."
           fi
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
@@ -154,7 +173,8 @@ jobs:
               else printf "the overview pages"
             }')
           git commit -q -m "Screenshots: $summary" \
-            -m "Rendered by the Screenshots workflow from $HEAD_SHA. Every other screen draws the same pixels."
+            -m "Rendered by the Screenshots workflow from $HEAD_SHA. Every other screen draws the same pixels." \
+            -m "Renderer: $renderer"
           git log --oneline -1
 
       # The branch point for the before images, so a screenshot changed on the base since then is not
@@ -179,16 +199,23 @@ jobs:
             | python3 scripts/screenshots.py table --repo "$GITHUB_REPOSITORY" --pr "$PR_NUMBER" \
                 --base-sha "$before" --head-sha "$(git rev-parse HEAD)"
 
-      - name: Push the screenshots to the PR's branch
+      # The commit goes to the push job as a bundle: that job holds the key and runs nothing of the PR's.
+      - name: Bundle the commit for the push job
         if: github.event_name == 'pull_request' && steps.changes.outputs.any == 'true' && env.CAN_PUSH == 'true'
         env:
-          HEAD_REF: ${{ github.event.pull_request.head.ref }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
         run: |
-          git push origin "HEAD:refs/heads/$HEAD_REF" || {
-            echo "::error::the push was rejected: the branch moved since this run started." \
-                 "The run on its new head renders again."
-            exit 1
-          }
+          git update-ref refs/heads/screenshots-render HEAD
+          git bundle create "$RUNNER_TEMP/screenshots.bundle" refs/heads/screenshots-render "^$HEAD_SHA"
+
+      - name: Upload the bundle
+        if: github.event_name == 'pull_request' && steps.changes.outputs.any == 'true' && env.CAN_PUSH == 'true'
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: screenshots-render
+          path: ${{ runner.temp }}/screenshots.bundle
+          if-no-files-found: error
+          retention-days: 1
 
       - name: Fail when the screens differ and this run cannot push the render
         if: github.event_name == 'pull_request' && steps.changes.outputs.any == 'true' && env.CAN_PUSH != 'true'
@@ -203,7 +230,63 @@ jobs:
         if: github.event_name != 'pull_request' && steps.changes.outputs.any == 'true'
         run: |
           echo "::error::docs/screenshots on main does not match the render of main (listed above):" \
-               "a PR merged with a head its Screenshots run had not finished on. Open a PR from a new" \
-               "branch off main (never from main itself, which this workflow never writes); its run commits" \
-               "the render."
+               "a PR merged with a head its Screenshots run had not finished on, or the runner's renderer" \
+               "changed (its image or its JDK). Open a PR from a new branch off main (never from main" \
+               "itself, which this workflow never writes); its run commits the render."
           exit 1
+
+  # Runs none of the PR's code: actions/checkout, the artifact, and git. Only this job holds the key.
+  # A failed render job, the case without the key among them, skips it.
+  push:
+    name: Push the screenshots
+    needs: render
+    if: >-
+      github.event_name == 'pull_request'
+      && needs.render.outputs.any == 'true'
+      && github.event.pull_request.head.repo.full_name == github.repository
+      && github.event.pull_request.head.ref != 'main'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout the PR's branch with the deploy key
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          ref: ${{ github.event.pull_request.head.ref }}
+          ssh-key: ${{ secrets.SCREENSHOTS_DEPLOY_KEY }}
+          fetch-depth: 0
+
+      - name: Download the bundle
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: screenshots-render
+          path: ${{ runner.temp }}/render
+
+      # The bundle comes from a job that ran the PR's code, so it is checked before it is pushed: one
+      # commit, whose one parent is the PR's head this run was started for, changing nothing outside
+      # docs/screenshots/. The head sha and ref come from the event, not from that job.
+      - name: Check the commit and push it to the PR's branch
+        env:
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          HEAD_REF: ${{ github.event.pull_request.head.ref }}
+        run: |
+          set -eo pipefail
+          git fetch -q "$RUNNER_TEMP/render/screenshots.bundle" refs/heads/screenshots-render:refs/screenshots/render
+          render=$(git rev-parse refs/screenshots/render)
+          parents=$(git rev-list --parents -n 1 "$render" | cut -d ' ' -f 2-)
+          if [ "$parents" != "$HEAD_SHA" ]; then
+            echo "::error::the render job's commit $render is not one commit on top of the PR's head $HEAD_SHA"
+            exit 1
+          fi
+          outside=$(git diff --name-only --no-renames "$HEAD_SHA" "$render" | grep -v '^docs/screenshots/' || true)
+          if [ -n "$outside" ]; then
+            echo "::error::the render job's commit changes files outside docs/screenshots/, so it is not pushed:"
+            echo "$outside"
+            exit 1
+          fi
+          git push origin "$render:refs/heads/$HEAD_REF" || {
+            echo "::error::the push was rejected: the branch moved since this run started." \
+                 "The run on its new head renders again."
+            exit 1
+          }

@@ -32,8 +32,9 @@ has the details) runs on every PR:
 2. It optimizes the PNGs that changed, losslessly, and fails a folder over
    its size budget before anything is committed (`scripts/screenshots.py`).
 3. It commits them to the PR's branch as `github-actions[bot]`, pushed with
-   the `SCREENSHOTS_DEPLOY_KEY` deploy key, so CI runs again on the new
-   head. That run finds nothing to commit.
+   the `SCREENSHOTS_DEPLOY_KEY` deploy key from a job that runs none of the
+   PR's code, so CI runs again on the new head. That run finds nothing to
+   commit.
 4. It writes the before/after table into the description, between
    `<!-- screenshots:start -->` and `<!-- screenshots:end -->`, under
    `## Screenshots`: one row per screenshot added, changed or removed since
@@ -85,8 +86,9 @@ commit's image: `git show <rev>:docs/screenshots/<screen>/<state>.png`.
 | The message says | What it means, and what to do |
 |---|---|
 | this run cannot push the render | A fork PR, the `SCREENSHOTS_DEPLOY_KEY` secret is not set, or the PR's head branch is `main`, which the workflow never writes. A maintainer renders on a branch of this repository, or the owner sets the secret. |
-| a preview is not deterministic | The render differs right after CI's own commit. A preview draws the clock or randomness: give it fixed sample data. |
+| a preview is not deterministic | The render differs right after CI's own commit, drawn by the same renderer (the runner's image and JDK, recorded in that commit). A preview draws the clock or randomness: give it fixed sample data. When the renderer changed, CI commits the new render once instead. |
 | the push was rejected | The branch moved while the run worked. The run on the new head renders again. |
+| is not one commit on top of the PR's head, or changes files outside docs/screenshots/ | The push job refused the render job's commit. The PR's build wrote files outside `docs/screenshots/`, or the branch was force-pushed during the run. Find what wrote them; push again. |
 | over its budget | The folder, or one image, is too large. The way out is in the message and in the folder's README. |
 | does not match the render of main | A PR merged before its run had committed. Open a PR from a new branch off `main`, never from `main` itself; its run commits the render. |
 
