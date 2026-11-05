@@ -88,7 +88,7 @@ commit's image: `git show <rev>:docs/screenshots/<screen>/<state>.png`.
 | a preview is not deterministic | The render differs right after CI's own commit. A preview draws the clock or randomness: give it fixed sample data. |
 | the push was rejected | The branch moved while the run worked. The run on the new head renders again. |
 | over its budget | The folder, or one image, is too large. The way out is in the message and in the folder's README. |
-| does not match the render of main | A PR merged before its run had committed. Open a PR from `main`; its run commits the render. |
+| does not match the render of main | A PR merged before its run had committed. Open a PR from a new branch off `main`, never from `main` itself; its run commits the render. |
 
 ## The deploy key
 

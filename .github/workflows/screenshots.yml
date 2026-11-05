@@ -203,6 +203,7 @@ jobs:
         if: github.event_name != 'pull_request' && steps.changes.outputs.any == 'true'
         run: |
           echo "::error::docs/screenshots on main does not match the render of main (listed above):" \
-               "a PR merged with a head its Screenshots run had not finished on. Open a PR from main;" \
-               "its run commits the render."
+               "a PR merged with a head its Screenshots run had not finished on. Open a PR from a new" \
+               "branch off main (never from main itself, which this workflow never writes); its run commits" \
+               "the render."
           exit 1
