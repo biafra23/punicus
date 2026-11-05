@@ -229,8 +229,9 @@ class WalletConnectDapps internal constructor(
 
     companion object {
         /**
-         * The project ID this build carries for [debug] builds or release builds (ruling 2: separate
-         * IDs), or empty when it has none. The host knows which it is.
+         * The project ID this build carries for [debug] builds or release builds, or empty when it has
+         * none. The host knows which it is. Ruling 2 keeps the two apart; for now both hold the same
+         * ID (owner ruling, 2026-11-05: one free-tier project).
          */
         fun projectIdFor(debug: Boolean): String =
             if (debug) WALLETCONNECT_PROJECT_ID_DEBUG else WALLETCONNECT_PROJECT_ID_RELEASE

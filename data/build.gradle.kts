@@ -20,8 +20,9 @@ plugins {
 
 // The Reown project IDs WalletConnect connects with (docs/walletconnect.md, ruling 2): never committed,
 // passed as Gradle properties (from CI secrets, or ~/.gradle/gradle.properties for a local build), one
-// for debug builds and one for release builds. A build without one has dApp connections switched off
-// and says so. An ID is letters and digits: anything else fails the build rather than reach the code.
+// for debug builds and one for release builds (for now the same ID: owner ruling, 2026-11-05). A build
+// without one has dApp connections switched off and says so. An ID is letters and digits: anything else
+// fails the build rather than reach the code.
 val generateWalletConnectBuildInfo by tasks.registering {
     val outDir = layout.buildDirectory.dir("generated/walletConnect/kotlin")
     // Trimmed: a secret pasted with a trailing newline or space is still the same ID.
