@@ -67,6 +67,10 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.update
+import eth.serotine.domain.model.NftRef
+import eth.serotine.domain.repository.NftCollectionReading
+import eth.serotine.domain.repository.NftContracts
+import eth.serotine.domain.repository.NftHolding
 
 /** One gwei, in wei. */
 internal const val GWEI = 1_000_000_000L
@@ -415,4 +419,19 @@ internal class MemorySwapVenue : SwapVenueSetting {
         choice.value = VenueChoice.Chosen(venue)
         return true
     }
+}
+
+/**
+ * [NftContracts] answering from [held] (each NFT with the amount held, proven at block 9,500) and
+ * [names]; any other NFT is not held, and a collection without a name says none.
+ */
+internal class FakeNftContracts : NftContracts {
+    val held = mutableMapOf<NftRef, UInt256>()
+    val names = mutableMapOf<Address, NftCollectionReading.Read>()
+
+    override suspend fun holding(network: Network, holder: Address, nft: NftRef): NftHolding =
+        held[nft]?.let { NftHolding.Held(it, 9_500) } ?: NftHolding.NotHeld(9_500)
+
+    override suspend fun collection(network: Network, contract: Address): NftCollectionReading =
+        names[contract] ?: NftCollectionReading.Read(null, null, 9_500)
 }

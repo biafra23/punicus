@@ -396,6 +396,7 @@ class SerotineApplication : Application() {
             transactionHistory = transactionHistory,
             historyStarts = historyStarts,
             logIndex = node.logIndex,
+            nfts = node.nfts,
             // The Safe transactions waiting for their owners, with the signatures collected (public
             // data, no key in them), beside the account list in the app's private files.
             safeTxQueue = FileSafeTxQueue(filesDir.resolve("safe-tx-queue.json").path),

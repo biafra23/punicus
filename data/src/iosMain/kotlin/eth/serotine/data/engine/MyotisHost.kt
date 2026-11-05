@@ -18,6 +18,7 @@ import eth.serotine.domain.repository.LightClient
 import eth.serotine.domain.repository.LightClientControl
 import eth.serotine.domain.repository.LightClientRun
 import eth.serotine.domain.repository.LogIndex
+import eth.serotine.domain.repository.NftContracts
 import eth.serotine.domain.repository.NameResolver
 import eth.serotine.domain.repository.NativeBalances
 import eth.serotine.domain.repository.NetworkFreshness
@@ -172,6 +173,9 @@ class MyotisHost private constructor(
 
     /** The engine's verified log index of each network: what it follows of the accounts, and the logs it holds. */
     val logIndex: LogIndex = routed.logIndex
+
+    /** What NFT contracts say, verified, each network's by its own light client (issue #246). */
+    val nfts: NftContracts = routed.nfts
 
     /** Starts [network]'s light client, or stops it ([LightClientRun.IDLE], [LightClientRun.OFF]). Returns at once. */
     override fun set(network: Network, run: LightClientRun) {

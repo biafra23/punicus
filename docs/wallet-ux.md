@@ -1166,9 +1166,13 @@ they are helpful." The rulings (owner rulings, 2026-11-05, #246; the
   proven to hold it.
 - **On chain only.** A row shows the collection's name (its `name()`, the
   contract's claim, or the built-in name) and the token id; an ERC-1155
-  amount above one shows as "×n". An image is drawn only from an on-chain
-  `data:` URI; otherwise the row says the image is not on chain. Nothing is
-  fetched from IPFS or HTTP.
+  amount above one shows as "×n". No image is drawn yet; when one is, only
+  from an on-chain `data:` URI. Nothing is fetched from IPFS or HTTP.
+- **Below the assets** (screen 4, in both views): the built-in collections'
+  rows, then "Unlisted collections (n)", collapsed until tapped, each of its
+  rows saying "not confirmed" with its contract. A line under them says what
+  the list covers ("Received since block 9,000 · 1 not proven held yet";
+  simple mode: "Received since this account was added here").
 - **Built in, or unlisted.** The built-in collections (`KnownNftCollections`)
   are ENS's: the .eth registrar (ERC-721) and the NameWrapper (ERC-1155), on
   Ethereum and Sepolia. Their NFTs are shown openly. Any other collection's

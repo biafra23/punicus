@@ -62,11 +62,13 @@ import eth.serotine.domain.usecase.RefreshNetworkData
 import eth.serotine.domain.usecase.SetNetworkEnabled
 import eth.serotine.domain.usecase.SetTokenHidden
 import eth.serotine.domain.usecase.ToggleAmountsHidden
+import eth.serotine.domain.usecase.ObserveNfts
 import eth.serotine.ui.FakeAccounts
 import eth.serotine.ui.FakeBalances
 import eth.serotine.ui.FakeFeeds
 import eth.serotine.ui.FakeFreshness
 import eth.serotine.ui.FakeLogIndex
+import eth.serotine.ui.FakeNftContracts
 import eth.serotine.ui.FakeMetadata
 import eth.serotine.ui.FakeNames
 import eth.serotine.ui.FakeRecovery
@@ -129,6 +131,7 @@ class AccountDetailViewModelTest {
     private val waitingSwaps = MemoryWaitingSwaps()
     private val logIndex = FakeLogIndex()
     private val historyStarts = MemoryHistoryStarts()
+    private val nftContracts = FakeNftContracts()
     private val names = FakeNames()
     private val balances = FakeBalances()
     private val usdc =
@@ -188,6 +191,7 @@ class AccountDetailViewModelTest {
         DropWaitingSwap(waitingSwaps),
         ObserveAmountsHidden(amountsHidden),
         ToggleAmountsHidden(amountsHidden),
+        ObserveNfts(logIndex, historyStarts, nftContracts),
         formatTime = { "<$it>" },
         clock = { NOW },
     )
@@ -219,6 +223,26 @@ class AccountDetailViewModelTest {
 
     @AfterTest
     fun resetMainDispatcher() = Dispatchers.resetMain()
+
+    @Test
+    fun theNftsAreBelowTheAssetsAndTheUnlistedOnesOpenOnlyWhenAsked() = runTest {
+        Dispatchers.setMain(UnconfinedTestDispatcher(testScheduler))
+        val viewModel = viewModel()
+        backgroundScope.launch { viewModel.uiState.collect {} }
+        runCurrent()
+
+        // No history start fixed yet: the section says when NFTs are found.
+        val nfts = (viewModel.uiState.value as AccountDetailUiState.Ready).nfts
+        assertEquals("NFTs are found once the light client is synced.", nfts?.empty)
+        assertEquals(false, nfts?.unlistedOpen)
+
+        viewModel.toggleUnlistedNfts()
+        runCurrent()
+        assertEquals(true, (viewModel.uiState.value as AccountDetailUiState.Ready).nfts?.unlistedOpen)
+        viewModel.toggleUnlistedNfts()
+        runCurrent()
+        assertEquals(false, (viewModel.uiState.value as AccountDetailUiState.Ready).nfts?.unlistedOpen)
+    }
 
     @Test
     fun dismissLetsTheSwapWaitingInTheActivityGo() = runTest {
@@ -988,6 +1012,7 @@ class AccountDetailViewModelTest {
             DropWaitingSwap(waitingSwaps),
             ObserveAmountsHidden(amountsHidden),
             ToggleAmountsHidden(amountsHidden),
+            ObserveNfts(logIndex, historyStarts, nftContracts),
         )
         backgroundScope.launch { viewModel.uiState.collect {} }
         runCurrent()

@@ -41,6 +41,7 @@ fun SimpleAccountDetailScreen(
     onDerive: () -> Unit = {},
     onToggleAmounts: () -> Unit = {},
     onOrderActivity: (ActivityOrder) -> Unit = {},
+    onToggleUnlistedNfts: () -> Unit = {},
 ) {
     val ready = state as? AccountDetailUiState.Ready
     AccountDetailScreen(
@@ -69,15 +70,18 @@ fun SimpleAccountDetailScreen(
         onDerive = onDerive,
         onToggleAmounts = onToggleAmounts,
         onOrderActivity = onOrderActivity,
+        onToggleUnlistedNfts = onToggleUnlistedNfts,
     )
 }
 
 /**
  * [this] in simple mode's words: each asset's age ([AssetRow.ageNote]) for when it was last verified
- * and no block, the Activity's simple texts, and the Safe's owners checked on chain with no block.
+ * and no block, the Activity's simple texts, the Safe's owners checked on chain with no block, and
+ * what the NFTs cover with no block.
  */
 private fun AccountDetailUiState.Ready.simple(): AccountDetailUiState.Ready = copy(
     assets = assets.map { it.copy(verifiedAt = null, lastKnown = it.ageNote ?: it.lastKnown) },
     activity = activity.simple(),
     safe = (safe as? SafeDetails.Shown)?.copy(checkedAt = "Checked on chain") ?: safe,
+    nfts = nfts?.let { it.copy(note = it.simpleNote) },
 )

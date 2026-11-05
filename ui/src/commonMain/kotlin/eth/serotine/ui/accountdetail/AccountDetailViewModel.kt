@@ -28,6 +28,7 @@ import eth.serotine.domain.usecase.ObserveEnsNames
 import eth.serotine.domain.usecase.ObserveKnownTokens
 import eth.serotine.domain.usecase.ObserveLightClient
 import eth.serotine.domain.usecase.ObserveNetworkLive
+import eth.serotine.domain.usecase.ObserveNfts
 import eth.serotine.domain.usecase.ObserveSafe
 import eth.serotine.domain.usecase.ObserveSafeTxQueue
 import eth.serotine.domain.usecase.ObserveUpgradeWarnings
@@ -134,6 +135,8 @@ class AccountDetailViewModel(
     observeAmountsHidden: ObserveAmountsHidden,
     /** Hides amounts or shows them again: what a tap on the eye asks. */
     private val toggleAmountsHidden: ToggleAmountsHidden,
+    /** The account's NFTs, below its assets (docs/wallet-ux.md, *NFTs*, issue #246). */
+    observeNfts: ObserveNfts,
     /** How a row dates a balance last verified (unix seconds). */
     private val formatTime: (Long) -> String = ::formatDateTime,
     /** Now, in unix seconds: what simple mode's ages are dated against. */
@@ -268,6 +271,14 @@ class AccountDetailViewModel(
         .distinctUntilChanged()
         .flatMapLatest { shown -> if (shown) sharedActivity else flowOf(ActivityUiState.Loading) }
 
+    /** Whether the unlisted collections' NFTs are shown: collapsed until the user opens them (owner ruling, #246). */
+    private val unlistedNftsOpen = MutableStateFlow(false)
+
+    /** The account's NFTs, display-ready; null until first read. */
+    private val nfts = combine(observeNfts(account), unlistedNftsOpen, ::nftSection)
+        .map<NftSection, NftSection?> { it }
+        .onStart { emit(null) }
+
     /** What the queue segment is drawn from. */
     private sealed interface QueueView {
         data object None : QueueView
@@ -343,6 +354,10 @@ class AccountDetailViewModel(
             .map { it.finish(clock()) }
             // Masked last, on the finished state (the Activity masks its own, as it is built).
             .combine(amountsHidden) { state, hidden -> state.withAmountsHidden(hidden) }
+            // The NFTs: no amount of money, so nothing of them is masked.
+            .combine(nfts) { state, nfts ->
+                if (state is AccountDetailUiState.Ready) state.copy(nfts = nfts) else state
+            }
             .stateIn(
             scope = viewModelScope,
             // As on Accounts: a screen back after the timeout must not show an old balance as current.
@@ -398,6 +413,11 @@ class AccountDetailViewModel(
             }
             view.update { it.copy(message = said) }
         }
+    }
+
+    /** Opens the unlisted collections' NFTs, or collapses them again. */
+    fun toggleUnlistedNfts() {
+        unlistedNftsOpen.update { !it }
     }
 
     /** The screen has said [AccountDetailUiState.Ready.message]. */
