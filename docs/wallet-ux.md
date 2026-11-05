@@ -368,7 +368,10 @@ upgrades*).
    - Outcome, from verified blocks alone: Sent (its receipt verified); It
      failed (it reverted); Not what you handed over (another amount from the
      account to the recipient); Not from this account (that amount from
-     another address, which is not counted as this account's); No matching
+     another address, which may be another of that wallet's accounts or
+     someone else's payment, and is not counted as this account's); each
+     near one says what its verified receipt says, and that it is not known
+     when none was verified in time; No matching
      transfer seen yet. Not recorded in Activity: the record of sent
      transactions holds signed bytes, and none are signed here.
 9. **Send, status**: what was sent (amount, asset, recipient, from this

@@ -481,8 +481,9 @@ class HandoffViewModel(
                         name,
                         OutcomeKind.NOT_THE_ONE,
                         "Not what you handed over",
-                        "${amountOf(request, match.amount)}, not $asked, went from “${request.sender.label}” to " +
-                            "$recipient in block $block" + if (watch.succeeded == false) ", and it reverted." else ".",
+                        "A transfer of ${amountOf(request, match.amount)}, not $asked, from " +
+                            "“${request.sender.label}” to $recipient is in block $block. " +
+                            receiptSays(watch.succeeded),
                         hash = watch.hash,
                         block = block,
                     )
@@ -490,9 +491,10 @@ class HandoffViewModel(
                         name,
                         OutcomeKind.NOT_THE_ONE,
                         "Not from this account",
-                        "$asked went to $recipient in block $block from ${Eip55.format(match.sender)}, not from " +
-                            "“${request.sender.label}”: the other wallet used another of its accounts. It is not " +
-                            "counted as this account's.",
+                        "A transfer of $asked to $recipient is in block $block, from ${Eip55.format(match.sender)} " +
+                            "and not from “${request.sender.label}”. It may come from another account of the other " +
+                            "wallet, or be someone else's payment. It is not counted as this account's. " +
+                            receiptSays(watch.succeeded),
                         hash = watch.hash,
                         block = block,
                     )
@@ -508,6 +510,16 @@ class HandoffViewModel(
             )
             else -> error("not an outcome: $watch")
         }
+    }
+
+    /**
+     * What the verified receipt of a transaction found says, in words that claim no more than it
+     * proved: a block holding a transaction proves it exists, not that it moved anything.
+     */
+    private fun receiptSays(succeeded: Boolean?): String = when (succeeded) {
+        true -> "Its verified receipt says it went through."
+        false -> "Its verified receipt says it reverted: nothing was moved."
+        null -> "Its receipt could not be verified in time, so whether it went through is not known."
     }
 
     private fun amountOf(request: Request, units: UInt256): String =

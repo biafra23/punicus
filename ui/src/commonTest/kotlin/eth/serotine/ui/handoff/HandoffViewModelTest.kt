@@ -191,6 +191,8 @@ class HandoffViewModelTest {
         val outcome = assertIs<HandoffUiState.Outcome>(viewModel.uiState.value)
         assertEquals(OutcomeKind.NOT_THE_ONE, outcome.kind)
         assertEquals("Not from this account", outcome.title)
+        assertTrue("someone else's payment" in outcome.message, "no guess stated as fact")
+        assertTrue("says it went through" in outcome.message, "the receipt's word, said as such")
     }
 
     @Test

@@ -192,8 +192,9 @@ private fun HandoffOtherSenderPreview() = HandoffPreview(
         "Sepolia",
         OutcomeKind.NOT_THE_ONE,
         "Not from this account",
-        "25 USDC went to $FRIEND in block 8,412,313 from $OTHER, not from “Hardware wallet”: the other wallet used " +
-            "another of its accounts. It is not counted as this account's.",
+        "A transfer of 25 USDC to $FRIEND is in block 8,412,313, from $OTHER and not from “Hardware wallet”. It may " +
+            "come from another account of the other wallet, or be someone else's payment. It is not counted as this " +
+            "account's. Its verified receipt says it went through.",
         hash = HASH,
         block = "8,412,313",
     ),
@@ -207,7 +208,8 @@ private fun HandoffOtherAmountPreview() = HandoffPreview(
         "Sepolia",
         OutcomeKind.NOT_THE_ONE,
         "Not what you handed over",
-        "0.000000000000000025 USDC, not 25 USDC, went from “Hardware wallet” to $FRIEND in block 8,412,313.",
+        "A transfer of 0.000000000000000025 USDC, not 25 USDC, from “Hardware wallet” to $FRIEND is in block " +
+            "8,412,313. Its verified receipt says it went through.",
         hash = HASH,
         block = "8,412,313",
     ),
