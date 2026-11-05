@@ -4,6 +4,7 @@ import eth.serotine.domain.model.Address
 import eth.serotine.domain.model.Digest
 import eth.serotine.domain.model.Network
 import eth.serotine.domain.model.NetworkUpgrade
+import eth.serotine.domain.model.NftRef
 import eth.serotine.domain.model.PriceId
 import eth.serotine.domain.model.UInt256
 import eth.serotine.domain.repository.AddressKinds
@@ -30,6 +31,9 @@ import eth.serotine.domain.repository.NameResolution
 import eth.serotine.domain.repository.NameResolver
 import eth.serotine.domain.repository.NativeBalances
 import eth.serotine.domain.repository.NetworkUpgrades
+import eth.serotine.domain.repository.NftCollectionReading
+import eth.serotine.domain.repository.NftContracts
+import eth.serotine.domain.repository.NftHolding
 import eth.serotine.domain.repository.NonceReading
 import eth.serotine.domain.repository.PastReading
 import eth.serotine.domain.repository.PriceFeeds
@@ -184,6 +188,15 @@ class NetworkRoutedPorts(private val byNetwork: Map<Network, ChainPorts>) {
             of(network)?.cow?.call(network, to, data) ?: Simulation.Unavailable(ReadUnavailable.NO_ENGINE)
     }
 
+    val nfts: NftContracts = object : NftContracts {
+        override suspend fun holding(network: Network, holder: Address, nft: NftRef): NftHolding =
+            of(network)?.nfts?.holding(network, holder, nft) ?: NftHolding.Unavailable(ReadUnavailable.NO_ENGINE)
+
+        override suspend fun collection(network: Network, contract: Address): NftCollectionReading =
+            of(network)?.nfts?.collection(network, contract)
+                ?: NftCollectionReading.Unavailable(ReadUnavailable.NO_ENGINE)
+    }
+
     val logIndex: LogIndex = object : LogIndex {
         override suspend fun configure(network: Network, watch: List<LogWatch>, unwatch: List<LogWatchKey>): Boolean =
             of(network)?.logIndex?.configure(network, watch, unwatch) ?: false
@@ -214,4 +227,5 @@ class ChainPorts(
     val uniswap: UniswapV3Chain,
     val cow: CowChain,
     val logIndex: LogIndex,
+    val nfts: NftContracts,
 )
