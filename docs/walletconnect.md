@@ -43,7 +43,8 @@ two open points, the chains and the order.
    signing.
 6. **A dApp may call a closed list of methods:** `eth_sendTransaction`,
    `personal_sign`, `eth_signTypedData_v4`, and `wallet_switchEthereumChain`
-   to Sepolia only. Every other method gets an
+   to a network the session holds (ruling 9, as amended). Every other method
+   gets an
    unsupported-method error. `eth_sign` is refused in every case: it signs a
    raw digest, which is what phishing asks for.
 7. **WalletConnect's optional services stay off:** the Verify API, fetching
@@ -55,11 +56,16 @@ two open points, the chains and the order.
    on that session. The file is kept out of backups and device transfers like
    the rest of the app's data, is never logged, and is not under the wallet
    password, so sessions resume without an unlock.
-9. **Sepolia first.** A dApp session names Sepolia (`eip155:11155111`) alone.
-   Ethereum and Gnosis Chain come by a later ruling, once dApp connections
-   have been tried against real dApps. #22 was written when Sepolia was the
-   only network; this keeps its scope after the networks ruling of
-   2026-10-22.
+9. **Real funds or testnet, never both** (owner ruling, 2026-11-05, on #22).
+   A dApp session holds Ethereum (`eip155:1`) and Gnosis Chain
+   (`eip155:100`) accounts together, and the dApp may switch between them;
+   or it holds Sepolia (`eip155:11155111`) alone. A dApp can never switch a
+   session from testnet to real funds, nor back. Sepolia keeps every testnet
+   warning and is never added to a total with real funds.
+   - It amends the ruling of 2026-11-03 (#22), which read: "**Sepolia
+     first.** A dApp session names Sepolia (`eip155:11155111`) alone.
+     Ethereum and Gnosis Chain come by a later ruling, once dApp connections
+     have been tried against real dApps." 
 10. **dApps connecting to Serotine come first** (direction 1, below):
     signing in and requests for EOAs first. An external wallet as a Safe
     owner's signer (direction 2) follows. #22 had them the other way round.
@@ -116,19 +122,23 @@ everything on the chain side: the verified `call`, `estimateGasDetailed`,
 
 - The user pastes a `wc:` URI, or opens one from a `wc:` link on Android.
   Scanning a QR code needs a camera library, chosen later.
-- A proposal whose required namespaces name any chain but Sepolia is
-  rejected. Optional namespaces are approved with Sepolia alone (ruling 9):
-  an optional namespace that does not name Sepolia adds no method or event
-  to the session.
+- A proposal is rejected when its required namespaces name a chain
+  Serotine does not serve, or chains of both kinds (real funds and testnet,
+  ruling 9), or when it asks for no chain Serotine serves at all.
+- The session's chains are its required chains and the chains of the
+  accounts the user chooses, of those the dApp asked for. An optional
+  namespace adds its methods and events only where it names one of them.
 - A pairing has at most 5 proposals waiting, as a session has at most 20
   requests. One more is answered with -32005, so no peer holding a
   pairing's key can grow the stored state without bound.
 - The proposal screen lists every account, and the user chooses which the
   dApp sees. An account that cannot be offered is greyed out, never hidden
   (owner ruling, 2026-10-18, #55), and a tap says why:
-  - an account on Ethereum or Gnosis Chain: dApp connections are on Sepolia
-    only for now;
-  - a Sepolia account while Sepolia is off: "Turn on" Sepolia (Settings →
+  - an account on a network the dApp did not ask for;
+  - an account of the other kind than the dApp requires, or than an account
+    already chosen: a session is real funds or testnet, never both
+    (ruling 9);
+  - an account on a network that is off: "Turn on" its network (Settings →
     Networks);
   - an EOA watched with no key on this device: it can sign nothing here. A
     watched Safe is offered, since its owners sign for it; until Safe
@@ -149,20 +159,23 @@ everything on the chain side: the verified `call`, `estimateGasDetailed`,
 | `personal_sign` | signed, after review | refused until Safe messages (EIP-1271) come | the signature |
 | `eth_signTypedData_v4` | signed, after review | refused until Safe messages come | the signature |
 | `eth_sendTransaction` | signed and sent, after review | a `SafeTx`, signed by its owners and executed | the hash of the transaction sent |
-| `wallet_switchEthereumChain` | to Sepolia only, which the session already is | the same | null, or an error for any other chain |
+| `wallet_switchEthereumChain` | to a network the session holds; `chainChanged` follows | the same | null, or 4902 for any other chain |
 | `eth_sign` | refused | refused | an error |
 | anything else | unsupported method | unsupported method | an error |
 
 - A user who declines gets the "user rejected" error (EIP-1193 4001), and an
   unsupported method the 4200 one. A request is never left unanswered while
   the session lives.
-- Every request must name `eip155:11155111`. A request for another chain, or
-  a `from` or an address that is not one of the session's accounts, is
-  refused.
+- Every request must name one of its session's chains. A request for
+  another chain, or a `from` or an address that is not one of the session's
+  accounts on that chain, is refused. Everything about it is read, simulated
+  and sent on that chain's network.
 - The errors: 4001 when the user declines; 4100 for an account or a chain
   the session does not give the dApp, or an account that cannot sign here;
-  4200 for a method not answered; 4902 for a switch to a chain other than
-  Sepolia (EIP-3326); -32602 for parameters that are not the method's.
+  4200 for a method not answered; 4902 for a switch to a chain the session
+  does not hold (EIP-3326); -32602 for parameters that are not the method's.
+- A switch to a chain the session holds is answered with null, and then, where
+  the session carries it, the `chainChanged` event names that chain.
 - **What needs no one's decision is answered at once**, by the app while it
   runs: `wallet_switchEthereumChain`, and parameters out of shape.
 - JSON from outside the device (the relay's frames, a dApp's messages, typed
@@ -268,8 +281,11 @@ everything on the chain side: the verified `call`, `estimateGasDetailed`,
   - `gas` is applied as the gas limit when it covers the verified estimate;
     below it the transaction would run out of gas, so it is refused (-32602),
     never raised.
-  - `chainId` must be Sepolia's, `type` `0x2` (EIP-1559, which every
-    transaction here is), and an `accessList` empty.
+  - `chainId` must be the request's chain's, `type` `0x2` (EIP-1559, which
+    every transaction here is), and an `accessList` empty.
+  - `gas` is at most 2^24 (16,777,216): EIP-7825's cap on a transaction's
+    gas, on Ethereum and Sepolia since Fusaka, and above Gnosis Chain's
+    block gas limit too.
   - Refused: `nonce` (the account's next one is the wallet's, behind its own
     transactions not mined yet), `gasPrice`, `maxFeePerGas` and
     `maxPriorityFeePerGas` (the fees are the wallet's, from the verified fee
@@ -305,7 +321,7 @@ everything on the chain side: the verified `call`, `estimateGasDetailed`,
     while it runs. One whose nonce another transaction took can never be
     mined: the request can then only be refused.
   - It is reviewed again just before it is signed: an account removed, a key
-    gone or Sepolia turned off since the quote refuses it.
+    gone or its network turned off since the quote refuses it.
   - While a transaction signed for it may be on its way, Refuse is greyed
     out, and a tap says why: refusing would tell the dApp no while it may
     still be mined.
@@ -354,7 +370,8 @@ everything on the chain side: the verified `call`, `estimateGasDetailed`,
 - **A dApp is answered only with an Ethereum transaction hash.** For a Safe,
   that is the hash of the `execTransaction` sent, never the `safeTxHash`. The
   app answers it while it runs, once a peer takes an execution of the Safe
-  transaction recorded for it, sent from this device on Sepolia, or a
+  transaction recorded for it, sent from this device on the request's
+  network, or a
   verified block includes one. An execution a co-signer sends from another
   device does not answer it. If the request expires first (the threshold
   not met in time, or executed elsewhere), the dApp gets an error, and the
@@ -582,7 +599,8 @@ merge part PRs into the feature branch itself.
       real relay runs only with a project ID
       (`-PwalletConnectLiveTest=<id>`); pairing with Reown's sample dApp on
       Sepolia is the spike once the ID exists.
-   2. dApp sessions: pairing, the proposal, the Sepolia-only namespace, the
+   2. dApp sessions: pairing, the proposal, the namespace (Sepolia alone
+      then; ruling 9 as amended adds Ethereum and Gnosis Chain), the
       session list, disconnect, expiry and extend, `accountsChanged`. Screens
       D1 to D3. Opening a `wc:` link on Android, which arrives at D2 with the
       link filled in, follows in a part of its own (1.2a).
@@ -604,14 +622,14 @@ merge part PRs into the feature branch itself.
    registered by the desktop installers; requests delivered while Serotine is
    in the background; `wallet_sendCalls` (EIP-5792) through MultiSend for a
    Safe; Safe messages (EIP-1271), which `personal_sign` and typed data on a
-   Safe wait for; the Verify API; and dApp sessions on Ethereum and Gnosis
-   Chain. Each needs the owner's ruling where it touches one.
+   Safe wait for; and the Verify API. Each needs the owner's ruling where it
+   touches one. dApp sessions on Ethereum and Gnosis Chain came by ruling 9
+   as amended (owner ruling, 2026-11-05, on #22).
 
 ## Open decisions
 
 The owner's, each recorded here and in the rules before its code lands:
 
-- dApp sessions on Ethereum and Gnosis Chain (ruling 9).
 - Each optional WalletConnect service (ruling 7).
 
 ## Risks to check early
@@ -634,11 +652,11 @@ The owner's, each recorded here and in the rules before its code lands:
 
 ## Done when
 
-- A Sepolia dApp connects to Serotine, and the user signs in to it with an
-  EOA whose key is on this device. Its transaction request, for an EOA or a
-  Safe, is reviewed, signed, sent and answered with the transaction hash.
-  Anything outside the closed method list, or off Sepolia, is refused with an
-  error.
+- A dApp connects to Serotine on Sepolia, or on Ethereum and Gnosis Chain,
+  and the user signs in to it with an EOA whose key is on this device. Its
+  transaction request, for an EOA or a Safe, is reviewed, signed, sent and
+  answered with the transaction hash. Anything outside the closed method
+  list, or off the session's networks, is refused with an error.
 - A user with no key in Serotine connects an external wallet, which is
   recognised as a verified owner of a watched Safe, sends ETH from that Safe
   with the signature made in that wallet, and Serotine shows the execution,

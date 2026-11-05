@@ -235,13 +235,22 @@ docs/walletconnect.md is the contract.)
 - **The optional services stay off:** the Verify API, fetching dApp icons
   (a request to a host the dApp chooses, which reveals the IP address), the
   push (echo) server and Link Mode.
-- **A dApp session names Sepolia alone, for now.** Ethereum and Gnosis Chain
-  come by a later ruling, recorded here first. A proposal that requires
-  another chain is rejected.
+- **A dApp session holds real funds or testnet, never both** (owner ruling,
+  2026-11-05, on #22; it amends "a dApp session names Sepolia alone, for
+  now" of 2026-11-03, #22, ruling 9).
+  - One session may hold Ethereum and Gnosis Chain accounts, and the dApp
+    may switch between them with `wallet_switchEthereumChain`.
+  - A Sepolia session is Sepolia alone. A dApp can never switch a session
+    from testnet to real funds, nor back.
+  - A proposal that requires a chain Serotine does not serve, or chains of
+    both kinds, is rejected. Accounts of the other kind than those already
+    chosen are greyed out on the proposal screen, a tap saying why.
+  - Each request names one of its session's networks and an account of the
+    session on that network, or it is refused.
 - **dApps connecting to Serotine come first**; an external wallet as a Safe
   owner's signer follows (docs/walletconnect.md, *The plan*).
 
 ## Open decisions
 
-Each is recorded here before its code lands. Today: dApp sessions on
-Ethereum and Gnosis Chain, and each optional WalletConnect service above.
+Each is recorded here before its code lands. Today: each optional
+WalletConnect service above.

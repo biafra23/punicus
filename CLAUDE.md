@@ -252,5 +252,6 @@ rulings to the screens.
   prices a token, labelled and counted in totals; a stale feed never falls
   back to it (owner ruling, 2026-10-29, #205).
 - dApps connect over WalletConnect v2, whose relay never supplies chain
-  state; a dApp session names Sepolia alone for now; the project ID is never
-  committed (owner rulings, 2026-11-03, #22; docs/walletconnect.md).
+  state; the project ID is never committed (owner rulings, 2026-11-03, #22;
+  docs/walletconnect.md). A dApp session holds Ethereum and Gnosis Chain
+  together, or Sepolia alone, never both (owner ruling, 2026-11-05, on #22).
