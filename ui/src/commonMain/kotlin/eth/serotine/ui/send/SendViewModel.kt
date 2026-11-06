@@ -371,7 +371,8 @@ class SendViewModel(
         val option = model.selected ?: return
         // Composing, and no review being quoted: Max changes what a quote would be made for.
         if ((step.value as? Step.Composing)?.quoting != false) return
-        if (!model.lenient || option.asset != TransferAsset.Native) {
+        // Lenient Max only on a balance last verified: once it is verified, a quote says whether the fee fits.
+        if (!model.lenient || option.asset != TransferAsset.Native || !option.lastKnown) {
             val balance = option.balance ?: return
             change { it.copy(amount = balance.formatUnits(option.decimals)) }
             return

@@ -31,6 +31,7 @@ import eth.serotine.domain.usecase.SafeChainEvent
 import eth.serotine.domain.usecase.TokenTransferEvent
 import eth.serotine.ui.components.epochSecondsNow
 import eth.serotine.ui.components.grouped
+import eth.serotine.ui.outbox.redatedAtTheirHour
 import eth.serotine.ui.platform.formatDateTime
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.combine
@@ -98,6 +99,8 @@ class AccountActivity(
             // Nothing queued until the outbox is read: the Activity never waits for it.
             .onStart { emit(emptyList()) }
             .distinctUntilChanged()
+            // Drawn again when one passes its hour: "Waiting to send" becomes "Waiting for your answer".
+            .redatedAtTheirHour(now)
 
         val state: Flow<ActivityUiState> = combine(
             combine(

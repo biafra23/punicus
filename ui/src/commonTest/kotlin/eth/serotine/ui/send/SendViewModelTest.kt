@@ -1239,6 +1239,20 @@ class SendViewModelTest {
     }
 
     @Test
+    fun lenientMaxOnAVerifiedBalanceIsStrictMaxTheWholeBalance() = runTest {
+        // Lenient mode, but the light client verifies: a quote says whether the fee fits.
+        policy.policy.value = SyncPolicy.LENIENT
+        holding()
+        val viewModel = viewModel()
+        runCurrent()
+        assertTrue(viewModel.compose.canMax)
+        viewModel.onMax()
+        runCurrent()
+
+        assertEquals("1.5", viewModel.compose.amount)
+    }
+
+    @Test
     fun aNetworkThatIsOffIsNotSyncingAndNothingIsDraftedOnIt() = runTest {
         policy.policy.value = SyncPolicy.LENIENT
         networks.on.value = emptySet()
