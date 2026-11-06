@@ -116,7 +116,9 @@ sealed interface NftHoldings {
  *
  * An NFT is proven again when a log naming it and the account appeared since its last proof, when
  * its last proof had no answer or was made at a block before its last move, and in any case once
- * it is [REPROVE_AFTER_SECONDS] old: holding can change with no log (an ENS name expiring). At most
+ * it is [REPROVE_AFTER_SECONDS] old: holding can change with no log (an ENS name expiring). A proof
+ * again that gets no answer keeps the last one answered, so an NFT proven held stays listed, dated
+ * by its block, and is asked about again at every reading. At most
  * [MAX_CHECKED] NFTs are checked, the built-in collections' first, then the most recently moved, so
  * that a flood of airdrops can neither flood the light client with calls nor push out the user's
  * ENS names. Each unlisted collection's name is read once, right after its first NFT is proven
@@ -236,6 +238,11 @@ class ObserveNfts(
                             val move = last.getValue(nft)
                             if (proofs[nft]?.standsFor(move, head, reproveAfter) == true) continue
                             val holding = contracts.holding(account.network, address, nft)
+                            // A proof that gets no answer keeps the last one answered, and its name: the row stays,
+                            // dated by the block it was proven at, as the network-off path keeps it. That proof no
+                            // longer stands, so it is asked again at every reading until one answers.
+                            val answered = proofs[nft]?.holding.let { it is NftHolding.Held || it is NftHolding.NotHeld }
+                            if (holding is NftHolding.Unavailable && answered) continue
                             proofs[nft] = Proof(move.transactionHash to move.logIndex, head, holding)
                             // Proven again: its name is read again too (a renewal, a wrap or an unwrap).
                             ensNames.remove(nft)

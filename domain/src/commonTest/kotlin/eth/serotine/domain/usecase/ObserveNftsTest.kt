@@ -294,6 +294,29 @@ class ObserveNftsTest {
     }
 
     @Test
+    fun aProofAgainWithNoAnswerKeepsTheLastOneAnswered() = runTest {
+        logs = listOf(erc721(bob, alice, 5, 9_100))
+        contracts.held += nft(art, 5, NftStandard.ERC721)
+        covered(9_200)
+        val seen = mutableListOf<NftHoldings>()
+        collectInto(seen)
+        runCurrent()
+        assertEquals(1, assertIs<NftHoldings.Read>(seen.last()).nfts.size)
+
+        contracts.unavailable = true
+        covered(9_600) // an hour on: proven again, and no answer
+        runCurrent()
+        assertEquals(2, contracts.holdingCalls)
+        val kept = assertIs<NftHoldings.Read>(seen.last())
+        assertEquals(listOf(nft(art, 5, NftStandard.ERC721)), kept.nfts.map { it.nft })
+        assertEquals(9_200, kept.nfts.single().blockNumber, "dated by the block it was proven at")
+
+        covered(9_601) // asked again at every reading until one answers
+        runCurrent()
+        assertEquals(3, contracts.holdingCalls)
+    }
+
+    @Test
     fun aProofWithNoAnswerIsCountedAndAskedAgain() = runTest {
         logs = listOf(erc721(bob, alice, 5, 9_100))
         contracts.unavailable = true
