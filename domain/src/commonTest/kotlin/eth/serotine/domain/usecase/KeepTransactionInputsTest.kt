@@ -24,7 +24,9 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.advanceTimeBy
 import kotlinx.coroutines.test.runCurrent
+import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.runTest
+import kotlinx.coroutines.test.testTimeSource
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class KeepTransactionInputsTest {
@@ -37,19 +39,22 @@ class KeepTransactionInputsTest {
     private val policy = FakePolicy()
     private val lightClient = FakeLightClient()
     private val inputs = AskedInputs()
-    private val keep = KeepTransactionInputs(
+    private val accounts = ListAccountRepository(held, watched, safe, elsewhere)
+
+    private fun TestScope.keeping() = KeepTransactionInputs(
         policy,
-        ListAccountRepository(held, watched, safe, elsewhere),
+        accounts,
         lightClient,
         inputs,
         networks = listOf(Network.SEPOLIA),
         interval = 10.minutes,
+        timeSource = testTimeSource,
     )
 
     @Test
     fun inStrictModeNothingIsAsked() = runTest {
         lightClient.status.value = synced()
-        val job = launch { keep() }
+        val job = launch { keeping()() }
         runCurrent()
 
         assertEquals(emptyList(), inputs.asked)
@@ -60,7 +65,7 @@ class KeepTransactionInputsTest {
     fun inLenientModeTheFeesAndEachHeldEoasMinedCountAreReadOnceVerifiedAndThenEveryInterval() = runTest {
         policy.policy.value = SyncPolicy.LENIENT
         lightClient.status.value = LightClientStatus.CatchingUp(done = 1, total = 3)
-        val job = launch { keep() }
+        val job = launch { keeping()() }
         runCurrent()
         assertEquals(emptyList(), inputs.asked, "nothing is asked before the light client verifies")
 
@@ -85,7 +90,7 @@ class KeepTransactionInputsTest {
     fun turningLenientModeOffStopsTheReads() = runTest {
         policy.policy.value = SyncPolicy.LENIENT
         lightClient.status.value = synced()
-        val job = launch { keep() }
+        val job = launch { keeping()() }
         runCurrent()
         assertEquals(2, inputs.asked.size)
 
@@ -93,6 +98,41 @@ class KeepTransactionInputsTest {
         runCurrent()
         advanceTimeBy(30.minutes)
         assertEquals(2, inputs.asked.size)
+        job.cancel()
+    }
+
+    @Test
+    fun aLightClientThatStopsAndStartsVerifyingWithinTheIntervalWaitsItOut() = runTest {
+        policy.policy.value = SyncPolicy.LENIENT
+        lightClient.status.value = synced()
+        val job = launch { keeping()() }
+        runCurrent()
+        assertEquals(2, inputs.asked.size)
+
+        // Two minutes later it loses its head, and finds a fresh one a minute after that.
+        advanceTimeBy(2.minutes)
+        lightClient.status.value = LightClientStatus.WaitingForHead(headAgeSeconds = 50)
+        runCurrent()
+        advanceTimeBy(1.minutes)
+        lightClient.status.value = synced()
+        runCurrent()
+        assertEquals(2, inputs.asked.size, "no round before the interval is out")
+
+        advanceTimeBy(7.minutes)
+        runCurrent()
+        assertEquals(4, inputs.asked.size, "the next round ten minutes after the first")
+        job.cancel()
+    }
+
+    @Test
+    fun aNetworkWithNoAccountToDraftFromAsksNothing() = runTest {
+        accounts.accounts.value = listOf(watched, safe, elsewhere)
+        policy.policy.value = SyncPolicy.LENIENT
+        lightClient.status.value = synced()
+        val job = launch { keeping()() }
+        runCurrent()
+
+        assertEquals(emptyList(), inputs.asked)
         job.cancel()
     }
 

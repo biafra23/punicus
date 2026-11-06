@@ -25,10 +25,10 @@ import kotlinx.serialization.json.Json
  * public chain data under a network's chain id and, for a count, an address; no key material.
  *
  * Kept, never acted on alone: a draft built on them is sent only after the check at a fresh head
- * (owner rulings, 2026-11-06). An older block's answer never replaces a newer one's. A count is
- * written again only when it changed or its stored block is [REWRITE_AFTER_BLOCKS] blocks old,
- * and a fee quote only when the stored one is that old, so a value may be a little older than
- * the last answer, never newer. At most [maxKept] counts ([MAX_KEPT] but in tests), the least
+ * (owner rulings, 2026-11-06). An older block's answer never replaces a newer one's, decided under
+ * the file's lock. A count is written again only when it changed or its stored block is
+ * [REWRITE_AFTER_BLOCKS] blocks old, and a fee quote only when the stored one is that old, so a
+ * value may be a little older than the last answer, never newer. At most [maxKept] counts ([MAX_KEPT] but in tests), the least
  * recently verified dropped first. A file that cannot be read keeps and gives nothing; a damaged
  * one is set aside as every [VersionedJsonFile] is. File work runs on [dispatcher].
  */
@@ -80,11 +80,17 @@ internal class KeptInputsFile(
     suspend fun saveNonce(network: Network, account: Address, count: Long, block: Long, asOf: Long?) {
         if (count < 0 || block <= 0) return
         val id = nonceId(network, account)
-        val stored = kept()?.nonces?.get(id)
-        if (stored != null && block < stored.block) return
-        if (stored?.count == count && block - stored.block < REWRITE_AFTER_BLOCKS) return
+        fun wanted(stored: StoredNonce?): Boolean = when {
+            stored == null -> true
+            block < stored.block -> false
+            else -> stored.count != count || block - stored.block >= REWRITE_AFTER_BLOCKS
+        }
+        // Asked of the value read last, so most answers write nothing; asked again under the
+        // file's lock, so an older answer that lost a race never replaces a newer one.
+        if (!wanted(kept()?.nonces?.get(id))) return
         val entry = StoredNonce(id, count, block, asOf)
         change { kept ->
+            if (!wanted(kept.nonces[id])) return@change null
             // Re-inserted last: the map's order is the order of verifying.
             val nonces = (kept.nonces - id + (id to entry)).toList().takeLast(maxKept).toMap()
             Kept(nonces, kept.fees)
@@ -93,8 +99,9 @@ internal class KeptInputsFile(
 
     /** Keeps [quote], [network]'s fee quote, read at a head of [asOf]. Never throws. */
     suspend fun saveFees(network: Network, quote: FeeQuote, asOf: Long?) {
-        val stored = kept()?.fees?.get(network.chainId)
-        if (stored != null && quote.blockNumber - stored.block < REWRITE_AFTER_BLOCKS) return
+        fun wanted(stored: StoredFees?): Boolean =
+            stored == null || quote.blockNumber - stored.block >= REWRITE_AFTER_BLOCKS
+        if (!wanted(kept()?.fees?.get(network.chainId))) return
         val entry = StoredFees(
             chainId = network.chainId,
             nextBaseFee = quote.nextBaseFee.toDecimal(),
@@ -102,13 +109,17 @@ internal class KeptInputsFile(
             block = quote.blockNumber,
             asOf = asOf,
         )
-        change { kept -> Kept(kept.nonces, kept.fees + (network.chainId to entry)) }
+        change { kept ->
+            if (!wanted(kept.fees[network.chainId])) return@change null
+            Kept(kept.nonces, kept.fees + (network.chainId to entry))
+        }
     }
 
     /** What the file holds, or null when it cannot be read. */
     private suspend fun kept(): Kept? = (file.observe().first() as? VersionedJsonFile.Read.Loaded)?.value
 
-    private suspend fun change(next: (Kept) -> Kept) {
+    /** Stores what [next] makes of the file's value, read again under its lock; null stores nothing. */
+    private suspend fun change(next: (Kept) -> Kept?) {
         try {
             file.change(notSaved = Unit) { kept -> Decision(Unit, next(kept)) }
         } catch (e: CancellationException) {
@@ -145,8 +156,12 @@ internal class KeptInputsFile(
         /** Counts kept: far more than the accounts a wallet sends from. */
         const val MAX_KEPT = 256
 
-        /** About ten minutes of Ethereum's blocks: how old a stored value may get before it is written again. */
-        const val REWRITE_AFTER_BLOCKS = 50L
+        /**
+         * About five minutes of Ethereum's blocks: how old a stored value may get before it is
+         * written again. Well under `KeepTransactionInputs`' ten minutes, so each of its rounds
+         * writes a fresh fee quote, missed slots and all.
+         */
+        const val REWRITE_AFTER_BLOCKS = 25L
 
         private val JSON = Json
 

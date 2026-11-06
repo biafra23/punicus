@@ -125,7 +125,8 @@ class KeptInputsFileTest {
         val chain = FakeTransactingChain()
         chain.base.snapshot = running(head = 321, headTimestamp = 1_792_200_000)
         chain.mined = 9
-        chain.feeHistory = """{"oldestBlock":"0x1","baseFeePerGas":["0x10","0x10"],"reward":[["0x1","0x2","0x3"]]}"""
+        // A history that ends at the head it was read at.
+        chain.feeHistory = """{"oldestBlock":"0x141","baseFeePerGas":["0x10","0x10"],"reward":[["0x1","0x2","0x3"]]}"""
         val kept = kept()
         val inputs = EngineTransactionInputs(
             Network.SEPOLIA,
@@ -139,7 +140,56 @@ class KeptInputsFileTest {
 
         assertEquals(KeptNonce(9, 321, 1_792_200_000), kept.minedNonce(Network.SEPOLIA, alice))
         assertTrue(fees is FeeReading.Quoted)
+        assertEquals(321, fees.quote.blockNumber)
         assertEquals(KeptFees(fees.quote, 1_792_200_000), kept.fees(Network.SEPOLIA))
+    }
+
+    @Test
+    fun aValueWhoseHeadMovedDuringTheReadIsNotKeptAndAnOlderFeeHistoryIsNotDated() = runTest {
+        val chain = FakeTransactingChain()
+        chain.base.snapshot = running(head = 321, headTimestamp = 1_792_200_000)
+        chain.mined = 9
+        chain.onMinedNonce = { chain.base.snapshot = running(head = 322, headTimestamp = 1_792_200_012) }
+        // A history ending at block 299: older than the head it was read at.
+        chain.feeHistory = """{"oldestBlock":"0x12a","baseFeePerGas":["0x10","0x10","0x10"],"reward":[["0x1","0x2","0x3"],["0x1","0x2","0x3"]]}"""
+        val kept = kept()
+        val inputs = EngineTransactionInputs(Network.SEPOLIA, chain, StandardTestDispatcher(testScheduler), kept = kept)
+
+        assertEquals(NonceReading.Read(9), inputs.minedNonce(Network.SEPOLIA, alice), "the answer is the same")
+        assertNull(kept.minedNonce(Network.SEPOLIA, alice), "a count of an unknown head is not kept")
+
+        val fees = inputs.fees(Network.SEPOLIA)
+        assertTrue(fees is FeeReading.Quoted)
+        assertEquals(299, fees.quote.blockNumber)
+        assertEquals(KeptFees(fees.quote, asOf = null), kept.fees(Network.SEPOLIA), "kept, but not dated as the head")
+    }
+
+    @Test
+    fun aNetworkTheAdapterDoesNotServeKeepsNothing() = runTest {
+        val chain = FakeTransactingChain()
+        chain.base.snapshot = running(head = 321, headTimestamp = 1_792_200_000)
+        chain.mined = 9
+        val kept = kept()
+        val inputs = EngineTransactionInputs(Network.SEPOLIA, chain, StandardTestDispatcher(testScheduler), kept = kept)
+
+        assertTrue(inputs.minedNonce(Network.ETHEREUM, alice) is NonceReading.Unavailable)
+        assertNull(kept.minedNonce(Network.ETHEREUM, alice))
+        assertNull(kept.minedNonce(Network.SEPOLIA, alice))
+    }
+
+    @Test
+    fun aKeptFileThatCannotBeWrittenNeverChangesTheAnswer() = runTest {
+        // A directory where the file should be: it can be neither read nor written.
+        SystemFileSystem.createDirectories(file)
+        val chain = FakeTransactingChain()
+        chain.base.snapshot = running(head = 321, headTimestamp = 1_792_200_000)
+        chain.mined = 9
+        val kept = kept()
+        val inputs = EngineTransactionInputs(Network.SEPOLIA, chain, StandardTestDispatcher(testScheduler), kept = kept)
+
+        assertEquals(NonceReading.Read(9), inputs.minedNonce(Network.SEPOLIA, alice))
+        assertNull(kept.minedNonce(Network.SEPOLIA, alice))
+        SystemFileSystem.delete(file)
     }
 
     @Test

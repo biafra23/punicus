@@ -50,7 +50,7 @@ target is what resolves the engine's AAR. One package per area,
 | `account` | `FileAccountRepository`: the account list, persisted as a JSON file. `InMemoryAccountRepository` for tests. |
 | `files` | `VersionedJsonFile`: the versioned JSON file every file adapter keeps its value in. |
 | `keys` | `EnvelopeKeyStore`: imported seeds in envelopes (docs/keys-and-signing.md). `Secp256k1Recovery`: finds the address a signature recovers to; it holds no key. |
-| `engine` | `MyotisHost`, the Myotis engine adapter: one engine hosting a light client per network that is on and needed. It gives verified native and token balances, token metadata, prices (a pinned feed's, or a pinned pool's average where no feed is) and address kinds; the peer-reported network-upgrade advisory; for sending, the nonce, fees, gas, broadcast, receipts and ENS names; a Safe's owners' approvals on chain; Uniswap v3's pinned contracts, proven by their code, and its verified calls; CoW Protocol's the same way; the verified log index that follows the accounts' histories; the finalized block with its header's timestamp; and a feed's round of a day ago from its round history. Its glue over `io.myotis.api` lives in a `jvmSharedMain` source set the Android and desktop targets share. |
+| `engine` | `MyotisHost`, the Myotis engine adapter: one engine hosting a light client per network that is on and needed. It gives verified native and token balances, token metadata, prices (a pinned feed's, or a pinned pool's average where no feed is) and address kinds; the peer-reported network-upgrade advisory; for sending, the nonce, fees, gas, broadcast, receipts and ENS names, and the mined counts and fee quotes last verified, kept for a lenient draft; a Safe's owners' approvals on chain; Uniswap v3's pinned contracts, proven by their code, and its verified calls; CoW Protocol's the same way; the verified log index that follows the accounts' histories; the finalized block with its header's timestamp; and a feed's round of a day ago from its round history. Its glue over `io.myotis.api` lives in a `jvmSharedMain` source set the Android and desktop targets share. |
 | `upgrade` | The record of a known network upgrade. |
 | `tokens` | The built-in token list and the user's token settings. |
 | `prices` | The Chainlink feed table, the Uniswap pools that price what no feed does, and the feed-first routing between them. |
@@ -63,7 +63,7 @@ target is what resolves the engine's AAR. One package per area,
 | `history` | Where each account's history starts. |
 | `rates` | The exchange rate last verified, for the home-screen widget. |
 | `logs` | The Debug tab's log, in memory only. The engine adapter writes each request into it. |
-| `settings` | The display currency, the swap venue last chosen, the Debug tab's switch, the view chosen (simple mode or Detailed view) and whether amounts are hidden. |
+| `settings` | The display currency, the swap venue last chosen, the Debug tab's switch, the view chosen (simple mode or Detailed view), whether amounts are hidden, and the sync policy (strict, or lenient: *Sign while syncing*). |
 
 ### `ui`
 

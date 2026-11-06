@@ -50,10 +50,11 @@ class EngineTransactionInputs internal constructor(
 
     override suspend fun minedNonce(network: Network, account: Address): NonceReading {
         val (reading, head) = ask(network, { Answered(NonceReading.Unavailable(it), null) }) { chain ->
-            val head = chain.readableHeadAt()
+            val before = chain.readableHeadAt()
             val reading = chain.minedNonce(account)?.takeIf { it >= 0 }?.let(NonceReading::Read)
                 ?: NonceReading.Unavailable(ReadUnavailable.UNPROVEN)
-            Answered(reading, head)
+            // The engine reads at `latest`: the head the answer is of is known only while it did not move.
+            Answered(reading, before?.takeIf { it == chain.readableHeadAt() })
         }
         if (reading is NonceReading.Read && head != null) {
             kept?.saveNonce(network, account, reading.nonce, head.block, head.asOf)
@@ -83,7 +84,10 @@ class EngineTransactionInputs internal constructor(
                     ?: COLD
                 Answered(reading, head)
             }
-            if (reading is FeeReading.Quoted) kept?.saveFees(network, reading.quote, head?.asOf)
+            // The engine's history may be older than the head: dated only when it ends at it.
+            if (reading is FeeReading.Quoted) {
+                kept?.saveFees(network, reading.quote, head?.takeIf { it.block == reading.quote.blockNumber }?.asOf)
+            }
             if (reading !== COLD) return reading
             // No room for another wait and a read the engine may hold for its own wait: no answer.
             if (started.elapsedNow() + feeRetryInterval + engineFeeWait > feeWait) return COLD

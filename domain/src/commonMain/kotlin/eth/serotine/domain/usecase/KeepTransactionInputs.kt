@@ -22,17 +22,23 @@ import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.minutes
+import kotlin.time.TimeMark
+import kotlin.time.TimeSource
 
 /**
  * Keeps what a lenient draft is built on recent (docs/lenient-mode.md, *What a draft is built
  * on*): while the policy is [SyncPolicy.LENIENT], each of [networks] whose light client serves
- * verified reads ([LightClientStatus.Synced]) has its fee quote and the mined count of each EOA
- * whose key is here read, at once and every [interval] while it stays so. The reads are
- * [TransactionInputs]' own, verified; :data keeps each answer ([KeptTransactionInputs]), so this
- * use case only asks. In strict mode it asks nothing: a quote keeps what it reads anyway.
+ * verified reads ([LightClientStatus.Synced]) and holds an EOA whose key is here has its fee
+ * quote and the mined count of each such EOA read, at most once every [interval] (measured on
+ * [timeSource]): at once when it first verifies, then every [interval] while it does. A light
+ * client that stops verifying and starts again within the interval waits out the rest of it, so a
+ * flapping one costs no more. The reads are [TransactionInputs]' own, verified; :data keeps each
+ * answer ([KeptTransactionInputs]), so this use case only asks. In strict mode it asks nothing:
+ * a quote keeps what it reads anyway.
  *
- * Run for as long as the app is open (the hosts start it, never `App`). Runs until cancelled; a
- * port that breaks its promise not to throw costs that round only.
+ * Run while the hosts run their background work (never `App`): the app in front, and on Android
+ * any hold of the engine. Runs until cancelled; a port that breaks its promise not to throw costs
+ * that round only.
  */
 class KeepTransactionInputs(
     private val policy: SyncPolicySetting,
@@ -41,6 +47,7 @@ class KeepTransactionInputs(
     private val inputs: TransactionInputs,
     private val networks: List<Network> = Network.entries,
     private val interval: Duration = 10.minutes,
+    private val timeSource: TimeSource = TimeSource.Monotonic,
 ) {
     /** Runs until cancelled. */
     @OptIn(ExperimentalCoroutinesApi::class)
@@ -51,14 +58,20 @@ class KeepTransactionInputs(
         }
     }
 
-    /** Reads [network]'s inputs whenever its light client becomes able to verify, and every [interval] while it is. */
+    /**
+     * Reads [network]'s inputs while its light client verifies, at most once every [interval]: a
+     * round run less than [interval] ago, before it stopped verifying, is waited out first.
+     */
     private suspend fun follow(network: Network) {
+        var lastRound: TimeMark? = null
         lightClient.observeStatus(network)
             .map { it is LightClientStatus.Synced }
             .distinctUntilChanged()
             .collectLatest { synced ->
                 if (!synced) return@collectLatest
+                lastRound?.let { mark -> (interval - mark.elapsedNow()).takeIf { it.isPositive() }?.let { delay(it) } }
                 while (true) {
+                    lastRound = timeSource.markNow()
                     read(network)
                     delay(interval)
                 }
@@ -67,9 +80,11 @@ class KeepTransactionInputs(
 
     private suspend fun read(network: Network) {
         try {
-            inputs.fees(network)
             val held = (accounts.observeAccounts().first() as? AccountList.Loaded)?.accounts.orEmpty()
                 .filter { it.network == network && it.kind == AccountKind.EOA && it.custody == AccountCustody.InKeyStore }
+            // A network with no account to draft from has nothing to keep.
+            if (held.isEmpty()) return
+            inputs.fees(network)
             held.forEach { inputs.minedNonce(network, it.address) }
         } catch (e: CancellationException) {
             throw e
