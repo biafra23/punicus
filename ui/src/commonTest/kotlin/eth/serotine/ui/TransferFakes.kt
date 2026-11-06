@@ -63,6 +63,8 @@ import eth.serotine.domain.repository.prunable
 import eth.serotine.domain.repository.yieldsTo
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.awaitCancellation
+import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.map
@@ -451,8 +453,10 @@ internal class FakeEnsNfts : EnsNfts {
     ): EnsNftReading = EnsNftReading.Unavailable(ReadUnavailable.UNPROVEN)
 }
 
-/** [ReceiptTracker] for which no transaction is ever included. */
+/** [ReceiptTracker] for which no transaction is ever included: pending, as the port keeps saying, until cancelled. */
 internal class FakeReceiptsNever : ReceiptTracker {
-    override fun observe(network: Network, hash: String): Flow<TransactionProgress> =
-        flowOf(TransactionProgress.Pending)
+    override fun observe(network: Network, hash: String): Flow<TransactionProgress> = flow {
+        emit(TransactionProgress.Pending)
+        awaitCancellation()
+    }
 }

@@ -218,6 +218,29 @@ class ObserveNftsTest {
     }
 
     @Test
+    fun aPinnedCollectionNotYetProvenKeepsItsPlaceBeforeAFloodOfAirdrops() = runTest {
+        val v2 = known(KnownNftKind.ENS_V2_REGISTRY)
+        val token = nft(v2, 5, NftStandard.ERC1155)
+        val topics = listOf(Erc1155Transfers.TRANSFER_SINGLE, topic(operator), topic(Address.ZERO), topic(alice))
+        val spam = Address.of("0x" + "5b".repeat(20))
+        logs = listOf(log(v2, topics, "0x" + word(5) + word(1), 9_010, 0)) +
+            (1..ObserveNfts.MAX_CHECKED + 5).map { id ->
+                val transfer = listOf(TokenTransfers.TRANSFER, topic(bob), topic(alice), "0x" + word(id.toLong()))
+                log(spam, transfer, "0x", 9_100L + id, 0)
+            }
+        contracts.held += token
+        ens.names[token] = EnsNftReading.Named("multisig.eth", "0x" + word(5), null, wrapped = false, 9_200)
+        covered(9_300)
+        val seen = mutableListOf<NftHoldings>()
+        collectInto(seen)
+        runCurrent()
+
+        val read = assertIs<NftHoldings.Read>(seen.last())
+        assertEquals("multisig.eth", read.nfts.single().ens?.name)
+        assertEquals(v2, read.nfts.single().collection.known?.address)
+    }
+
+    @Test
     fun aPinnedCollectionWhoseCodeIsNotItsPinIsUnlisted() = runTest {
         val v2 = known(KnownNftKind.ENS_V2_REGISTRY)
         val token = nft(v2, 5, NftStandard.ERC1155)

@@ -234,7 +234,8 @@ class VerifiedEnsNfts internal constructor(
             val bytes = hex.fromHex()
             if (bytes.size < 2 * WORD) return null
             val offset = small(bytes, 0) ?: return null
-            if (offset % WORD != 0 || offset + WORD > bytes.size) return null
+            // Compared by subtraction: an offset near Int.MAX_VALUE must not wrap past the check.
+            if (offset % WORD != 0 || offset > bytes.size - WORD) return null
             val length = small(bytes, offset)?.takeIf { it <= MAX_LABEL_BYTES } ?: return null
             val end = offset + WORD + length
             val padded = offset + WORD + (length + WORD - 1) / WORD * WORD
@@ -244,7 +245,7 @@ class VerifiedEnsNfts internal constructor(
 
         /** The word at [at] as a small non-negative Int, or null when it is larger than any offset or length. */
         private fun small(bytes: ByteArray, at: Int): Int? {
-            if (at + WORD > bytes.size) return null
+            if (at < 0 || at > bytes.size - WORD) return null
             if ((at until at + WORD - 4).any { bytes[it] != 0.toByte() }) return null
             var value = 0L
             for (i in at + WORD - 4 until at + WORD) value = (value shl 8) or (bytes[i].toLong() and 0xff)

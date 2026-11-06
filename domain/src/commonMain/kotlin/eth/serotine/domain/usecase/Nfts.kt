@@ -176,9 +176,14 @@ class ObserveNfts(
                             nft.standard == NftStandard.ERC721 && nft !in last.getValue(nft).received
                         }
                         // The built-in collections' first, so that no flood of airdrops pushes them out
-                        // of the NFTs checked; within each part, the most recently moved first.
+                        // of the NFTs checked; within each part, the most recently moved first. A pinned
+                        // collection keeps its place until its code is proven not to be its pin: its proof
+                        // is made only among the NFTs checked.
                         val ordered = received.sortedWith(
-                            compareBy<NftRef> { builtIn(it.collection) == null }
+                            compareBy<NftRef> {
+                                KnownNftCollections.find(account.network, it.collection)
+                                    .let { known -> known == null || pins.mismatched(known) }
+                            }
                                 .thenByDescending { last.getValue(it).blockNumber }
                                 .thenByDescending { last.getValue(it).logIndex },
                         )

@@ -177,6 +177,14 @@ class VerifiedEnsNftsTest {
     }
 
     @Test
+    fun anOffsetNearTheLargestIntIsOutOfShapeNotACrash() {
+        // A log any contract in the transaction could emit: an offset that wraps past an added bounds check.
+        val data = "0".repeat(56) + "7fffffe0" + "00".repeat(32)
+        assertNull(VerifiedEnsNfts.abiBytes(data, allowTail = true))
+        assertNull(VerifiedEnsNfts.abiBytes(word(32) + "0".repeat(56) + "7fffffe0", allowTail = true))
+    }
+
+    @Test
     fun anotherNetworkIsNeverAnsweredHere() = runTest {
         val reading = ens().name(Network.ETHEREUM, v2(), NftRef(registry, UInt256.ONE, NftStandard.ERC1155))
         assertEquals(EnsNftReading.Unavailable(ReadUnavailable.NO_ENGINE), reading)
