@@ -3,6 +3,7 @@ package eth.serotine.ui.safeimport
 import androidx.compose.runtime.Composable
 import eth.serotine.ui.components.LightClientItem
 import eth.serotine.ui.components.verifiedStripSample
+import eth.serotine.ui.ScreenPreview
 import eth.serotine.ui.theme.SerotineTheme
 import org.jetbrains.compose.ui.tooling.preview.Preview
 
@@ -77,12 +78,12 @@ private fun SafeImportWrongNetworkPreview() = SafeImportPreview(
 )
 
 /** Every preview above, which SafeImportScreenPreviewsTest renders: a new preview goes in here too. */
-internal val safeImportScreenPreviews: List<@Composable () -> Unit> = listOf(
-    { SafeImportEmptyPreview() },
-    { SafeImportEmptyDarkPreview() },
-    { SafeImportPastedPreview() },
-    { SafeImportCheckingPreview() },
-    { SafeImportRefusedPreview() },
-    { SafeImportImportedPreview() },
-    { SafeImportWrongNetworkPreview() },
+internal val safeImportScreenPreviews: List<ScreenPreview> = listOf(
+    ScreenPreview("empty") { SafeImportEmptyPreview() },
+    ScreenPreview("empty-dark") { SafeImportEmptyDarkPreview() },
+    ScreenPreview("pasted") { SafeImportPastedPreview() },
+    ScreenPreview("checking") { SafeImportCheckingPreview() },
+    ScreenPreview("refused") { SafeImportRefusedPreview() },
+    ScreenPreview("imported") { SafeImportImportedPreview() },
+    ScreenPreview("wrong-network") { SafeImportWrongNetworkPreview() },
 )

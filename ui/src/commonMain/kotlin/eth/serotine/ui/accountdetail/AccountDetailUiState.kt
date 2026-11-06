@@ -9,6 +9,7 @@ import eth.serotine.ui.accounts.swapBlockedReason
 import eth.serotine.ui.activity.ActivityOrder
 import eth.serotine.ui.activity.ActivityUiState
 import eth.serotine.ui.components.Control
+import eth.serotine.ui.components.HandoffChoice
 import eth.serotine.ui.components.NetworkLabel
 
 /** Everything the account detail screen renders (docs/wallet-ux.md, screen 4). */
@@ -79,6 +80,12 @@ sealed interface AccountDetailUiState {
         val refreshing: Boolean = false,
         val cantCheck: UnreachableNetwork? = null,
         val amountsHidden: Boolean = false,
+        /**
+         * Send from another wallet (issue #255), for an EOA whose key is not on this device: greyed
+         * out with its reason where it cannot be done now; null where it does not apply. The asset
+         * menu offers it, and so does the greyed-out Send's explanation.
+         */
+        val handoff: HandoffChoice? = null,
     ) : AccountDetailUiState {
 
         /** The tabs this account has: Assets | Activity, and a Safe's Owners | Queue after them. */

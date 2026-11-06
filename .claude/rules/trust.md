@@ -141,6 +141,18 @@ fails the call.
   an app-private file, out of backups and device transfers, never logged,
   and not under the wallet password.
 
+## Send from another wallet signs nothing here
+
+(Owner rulings, 2026-11-05, #255.)
+
+- A watched EOA may hand a transfer to another wallet app as a payment link.
+  Watched still means Serotine signs nothing: the other wallet must hold the
+  key, and the screen says so.
+- Nothing the other wallet does is taken on its word. A transfer counts only
+  when a verified block holds it: from the account, to the recipient, that
+  amount. Another amount, or the same from another address, is said as such
+  and never counted as the account's.
+
 ## Key material
 
 An EOA's private key, a seed, a Safe owner key: it lives in the key-store

@@ -5,6 +5,7 @@ import eth.serotine.domain.usecase.DappSignRefusal
 import eth.serotine.ui.components.NotSentItem
 import eth.serotine.ui.dapprequest.DappRequestViewModel
 import eth.serotine.ui.dapprequest.SignInField
+import eth.serotine.ui.ScreenPreview
 import eth.serotine.ui.theme.SerotineTheme
 import org.jetbrains.compose.ui.tooling.preview.Preview
 
@@ -235,25 +236,25 @@ private fun DappTransactionEndedPreview() = DappTransactionPreview(
 private fun DappTransactionLoadingPreview() = DappTransactionPreview(DappTransactionUiState())
 
 /** Every preview above, which DappTransactionScreenPreviewsTest renders: a new preview goes in here too. */
-internal val dappTransactionScreenPreviews: List<@Composable () -> Unit> = listOf(
-    { DappTransactionPaymentPreview() },
-    { DappTransactionPaymentDarkPreview() },
-    { DappTransactionTokenTransferPreview() },
-    { DappTransactionApprovalPreview() },
-    { DappTransactionNotDecodedPreview() },
-    { DappTransactionQuotingPreview() },
-    { DappTransactionNotQuotedPreview() },
-    { DappTransactionRefusedPreview() },
-    { DappTransactionSafePreview() },
-    { DappTransactionSafeDarkPreview() },
-    { DappTransactionSafeNoOwnerPreview() },
-    { DappTransactionSafeSigningPreview() },
-    { DappTransactionSafeQueuedPreview() },
-    { DappTransactionSendingPreview() },
-    { DappTransactionNotSentPreview() },
-    { DappTransactionExplainingPreview() },
-    { DappTransactionEndedPreview() },
-    { DappTransactionLoadingPreview() },
-    { DappTransactionRealFundsPreview() },
-    { DappTransactionRealFundsDarkPreview() },
+internal val dappTransactionScreenPreviews: List<ScreenPreview> = listOf(
+    ScreenPreview("payment") { DappTransactionPaymentPreview() },
+    ScreenPreview("payment-dark") { DappTransactionPaymentDarkPreview() },
+    ScreenPreview("token-transfer") { DappTransactionTokenTransferPreview() },
+    ScreenPreview("approval") { DappTransactionApprovalPreview() },
+    ScreenPreview("not-decoded") { DappTransactionNotDecodedPreview() },
+    ScreenPreview("quoting") { DappTransactionQuotingPreview() },
+    ScreenPreview("not-quoted") { DappTransactionNotQuotedPreview() },
+    ScreenPreview("refused") { DappTransactionRefusedPreview() },
+    ScreenPreview("safe") { DappTransactionSafePreview() },
+    ScreenPreview("safe-dark") { DappTransactionSafeDarkPreview() },
+    ScreenPreview("safe-no-owner") { DappTransactionSafeNoOwnerPreview() },
+    ScreenPreview("safe-signing") { DappTransactionSafeSigningPreview() },
+    ScreenPreview("safe-queued") { DappTransactionSafeQueuedPreview() },
+    ScreenPreview("sending") { DappTransactionSendingPreview() },
+    ScreenPreview("not-sent") { DappTransactionNotSentPreview() },
+    ScreenPreview("explaining") { DappTransactionExplainingPreview() },
+    ScreenPreview("ended") { DappTransactionEndedPreview() },
+    ScreenPreview("loading") { DappTransactionLoadingPreview() },
+    ScreenPreview("real-funds") { DappTransactionRealFundsPreview() },
+    ScreenPreview("real-funds-dark") { DappTransactionRealFundsDarkPreview() },
 )

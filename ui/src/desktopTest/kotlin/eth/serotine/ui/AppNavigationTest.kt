@@ -358,6 +358,8 @@ class AppNavigationTest {
         transactionInputs = FactoryInputs(),
         broadcaster = broadcaster,
         receipts = receipts,
+        blockTransactions = FakeBlockTransactions(),
+        walletHandoff = FakeWalletHandoff(),
         names = FakeNames(),
         signer = signer,
         sentTransfers = sentTransfers,

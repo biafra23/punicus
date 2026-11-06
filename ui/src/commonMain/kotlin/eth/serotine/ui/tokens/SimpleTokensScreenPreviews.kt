@@ -2,6 +2,7 @@ package eth.serotine.ui.tokens
 
 import androidx.compose.runtime.Composable
 import eth.serotine.ui.components.NetworkLabel
+import eth.serotine.ui.ScreenPreview
 import eth.serotine.ui.theme.SerotineTheme
 import org.jetbrains.compose.ui.tooling.preview.Preview
 
@@ -58,7 +59,7 @@ private fun SimpleTokensListPreview() = SimpleTokensPreview()
 private fun SimpleTokensDarkPreview() = SimpleTokensPreview(darkTheme = true)
 
 /** Every preview above, which SimpleTokensScreenPreviewsTest renders: a new preview goes in here too. */
-internal val simpleTokensScreenPreviews: List<@Composable () -> Unit> = listOf(
-    { SimpleTokensListPreview() },
-    { SimpleTokensDarkPreview() },
+internal val simpleTokensScreenPreviews: List<ScreenPreview> = listOf(
+    ScreenPreview("list") { SimpleTokensListPreview() },
+    ScreenPreview("list-dark") { SimpleTokensDarkPreview() },
 )

@@ -5,6 +5,7 @@ import eth.serotine.domain.model.WalletPassword
 import eth.serotine.domain.usecase.DappSignRefusal
 import eth.serotine.domain.usecase.DappSignWarning
 import eth.serotine.ui.components.UnlockStep
+import eth.serotine.ui.ScreenPreview
 import eth.serotine.ui.theme.SerotineTheme
 import org.jetbrains.compose.ui.tooling.preview.Preview
 
@@ -246,25 +247,25 @@ private fun DappRequestRealFundsPreview() = DappRequestPreview(signInOnEthereum)
 private fun DappRequestRealFundsDarkPreview() = DappRequestPreview(signInOnEthereum, darkTheme = true)
 
 /** Every preview above, which DappRequestScreenPreviewsTest renders: a new preview goes in here too. */
-internal val dappRequestScreenPreviews: List<@Composable () -> Unit> = listOf(
-    { DappRequestSignInPreview() },
-    { DappRequestSignInDarkPreview() },
-    { DappRequestBiometricsPreview() },
-    { DappRequestOtherSitePreview() },
-    { DappRequestMessagePreview() },
-    { DappRequestHexPreview() },
-    { DappRequestRefusedPreview() },
-    { DappRequestWrongPasswordPreview() },
-    { DappRequestSigningPreview() },
-    { DappRequestExplainingPreview() },
-    { DappRequestEndedPreview() },
-    { DappRequestLoadingPreview() },
-    { DappRequestApprovalPreview() },
-    { DappRequestApprovalDarkPreview() },
-    { DappRequestUnlimitedPreview() },
-    { DappRequestSwapOrderPreview() },
-    { DappRequestNotDecodedPreview() },
-    { DappRequestOtherNetworkPreview() },
-    { DappRequestRealFundsPreview() },
-    { DappRequestRealFundsDarkPreview() },
+internal val dappRequestScreenPreviews: List<ScreenPreview> = listOf(
+    ScreenPreview("sign-in") { DappRequestSignInPreview() },
+    ScreenPreview("sign-in-dark") { DappRequestSignInDarkPreview() },
+    ScreenPreview("biometrics") { DappRequestBiometricsPreview() },
+    ScreenPreview("other-site") { DappRequestOtherSitePreview() },
+    ScreenPreview("message") { DappRequestMessagePreview() },
+    ScreenPreview("hex") { DappRequestHexPreview() },
+    ScreenPreview("refused") { DappRequestRefusedPreview() },
+    ScreenPreview("wrong-password") { DappRequestWrongPasswordPreview() },
+    ScreenPreview("signing") { DappRequestSigningPreview() },
+    ScreenPreview("explaining") { DappRequestExplainingPreview() },
+    ScreenPreview("ended") { DappRequestEndedPreview() },
+    ScreenPreview("loading") { DappRequestLoadingPreview() },
+    ScreenPreview("approval") { DappRequestApprovalPreview() },
+    ScreenPreview("approval-dark") { DappRequestApprovalDarkPreview() },
+    ScreenPreview("unlimited") { DappRequestUnlimitedPreview() },
+    ScreenPreview("swap-order") { DappRequestSwapOrderPreview() },
+    ScreenPreview("not-decoded") { DappRequestNotDecodedPreview() },
+    ScreenPreview("other-network") { DappRequestOtherNetworkPreview() },
+    ScreenPreview("real-funds") { DappRequestRealFundsPreview() },
+    ScreenPreview("real-funds-dark") { DappRequestRealFundsDarkPreview() },
 )

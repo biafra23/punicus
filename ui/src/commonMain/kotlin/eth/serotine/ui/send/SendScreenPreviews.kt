@@ -14,6 +14,7 @@ import eth.serotine.ui.components.SendFrom
 import eth.serotine.ui.components.TransferForm
 import eth.serotine.ui.components.UnlockStep
 import eth.serotine.ui.components.verifiedStripSample
+import eth.serotine.ui.ScreenPreview
 import eth.serotine.ui.theme.SerotineTheme
 import org.jetbrains.compose.ui.tooling.preview.Preview
 
@@ -345,28 +346,28 @@ private fun SendWatchOnlyPreview() = SendPreview(
 private fun SendSentPreview() = SendPreview(SendUiState.Sent("Sepolia", "0x" + "5e".repeat(32)))
 
 /** Every preview above, which SendScreenPreviewsTest renders: a new preview goes in here too. */
-internal val sendScreenPreviews: List<@Composable () -> Unit> = listOf(
-    { SendComposeEmptyPreview() },
-    { SendComposeEmptyDarkPreview() },
-    { SendComposedTokenToNamePreview() },
-    { SendComposeResolvingPreview() },
-    { SendComposeInputErrorsPreview() },
-    { SendComposeGnosisNoNamesPreview() },
-    { SendComposeNameUnavailablePreview() },
-    { SendComposeQuotingPreview() },
-    { SendComposeRefusedPreview() },
-    { SendComposeEarlierMaybeSentPreview() },
-    { SendComposeTokenNotFoundPreview() },
-    { SendReviewPreview() },
-    { SendReviewDarkPreview() },
-    { SendReviewTokenWithBiometricsPreview() },
-    { SendReviewWrongPasswordPreview() },
-    { SendReviewBiometricsCancelledPreview() },
-    { SendReviewSigningPreview() },
-    { SendReviewRefreshingPreview() },
-    { SendReviewNotSentPreview() },
-    { SendReviewRejectedPreview() },
-    { SendLoadingPreview() },
-    { SendWatchOnlyPreview() },
-    { SendSentPreview() },
+internal val sendScreenPreviews: List<ScreenPreview> = listOf(
+    ScreenPreview("compose-empty") { SendComposeEmptyPreview() },
+    ScreenPreview("compose-empty-dark") { SendComposeEmptyDarkPreview() },
+    ScreenPreview("composed-token-to-name") { SendComposedTokenToNamePreview() },
+    ScreenPreview("compose-resolving") { SendComposeResolvingPreview() },
+    ScreenPreview("compose-input-errors") { SendComposeInputErrorsPreview() },
+    ScreenPreview("compose-gnosis-no-names") { SendComposeGnosisNoNamesPreview() },
+    ScreenPreview("compose-name-unavailable") { SendComposeNameUnavailablePreview() },
+    ScreenPreview("compose-quoting") { SendComposeQuotingPreview() },
+    ScreenPreview("compose-refused") { SendComposeRefusedPreview() },
+    ScreenPreview("compose-earlier-maybe-sent") { SendComposeEarlierMaybeSentPreview() },
+    ScreenPreview("compose-token-not-found") { SendComposeTokenNotFoundPreview() },
+    ScreenPreview("review") { SendReviewPreview() },
+    ScreenPreview("review-dark") { SendReviewDarkPreview() },
+    ScreenPreview("review-token-with-biometrics") { SendReviewTokenWithBiometricsPreview() },
+    ScreenPreview("review-wrong-password") { SendReviewWrongPasswordPreview() },
+    ScreenPreview("review-biometrics-cancelled") { SendReviewBiometricsCancelledPreview() },
+    ScreenPreview("review-signing") { SendReviewSigningPreview() },
+    ScreenPreview("review-refreshing") { SendReviewRefreshingPreview() },
+    ScreenPreview("review-not-sent") { SendReviewNotSentPreview() },
+    ScreenPreview("review-rejected") { SendReviewRejectedPreview() },
+    ScreenPreview("loading") { SendLoadingPreview() },
+    ScreenPreview("watch-only") { SendWatchOnlyPreview() },
+    ScreenPreview("sent") { SendSentPreview() },
 )

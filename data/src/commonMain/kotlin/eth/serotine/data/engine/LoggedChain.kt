@@ -103,6 +103,11 @@ internal class LoggedChain(
     override fun receipt(hash: String): String? =
         request("getTransactionReceipt", { "hash=$hash" }, ::answered) { inner.receipt(hash) }
 
+    override fun blockWithTransactions(number: Long): String? =
+        request("getBlockByNumber", { "block=0x${number.toString(16)}, full=true" }, ::answered) {
+            inner.blockWithTransactions(number)
+        }
+
     override fun resolveName(name: String): NameAnswer =
         request("ens.resolveAddress", { "name=$name, root=FINALIZED" }, { it.error }) {
             inner.resolveName(name)

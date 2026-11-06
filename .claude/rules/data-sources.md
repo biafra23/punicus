@@ -250,6 +250,26 @@ docs/walletconnect.md is the contract.)
 - **dApps connecting to Serotine come first**; an external wallet as a Safe
   owner's signer follows (docs/walletconnect.md, *The plan*).
 
+## Send from another wallet hands a payment link to another wallet app
+
+(Owner rulings, 2026-11-05, #255, accepting its recommendations.)
+
+- For an EOA whose key is not on this device, a transfer of the network's
+  currency or of an ERC-20 token is handed to another wallet app as an
+  EIP-681 payment link. That wallet signs and broadcasts it, through its own
+  provider, which the review says learns the transfer and the IP address.
+  Serotine contacts no service.
+- Every network that is on. It is not a dApp session, so the Sepolia-only
+  ruling for dApp sessions does not bind it.
+- Only `ethereum:` and `metamask://` links, never MetaMask's `https://` form,
+  which falls back to its website.
+- Nothing comes back through the link. What the transfer became is read from
+  verified blocks alone, for 10 minutes after the handoff; after that, the
+  account's history.
+- On mobile; not on the desktop. Built for Android so far. iOS is not built
+  yet, which is no ruling: the engine's iOS reads have no verified block body,
+  and iOS opens an undefined one of several apps that claim `ethereum:`.
+
 ## Open decisions
 
 Each is recorded here before its code lands. Today: each optional

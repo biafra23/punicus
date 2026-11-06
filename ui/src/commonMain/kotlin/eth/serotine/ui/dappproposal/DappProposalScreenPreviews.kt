@@ -4,6 +4,7 @@ import androidx.compose.runtime.Composable
 import eth.serotine.domain.model.Network
 import eth.serotine.domain.repository.DappRefusal
 import eth.serotine.domain.usecase.DappOffer
+import eth.serotine.ui.ScreenPreview
 import eth.serotine.ui.theme.SerotineTheme
 import org.jetbrains.compose.ui.tooling.preview.Preview
 
@@ -137,17 +138,17 @@ private fun DappProposalEndedPreview() = DappProposalPreview(
 private fun DappProposalLoadingPreview() = DappProposalPreview(DappProposalUiState())
 
 /** Every preview above, which DappProposalScreenPreviewsTest renders: a new preview goes in here too. */
-internal val dappProposalScreenPreviews: List<@Composable () -> Unit> = listOf(
-    { DappProposalRequestPreview() },
-    { DappProposalRequestDarkPreview() },
-    { DappProposalNoneChosenPreview() },
-    { DappProposalEitherKindPreview() },
-    { DappProposalRealFundsPreview() },
-    { DappProposalRealFundsDarkPreview() },
-    { DappProposalMixedFundsRefusedPreview() },
-    { DappProposalRefusedPreview() },
-    { DappProposalExplainingPreview() },
-    { DappProposalNotSavedPreview() },
-    { DappProposalEndedPreview() },
-    { DappProposalLoadingPreview() },
+internal val dappProposalScreenPreviews: List<ScreenPreview> = listOf(
+    ScreenPreview("request") { DappProposalRequestPreview() },
+    ScreenPreview("request-dark") { DappProposalRequestDarkPreview() },
+    ScreenPreview("none-chosen") { DappProposalNoneChosenPreview() },
+    ScreenPreview("either-kind") { DappProposalEitherKindPreview() },
+    ScreenPreview("real-funds") { DappProposalRealFundsPreview() },
+    ScreenPreview("real-funds-dark") { DappProposalRealFundsDarkPreview() },
+    ScreenPreview("mixed-funds-refused") { DappProposalMixedFundsRefusedPreview() },
+    ScreenPreview("refused") { DappProposalRefusedPreview() },
+    ScreenPreview("explaining") { DappProposalExplainingPreview() },
+    ScreenPreview("not-saved") { DappProposalNotSavedPreview() },
+    ScreenPreview("ended") { DappProposalEndedPreview() },
+    ScreenPreview("loading") { DappProposalLoadingPreview() },
 )

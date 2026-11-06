@@ -12,6 +12,7 @@ import android.os.Looper
 import android.os.SystemClock
 import android.util.Log
 import android.widget.Toast
+import eth.serotine.android.handoff.AndroidWalletHandoff
 import eth.serotine.android.keys.ForegroundActivity
 import eth.serotine.android.keys.PlatformBiometricPrompter
 import eth.serotine.android.upgrade.AndroidUpgradeNotifier
@@ -390,6 +391,8 @@ class SerotineApplication : Application() {
             transactionInputs = node.transactionInputs,
             broadcaster = node.broadcaster,
             receipts = node.receipts,
+            blockTransactions = node.blockTransactions,
+            walletHandoff = AndroidWalletHandoff(this) { foreground.current },
             names = node.names,
             signer = keyStore,
             sentTransfers = sentTransfers,

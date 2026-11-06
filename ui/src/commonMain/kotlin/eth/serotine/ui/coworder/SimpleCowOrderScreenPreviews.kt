@@ -5,6 +5,7 @@ import eth.serotine.ui.components.BalanceChange
 import eth.serotine.ui.components.SendFrom
 import eth.serotine.ui.components.SpenderItem
 import eth.serotine.ui.components.UnlockStep
+import eth.serotine.ui.ScreenPreview
 import eth.serotine.ui.theme.SerotineTheme
 import org.jetbrains.compose.ui.tooling.preview.Preview
 
@@ -91,8 +92,8 @@ private fun SimpleCowOrderFilledDarkPreview() = SimpleCowOrderPreview(filled, da
 private fun SimpleCowOrderCancelReviewPreview() = SimpleCowOrderPreview(review)
 
 /** Every preview above, which SimpleCowOrderScreenPreviewsTest renders: a new preview goes in here too. */
-internal val simpleCowOrderScreenPreviews: List<@Composable () -> Unit> = listOf(
-    { SimpleCowOrderFilledPreview() },
-    { SimpleCowOrderFilledDarkPreview() },
-    { SimpleCowOrderCancelReviewPreview() },
+internal val simpleCowOrderScreenPreviews: List<ScreenPreview> = listOf(
+    ScreenPreview("filled") { SimpleCowOrderFilledPreview() },
+    ScreenPreview("filled-dark") { SimpleCowOrderFilledDarkPreview() },
+    ScreenPreview("cancel-review") { SimpleCowOrderCancelReviewPreview() },
 )
