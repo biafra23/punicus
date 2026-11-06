@@ -63,7 +63,8 @@ docs/lenient-mode.md, which has the detail.)
   call stands in for the estimate. A draft has no simulation, no ENS name
   and no fiat value. With nothing kept, the draft waits.
 - **The check makes the strict quote again, fresh, and compares.** The
-  quote must be made, except for its own funds test. The nonce must be the
+  quote must be made, enough of the asset included. Only its own test of the
+  fee is left out: the funds test below replaces it. The nonce must be the
   one signed. The fresh estimate must be within the signed gas limit.
 - **The check's fees and funds use the signed figures.** The signed fee cap
   must cover 1.125² times the next base fee, plus the signed tip. The fresh
@@ -91,6 +92,9 @@ docs/lenient-mode.md, which has the detail.)
   stay strict for now. The Safe refusals below apply when drafting.
 - Turning the switch off leaves what is queued queued: it is checked and
   sent, or discarded by the user.
+- **A network that is off is not syncing.** Its actions stay greyed out with
+  "Turn on" as the way to get them, in either mode: nothing is drafted on
+  it.
 
 ## Past the weak-subjectivity window only on the user's word
 

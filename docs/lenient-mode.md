@@ -109,6 +109,11 @@ and says why. In lenient mode it also says that the setting does not apply
 to it. Where lenient mode greys a step out, a tap on it says what it waits
 for (owner ruling, 2026-10-18, #55).
 
+A network that is off is not syncing: it runs no light client, and its
+accounts' actions stay greyed out with "Turn on" as the way to get them
+(owner ruling, 2026-10-22), in either mode. Nothing is drafted on it, even
+where inputs were kept for it before it was turned off.
+
 ## What a draft is built on
 
 A draft is built on the state the light client verified last. Each figure
@@ -258,9 +263,12 @@ own test of the fee. A peer tests the signed figures, not the fresh ones.
   user is asked to sign again. Sign again opens the review with the fresh
   quote, read fresh as in strict mode now that the light client verifies.
   Discard deletes it.
-- **The old signature is deleted when the conflict is found.** It was never
-  broadcast, so deleting the one copy is what keeps it from being sent. That
-  holds only while the copy never left the device (decision 5). A nonce gap
+- **The old signature is deleted when the conflict is found.** Except after
+  a rejected broadcast, it was never broadcast, so deleting the one copy is
+  what keeps it from being sent. That holds only while the copy never left
+  the device (decision 5). A rejected one was seen by the peer that rejected
+  it; what retires it is the new signature at the same nonce being mined, as
+  after a rejected broadcast in strict mode (`signAndSend`). A nonce gap
   is the case that matters: the signed transaction becomes valid again once
   the gap fills, and a copy kept elsewhere would then make a payment the
   user chose not to make.
