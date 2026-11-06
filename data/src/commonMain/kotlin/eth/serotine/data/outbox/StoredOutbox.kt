@@ -65,7 +65,7 @@ internal class StoredOutbox(val version: Int, val queued: List<StoredQueued>) {
         /** A newer version wrote it: it is left as it is. */
         data object Newer : Decoding
 
-        /** It is not an outbox: damaged. */
+        /** It is not an outbox this version can read, though it says this version. */
         data object Damaged : Decoding
     }
 

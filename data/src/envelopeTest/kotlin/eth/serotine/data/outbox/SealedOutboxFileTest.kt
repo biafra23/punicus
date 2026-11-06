@@ -30,6 +30,7 @@ import kotlinx.io.files.Path
 import kotlinx.io.files.SystemFileSystem
 import kotlinx.io.files.SystemTemporaryDirectory
 import kotlinx.io.readByteArray
+import kotlinx.io.write
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class SealedOutboxFileTest {
@@ -147,6 +148,29 @@ class SealedOutboxFileTest {
         assertEquals(OutboxList.Unreadable, chosen.observe().first())
         assertFalse(chosen.put(queued(account = bob)))
         assertTrue(SystemFileSystem.exists(file))
+    }
+
+    @Test
+    fun aFileThatOpensButThisVersionCannotReadIsKeptAsItIs() = runTest {
+        SystemFileSystem.createDirectories(directory)
+        val sealed = OutboxSeal(FakeHardware()).seal("""{"version":1,"queued":[{"id":"x"}]}""".encodeToByteArray())!!
+        SystemFileSystem.sink(file).buffered().use { it.write(sealed) }
+
+        assertEquals(OutboxList.Unreadable, outbox().observe().first())
+        assertTrue(SystemFileSystem.exists(file), "authenticated content is never deleted as damaged")
+    }
+
+    @Test
+    fun aKeyStoreThatFailedWhileChosenIsAskedAgainAtTheNextUse() = runTest {
+        outbox().put(queued())
+        var asks = 0
+        val chosen = ChosenOutbox(
+            file.toString(),
+            { if (++asks == 1) error("the key store is busy") else FakeHardware() },
+            StandardTestDispatcher(testScheduler),
+        )
+        assertEquals(OutboxList.Unreadable, chosen.observe().first())
+        assertEquals(1, (chosen.observe().first() as OutboxList.Loaded).queued.size)
     }
 
     @Test

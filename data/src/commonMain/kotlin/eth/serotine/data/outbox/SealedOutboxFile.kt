@@ -1,5 +1,6 @@
 package eth.serotine.data.outbox
 
+import eth.serotine.data.files.syncDirectoryOf
 import eth.serotine.data.keys.EnvelopeCrypto
 import eth.serotine.domain.model.AccountId
 import eth.serotine.domain.repository.Outbox
@@ -29,9 +30,10 @@ import kotlinx.io.readByteArray
  * A file that will never open here is deleted and said once as lost ([OutboxList.Loaded.lost], a
  * marker beside it, `<path>.lost`, which holds nothing, written before the file is deleted, until
  * [acknowledgeLost]): the user signs again. That is a seal key known to be gone (the key store
- * reset, a copy restored on another device), a file sealed under another key, and one damaged. A
- * file that cannot be read right now (the key store would not say whether its key exists, the
- * hardware failed, a newer version wrote it, an I/O error) is [OutboxList.Unreadable], untouched,
+ * reset, a copy restored on another device), and a file sealed under another key or damaged (its tag
+ * does not verify). A file that cannot be read right now (the key store would not say whether its
+ * key exists, the hardware failed, a version of Serotine wrote what this one cannot read, an I/O
+ * error) is [OutboxList.Unreadable], untouched,
  * read again by the next subscriber, and nothing changes until it can be read. File work runs on
  * [dispatcher].
  */
@@ -106,7 +108,8 @@ internal class SealedOutboxFile(
                     when (decoding) {
                         is StoredOutbox.Decoding.Read -> OutboxList.Loaded(decoding.queued, lost)
                         StoredOutbox.Decoding.Newer -> unreadable("a newer version of Serotine wrote it")
-                        StoredOutbox.Decoding.Damaged -> lostNow("it is damaged")
+                        // The tag verified, so it is what a version of Serotine sealed: not damage, and kept.
+                        StoredOutbox.Decoding.Damaged -> unreadable("this version cannot read what it holds")
                     }
                 }
             }
@@ -145,7 +148,9 @@ internal class SealedOutboxFile(
         withContext(NonCancellable + dispatcher) {
             try {
                 if (queued.isEmpty()) {
+                    // Durably gone: a discarded transaction must not come back after a power loss.
                     SystemFileSystem.delete(file, mustExist = false)
+                    syncDirectoryOf(path)
                 } else {
                     val plain = StoredOutbox.encode(queued)
                     val sealed = try {

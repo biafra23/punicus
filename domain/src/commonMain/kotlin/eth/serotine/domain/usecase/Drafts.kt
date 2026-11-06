@@ -134,7 +134,8 @@ object DraftGas {
  *
  * The recipient is an address: no name is resolved for a draft (decision 8). Refused before
  * anything is read: the zero address, the token's own contract, nothing to send, and an account
- * that has something queued already (one per account, decision 6), or an earlier transaction
+ * that has something queued already (one per account, decision 6), every account while the outbox
+ * cannot be read (it may hold one), or an earlier transaction
  * maybe sent within its lifetime, past the kept mined count. A draft is never simulated and never
  * signed here: [QueueTransfer] signs it; the check before sending reads everything again. [clock]
  * is in unix seconds.
@@ -162,7 +163,13 @@ class DraftTransfer(
         if (to == Address.ZERO) return refused(TransferQuoting.ToZeroAddress)
         if (token != null && to == token.address) return refused(TransferQuoting.ToTokenContract)
         if (amount.isZero) return refused(TransferQuoting.NothingToSend)
-        queuedId(from)?.let { return TransferDrafting.AccountBusy(it) }
+        when (val list = outbox.observe().first()) {
+            // It may hold a transaction already broadcast whose record is not written yet.
+            OutboxList.Unreadable ->
+                return refused(TransferQuoting.Unavailable(ReadUnavailable.UNPROVEN, QuoteFigure.NONCE))
+            is OutboxList.Loaded -> list.queued.firstOrNull { it.network == network && it.account == from }
+                ?.let { return TransferDrafting.AccountBusy(it.id) }
+        }
 
         val nonce = kept.minedNonce(network, from) ?: return TransferDrafting.Waits(DraftInput.NONCE)
         val fees = kept.fees(network) ?: return TransferDrafting.Waits(DraftInput.FEES)
@@ -289,11 +296,6 @@ class DraftTransfer(
         return balance.minusOrNull(reserved) ?: UInt256.ZERO
     }
 
-    /** The id of what [from] has queued on this network, or null; an unreadable outbox holds nothing back here. */
-    private suspend fun queuedId(from: Address): String? =
-        (outbox.observe().first() as? OutboxList.Loaded)?.queued
-            ?.firstOrNull { it.network == network && it.account == from }
-            ?.id
 
     /** A balance as read: [amount] (null: not a uint256), at [block], a head of [asOf]. */
     private class Read(val amount: UInt256?, val block: Long?, val asOf: Long?)

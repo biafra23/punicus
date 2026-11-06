@@ -202,12 +202,18 @@ class FollowOutbox(
         }
     }
 
-    /** One pass over what is queued; each transaction under [lock], read again inside it. */
+    /**
+     * One pass over what is queued; each transaction under [lock], read again inside it. One still
+     * marked as sending is resolved whatever the light client does: it reads nothing from the
+     * chain, and until it is resolved its bytes are in no record. The rest wait for a verified head.
+     */
     internal suspend fun round() {
         val queued = (outbox.observe().first() as? OutboxList.Loaded)?.queued.orEmpty()
         for (entry in queued) {
             if (entry.signed == null) continue
-            if (lightClient.observeStatus(entry.network).first() !is LightClientStatus.Synced) continue
+            if (!entry.sending && lightClient.observeStatus(entry.network).first() !is LightClientStatus.Synced) {
+                continue
+            }
             lock.mutex.withLock { follow(entry.accountId) }
         }
     }
@@ -287,10 +293,17 @@ class FollowOutbox(
 /**
  * Discards what [account] had queued (docs/lenient-mode.md, *The outbox*): its signed bytes are
  * deleted with it. Waits while a check of it runs ([OutboxLock]), so the check never sends what was
- * discarded. False when the outbox could not be saved, and nothing changed.
+ * discarded. False, and nothing changed, when the outbox could not be saved, and when it is marked
+ * as sending ([QueuedTransaction.sending]): its bytes may be on the network and are in no record
+ * yet, so only the follower resolves it, into a record of a transaction maybe sent.
  */
 class DiscardQueued(private val outbox: Outbox, private val lock: OutboxLock) {
-    suspend operator fun invoke(account: AccountId): Boolean = lock.mutex.withLock { outbox.remove(account) }
+    suspend operator fun invoke(account: AccountId): Boolean = lock.mutex.withLock {
+        val entry = (outbox.observe().first() as? OutboxList.Loaded)?.queued?.firstOrNull { it.accountId == account }
+            ?: return@withLock false
+        if (entry.sending) return@withLock false
+        outbox.remove(account)
+    }
 }
 
 /**
