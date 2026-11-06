@@ -2,7 +2,9 @@ package eth.serotine.ui.dappproposal
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import eth.serotine.domain.model.AccountId
 import eth.serotine.domain.model.Address
+import eth.serotine.domain.model.Network
 import eth.serotine.domain.repository.DappApproval
 import eth.serotine.domain.repository.DappConnections
 import eth.serotine.domain.repository.DappProposalId
@@ -10,6 +12,7 @@ import eth.serotine.domain.repository.DappRefusal
 import eth.serotine.domain.usecase.ApproveDappProposal
 import eth.serotine.domain.usecase.DappOffer
 import eth.serotine.domain.usecase.ObserveDappConnections
+import eth.serotine.domain.usecase.missingRequired
 import eth.serotine.domain.usecase.RejectDappProposal
 import eth.serotine.ui.components.shortAddress
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -22,9 +25,9 @@ import kotlinx.coroutines.launch
 
 /**
  * A dApp's session proposal (docs/walletconnect.md, screen D3) as display-ready values: what the
- * dApp says of itself (its claim), the chain, what it asks to do, why it can only be rejected when
- * it can, and every account, those a dApp may not be offered greyed out with the reason. [gone] once
- * the proposal is no longer waiting; [done] once answered.
+ * dApp says of itself (its claim), the networks the connection would hold, what it asks to do, why it can
+ * only be rejected when it can, and every account, those a dApp may not be offered greyed out with the
+ * reason. [gone] once the proposal is no longer waiting; [done] once answered.
  */
 data class DappProposalUiState(
     val loading: Boolean = true,
@@ -34,6 +37,13 @@ data class DappProposalUiState(
     val name: String = "",
     val url: String = "",
     val description: String = "",
+    /**
+     * The networks the connection would hold, each named with its kind of funds ("Sepolia, a test network"):
+     * those the dApp asks for, of the kind of the accounts chosen once there are some.
+     */
+    val networks: List<String> = emptyList(),
+    /** While the dApp asks for both kinds of funds and nothing is chosen: that the first account decides. */
+    val networksNote: String? = null,
     val asks: List<String> = emptyList(),
     val refusal: String? = null,
     val accounts: List<AccountOption> = emptyList(),
@@ -42,18 +52,25 @@ data class DappProposalUiState(
     /** The reason a greyed-out item gives on a tap, while it is shown. */
     val explaining: Explanation? = null,
     val done: Boolean = false,
+    /**
+     * Why Approve waits for more accounts: the networks the dApp requires that no chosen account is on, said
+     * ("This dApp requires an account on Gnosis Chain…"); null when each has one.
+     */
+    val missingRequired: String? = null,
 ) {
     /** Approve is greyed out, still tappable, while it cannot be done (owner ruling, 2026-10-18, #55). */
-    val approveUnavailable: Boolean get() = refusal != null || accounts.none { it.chosen }
+    val approveUnavailable: Boolean get() = refusal != null || accounts.none { it.chosen } || missingRequired != null
 }
 
-/** One account, [chosen] or not; [unavailable] is why a dApp may not be offered it, or null. */
+/** One account on its [network], [chosen] or not; [unavailable] is why this dApp may not be offered it, or null. */
 data class AccountOption(
     val key: String,
     val name: String,
     val address: String,
     val chosen: Boolean,
     val unavailable: String?,
+    /** Its network, by name ("Gnosis Chain"): a dApp sees an account on its network alone. */
+    val network: String = "",
 )
 
 /** What a tap on a greyed-out item says. */
@@ -90,23 +107,42 @@ class DappProposalViewModel(
             } else {
                 DappProposalUiState(loading = false, gone = true, done = local.done)
             }
+        // What is chosen and still offered on its own: each account is judged beside the others chosen. One no
+        // longer offered (its network turned off, say) counts for nothing, so it greys out no other.
+        val ticked = overview.accounts
+            .filter { keyOf(it.account.id) in local.chosen && it.offerTo(proposal) == DappOffer.OFFERED }
+            .map { it.account.id }
+        val options = overview.accounts.map { choice ->
+            val offer =
+                if (proposal.refusal != null) choice.offer else choice.offerTo(proposal, ticked - choice.account.id)
+            AccountOption(
+                key = keyOf(choice.account.id),
+                name = choice.account.label,
+                address = shortAddress(choice.account.address.hex),
+                chosen = offer == DappOffer.OFFERED && keyOf(choice.account.id) in local.chosen,
+                unavailable = offerLine(offer, choice.account.network),
+                network = choice.account.network.displayName,
+            )
+        }
+        val chosenKeys = options.filter { it.chosen }.map { it.key }.toSet()
+        val chosenKinds = overview.accounts.filter { keyOf(it.account.id) in chosenKeys }
+            .map { it.account.network.testnet }.toSet()
+        val held = Network.entries
+            .filter { it in proposal.networks && (chosenKinds.isEmpty() || it.testnet in chosenKinds) }
         DappProposalUiState(
             loading = false,
             name = proposal.dapp.name,
             url = proposal.dapp.url,
             description = proposal.dapp.description,
+            networks = held.map(::networkLine),
+            // Only while a choice can still decide: a refused proposal can only be rejected.
+            networksNote = BOTH_KINDS.takeIf { proposal.refusal == null && held.map { it.testnet }.toSet().size > 1 },
             asks = proposal.methods.sortedBy { METHOD_ORDER.indexOf(it) }.map(::methodLine),
             refusal = proposal.refusal?.let(::refusalLine),
-            accounts = overview.accounts.map { choice ->
-                AccountOption(
-                    key = accountKey(choice.account.network.chainId, choice.account.address.hex),
-                    name = choice.account.label,
-                    address = shortAddress(choice.account.address.hex),
-                    chosen = choice.offer == DappOffer.OFFERED &&
-                        accountKey(choice.account.network.chainId, choice.account.address.hex) in local.chosen,
-                    unavailable = offerLine(choice.offer),
-                )
-            },
+            accounts = options,
+            missingRequired = missingLine(
+                missingRequired(proposal, overview.accounts.map { it.account.id }.filter { keyOf(it) in chosenKeys }),
+            ),
             busy = local.busy,
             notice = local.notice ?: if (overview.accountsUnreadable) ACCOUNTS_UNREADABLE else null,
             explaining = local.explaining,
@@ -117,8 +153,13 @@ class DappProposalViewModel(
     /** Chooses or unchooses the account [key]; one a dApp may not be offered says why instead. */
     fun toggle(key: String) {
         val option = uiState.value.accounts.find { it.key == key } ?: return
+        // One chosen before it became unavailable can always be unchosen.
+        if (key in local.value.chosen) {
+            local.update { it.copy(chosen = it.chosen - key, notice = null) }
+            return
+        }
         if (option.unavailable != null) {
-            local.update { it.copy(explaining = Explanation("Not offered to dApps", option.unavailable)) }
+            local.update { it.copy(explaining = Explanation("Not offered to this dApp", option.unavailable)) }
             return
         }
         local.update { it.copy(chosen = if (key in it.chosen) it.chosen - key else it.chosen + key, notice = null) }
@@ -134,9 +175,13 @@ class DappProposalViewModel(
             local.update { it.copy(explaining = Explanation("Cannot be approved", reason)) }
             return
         }
-        val chosen = state.accounts.filter { it.chosen }.mapNotNull { Address.parse(it.key.substringAfter(':')) }
+        val chosen = state.accounts.filter { it.chosen }.mapNotNull { idOf(it.key) }
         if (chosen.isEmpty()) {
             local.update { it.copy(explaining = Explanation("Choose an account", CHOOSE_ACCOUNT)) }
+            return
+        }
+        state.missingRequired?.let { reason ->
+            local.update { it.copy(explaining = Explanation("Choose an account", reason)) }
             return
         }
         local.update { it.copy(busy = true, notice = null) }
@@ -167,6 +212,31 @@ class DappProposalViewModel(
          */
         fun accountKey(chainId: Long, address: String): String = "$chainId:$address"
 
+        private fun keyOf(id: AccountId): String = accountKey(id.network.chainId, id.address.hex)
+
+        private fun idOf(key: String): AccountId? {
+            val network = key.substringBefore(':').toLongOrNull()?.let(Network::ofChainId) ?: return null
+            return AccountId(network, Address.parse(key.substringAfter(':')) ?: return null)
+        }
+
+        /** [network] by name, with its kind of funds: Sepolia keeps its testnet warning everywhere. */
+        fun networkLine(network: Network): String =
+            if (network.testnet) "${network.displayName}, a test network" else "${network.displayName}, real funds"
+
+        /** What Approve waits for when [missing], the networks required with no chosen account, is not empty. */
+        fun missingLine(missing: Set<Network>): String? {
+            val names = Network.entries.filter { it in missing }.map { it.displayName }
+            if (names.isEmpty()) return null
+            val listed = when (names.size) {
+                1 -> names.single()
+                else -> names.dropLast(1).joinToString(", ") + " and " + names.last()
+            }
+            return "This dApp requires an account on $listed. Choose one there to approve."
+        }
+
+        const val BOTH_KINDS = "A connection holds real funds or a test network, never both: the first account " +
+            "you choose decides which."
+
         const val CHOOSE_ACCOUNT = "Choose at least one account for the dApp to see."
         const val ACCOUNTS_UNREADABLE = "Your accounts cannot be read right now, so none can be offered."
 
@@ -177,15 +247,17 @@ class DappProposalViewModel(
             "personal_sign" -> "Ask you to sign messages, such as signing in"
             "eth_signTypedData_v4" -> "Ask you to sign structured data, such as permits"
             "eth_sendTransaction" -> "Ask you to send transactions, each one reviewed here"
-            "wallet_switchEthereumChain" -> "Ask to stay on Sepolia"
+            "wallet_switchEthereumChain" -> "Ask to switch between the networks it is connected on"
             else -> method
         }
 
         fun refusalLine(refusal: DappRefusal): String = when (refusal) {
-            DappRefusal.OTHER_CHAIN -> "This dApp requires a network other than Sepolia. dApp connections are " +
-                "on Sepolia only for now, so it can only be rejected."
-            DappRefusal.NO_SEPOLIA -> "This dApp does not ask for Sepolia. dApp connections are on Sepolia only " +
-                "for now, so it can only be rejected."
+            DappRefusal.OTHER_CHAIN -> "This dApp requires a network Serotine does not connect dApps on. Only " +
+                "Ethereum, Gnosis Chain and Sepolia are, so it can only be rejected."
+            DappRefusal.MIXED_FUNDS -> "This dApp requires a test network and a network with real funds at once. " +
+                "A connection holds one or the other, never both, so it can only be rejected."
+            DappRefusal.NO_NETWORK -> "This dApp asks for none of the networks Serotine connects dApps on: " +
+                "Ethereum, Gnosis Chain and Sepolia. It can only be rejected."
             DappRefusal.METHOD -> "This dApp requires a way of signing Serotine does not offer, such as " +
                 "eth_sign, so it can only be rejected."
             DappRefusal.EVENT -> "This dApp requires notices Serotine does not send, so it can only be rejected."
@@ -193,10 +265,16 @@ class DappProposalViewModel(
                 "This dApp requires a chain that is not an Ethereum one, so it can only be rejected."
         }
 
-        fun offerLine(offer: DappOffer): String? = when (offer) {
+        /** Why an account on [network] is not offered, for [offer]; null when it is. */
+        fun offerLine(offer: DappOffer, network: Network): String? = when (offer) {
             DappOffer.OFFERED -> null
-            DappOffer.NOT_SEPOLIA -> "dApp connections are on Sepolia only for now."
-            DappOffer.SEPOLIA_OFF -> "Sepolia is off. Turn it on in Settings, under Networks."
+            DappOffer.NOT_ASKED -> "This dApp did not ask for ${network.displayName}."
+            DappOffer.OTHER_FUNDS -> if (network.testnet) {
+                "${network.displayName} is a test network. A connection holding real funds cannot include it."
+            } else {
+                "${network.displayName} holds real funds. A connection on a test network cannot include it."
+            }
+            DappOffer.NETWORK_OFF -> "${network.displayName} is off. Turn it on in Settings, under Networks."
             DappOffer.NO_KEY -> "This account is watched: there is no key for it on this device."
         }
 

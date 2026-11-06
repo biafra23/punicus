@@ -49,7 +49,7 @@ data class RequestExplanation(val title: String, val reason: String)
 
 /**
  * A dApp's request to sign (docs/walletconnect.md, screens D4 and D5) as display-ready values: who
- * asks (the dApp's claim), the account asked to sign, on Sepolia, and what: a message, field by field
+ * asks (the dApp's claim), the account asked to sign, on its network, and what: a message, field by field
  * when it is a sign-in, else as text, or as hex marked "not text"; or typed data, with what it lets
  * someone do when this app knows its struct, its domain and every field. The [warnings] to read
  * before signing, the [refusal] when it can only be refused, and the unlock. [gone] once the request
@@ -67,6 +67,8 @@ data class DappRequestUiState(
     val accountName: String? = null,
     /** The account asked to sign, EIP-55 checksummed, in full. */
     val accountAddress: String = "",
+    /** The network the request is on, with its kind of funds ("On Sepolia, a test network"). */
+    val network: String = "On Sepolia, a test network",
     /** The sign-in's fields, in the order EIP-4361 gives them; empty when the message is not a sign-in. */
     val signIn: List<SignInField> = emptyList(),
     /** The message as text, when it is text and not a sign-in shown field by field. */
@@ -180,6 +182,7 @@ class DappRequestViewModel(
             url = review.request.dapp.url,
             accountName = review.account?.label,
             accountAddress = Eip55.format(review.address),
+            network = onLine(review.request.network),
             warnings = review.warnings.sorted().map(::warningLine),
             refusal = review.refusal?.let(::refusalLine),
         )
@@ -367,20 +370,30 @@ class DappRequestViewModel(
                     "trust this dApp and understand the message."
         }
 
+        /**
+         * The network a request is on, with its kind of funds: Sepolia keeps its testnet warning. One Serotine does
+         * not serve (refused, whatever it asks) is said as such.
+         */
+        fun onLine(network: Network?): String = when {
+            network == null -> "On a network Serotine does not connect dApps on"
+            network.testnet -> "On ${network.displayName}, a test network"
+            else -> "On ${network.displayName}, real funds"
+        }
+
         fun refusalLine(refusal: DappSignRefusal): String = when (refusal) {
-            DappSignRefusal.NOT_SESSION_ACCOUNT -> "It names an account this dApp was not given."
-            DappSignRefusal.OTHER_CHAIN -> "It names a network other than Sepolia."
+            DappSignRefusal.NOT_SESSION_ACCOUNT -> "It names an account this dApp was not given on this network."
+            DappSignRefusal.OTHER_CHAIN -> "It names a network this connection does not hold."
             DappSignRefusal.NOT_IN_WALLET -> "The account is no longer in this wallet."
             DappSignRefusal.ACCOUNTS_UNREADABLE ->
                 "Your accounts cannot be read right now, so the account cannot be checked."
             DappSignRefusal.NO_KEY -> "This account is watched: there is no key for it on this device."
-            DappSignRefusal.SEPOLIA_OFF -> "Sepolia is off. Turn it on in Settings, under Networks."
+            DappSignRefusal.NETWORK_OFF -> "Its network is off. Turn it on in Settings, under Networks."
             DappSignRefusal.SAFE -> "A Safe cannot sign messages here yet: that comes with Safe messages (EIP-1271)."
             DappSignRefusal.SIGN_IN_OTHER_ADDRESS -> "The sign-in names another account than the one asked to sign it."
-            DappSignRefusal.SIGN_IN_OTHER_CHAIN -> "The sign-in names a network other than Sepolia."
+            DappSignRefusal.SIGN_IN_OTHER_CHAIN -> "The sign-in names another network than the one it is asked on."
             DappSignRefusal.SIGN_IN_EXPIRED -> "The sign-in has expired."
             DappSignRefusal.SIGN_IN_NOT_YET_VALID -> "The sign-in is not valid yet."
-            DappSignRefusal.TYPED_OTHER_CHAIN -> "The data names a network other than Sepolia."
+            DappSignRefusal.TYPED_OTHER_CHAIN -> "The data names another network than the one it is asked on."
             DappSignRefusal.PERMIT_OTHER_OWNER -> "The approval is for another account than the one asked to sign it."
             DappSignRefusal.SAFE_GAS -> "It sets a gas limit, which a Safe's transaction cannot take: the account " +
                 "that executes it sets the gas. Ask the dApp again without one, or refuse."

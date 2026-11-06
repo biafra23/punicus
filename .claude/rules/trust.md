@@ -116,8 +116,10 @@ fails the call.
 (Owner rulings, 2026-11-03, #22; docs/walletconnect.md.)
 
 - **A closed list of methods:** `eth_sendTransaction`, `personal_sign`,
-  `eth_signTypedData_v4`, and `wallet_switchEthereumChain` to Sepolia only.
-  Every other method gets an unsupported-method error.
+  `eth_signTypedData_v4`, and `wallet_switchEthereumChain` to a network the
+  session holds. Every other method gets an unsupported-method error. A
+  switch to a network outside the session, from testnet to real funds above
+  all, gets the unrecognized-chain error (owner ruling, 2026-11-05, on #22).
 - **`eth_sign` is refused in every case.** It signs a raw digest the dApp
   chose, which is what phishing asks for. A digest Serotine signs for a dApp
   is one it computed itself: EIP-191 for `personal_sign`, EIP-712 for typed
