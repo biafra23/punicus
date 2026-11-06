@@ -118,6 +118,7 @@ fun AccountsRoute(
             onSyncPastStaleAnchor = viewModel::syncPastStaleAnchor,
             onMessageShown = viewModel::messageShown,
             onToggleAmounts = viewModel::toggleAmounts,
+            onDismissLost = viewModel::dismissLost,
         )
         InterfaceMode.DETAILED -> AccountsScreen(
             state = state,
@@ -131,6 +132,7 @@ fun AccountsRoute(
             onSyncPastStaleAnchor = viewModel::syncPastStaleAnchor,
             onMessageShown = viewModel::messageShown,
             onToggleAmounts = viewModel::toggleAmounts,
+            onDismissLost = viewModel::dismissLost,
         )
     }
 }
@@ -149,7 +151,8 @@ fun AccountsRoute(
  * "Catch up anyway…" asks first, then [onSyncPastStaleAnchor] (owner's request, 2026-10-24).
  * [fabExpandedAtStart] opens the button's fan from the start (a preview). Once the list is read, the
  * eye at the top left hides or shows every amount ([onToggleAmounts]; docs/wallet-ux.md, *Hiding
- * amounts*).
+ * amounts*). What lenient mode's outbox holds is said under each network's line, and a queued
+ * transaction lost once, until [onDismissLost].
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -166,6 +169,7 @@ fun AccountsScreen(
     onSyncPastStaleAnchor: (chainId: Long) -> Unit = {},
     onMessageShown: () -> Unit = {},
     onToggleAmounts: () -> Unit = {},
+    onDismissLost: () -> Unit = {},
 ) {
     val snackbar = remember { SnackbarHostState() }
     // Said once: a network that could not be turned on.
@@ -216,6 +220,7 @@ fun AccountsScreen(
     ) { padding ->
         Column(Modifier.padding(padding).fillMaxSize()) {
             state.upgrades.forEach { UpgradeBanner(it) }
+            (state as? AccountsUiState.Ready)?.lostNotice?.let { LostQueuedNotice(it, onDismissLost) }
             (state as? AccountsUiState.Ready)?.let { ready ->
                 ready.total?.let { PortfolioTotal(it, ready.totalLabel, ready.totalNote) }
             }
@@ -416,6 +421,15 @@ private fun SectionHeader(section: NetworkSection, onCatchUp: (StaleAnchorWarnin
         }
         section.totalNote?.let {
             Text(it, style = MaterialTheme.typography.labelSmall, color = secondary)
+        }
+        // What its accounts have queued in lenient mode, under its light client's line.
+        section.queued?.let {
+            Text(
+                it,
+                Modifier.testTag(ACCOUNTS_QUEUED_TAG),
+                style = MaterialTheme.typography.labelMedium,
+                color = if (alarmed) secondary else colors.tertiary,
+            )
         }
         section.blocked?.let {
             Text(

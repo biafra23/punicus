@@ -28,6 +28,7 @@ import eth.serotine.domain.usecase.DescribeKeyStore
 import eth.serotine.domain.usecase.ObserveAccounts
 import eth.serotine.domain.usecase.ObserveCowOrder
 import eth.serotine.domain.usecase.ObserveCowOrderLife
+import eth.serotine.domain.usecase.ObserveSyncPolicy
 import eth.serotine.domain.usecase.QuoteCowCancellation
 import eth.serotine.domain.usecase.RebroadcastTransfer
 import eth.serotine.domain.usecase.SendCowCancellation
@@ -42,6 +43,7 @@ import eth.serotine.ui.FakeSigner
 import eth.serotine.ui.FakeTransactionInputs
 import eth.serotine.ui.MemoryCowOrders
 import eth.serotine.ui.MemorySentTransfers
+import eth.serotine.ui.MemorySyncPolicy
 import kotlin.test.assertFalse
 import kotlin.time.Duration.Companion.seconds
 import kotlinx.coroutines.CompletableDeferred
@@ -141,6 +143,7 @@ class CowOrderViewModelTest {
             SendCowCancellation(signer, broadcaster, sent) { now },
             RebroadcastTransfer(broadcaster, sent, FakeReceipts()),
             Network.SEPOLIA,
+            ObserveSyncPolicy(MemorySyncPolicy()),
             clock = { now },
             formatTime = { "at $it" },
         )

@@ -11,6 +11,7 @@ import eth.serotine.domain.model.DisplayCurrency
 import eth.serotine.domain.model.Network
 import eth.serotine.domain.model.SlippageTolerance
 import eth.serotine.domain.model.SwapVenue
+import eth.serotine.domain.model.SyncPolicy
 import eth.serotine.domain.model.Token
 import eth.serotine.domain.model.TransferAsset
 import eth.serotine.domain.model.UInt256
@@ -45,6 +46,7 @@ import eth.serotine.domain.usecase.KeepWaitingSwap
 import eth.serotine.domain.usecase.ObserveAccountValue
 import eth.serotine.domain.usecase.ObserveAccounts
 import eth.serotine.domain.usecase.ObserveSwapVenue
+import eth.serotine.domain.usecase.ObserveSyncPolicy
 import eth.serotine.domain.usecase.PlaceCowOrder
 import eth.serotine.domain.usecase.QuoteCowSwap
 import eth.serotine.domain.usecase.QuoteFigure
@@ -66,6 +68,10 @@ import eth.serotine.domain.usecase.WarmFeeHistory
 import eth.serotine.domain.usecase.WrapQuote
 import eth.serotine.domain.usecase.WrapQuoting
 import eth.serotine.ui.components.AssetOption
+import eth.serotine.ui.components.SWAPS_STAY_STRICT
+import eth.serotine.ui.components.WRAPS_STAY_STRICT
+import eth.serotine.ui.outbox.OPEN_QUEUED
+import eth.serotine.ui.outbox.QUEUED_FIRST
 import eth.serotine.ui.components.BalanceChange
 import eth.serotine.ui.components.Eip55
 import eth.serotine.ui.components.NATIVE_DECIMALS
@@ -200,12 +206,25 @@ class SwapViewModel(
     private val keepWaitingSwap: KeepWaitingSwap,
     private val dropWaitingSwap: DropWaitingSwap,
     private val findWaitingSwap: FindWaitingSwap,
+    /** Whether the user chose *Sign while syncing*, which a swap does not follow: its refusal says so. */
+    observeSyncPolicy: ObserveSyncPolicy,
     private val timeSource: TimeSource = TimeSource.Monotonic,
     private val formatTime: (Long) -> String = ::formatDateTime,
     private val now: () -> Long = ::epochSecondsNow,
     fill: SwapFill? = null,
     continuing: Boolean = false,
 ) : ViewModel() {
+    /** Whether lenient mode is chosen: a refusal while syncing then says the setting does not reach this. */
+    private val lenient = observeSyncPolicy().map { it == SyncPolicy.LENIENT }
+        .stateIn(viewModelScope, SharingStarted.Eagerly, false)
+
+    /** [note] in lenient mode, nothing in strict mode. */
+    private fun lenientNote(note: String): String = if (lenient.value) note else ""
+
+    /** [note] in lenient mode for a figure unavailable while syncing ([reason]), nothing otherwise. */
+    private fun lenientNote(note: String, reason: ReadUnavailable): String =
+        if (reason == ReadUnavailable.SYNCING) lenientNote(note) else ""
+
     /** The account this screen is about: its address, on its network. */
     private val from: Address = account.address
 
@@ -1062,10 +1081,7 @@ class SwapViewModel(
             when (val wrapping = askWrap(request)) {
                 WrapQuoting.NotAWrap -> Unit
                 is WrapQuoting.Quoted -> return Quoted.Wrap(wrapping.quote)
-                is WrapQuoting.EarlierMaybeSent -> return Step.Composing(
-                    error = EARLIER_MAYBE_SENT,
-                    earlier = EarlierItem(wrapping.hash, "Open the earlier transaction", waiting = false),
-                )
+                is WrapQuoting.EarlierMaybeSent -> return heldBack(wrapping.hash, wrapping.queued)
                 else -> return Step.Composing(error = wrapRefusal(wrapping, request))
             }
         }
@@ -1120,10 +1136,7 @@ class SwapViewModel(
             info = earlierSwapText(request),
             earlier = EarlierItem(approving.hash, "Open the earlier swap", waiting = true),
         )
-        is ApprovalQuoting.EarlierMaybeSent -> Step.Composing(
-            error = EARLIER_MAYBE_SENT,
-            earlier = EarlierItem(approving.hash, "Open the earlier transaction", waiting = false),
-        )
+        is ApprovalQuoting.EarlierMaybeSent -> heldBack(approving.hash, approving.queued)
         else -> Step.Composing(
             error = approvalRefusal(approving, request.sell),
             simpleError = simpleApprovalRefusal(approving, request.sell),
@@ -1174,10 +1187,7 @@ class SwapViewModel(
         )
         // Short of the allowance on a second read, after an approval read it as enough.
         is SwapQuoting.NeedsApproval -> Step.Composing(error = ALLOWANCE_MOVED)
-        is SwapQuoting.EarlierMaybeSent -> Step.Composing(
-            error = EARLIER_MAYBE_SENT,
-            earlier = EarlierItem(quoting.hash, "Open the earlier transaction", waiting = false),
-        )
+        is SwapQuoting.EarlierMaybeSent -> heldBack(quoting.hash, quoting.queued)
         else -> Step.Composing(error = swapRefusal(quoting, request), simpleError = simpleSwapRefusal(quoting))
     }
 
@@ -1189,16 +1199,23 @@ class SwapViewModel(
         )
         // Short of the allowance on a second read, after an approval read it as enough.
         is CowSwapQuoting.NeedsApproval -> Step.Composing(error = RELAYER_ALLOWANCE_MOVED)
-        is CowSwapQuoting.EarlierMaybeSent -> Step.Composing(
-            error = EARLIER_MAYBE_SENT,
-            earlier = EarlierItem(quoting.hash, "Open the earlier transaction", waiting = false),
-        )
+        is CowSwapQuoting.EarlierMaybeSent -> heldBack(quoting.hash, quoting.queued)
         else -> Step.Composing(
             error = cowRefusal(quoting, request),
             uniswapInstead = uniswapMayTake(quoting),
             liveOrder = (quoting as? CowSwapQuoting.EarlierOrderLive)?.uid?.hex,
         )
     }
+
+    /**
+     * The compose step held back by the earlier transaction [hash]: maybe sent, retried from its
+     * status; or, [queued], waiting in the outbox (lenient mode, one per account), sent or discarded
+     * first (docs/lenient-mode.md, *The outbox*). Its status is offered either way.
+     */
+    private fun heldBack(hash: String, queued: Boolean) = Step.Composing(
+        error = if (queued) QUEUED_FIRST else EARLIER_MAYBE_SENT,
+        earlier = EarlierItem(hash, if (queued) OPEN_QUEUED else "Open the earlier transaction", waiting = false),
+    )
 
     /**
      * Whether the same swap is offered on Uniswap after [quoting]: CoW itself refused it or did not
@@ -1650,8 +1667,9 @@ class SwapViewModel(
             }
             WrapQuoting.NotAToken -> NOT_A_TOKEN
             WrapQuoting.Refused -> "The light client on this device cannot quote this $verb."
-            WrapQuoting.Syncing -> "The light client is not synced yet: try again in a moment."
-            is WrapQuoting.Unavailable -> unavailableText(quoting.reason, quoting.figure)
+            WrapQuoting.Syncing -> "The light client is not synced yet: try again in a moment." + lenientNote(WRAPS_STAY_STRICT)
+            is WrapQuoting.Unavailable -> unavailableText(quoting.reason, quoting.figure) +
+                lenientNote(WRAPS_STAY_STRICT, quoting.reason)
         }
     }
 
@@ -1811,8 +1829,9 @@ class SwapViewModel(
         }
         SwapQuoting.NotAToken -> NOT_A_TOKEN
         SwapQuoting.Refused -> "The light client on this device cannot quote this swap."
-        SwapQuoting.Syncing -> "The light client is not synced yet: try again in a moment."
-        is SwapQuoting.Unavailable -> unavailableText(quoting.reason, quoting.figure)
+        SwapQuoting.Syncing -> "The light client is not synced yet: try again in a moment." + lenientNote(SWAPS_STAY_STRICT)
+        is SwapQuoting.Unavailable -> unavailableText(quoting.reason, quoting.figure) +
+            lenientNote(SWAPS_STAY_STRICT, quoting.reason)
     }
 
     /** [swapRefusal] in simple mode's words, with no block (docs/simple-ui.md); null where it names none. */
@@ -1863,8 +1882,9 @@ class SwapViewModel(
             "its transactions not mined yet can take is set aside."
         CowSwapQuoting.NotAToken -> NOT_A_TOKEN
         CowSwapQuoting.Refused -> "The light client on this device cannot quote this swap."
-        CowSwapQuoting.Syncing -> "The light client is not synced yet: try again in a moment."
-        is CowSwapQuoting.Unavailable -> unavailableText(quoting.reason, quoting.figure)
+        CowSwapQuoting.Syncing -> "The light client is not synced yet: try again in a moment." + lenientNote(SWAPS_STAY_STRICT)
+        is CowSwapQuoting.Unavailable -> unavailableText(quoting.reason, quoting.figure) +
+            lenientNote(SWAPS_STAY_STRICT, quoting.reason)
         is CowSwapQuoting.CowRefused -> when (quoting.why) {
             CowRefusal.NO_LIQUIDITY -> "CoW found no liquidity for this swap"
             CowRefusal.UNSUPPORTED_TOKEN ->
@@ -1900,8 +1920,9 @@ class SwapViewModel(
             (quoting.blockNumber?.let { " at block ${grouped(it)}" }.orEmpty()) + ". Nothing was signed."
         ApprovalQuoting.NotAToken -> "${sell.symbol}'s contract does not answer as a token."
         ApprovalQuoting.Refused -> "The light client on this device cannot quote the approval."
-        ApprovalQuoting.Syncing -> "The light client is not synced yet: try again in a moment."
-        is ApprovalQuoting.Unavailable -> unavailableText(quoting.reason, quoting.figure)
+        ApprovalQuoting.Syncing -> "The light client is not synced yet: try again in a moment." + lenientNote(SWAPS_STAY_STRICT)
+        is ApprovalQuoting.Unavailable -> unavailableText(quoting.reason, quoting.figure) +
+            lenientNote(SWAPS_STAY_STRICT, quoting.reason)
     }
 
     private fun unavailableText(reason: ReadUnavailable, figure: QuoteFigure?) =

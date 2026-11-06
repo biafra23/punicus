@@ -36,6 +36,7 @@ import eth.serotine.domain.usecase.DeploySafe
 import eth.serotine.domain.usecase.DescribeKeyStore
 import eth.serotine.domain.usecase.ObserveAccounts
 import eth.serotine.domain.usecase.ObserveEnabledNetworks
+import eth.serotine.domain.usecase.ObserveSyncPolicy
 import eth.serotine.domain.usecase.PlanSafe
 import eth.serotine.domain.usecase.QuoteSafeDeployment
 import eth.serotine.domain.usecase.RebroadcastTransfer
@@ -53,6 +54,7 @@ import eth.serotine.ui.FakeSigner
 import eth.serotine.ui.FakeTransactionInputs
 import eth.serotine.ui.MemoryNetworkSettings
 import eth.serotine.ui.MemorySentTransfers
+import eth.serotine.ui.MemorySyncPolicy
 import eth.serotine.ui.TEST_RELEASE
 import eth.serotine.ui.components.AccountChoice
 import eth.serotine.ui.components.BalanceChange
@@ -174,6 +176,7 @@ class CreateSafeViewModelTest {
             WarmFeeHistory(inputs),
             ObserveEnabledNetworks(networks),
             SetNetworkEnabled(networks),
+            ObserveSyncPolicy(MemorySyncPolicy()),
             clock,
         )
         backgroundScope.launch { viewModel.uiState.collect {} }

@@ -440,6 +440,10 @@ class SerotineApplication : Application() {
             cowApi = HttpCowApi.create(),
             cowOrders = cowOrders,
             outbox = outbox,
+            // The follower's own lock, the inputs kept for a lenient draft, and Sign while syncing.
+            outboxLock = outboxLock,
+            keptTransactionInputs = node.keptTransactionInputs,
+            syncPolicy = syncPolicy,
             swapVenue = swapVenue,
             waitingSwaps = waitingSwaps,
             debugLog = debugLog,

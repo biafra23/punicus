@@ -138,7 +138,8 @@ internal sealed interface NativeRead {
         fun of(reading: BalanceReading): NativeRead = when (reading) {
             is BalanceReading.Verified -> reading.wei.toUInt256OrNull()?.let { Before(it, reading.blockNumber) }
                 ?: NotRead(CallRefusal.Unavailable(ReadUnavailable.UNPROVEN, QuoteFigure.BALANCE))
-            // A balance last verified at an older head may have changed: nothing to quote on.
+            // A balance last verified at an older head may have changed: nothing to quote on (a
+            // lenient draft is built on it instead, and checked fresh before it is sent).
             BalanceReading.Syncing, is BalanceReading.LastKnown -> NotRead(CallRefusal.Syncing)
             is BalanceReading.Unavailable -> NotRead(CallRefusal.Unavailable(reading.reason, QuoteFigure.BALANCE))
         }
@@ -163,8 +164,11 @@ internal sealed interface CallQuoting {
  * The quote of any transaction from an account this wallet holds, the part every kind of
  * transaction shares: the sender's next nonce, the fees at a [FeeLevel], the gas it takes, the
  * transaction run as a verified call from the sender, which must not revert, and the native
- * balance it needs. Nothing is quoted on anything less than verified state. On [network] only,
- * its chain id signed into the transaction.
+ * balance it needs. Nothing is quoted on anything less than verified state: a balance last
+ * verified ([BalanceReading.LastKnown]) is refused as syncing, in either mode. In lenient mode a
+ * draft is built on the state last verified instead ([DraftTransfer]), labelled, and is sent only
+ * after the check before sending, which is this quote made again, fresh ([CheckQueued]; owner
+ * rulings, 2026-11-06). On [network] only, its chain id signed into the transaction.
  *
  * The sender's own transactions a peer took and no block has yet ([SentTransfers]) count: the
  * nonce is never below the last of them plus one, and what they may still take of the native

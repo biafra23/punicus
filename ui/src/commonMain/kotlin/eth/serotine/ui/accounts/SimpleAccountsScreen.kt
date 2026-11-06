@@ -68,7 +68,8 @@ const val ACCOUNTS_UNREACHABLE_TAG = "accounts-unreachable-"
  * down, or the Refresh button, asks [onRefresh]. Everything else is as [AccountsScreen] has it: the
  * + button, a row's tap and long-press menu, the greyed-out actions and their reasons, the upgrade
  * banners and a stale checkpoint's warning with its "Catch up anyway…", and the eye at the top left
- * that hides or shows every amount ([onToggleAmounts]).
+ * that hides or shows every amount ([onToggleAmounts]). What lenient mode's outbox holds is said
+ * per network under the freshness line, and a queued transaction lost once, until [onDismissLost].
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -86,6 +87,7 @@ fun SimpleAccountsScreen(
     onSyncPastStaleAnchor: (chainId: Long) -> Unit = {},
     onMessageShown: () -> Unit = {},
     onToggleAmounts: () -> Unit = {},
+    onDismissLost: () -> Unit = {},
 ) {
     val snackbar = remember { SnackbarHostState() }
     val message = (state as? AccountsUiState.Ready)?.message
@@ -159,12 +161,19 @@ fun SimpleAccountsScreen(
                 is AccountsUiState.Ready -> if (state.accounts.isEmpty()) {
                     Column(Modifier.fillMaxSize()) {
                         state.upgrades.forEach { UpgradeBanner(it) }
+                        state.lostNotice?.let { LostQueuedNotice(it, onDismissLost) }
                         // A damaged list set aside is said exactly when the list that follows is empty.
                         state.notice?.let { Notice(it) }
                         Box(Modifier.weight(1f).fillMaxWidth()) { NoAccounts(Modifier.align(Alignment.Center)) }
                     }
                 } else {
-                    SimpleAccountList(state, act, onTurnOnNetwork, onCatchUp = { asking = it }) { unavailable = it }
+                    SimpleAccountList(
+                        state,
+                        act,
+                        onTurnOnNetwork,
+                        onCatchUp = { asking = it },
+                        onDismissLost = onDismissLost,
+                    ) { unavailable = it }
                 }
             }
         }
@@ -177,10 +186,12 @@ private fun SimpleAccountList(
     onAccountAction: (AccountAction) -> Unit,
     onTurnOnNetwork: (Long) -> Unit,
     onCatchUp: (StaleAnchorWarning) -> Unit,
+    onDismissLost: () -> Unit,
     onUnavailable: (UnavailableNotice) -> Unit,
 ) {
     LazyColumn(Modifier.fillMaxSize().testTag(ACCOUNTS_LIST_TAG)) {
         items(state.upgrades) { UpgradeBanner(it) }
+        state.lostNotice?.let { lost -> item(key = "lost") { LostQueuedNotice(lost, onDismissLost) } }
         items(state.unreachable, key = { "unreachable/${it.chainId}" }) { Unreachable(it) }
         // A network this version can no longer follow, or that refuses a stale checkpoint: said in both views.
         items(state.sections.filter { it.blocked != null || it.staleAnchor != null }, key = { "alarm/${it.chainId}" }) {
@@ -190,6 +201,16 @@ private fun SimpleAccountList(
         val totalNote = state.simpleTotalNote ?: state.totalNote
         if (state.total != null || state.freshness != null || totalNote != null) {
             item(key = "total") { SimpleTotal(state.total, state.freshness, totalNote) }
+        }
+        // What lenient mode's outbox holds, under the freshness line: a line per network.
+        items(state.queued, key = { "queued/$it" }) { line ->
+            Text(
+                line,
+                Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp).testTag(ACCOUNTS_QUEUED_TAG),
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.tertiary,
+                textAlign = TextAlign.Center,
+            )
         }
         items(state.accounts, key = { "${it.chainId}/${it.address}" }) { account ->
             WithActionMenu(

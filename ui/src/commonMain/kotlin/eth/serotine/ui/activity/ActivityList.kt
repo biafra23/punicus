@@ -42,8 +42,9 @@ const val WAITING_STEP_TAG = "waiting-step"
  * its detail ([onOpen], by its key). Above them, a card for each swap whose next step waits for the
  * user (docs/simple-ui.md, H5): Continue opens Swap with it ([onContinue], by the token it sells), greyed
  * out unless [continueAvailable] as Swap is (a tap still goes to [onContinue], which says why), and
- * Dismiss lets it go ([onDismiss]). One item per row, so that a long history is composed as it
- * scrolls into view. While it is read, ghost rows in the rows' shape hold their room.
+ * Dismiss lets it go ([onDismiss]). Before everything, each transfer queued in lenient mode, whose
+ * tap opens its status ([onOpen] with its key). One item per row, so that a long history is
+ * composed as it scrolls into view. While it is read, ghost rows in the rows' shape hold their room.
  */
 fun LazyListScope.activityItems(
     state: ActivityUiState,
@@ -64,6 +65,10 @@ fun LazyListScope.activityItems(
             Text(state.message, color = MaterialTheme.colorScheme.error)
         }
         is ActivityUiState.Shown -> {
+            // What waits in the outbox, first whichever way the rows run: a tap opens its status.
+            items(state.queued, key = { it.key }) { row ->
+                ActivityItem(row, onClick = { onOpen(row.opens) })
+            }
             items(state.waiting, key = { "waiting-${it.sell}" }) { waiting ->
                 WaitingStepCard(
                     waiting,

@@ -129,14 +129,15 @@ internal fun ReviewButton(form: TransferForm, onReview: () -> Unit, modifier: Mo
 }
 
 /**
- * What every asset picker says under an asset's symbol: its verified balance and, if it has one,
- * its warning. The asset dropdowns of the transfer and swap forms share it, so they word the
- * verification alike.
+ * What every asset picker says under an asset's symbol: its verified balance (one last verified,
+ * offered for a lenient draft, says so) and, if it has one, its warning. The asset dropdowns of the
+ * transfer and swap forms share it, so they word the verification alike.
  */
 @Composable
 internal fun AssetBalanceLines(asset: AssetChoice) {
+    val verified = if (asset.lastKnown) "last verified" else "verified"
     Text(
-        asset.verifiedAt?.let { "${asset.balance} · verified at $it" }
+        asset.verifiedAt?.let { "${asset.balance} · $verified at $it" }
             ?: asset.age?.let { "${asset.balance} · $it" }
             ?: asset.balance,
         style = MaterialTheme.typography.bodyMedium,

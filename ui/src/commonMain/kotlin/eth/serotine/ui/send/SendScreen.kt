@@ -86,10 +86,14 @@ const val SEND_SIGN_TAG = "send-sign"
 /** Test tag of the button that opens an earlier transaction still maybe on its way, for UI tests. */
 const val SEND_EARLIER_TAG = "send-earlier"
 
+/** Test tag of a draft's line saying what it was prepared on, for UI tests. */
+const val SEND_PREPARED_ON_TAG = "send-prepared-on"
+
 /**
  * Binds [SendScreen], or in simple mode [SimpleSendScreen], to its ViewModel. A transfer broadcast
- * ends the screen through [onSent] with its hash, and [onOpenTransfer] opens the status of an
- * earlier one that may still be on its way; the screen stopping being shown becomes
+ * ends the screen through [onSent] with its hash, a lenient draft signed and queued through
+ * [onQueued] with its id, and [onOpenTransfer] opens the status of an earlier one that may still be
+ * on its way, or of the one the account has queued; the screen stopping being shown becomes
  * [SendViewModel.onHidden] (the password goes) and being shown again [SendViewModel.onShown] (the
  * review is quoted anew).
  */
@@ -102,6 +106,7 @@ fun SendRoute(
     onSent: (hash: String) -> Unit,
     onOpenTransfer: (hash: String) -> Unit,
     modifier: Modifier = Modifier,
+    onQueued: (id: String) -> Unit = onSent,
 ) {
     // Main.immediate: as on the seed screens, an edit reaches its field in the same frame.
     val state by viewModel.uiState.collectAsStateWithLifecycle(context = Dispatchers.Main.immediate)
@@ -111,6 +116,11 @@ fun SendRoute(
     val currentOnSent by rememberUpdatedState(onSent)
     LaunchedEffect(sent) {
         if (sent != null) currentOnSent(sent)
+    }
+    val queued = (state as? SendUiState.Queued)?.id
+    val currentOnQueued by rememberUpdatedState(onQueued)
+    LaunchedEffect(queued) {
+        if (queued != null) currentOnQueued(queued)
     }
     // The same state in the view the user chose (docs/simple-ui.md).
     when (LocalInterfaceMode.current) {
@@ -192,13 +202,16 @@ fun SendScreen(
     modifier: Modifier = Modifier,
 ) {
     val review = state as? SendUiState.Review
+    val draft = state as? SendUiState.DraftReview
     // In the review, back is to the compose step, until bytes may be out there: after a broadcast
     // no peer answered, only Try again may send them, so back leaves Send. While a signature
-    // runs, back waits for it: leaving would not stop it, only hide what it did.
-    val toCompose = review != null && review.notSent?.canRetry != true
-    BackHandler(enabled = review != null) {
+    // runs, back waits for it: leaving would not stop it, only hide what it did. A draft's review
+    // likewise, but nothing of it is ever out there: back is always to the compose step.
+    val toCompose = review != null && review.notSent?.canRetry != true || draft != null
+    val signing = review?.signing == true || draft?.signing == true
+    BackHandler(enabled = review != null || draft != null) {
         when {
-            review?.signing == true -> Unit
+            signing -> Unit
             toCompose -> onEdit()
             else -> onBack()
         }
@@ -208,15 +221,16 @@ fun SendScreen(
         topBar = {
             TopAppBar(
                 navigationIcon = {
-                    IconButton(onClick = if (toCompose) onEdit else onBack, enabled = review?.signing != true) {
+                    IconButton(onClick = if (toCompose) onEdit else onBack, enabled = !signing) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
                     }
                 },
                 title = {
                     Text(
                         when (state) {
-                            is SendUiState.Review -> "Review"
+                            is SendUiState.Review, is SendUiState.DraftReview -> "Review"
                             is SendUiState.Sent -> "Sent"
+                            is SendUiState.Queued -> "Queued"
                             else -> "Send"
                         },
                     )
@@ -242,6 +256,13 @@ fun SendScreen(
                     CircularProgressIndicator()
                     Text("Sent", Modifier.padding(top = 12.dp))
                 }
+                is SendUiState.Queued -> Column(
+                    Modifier.align(Alignment.Center),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                ) {
+                    CircularProgressIndicator()
+                    Text("Queued: nothing is sent until it checks out on chain", Modifier.padding(top = 12.dp))
+                }
                 is SendUiState.CannotSend -> Text(
                     state.message,
                     Modifier.align(Alignment.Center).padding(24.dp),
@@ -264,6 +285,11 @@ fun SendScreen(
                         ReviewContent(state, onRefresh, onPasswordChange, onSign, onSignWithBiometrics, onRetry)
                     is SendChrome.Simple ->
                         SimpleReviewContent(state, onRefresh, onPasswordChange, onSign, onSignWithBiometrics, onRetry)
+                }
+                is SendUiState.DraftReview -> when (chrome) {
+                    is SendChrome.Strip -> DraftReviewContent(state, onPasswordChange, onSign, onSignWithBiometrics)
+                    is SendChrome.Simple ->
+                        SimpleDraftReviewContent(state, onPasswordChange, onSign, onSignWithBiometrics)
                 }
             }
         }
@@ -320,7 +346,7 @@ private fun ComposeContent(
         state.form.error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
         state.earlier?.let { hash ->
             OutlinedButton(onClick = { onOpenTransfer(hash) }, Modifier.testTag(SEND_EARLIER_TAG)) {
-                Text("Open the earlier transaction")
+                Text(state.earlierLabel)
             }
         }
         ReviewButton(state.form, onReview, Modifier.align(Alignment.End))
@@ -472,6 +498,165 @@ private fun SimpleReviewContent(
             UnlockContent(state, onPasswordChange, onSign, onSignWithBiometrics)
         }
     }
+}
+
+/**
+ * A lenient draft's review in Detailed view (docs/lenient-mode.md, *The draft's review*): what is
+ * sent and to whom in full, from where, the most the fee can be, the nonce and the balances, each
+ * with the block it was last verified at, the balances after "if nothing changed", and in place of
+ * the verified simulation that it is not checked yet. No Refresh and no fiat value. Then the unlock,
+ * which signs and queues it.
+ */
+@Composable
+private fun DraftReviewContent(
+    state: SendUiState.DraftReview,
+    onPasswordChange: (String) -> Unit,
+    onSign: () -> Unit,
+    onSignWithBiometrics: () -> Unit,
+) {
+    Column(
+        Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+        Text("On ${state.network}", Modifier.testTag(SEND_NETWORK_TAG), style = MaterialTheme.typography.titleMedium)
+        PreparedOn(state.preparedOn)
+        Heading("You send")
+        Row(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
+            TokenIcon(state.asset.icon, state.asset.symbol, size = 40.dp)
+            SelectionContainer {
+                Text(
+                    state.amount,
+                    Modifier.testTag(SEND_AMOUNT_REVIEWED_TAG),
+                    style = MaterialTheme.typography.headlineSmall,
+                )
+            }
+        }
+        state.asset.warning?.let { Text(it, color = MaterialTheme.colorScheme.error) }
+        Heading("To")
+        RecipientCard(state.recipient)
+        Heading("From")
+        FromLine(state.from)
+        Heading("Network fee")
+        Text("At most ${state.maxFee}")
+        Note(state.feeDetail)
+        Note(state.nonce)
+        Heading("Balances, if nothing changed")
+        state.balances.forEach { change ->
+            Column {
+                Text(change.what, style = MaterialTheme.typography.labelLarge)
+                Text("${change.before} → ${change.after}")
+                Note(change.verifiedAt)
+            }
+        }
+        Text(state.notChecked, Modifier.testTag(SEND_SIMULATION_TAG), style = MaterialTheme.typography.bodyMedium)
+        state.pending?.let { Text(it, style = MaterialTheme.typography.bodySmall) }
+        HorizontalDivider()
+        DraftUnlockContent(state, onPasswordChange, onSign, onSignWithBiometrics)
+    }
+}
+
+/**
+ * A lenient draft's review in simple mode (docs/simple-ui.md, S2): as the simple review, with the
+ * line on top saying what it was prepared on, each figure's age where Detailed view names its
+ * block (the blocks under *Details*), and "Not checked yet" in place of "Checked on chain".
+ */
+@Composable
+private fun SimpleDraftReviewContent(
+    state: SendUiState.DraftReview,
+    onPasswordChange: (String) -> Unit,
+    onSign: () -> Unit,
+    onSignWithBiometrics: () -> Unit,
+) {
+    var details by rememberSaveable { mutableStateOf(false) }
+    Column(
+        Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+        Text("On ${state.network}", Modifier.testTag(SEND_NETWORK_TAG), style = MaterialTheme.typography.titleMedium)
+        PreparedOn(state.preparedOn)
+        Row(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
+            TokenIcon(state.asset.icon, state.asset.symbol, size = 40.dp)
+            SelectionContainer {
+                Text(
+                    "Send ${state.amount}",
+                    Modifier.testTag(SEND_AMOUNT_REVIEWED_TAG),
+                    style = MaterialTheme.typography.headlineSmall,
+                )
+            }
+        }
+        state.asset.warning?.let { Text(it, color = MaterialTheme.colorScheme.error) }
+        Heading("To")
+        RecipientCard(state.recipient.copy(resolvedAt = null))
+        Heading("From")
+        FromLine(state.from)
+        ReviewLine("Network fee, at most", state.maxFee)
+        Note(state.feeAge)
+        state.balances.forEach { change ->
+            ReviewLine("${change.short} after", change.after)
+            change.age?.let { Note(it) }
+        }
+        Surface(
+            Modifier.fillMaxWidth(),
+            shape = MaterialTheme.shapes.medium,
+            color = MaterialTheme.colorScheme.surfaceContainerHigh,
+        ) {
+            Text(
+                state.notChecked,
+                Modifier.padding(12.dp).testTag(SEND_SIMULATION_TAG),
+                style = MaterialTheme.typography.bodyMedium,
+            )
+        }
+        state.pending?.let { Text(it, style = MaterialTheme.typography.bodySmall) }
+        TextButton(onClick = { details = !details }, Modifier.testTag(SEND_DETAILS_TAG)) {
+            Text(if (details) "Hide details" else "Details")
+        }
+        if (details) {
+            Note(state.feeDetail)
+            Note(state.nonceAge)
+            Note(state.nonce)
+            state.balances.forEach { change ->
+                Note("${change.what}: ${change.before} → ${change.after}, ${change.verifiedAt}")
+            }
+        }
+        HorizontalDivider()
+        DraftUnlockContent(state, onPasswordChange, onSign, onSignWithBiometrics)
+    }
+}
+
+/** A draft's line on top: what it was prepared on, and that it is checked before it is sent. */
+@Composable
+private fun PreparedOn(text: String) {
+    Surface(
+        Modifier.fillMaxWidth(),
+        shape = MaterialTheme.shapes.medium,
+        color = MaterialTheme.colorScheme.tertiaryContainer,
+        contentColor = MaterialTheme.colorScheme.onTertiaryContainer,
+    ) {
+        Text(text, Modifier.padding(12.dp).testTag(SEND_PREPARED_ON_TAG), style = MaterialTheme.typography.bodyMedium)
+    }
+}
+
+/** A draft's unlock: as the review's, its button signing and queueing, never sending. */
+@Composable
+private fun DraftUnlockContent(
+    state: SendUiState.DraftReview,
+    onPasswordChange: (String) -> Unit,
+    onSign: () -> Unit,
+    onSignWithBiometrics: () -> Unit,
+) {
+    UnlockFields(
+        unlock = state.unlock,
+        signing = state.signing,
+        canSign = state.canSign,
+        canSignWithBiometrics = state.canSignWithBiometrics,
+        signLabel = "Sign and queue on ${state.network}",
+        signingLabel = "Signing and queueing…",
+        onPasswordChange = onPasswordChange,
+        onSign = onSign,
+        onSignWithBiometrics = onSignWithBiometrics,
+        passwordTag = SEND_PASSWORD_TAG,
+        signTag = SEND_SIGN_TAG,
+    )
 }
 
 /** A line of the simple review: what it is, and its value at the end. */

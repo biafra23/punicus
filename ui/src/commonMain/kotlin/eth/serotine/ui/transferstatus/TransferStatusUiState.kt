@@ -1,5 +1,6 @@
 package eth.serotine.ui.transferstatus
 
+import eth.serotine.domain.repository.FeeLevel
 import eth.serotine.ui.components.NotSentItem
 
 /**
@@ -41,7 +42,64 @@ sealed interface TransferStatusUiState {
         val notSent: NotSentItem? = null,
         val retrying: Boolean = false,
     ) : TransferStatusUiState
+
+    /**
+     * A transfer signed in lenient mode and waiting in the outbox under [id] (docs/lenient-mode.md,
+     * *The outbox*; owner rulings, 2026-11-06): what it sends ([sent]), and its [steps], a step
+     * after Signed saying where it stands: queued, waiting for the network to catch up or being
+     * checked, "Sending…", past its hour, or in conflict.
+     *
+     * - [question] past its hour without the user's tap (decision 4): "Still send this? You signed
+     *   it 2 h ago.", answered by Send now ([confirming] while that is saved).
+     * - [again] what Sign again (after a conflict) or Edit (otherwise) opens Send with, once it is
+     *   discarded; [againLabel] which of the two it is and [againNote] what it does.
+     * - [busy] why Discard and [again] wait, greyed out: its check and broadcast run ("It's being
+     *   checked and sent."); null while they can be done. [discarding] while a discard runs, which
+     *   waits for a check under way.
+     * - [error] a change that could not be saved, null otherwise.
+     */
+    data class Queued(
+        override val network: String,
+        val id: String,
+        val sent: SentSummary?,
+        val steps: List<StatusStep>,
+        val again: SendAgain?,
+        val againLabel: String,
+        val againNote: String,
+        val question: String? = null,
+        val confirming: Boolean = false,
+        val busy: String? = null,
+        val discarding: Boolean = false,
+        val error: String? = null,
+    ) : TransferStatusUiState
+
+    /**
+     * A queued transfer no longer queued: the user discarded it here ([message]: its signature was
+     * deleted, and nothing was sent), or, when the discard came, it was gone already (sent meanwhile,
+     * which its record shows once read, or discarded). [reopen], only for a transfer this discard
+     * deleted after Sign again or Edit, is what Send opens with in its place.
+     */
+    data class Discarded(
+        override val network: String,
+        val message: String,
+        val reopen: SendAgain? = null,
+    ) : TransferStatusUiState
 }
+
+/**
+ * What Send opens with for a queued transfer signed again (Sign again, Edit): the account it is from
+ * on the network of [chainId] ([from], an address), the token's contract [asset] (null: the network's
+ * currency), the recipient [to] (an address), the [amount] in the asset's units as text, and the
+ * [fee] level. Identifiers in lower case, as a route carries them.
+ */
+data class SendAgain(
+    val chainId: Long,
+    val from: String,
+    val asset: String?,
+    val to: String,
+    val amount: String,
+    val fee: FeeLevel,
+)
 
 /**
  * What was sent, from this device's record: the [amount] with its symbol, the asset's [symbol] and

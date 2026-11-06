@@ -46,6 +46,7 @@ import eth.serotine.domain.repository.Unlock
 import eth.serotine.domain.repository.prunable
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertIs
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
@@ -338,7 +339,8 @@ class LenientTransfersTest {
         follow.round()
         assertEquals(0, broadcaster.sent.size, "past its hour without a tap")
 
-        assertTrue(ConfirmQueued(outbox, lock) { now }(queued.accountId))
+        assertFalse(ConfirmQueued(outbox, lock) { now }(queued.accountId, "0x" + "00".repeat(32)), "another id")
+        assertTrue(ConfirmQueued(outbox, lock) { now }(queued.accountId, queued.id))
         follow.round()
         assertEquals(1, broadcaster.sent.size)
     }
@@ -346,8 +348,30 @@ class LenientTransfersTest {
     @Test
     fun discardingForgetsItSignedBytesAndAll() = runTest {
         val queued = queuedTenth()
-        assertTrue(DiscardQueued(outbox, OutboxLock())(queued.accountId))
+        assertEquals(QueuedDiscard.Discarded, DiscardQueued(outbox, OutboxLock())(queued.accountId, queued.id))
         assertEquals(emptyList(), outbox.queued.value)
+    }
+
+    @Test
+    fun aTransactionWhoseBroadcastRanIsNeverDiscarded() = runTest {
+        val queued = queuedTenth()
+        outbox.put(queued.copy(sending = true))
+
+        // Its broadcast may have reached the network: the follower records it as sent or maybe sent.
+        assertEquals(QueuedDiscard.BeingSent, DiscardQueued(outbox, OutboxLock())(queued.accountId, queued.id))
+        assertEquals(1, outbox.queued.value.size)
+    }
+
+    @Test
+    fun aDiscardOfAnIdNoLongerQueuedLeavesWhatIsQueuedAlone() = runTest {
+        val queued = queuedTenth()
+
+        // Sent meanwhile, or replaced by one signed since: either way, not this discard's to delete.
+        assertEquals(
+            QueuedDiscard.Gone,
+            DiscardQueued(outbox, OutboxLock())(queued.accountId, "0x" + "00".repeat(32)),
+        )
+        assertEquals(listOf(queued), outbox.queued.value)
     }
 
     @Test
@@ -430,7 +454,7 @@ class LenientTransfersTest {
         val follow = follower(broadcaster, RecordingNotifier(), lock)
         light.status.value = LightClientStatus.CatchingUp(1, 3)
         now += QUEUED_UNATTENDED_SECONDS + 1
-        assertTrue(ConfirmQueued(outbox, lock) { now }(queued.accountId))
+        assertTrue(ConfirmQueued(outbox, lock) { now }(queued.accountId, queued.id))
 
         // The light client catches up only after the tap's hour: it asks again.
         now += QUEUED_UNATTENDED_SECONDS + 1
@@ -444,7 +468,7 @@ class LenientTransfersTest {
         val queued = queuedTenth()
         outbox.put(queued.copy(sending = true))
         val lock = OutboxLock()
-        assertEquals(false, DiscardQueued(outbox, lock)(queued.accountId), "its bytes may be on the network")
+        assertEquals(QueuedDiscard.BeingSent, DiscardQueued(outbox, lock)(queued.accountId, queued.id), "it may be on the network")
         assertTrue(outbox.queued.value.single().sending)
 
         light.status.value = LightClientStatus.CatchingUp(1, 3)

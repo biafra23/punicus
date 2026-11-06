@@ -172,8 +172,10 @@ data class TransferQuote internal constructor(
  * behind its own transactions not mined yet, the fees at [FeeLevel], the gas it takes, and the
  * transfer run as a verified call from the sender, which must not revert). Nothing is quoted on
  * anything less than verified state, and an amount is in the asset's smallest unit: prices never
- * reach a transaction (CLAUDE.md, *Data sources*). On [network] only, its chain id signed into
- * the transaction.
+ * reach a transaction (CLAUDE.md, *Data sources*). A balance last verified is refused as syncing in
+ * either mode; in lenient mode the transfer is drafted on it instead ([DraftTransfer]), labelled,
+ * and this quote, made again fresh, is the check before it is sent ([CheckQueued]; owner rulings,
+ * 2026-11-06). On [network] only, its chain id signed into the transaction.
  *
  * What the sender's transfers and swaps of the same token not mined yet still move
  * ([SentTransfers]) is not this one's to move either, nor what its CoW orders may still take of it

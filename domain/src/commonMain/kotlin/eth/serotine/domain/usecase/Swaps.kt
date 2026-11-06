@@ -140,7 +140,9 @@ const val SWAP_DEADLINE_SECONDS: Long = 10 * 60
  * of its quote), the allowance the router needs, and the swap's transaction, quoted as every
  * transaction from an account held here is ([CallQuoter]) and run as a verified call that must
  * return at least the minimum. Nothing is quoted on anything less than verified state, and the
- * amount is in the sold asset's smallest unit: prices never reach a swap.
+ * amount is in the sold asset's smallest unit: prices never reach a swap. A swap stays strict in
+ * both modes: a minimum from an old quote is no minimum to sign (owner rulings, 2026-11-06;
+ * docs/lenient-mode.md, *What stays strict*).
  *
  * A token sold needs the router's allowance for the whole amount: one that falls short is
  * [SwapQuoting.NeedsApproval] (the approval is its own transaction, [QuoteTokenApproval]), and one

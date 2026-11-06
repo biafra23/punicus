@@ -18,6 +18,7 @@ import eth.serotine.domain.usecase.QuoteFigure
 import eth.serotine.domain.usecase.SafeSwapCheck
 import eth.serotine.domain.usecase.SafeTxRefusal
 import eth.serotine.domain.usecase.SwapNow
+import eth.serotine.ui.outbox.QUEUED_FIRST_SEE_ACTIVITY
 
 /**
  * What a Safe transaction does, as decoded here from its raw fields (docs/wallet-ux.md, screen
@@ -520,7 +521,8 @@ internal fun callRefusalText(refusal: CallRefusal, network: Network): String = w
     } else {
         unavailableText(refusal.reason)
     }
-    is CallRefusal.EarlierMaybeSent -> EARLIER_MAYBE_SENT
+    // Queued in lenient mode: one per account, sent or discarded first (docs/lenient-mode.md, *The outbox*).
+    is CallRefusal.EarlierMaybeSent -> if (refusal.queued) QUEUED_FIRST_SEE_ACTIVITY else EARLIER_MAYBE_SENT
 }
 
 /**

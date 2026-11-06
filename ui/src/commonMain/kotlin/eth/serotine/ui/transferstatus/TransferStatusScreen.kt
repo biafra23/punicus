@@ -24,17 +24,22 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.ListItem
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
@@ -47,9 +52,12 @@ import eth.serotine.ui.components.Blockie
 import eth.serotine.ui.components.LightClientItem
 import eth.serotine.ui.components.NotSentFields
 import eth.serotine.ui.components.TokenIcon
+import eth.serotine.ui.components.Unavailable
+import eth.serotine.ui.components.UnavailableDialog
 import eth.serotine.ui.components.UnderLightClientStrip
 import eth.serotine.ui.components.UnderLightClientStripIfAny
 import eth.serotine.ui.components.shortAddress
+import eth.serotine.ui.components.unavailable
 import eth.serotine.ui.mode.LocalInterfaceMode
 import kotlinx.coroutines.flow.StateFlow
 
@@ -68,9 +76,20 @@ const val TRANSFER_RECEIVED_TAG = "transfer-received"
 /** Test tag of the address of the Safe a deployment created, for UI tests. */
 const val TRANSFER_SAFE_TAG = "transfer-safe"
 
+/** Test tag of a queued transfer's Discard button, for UI tests. */
+const val TRANSFER_DISCARD_TAG = "transfer-discard"
+
+/** Test tag of a queued transfer's Sign again or Edit button, for UI tests. */
+const val TRANSFER_SIGN_AGAIN_TAG = "transfer-sign-again"
+
+/** Test tag of a queued transfer's Send now button, past its hour, for UI tests. */
+const val TRANSFER_SEND_NOW_TAG = "transfer-send-now"
+
 /**
  * Binds [TransferStatusScreen] to its ViewModel; Done and Back end it through [onDone], and Try
- * again is [TransferStatusViewModel.retry].
+ * again is [TransferStatusViewModel.retry]. For a transfer queued in lenient mode, Discard, Send
+ * now and Sign again (or Edit) are the ViewModel's; once Sign again or Edit has discarded it,
+ * [onSendAgain] opens Send filled in with it in this screen's place.
  */
 @Composable
 fun TransferStatusRoute(
@@ -79,18 +98,42 @@ fun TransferStatusRoute(
     lightClient: StateFlow<LightClientItem>,
     onDone: () -> Unit,
     modifier: Modifier = Modifier,
+    onSendAgain: (SendAgain) -> Unit = {},
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
+    val reopen = (state as? TransferStatusUiState.Discarded)?.reopen
+    val currentOnSendAgain by rememberUpdatedState(onSendAgain)
+    LaunchedEffect(reopen) {
+        if (reopen != null) currentOnSendAgain(reopen)
+    }
     // The same state in the view the user chose (docs/simple-ui.md): the strip in Detailed view; in simple
     // mode the same item, drawn as the sync line while it says something.
     when (LocalInterfaceMode.current) {
         InterfaceMode.SIMPLE -> {
             val strip by lightClient.collectAsStateWithLifecycle()
-            SimpleTransferStatusScreen(state, onDone, viewModel::retry, modifier, syncLine = strip)
+            SimpleTransferStatusScreen(
+                state,
+                onDone,
+                viewModel::retry,
+                modifier,
+                syncLine = strip,
+                onDiscard = viewModel::discard,
+                onSignAgain = viewModel::signAgain,
+                onConfirm = viewModel::confirm,
+            )
         }
         InterfaceMode.DETAILED -> {
             val strip by lightClient.collectAsStateWithLifecycle()
-            TransferStatusScreen(state, strip, onDone, viewModel::retry, modifier)
+            TransferStatusScreen(
+                state,
+                strip,
+                onDone,
+                viewModel::retry,
+                modifier,
+                onDiscard = viewModel::discard,
+                onSignAgain = viewModel::signAgain,
+                onConfirm = viewModel::confirm,
+            )
         }
     }
 }
@@ -100,7 +143,10 @@ fun TransferStatusRoute(
  * Signed → Broadcast → Included → Finalized, each step with its block once it has one; for one
  * maybe sent, Try again ([onRetry]), which sends the same signed bytes. [lightClient] is the
  * network's strip, Detailed view's; simple mode ([SimpleTransferStatusScreen]) draws none (null),
- * and offers its steps' blocks behind *Details* ([details]; none: no Details).
+ * and offers its steps' blocks behind *Details* ([details]; none: no Details). A transfer queued in
+ * lenient mode shows its step after Signed, with Discard ([onDiscard]), Sign again or Edit
+ * ([onSignAgain]) and, past its hour, Send now ([onConfirm]), each greyed out while its check and
+ * broadcast run, a tap saying so.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -112,6 +158,9 @@ fun TransferStatusScreen(
     modifier: Modifier = Modifier,
     details: List<String> = emptyList(),
     syncLine: LightClientItem? = null,
+    onDiscard: () -> Unit = {},
+    onSignAgain: () -> Unit = {},
+    onConfirm: () -> Unit = {},
 ) {
     Scaffold(
         modifier = modifier,
@@ -138,6 +187,15 @@ fun TransferStatusScreen(
             when (state) {
                 is TransferStatusUiState.Loading -> CircularProgressIndicator(Modifier.align(Alignment.Center))
                 is TransferStatusUiState.Shown -> Shown(state, onDone, onRetry, details)
+                is TransferStatusUiState.Queued ->
+                    QueuedContent(state, onDone, onDiscard, onSignAgain, onConfirm, details)
+                is TransferStatusUiState.Discarded -> Column(
+                    Modifier.fillMaxSize().padding(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(12.dp),
+                ) {
+                    Text(state.message, style = MaterialTheme.typography.bodyLarge)
+                    Button(onClick = onDone, modifier = Modifier.align(Alignment.End)) { Text("Done") }
+                }
             }
         }
         UnderLightClientStripIfAny(lightClient, Modifier.padding(padding), syncLine, body)
@@ -236,22 +294,7 @@ private fun Shown(state: TransferStatusUiState.Shown, onDone: () -> Unit, onRetr
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
         val sent = state.sent
-        if (sent != null) {
-            Row(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
-                TokenIcon(sent.icon, sent.symbol, size = 40.dp)
-                Text(sent.amount, style = MaterialTheme.typography.headlineSmall)
-            }
-            Row(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
-                Blockie(sent.to, size = 32.dp)
-                Column {
-                    Text("To", style = MaterialTheme.typography.labelMedium)
-                    SelectionContainer {
-                        Text(sent.to, style = MaterialTheme.typography.bodySmall, fontFamily = FontFamily.Monospace)
-                    }
-                }
-            }
-            FromRow(sent.from, "From")
-        }
+        if (sent != null) SentBlock(sent)
         val safeTx = state.safeTx
         if (safeTx != null) {
             Text(safeTx.title, style = MaterialTheme.typography.titleMedium)
@@ -323,6 +366,118 @@ private fun Shown(state: TransferStatusUiState.Shown, onDone: () -> Unit, onRetr
         SelectionContainer {
             Text(
                 state.hash,
+                Modifier.testTag(TRANSFER_HASH_TAG),
+                style = MaterialTheme.typography.bodySmall,
+                fontFamily = FontFamily.Monospace,
+            )
+        }
+        if (details.isNotEmpty()) {
+            var open by rememberSaveable { mutableStateOf(false) }
+            TextButton(onClick = { open = !open }, Modifier.testTag(TRANSFER_DETAILS_TAG)) {
+                Text(if (open) "Hide details" else "Details")
+            }
+            if (open) {
+                details.forEach {
+                    Text(
+                        it,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+            }
+        }
+        Button(onClick = onDone, modifier = Modifier.align(Alignment.End)) { Text("Done") }
+    }
+}
+
+/** A transfer: its amount, its recipient in full and the account it is from. */
+@Composable
+private fun SentBlock(sent: SentSummary) {
+    Row(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
+        TokenIcon(sent.icon, sent.symbol, size = 40.dp)
+        Text(sent.amount, style = MaterialTheme.typography.headlineSmall)
+    }
+    Row(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
+        Blockie(sent.to, size = 32.dp)
+        Column {
+            Text("To", style = MaterialTheme.typography.labelMedium)
+            SelectionContainer {
+                Text(sent.to, style = MaterialTheme.typography.bodySmall, fontFamily = FontFamily.Monospace)
+            }
+        }
+    }
+    FromRow(sent.from, "From")
+}
+
+/**
+ * A transfer queued in lenient mode (docs/wallet-ux.md, screen 9): what it sends, its steps, the
+ * question past its hour with Send now, and Sign again or Edit beside Discard, greyed out while
+ * [TransferStatusUiState.Queued.busy] says why, a tap saying so (owner ruling, 2026-10-18, #55).
+ */
+@Composable
+private fun QueuedContent(
+    state: TransferStatusUiState.Queued,
+    onDone: () -> Unit,
+    onDiscard: () -> Unit,
+    onSignAgain: () -> Unit,
+    onConfirm: () -> Unit,
+    details: List<String>,
+) {
+    var explaining by remember { mutableStateOf<String?>(null) }
+    explaining?.let { UnavailableDialog(it, state.busy.orEmpty(), onDismiss = { explaining = null }) }
+    Column(
+        Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+        state.sent?.let { SentBlock(it) }
+        Column {
+            state.steps.forEach { step -> StepRow(step) }
+        }
+        state.question?.let { question ->
+            Text(question, style = MaterialTheme.typography.titleMedium)
+            Button(
+                onClick = onConfirm,
+                enabled = !state.confirming && !state.discarding,
+                modifier = Modifier.testTag(TRANSFER_SEND_NOW_TAG),
+            ) {
+                Text(if (state.confirming) "Saving…" else "Send now")
+            }
+        }
+        state.error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
+        val busy = state.busy != null
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+            if (state.again != null) {
+                OutlinedButton(
+                    onClick = { if (busy) explaining = state.againLabel else onSignAgain() },
+                    enabled = !state.discarding,
+                    modifier = Modifier.unavailable(busy).testTag(TRANSFER_SIGN_AGAIN_TAG),
+                ) {
+                    Text(state.againLabel, color = if (busy) Unavailable.contentColor() else Color.Unspecified)
+                }
+            }
+            TextButton(
+                onClick = { if (busy) explaining = "Discard" else onDiscard() },
+                enabled = !state.discarding,
+                modifier = Modifier.unavailable(busy).testTag(TRANSFER_DISCARD_TAG),
+            ) {
+                if (state.discarding) {
+                    CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp)
+                } else {
+                    Text("Discard", color = if (busy) Unavailable.contentColor() else Color.Unspecified)
+                }
+            }
+        }
+        if (state.again != null) {
+            Text(
+                state.againNote,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+        Text("Its transaction hash, once sent", style = MaterialTheme.typography.labelMedium)
+        SelectionContainer {
+            Text(
+                state.id,
                 Modifier.testTag(TRANSFER_HASH_TAG),
                 style = MaterialTheme.typography.bodySmall,
                 fontFamily = FontFamily.Monospace,

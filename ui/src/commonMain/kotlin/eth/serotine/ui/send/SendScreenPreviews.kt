@@ -110,6 +110,147 @@ private val tokenReview = review.copy(
     unlock = UnlockStep(biometrics = true),
 )
 
+// Lenient mode (docs/lenient-mode.md): a balance last verified offered while the light client
+// catches up, and the draft's review built on it.
+
+private val etherLastVerified = AssetChoice(
+    "ETH",
+    "Ether",
+    "eth",
+    "1.25 ETH",
+    verifiedAt = "block 8,412,307",
+    age = "as of 12 min ago",
+    lastKnown = true,
+)
+
+private val usdcLastVerified = usdc.copy(age = "as of 12 min ago", lastKnown = true)
+
+private val lenientCompose = empty.with {
+    it.copy(
+        assets = listOf(etherLastVerified, usdcLastVerified),
+        asset = etherLastVerified,
+        to = SAVINGS,
+        recipient = RecipientItem(SAVINGS, label = "Savings"),
+        amount = "1.248",
+        canReview = true,
+    )
+}
+
+private val draftReview = SendUiState.DraftReview(
+    network = "Sepolia",
+    from = from,
+    amount = "0.1 ETH",
+    asset = etherLastVerified,
+    recipient = RecipientItem(SAVINGS, label = "Savings"),
+    preparedOn = "Prepared on data from 12 min ago. It's checked on chain again before it's sent.",
+    maxFee = "0.0022 ETH",
+    feeDetail = "Normal fee: 50,000 gas, the most this transfer is signed for, × at most 44 gwei, from the fee " +
+        "history last verified up to block 8,412,300. Only the gas used, at what the block charges, is paid.",
+    feeAge = "Fees as of 13 min ago",
+    nonce = "Nonce 7, after this account's count of mined transactions last verified at block 8,412,301",
+    nonceAge = "Nonce 7, counted as of 13 min ago",
+    balances = listOf(
+        BalanceChange(
+            "ETH balance",
+            "1.25 ETH",
+            "at least 1.1478 ETH, if nothing changed",
+            "last verified at block 8,412,307",
+            age = "as of 12 min ago",
+        ),
+    ),
+    unlock = UnlockStep(),
+)
+
+private val tokenDraftReview = draftReview.copy(
+    amount = "40 USDC",
+    asset = usdcLastVerified,
+    recipient = RecipientItem(FRIEND),
+    maxFee = "0.0044 ETH",
+    feeDetail = "Fast fee: 100,000 gas, the most this transfer is signed for, × at most 44 gwei, from the fee " +
+        "history last verified up to block 8,412,300. Only the gas used, at what the block charges, is paid.",
+    balances = listOf(
+        BalanceChange(
+            "USDC balance",
+            "250 USDC",
+            "210 USDC, if nothing changed",
+            "last verified at block 8,412,305",
+            age = "as of 12 min ago",
+        ),
+        BalanceChange(
+            "ETH balance, which pays the fee",
+            "1.25 ETH",
+            "at least 1.2456 ETH, if nothing changed",
+            "last verified at block 8,412,307",
+            short = "ETH balance",
+            age = "as of 12 min ago",
+        ),
+    ),
+    unlock = UnlockStep(biometrics = true),
+)
+
+@Preview
+@Composable
+private fun SendComposeLenientPreview() = SendPreview(lenientCompose, lightClient = catchingUpStripSample)
+
+@Preview
+@Composable
+private fun SendComposeDraftWaitsPreview() = SendPreview(
+    lenientCompose.with {
+        it.copy(
+            error = "The light client is still syncing, and this account's count of transactions, which its next " +
+                "nonce comes from, has never been verified on this device, so nothing can be prepared from it " +
+                "yet. The review waits for the light client to catch up.",
+        )
+    },
+    lightClient = catchingUpStripSample,
+)
+
+@Preview
+@Composable
+private fun SendComposeQueuedFirstPreview() = SendPreview(
+    lenientCompose.with {
+        it.copy(error = "A transaction from this account is waiting to be sent. Send or discard it first.")
+    }.copy(earlier = "0x" + "9a".repeat(32), earlierLabel = "Open the transaction waiting to be sent"),
+    lightClient = catchingUpStripSample,
+)
+
+@Preview
+@Composable
+private fun SendDraftReviewPreview() = SendPreview(
+    draftReview.copy(unlock = UnlockStep(WalletPassword("made-up preview password"))),
+    lightClient = catchingUpStripSample,
+)
+
+@Preview
+@Composable
+private fun SendDraftReviewDarkPreview() =
+    SendPreview(draftReview, darkTheme = true, lightClient = catchingUpStripSample)
+
+@Preview
+@Composable
+private fun SendDraftReviewTokenPreview() = SendPreview(tokenDraftReview, lightClient = catchingUpStripSample)
+
+@Preview
+@Composable
+private fun SendDraftReviewSigningPreview() =
+    SendPreview(draftReview.copy(signing = true), lightClient = catchingUpStripSample)
+
+@Preview
+@Composable
+private fun SendDraftReviewNotKeptPreview() = SendPreview(
+    draftReview.copy(
+        unlock = UnlockStep(
+            error = "Signed, but the outbox could not keep it, so the signature was dropped: nothing was queued " +
+                "or sent. Try again.",
+        ),
+    ),
+    lightClient = catchingUpStripSample,
+)
+
+@Preview
+@Composable
+private fun SendQueuedPreview() = SendPreview(SendUiState.Queued("Sepolia", "0x" + "9a".repeat(32)))
+
 @Composable
 private fun SendPreview(
     state: SendUiState,
@@ -370,4 +511,13 @@ internal val sendScreenPreviews: List<ScreenPreview> = listOf(
     ScreenPreview("loading") { SendLoadingPreview() },
     ScreenPreview("watch-only") { SendWatchOnlyPreview() },
     ScreenPreview("sent") { SendSentPreview() },
+    ScreenPreview("compose-lenient-last-verified") { SendComposeLenientPreview() },
+    ScreenPreview("compose-draft-waits") { SendComposeDraftWaitsPreview() },
+    ScreenPreview("compose-queued-first") { SendComposeQueuedFirstPreview() },
+    ScreenPreview("draft-review") { SendDraftReviewPreview() },
+    ScreenPreview("draft-review-dark") { SendDraftReviewDarkPreview() },
+    ScreenPreview("draft-review-token") { SendDraftReviewTokenPreview() },
+    ScreenPreview("draft-review-not-kept") { SendDraftReviewNotKeptPreview() },
+    ScreenPreview("draft-review-signing") { SendDraftReviewSigningPreview() },
+    ScreenPreview("queued") { SendQueuedPreview() },
 )

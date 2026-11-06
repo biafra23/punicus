@@ -23,6 +23,7 @@ import eth.serotine.domain.repository.Signing
 import eth.serotine.domain.repository.Simulation
 import eth.serotine.domain.usecase.DescribeKeyStore
 import eth.serotine.domain.usecase.ObserveDappMessages
+import eth.serotine.domain.usecase.ObserveSyncPolicy
 import eth.serotine.domain.usecase.ProposeDappSafeTx
 import eth.serotine.domain.usecase.QuoteDappTransaction
 import eth.serotine.domain.usecase.RefuseDappRequest
@@ -40,6 +41,7 @@ import eth.serotine.ui.FakeTokenCatalog
 import eth.serotine.ui.FakeTransactionInputs
 import eth.serotine.ui.MemoryNetworkSettings
 import eth.serotine.ui.MemorySentTransfers
+import eth.serotine.ui.MemorySyncPolicy
 import eth.serotine.ui.SafeWorld
 import eth.serotine.ui.components.STALE_QUOTE
 import kotlinx.coroutines.Dispatchers
@@ -118,6 +120,7 @@ class DappTransactionViewModelTest {
             SignDappSafeTx(requests) { SignSafeTx(signer, safes.observeSafe, safes.recovery, safes.queue, it) },
             RefuseDappRequest(requests, accounts, networks, clock = { now }),
             DescribeKeyStore(FakeKeys()),
+            observeSyncPolicy = ObserveSyncPolicy(MemorySyncPolicy()),
             clock = { now },
             timeSource = clock,
             ticks = kotlinx.coroutines.flow.flowOf(Unit),

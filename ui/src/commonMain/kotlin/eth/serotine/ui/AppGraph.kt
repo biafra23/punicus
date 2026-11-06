@@ -42,6 +42,8 @@ import eth.serotine.domain.repository.LogIndex
 import eth.serotine.domain.repository.NftContracts
 import eth.serotine.domain.repository.NameResolver
 import eth.serotine.domain.repository.NativeBalances
+import eth.serotine.domain.repository.KeptTransactionInputs
+import eth.serotine.domain.repository.SyncPolicySetting
 import eth.serotine.domain.repository.NetworkFreshness
 import eth.serotine.domain.repository.NetworkSettings
 import eth.serotine.domain.repository.NetworkUpgrades
@@ -66,17 +68,21 @@ import eth.serotine.domain.repository.UniswapV3Chain
 import eth.serotine.domain.repository.UserTokens
 import eth.serotine.domain.repository.BlockTransactions
 import eth.serotine.domain.repository.WalletHandoff
+import eth.serotine.domain.usecase.AcknowledgeLostOutbox
 import eth.serotine.domain.usecase.AddOnNetworks
 import eth.serotine.domain.usecase.AddToken
 import eth.serotine.domain.usecase.ApproveSafeTxOnChain
 import eth.serotine.domain.usecase.CheckSafeSwap
 import eth.serotine.domain.usecase.ChooseSwapVenue
 import eth.serotine.domain.usecase.ClearDebugLog
+import eth.serotine.domain.usecase.ConfirmQueued
 import eth.serotine.domain.usecase.CowOfferedOnThisDevice
 import eth.serotine.domain.usecase.DeploySafe
 import eth.serotine.domain.usecase.DeriveAccount
 import eth.serotine.domain.usecase.DescribeKeyStore
 import eth.serotine.domain.usecase.DisableBiometricUnlock
+import eth.serotine.domain.usecase.DiscardQueued
+import eth.serotine.domain.usecase.DraftTransfer
 import eth.serotine.domain.usecase.DropWaitingSwap
 import eth.serotine.domain.usecase.EnableBiometricUnlock
 import eth.serotine.domain.usecase.EncodeSigningRequest
@@ -112,6 +118,7 @@ import eth.serotine.domain.usecase.ObserveLightClient
 import eth.serotine.domain.usecase.ObserveNativeBalance
 import eth.serotine.domain.usecase.ObserveNetworkLive
 import eth.serotine.domain.usecase.ObserveNetworkOverview
+import eth.serotine.domain.usecase.ObserveOutbox
 import eth.serotine.domain.usecase.ObservePortfolio
 import eth.serotine.domain.usecase.ObserveSafe
 import eth.serotine.domain.usecase.ObserveSafeHistory
@@ -120,6 +127,7 @@ import eth.serotine.domain.usecase.ObserveSafes
 import eth.serotine.domain.usecase.ObserveSentToAddresses
 import eth.serotine.domain.usecase.ObserveSentTransfer
 import eth.serotine.domain.usecase.ObserveSwapVenue
+import eth.serotine.domain.usecase.ObserveSyncPolicy
 import eth.serotine.domain.usecase.ObserveTokenHoldings
 import eth.serotine.domain.usecase.ObserveTokenMetadata
 import eth.serotine.domain.usecase.AddNft
@@ -133,7 +141,9 @@ import eth.serotine.domain.usecase.PlaceCowOrder
 import eth.serotine.domain.usecase.PlanSafe
 import eth.serotine.domain.usecase.ProposeSafeSettingsChange
 import eth.serotine.domain.usecase.ProposeSafeSwap
+import eth.serotine.domain.usecase.OutboxLock
 import eth.serotine.domain.usecase.ProposeSafeTx
+import eth.serotine.domain.usecase.QueueTransfer
 import eth.serotine.domain.usecase.QuoteCowCancellation
 import eth.serotine.domain.usecase.QuoteCowSwap
 import eth.serotine.domain.usecase.QuoteSafeApproval
@@ -162,6 +172,7 @@ import eth.serotine.domain.usecase.SetDebugScreen
 import eth.serotine.domain.usecase.SetDisplayCurrency
 import eth.serotine.domain.usecase.SetInterfaceMode
 import eth.serotine.domain.usecase.SetNetworkEnabled
+import eth.serotine.domain.usecase.SetSyncPolicy
 import eth.serotine.domain.usecase.SetTokenHidden
 import eth.serotine.domain.usecase.SignSafeTx
 import eth.serotine.domain.usecase.SyncPastStaleAnchor
@@ -207,6 +218,7 @@ import eth.serotine.ui.safesettings.SafeSettingsViewModel
 import eth.serotine.ui.safeswap.SafeSwapViewModel
 import eth.serotine.ui.safetx.SafeTxViewModel
 import eth.serotine.ui.security.SecurityViewModel
+import eth.serotine.ui.send.SendFill
 import eth.serotine.ui.send.SendViewModel
 import eth.serotine.ui.settings.SettingsViewModel
 import eth.serotine.ui.swap.SwapFill
@@ -321,6 +333,18 @@ class AppGraph(
      * from. Every quote from an account with something queued is held back by it.
      */
     private val outbox: Outbox,
+    /**
+     * The one lock the outbox's follower and the user's changes to it (a discard, Still send this?, a
+     * new draft queued) share: the host's, beside [outbox], handed to its `FollowOutbox` too.
+     */
+    private val outboxLock: OutboxLock,
+    /**
+     * The transaction inputs the light client verified last, kept across restarts (the account's
+     * mined count, the network's fee quote): what a lenient draft is built on (docs/lenient-mode.md).
+     */
+    private val keptTransactionInputs: KeptTransactionInputs,
+    /** The policy the user chose in Settings → Advanced → *Sign while syncing*: strict by default. */
+    private val syncPolicy: SyncPolicySetting,
     /** The venue the user last chose on Swap, compose, which the next swap starts at. */
     private val swapVenue: SwapVenueSetting,
     /** The swaps whose next step waits for the user, which the account's Activity offers with Continue. */
@@ -387,6 +411,8 @@ class AppGraph(
             ObserveNetworkLive(networkFreshness),
             ObserveAmountsHidden(amountsHidden),
             toggleAmountsHidden,
+            ObserveOutbox(outbox),
+            AcknowledgeLostOutbox(outbox),
             offerHandoff = OfferHandoff(walletHandoff),
         )
 
@@ -546,8 +572,11 @@ class AppGraph(
         network,
     )
 
-    /** Send from the account at [from], with the token at [asset] chosen (null: the network's currency). */
-    fun sendViewModel(from: AccountId, asset: Address?): SendViewModel = SendViewModel(
+    /**
+     * Send from the account at [from], with the token at [asset] chosen (null: the network's currency),
+     * opened with [fill] filled in when given: a queued transfer signed again (docs/lenient-mode.md).
+     */
+    fun sendViewModel(from: AccountId, asset: Address?, fill: SendFill? = null): SendViewModel = SendViewModel(
         from,
         asset,
         ObserveAccounts(accounts),
@@ -568,6 +597,20 @@ class AppGraph(
         SendTransfer(signer, broadcaster, sentTransfers),
         RebroadcastTransfer(broadcaster, sentTransfers, receipts),
         WarmFeeHistory(transactionInputs),
+        ObserveSyncPolicy(syncPolicy),
+        ObserveEnabledNetworks(networkSettings),
+        DraftTransfer(
+            keptTransactionInputs,
+            nativeBalances,
+            tokenBalances,
+            sentTransfers,
+            cowOrders,
+            cowChain,
+            outbox,
+            from.network,
+        ),
+        QueueTransfer(signer, outbox, outboxLock),
+        fill = fill,
     )
 
     /**
@@ -637,6 +680,7 @@ class AppGraph(
         KeepWaitingSwap(waitingSwaps),
         DropWaitingSwap(waitingSwaps),
         FindWaitingSwap(waitingSwaps),
+        ObserveSyncPolicy(syncPolicy),
         fill = fill,
         continuing = continuing,
     )
@@ -663,15 +707,25 @@ class AppGraph(
         SendCowCancellation(signer, broadcaster, sentTransfers),
         RebroadcastTransfer(broadcaster, sentTransfers, receipts),
         network,
+        ObserveSyncPolicy(syncPolicy),
     )
 
-    /** Where the transfer [hash] on [network] stands, and for a Safe it deployed, where its listing does. */
+    /**
+     * Where the transfer [hash] on [network] stands, and for a Safe it deployed, where its listing does;
+     * while [hash] names a transfer queued in lenient mode, that one, with Discard, Sign again and Still
+     * send this? under the outbox's one lock.
+     */
     fun transferStatusViewModel(network: Network, hash: String): TransferStatusViewModel = TransferStatusViewModel(
         hash,
         ObserveSentTransfer(sentTransfers, receipts, transactionHistory),
         ObserveAccounts(accounts),
         RebroadcastTransfer(broadcaster, sentTransfers, receipts),
         network,
+        ObserveOutbox(outbox),
+        ObserveLightClient(lightClient),
+        ObserveEnabledNetworks(networkSettings),
+        DiscardQueued(outbox, outboxLock),
+        ConfirmQueued(outbox, outboxLock),
     )
 
     /**
@@ -687,6 +741,7 @@ class AppGraph(
         ObserveSentToAddresses(transactionHistory),
         ObserveAccountCowOrders(cowOrders),
         ObserveWaitingSwaps(waitingSwaps),
+        ObserveOutbox(outbox),
     )
 
     /**
@@ -721,6 +776,7 @@ class AppGraph(
         WarmFeeHistory(transactionInputs),
         ObserveEnabledNetworks(networkSettings),
         SetNetworkEnabled(networkSettings),
+        ObserveSyncPolicy(syncPolicy),
     )
 
     /** Add on another network (docs/networks.md, N6), for the EOA [account]. */
@@ -773,6 +829,9 @@ class AppGraph(
             ObserveInterfaceMode(interfaceMode),
             SetInterfaceMode(interfaceMode),
             ObserveNetworkLive(networkFreshness),
+            ObserveSyncPolicy(syncPolicy),
+            SetSyncPolicy(syncPolicy),
+            ObserveOutbox(outbox),
         )
 
     /** Whether the bottom bar shows the Debug tab: one for the app, in the host's scope. */
@@ -838,6 +897,7 @@ class AppGraph(
         SignDappSafeTx(dappRequests, ::signSafeTx),
         RefuseDappRequest(dappRequests, accounts, networkSettings),
         DescribeKeyStore(keys),
+        ObserveSyncPolicy(syncPolicy),
     )
 
     /** The review of the request [requestKey] names (`topic/id`, as its route carries it): screen D4. */

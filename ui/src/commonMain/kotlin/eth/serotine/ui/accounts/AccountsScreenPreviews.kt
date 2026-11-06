@@ -598,6 +598,31 @@ private fun AccountsSendNeedsNetworkPreview() = SerotineTheme {
     )
 }
 
+/** Lenient mode: a transfer queued from Sepolia while it catches up, said under its line. */
+private val queuedWhileCatchingUp = catchingUp.copy(
+    sections = catchingUp.sections.map {
+        it.copy(queued = "1 waiting to send · Keep Serotine open to send it sooner")
+    },
+)
+
+@Preview
+@Composable
+private fun AccountsQueuedPreview() = AccountsPreview(queuedWhileCatchingUp)
+
+@Preview
+@Composable
+private fun AccountsQueuedDarkPreview() = AccountsPreview(queuedWhileCatchingUp, darkTheme = true)
+
+/** A queued transaction's sealed bytes could not be opened (the seal key gone): said once, until dismissed. */
+@Preview
+@Composable
+private fun AccountsLostQueuedPreview() = AccountsPreview(
+    withAccounts.copy(
+        lostNotice = "A transaction waiting to be sent was lost: the key that sealed it on this device is gone " +
+            "(the key store was reset, or the app was restored on another device). Nothing was sent. Sign it " +
+            "again from Send if you still want to send it.",
+    ),
+)
 /** Every preview above, which AccountsScreenPreviewsTest renders: a new preview goes in here too. */
 internal val accountsScreenPreviews: List<ScreenPreview> = listOf(
     ScreenPreview("accounts") { AccountsAccountsPreview() },
@@ -632,4 +657,7 @@ internal val accountsScreenPreviews: List<ScreenPreview> = listOf(
     ScreenPreview("stale-anchor-dialog") { AccountsStaleAnchorDialogPreview() },
     ScreenPreview("hidden") { AccountsHiddenPreview() },
     ScreenPreview("hidden-dark") { AccountsHiddenDarkPreview() },
+    ScreenPreview("queued") { AccountsQueuedPreview() },
+    ScreenPreview("queued-dark") { AccountsQueuedDarkPreview() },
+    ScreenPreview("lost-queued") { AccountsLostQueuedPreview() },
 )

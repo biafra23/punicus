@@ -53,12 +53,19 @@ const val SETTINGS_DETAILED_VIEW_TAG = "settings-detailed-view"
 /** Test tag of the Debug tab's row, for UI tests. */
 const val SETTINGS_DEBUG_SCREEN_TAG = "settings-debug-screen"
 
+/** Test tag of *Sign while syncing*'s row, for UI tests. */
+const val SETTINGS_SIGN_WHILE_SYNCING_TAG = "settings-sign-while-syncing"
+
 /**
  * What a tap on Connected dApps says in a build without a WalletConnect project ID
  * (docs/walletconnect.md, ruling 2).
  */
 internal const val CONNECTIONS_OFF =
     "This build has dApp connections switched off: it was built without a WalletConnect project ID."
+
+/** What *Sign while syncing* does, the line under its switch (docs/lenient-mode.md, *The setting*). */
+internal const val SIGN_WHILE_SYNCING = "Prepare and sign transactions before the light client has caught up. " +
+    "They wait to be sent until they check out on chain. If something changed, you're asked to sign again."
 
 /** Test tag of a network's row, followed by its chain id, for UI tests. */
 const val SETTINGS_NETWORK_TAG = "settings-network-"
@@ -92,6 +99,7 @@ fun SettingsRoute(
             onDetailedViewChange = viewModel::showDetailedView,
             onConnections = onConnections,
             connectionsOff = connectionsOff,
+            onSignWhileSyncingChange = viewModel::signWhileSyncing,
         )
         InterfaceMode.DETAILED -> SettingsScreen(
             state,
@@ -108,6 +116,7 @@ fun SettingsRoute(
             onDetailedViewChange = viewModel::showDetailedView,
             onConnections = onConnections,
             connectionsOff = connectionsOff,
+            onSignWhileSyncingChange = viewModel::signWhileSyncing,
         )
     }
 }
@@ -121,7 +130,8 @@ fun SettingsRoute(
  * build, a switch allows screen recordings of the protected screens through [onScreenCaptureChange].
  * Each network's switch turns it on or off through [onNetworkChange] (its chain id, and whether
  * on); the confirmation before a network with accounts is turned off answers through
- * [onConfirmTurnOff] and [onCancelTurnOff] (docs/networks.md, N16 and N20).
+ * [onConfirmTurnOff] and [onCancelTurnOff] (docs/networks.md, N16 and N20). *Sign while syncing*
+ * turns lenient mode on or off through [onSignWhileSyncingChange] (docs/lenient-mode.md).
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -140,6 +150,7 @@ fun SettingsScreen(
     onDetailedViewChange: (Boolean) -> Unit = {},
     onConnections: () -> Unit = {},
     connectionsOff: Boolean = false,
+    onSignWhileSyncingChange: (Boolean) -> Unit = {},
 ) {
     var asking by remember { mutableStateOf<StaleAnchorWarning?>(null) }
     var explainingConnections by remember { mutableStateOf(false) }
@@ -286,6 +297,27 @@ fun SettingsScreen(
                     trailingContent = { Switch(checked = debugScreen, onCheckedChange = null) },
                 )
             }
+            ListItem(
+                modifier = Modifier
+                    .toggleable(
+                        value = state.signWhileSyncing,
+                        role = Role.Switch,
+                        onValueChange = onSignWhileSyncingChange,
+                    )
+                    .testTag(SETTINGS_SIGN_WHILE_SYNCING_TAG),
+                headlineContent = { Text("Sign while syncing") },
+                supportingContent = {
+                    Column {
+                        Text(SIGN_WHILE_SYNCING)
+                        state.signWhileSyncingNote?.let { Text(it) }
+                        if (state.signWhileSyncingNotSaved) {
+                            Text("The change could not be saved.", color = MaterialTheme.colorScheme.error)
+                        }
+                    }
+                },
+                // The row is the toggle: the switch only shows its state.
+                trailingContent = { Switch(checked = state.signWhileSyncing, onCheckedChange = null) },
+            )
             state.screenCaptureAllowed?.let { allowed ->
                 Section("Debug build")
                 ListItem(

@@ -201,6 +201,33 @@ private fun SettingsStaleAnchorPreview() = SettingsPreview(
 @Composable
 private fun SettingsConnectionsOffPreview() = SettingsPreview(synced, connectionsOff = true)
 
+/** Lenient mode on: Settings → Advanced → Sign while syncing (docs/lenient-mode.md, *The setting*). */
+@Preview
+@Composable
+private fun SettingsSignWhileSyncingPreview() = SettingsPreview(synced.copy(signWhileSyncing = true))
+
+@Preview
+@Composable
+private fun SettingsSignWhileSyncingDarkPreview() =
+    SettingsPreview(synced.copy(signWhileSyncing = true), darkTheme = true)
+
+/** On with a transaction queued: turning it off leaves that queued (decision 10). */
+@Preview
+@Composable
+private fun SettingsSignWhileSyncingQueuedPreview() = SettingsPreview(
+    synced.copy(
+        signWhileSyncing = true,
+        signWhileSyncingNote = "Turning it off leaves what is queued in place: the transaction waiting to be sent " +
+            "stays queued, checked and sent, or discarded by you.",
+    ),
+)
+
+/** A switch of it that could not be saved. */
+@Preview
+@Composable
+private fun SettingsSignWhileSyncingNotSavedPreview() =
+    SettingsPreview(synced.copy(signWhileSyncingNotSaved = true))
+
 /** Every preview above, which SettingsScreenPreviewsTest renders: a new preview goes in here too. */
 internal val settingsScreenPreviews: List<ScreenPreview> = listOf(
     ScreenPreview("synced") { SettingsSyncedPreview() },
@@ -220,4 +247,8 @@ internal val settingsScreenPreviews: List<ScreenPreview> = listOf(
     ScreenPreview("detailed-view") { SettingsDetailedViewPreview() },
     ScreenPreview("detailed-view-not-saved") { SettingsDetailedViewNotSavedPreview() },
     ScreenPreview("connections-off") { SettingsConnectionsOffPreview() },
+    ScreenPreview("sign-while-syncing") { SettingsSignWhileSyncingPreview() },
+    ScreenPreview("sign-while-syncing-dark") { SettingsSignWhileSyncingDarkPreview() },
+    ScreenPreview("sign-while-syncing-queued") { SettingsSignWhileSyncingQueuedPreview() },
+    ScreenPreview("sign-while-syncing-not-saved") { SettingsSignWhileSyncingNotSavedPreview() },
 )

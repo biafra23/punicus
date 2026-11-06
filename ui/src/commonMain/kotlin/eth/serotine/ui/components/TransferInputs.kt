@@ -29,7 +29,11 @@ import kotlin.time.Duration.Companion.seconds
 // resolved, the amount typed in token units, and what the form says about each. Pure: each
 // ViewModel keeps its own inputs and its own steps, and draws its form from these.
 
-/** An asset the account can send, with what the form shows of it. */
+/**
+ * An asset the account can send, with what the form shows of it. [lastKnown] when its [balance] is
+ * the one the light client verified last, at an older head, which only a lenient draft is built on
+ * (docs/lenient-mode.md, *What a draft is built on*): it has no value in the display currency.
+ */
 internal data class AssetOption(
     val asset: TransferAsset,
     val symbol: String,
@@ -43,6 +47,7 @@ internal data class AssetOption(
     val provenAt: Long?,
     val valuation: Valuation?,
     val warning: String?,
+    val lastKnown: Boolean = false,
 ) {
     /** The token's contract, null for the network's currency. */
     val contract: Address?
@@ -57,47 +62,62 @@ internal data class AssetOption(
         contract = contract?.let(Eip55::format),
         verifiedAt = verifiedAt,
         warning = warning,
-        age = provenAt?.let { at -> now?.let { "updated ${agoText(at, it)}" } },
+        age = when {
+            // Last verified: labelled as such, whether its time is known or not.
+            lastKnown -> now?.let { at -> provenAt?.let { "as of ${agoText(it, at)}" } ?: "last verified earlier" }
+            else -> provenAt?.let { at -> now?.let { "updated ${agoText(at, it)}" } }
+        },
+        lastKnown = lastKnown,
     )
 }
 
 /**
  * The network's currency and every token the account holds, as [value] reads them, and the token
  * [chosen] whatever its balance says: it was asked for, and its row says what is known of it. With
- * [everyToken], every token the wallet lists, held or not: what a swap may buy.
+ * [everyToken], every token the wallet lists, held or not: what a swap may buy. With [lastKnown]
+ * (lenient mode, on a network that is on), a balance last verified is offered too, a token's while
+ * it was held, labelled as such and with no value in the display currency: a price is never shown
+ * last known (docs/lenient-mode.md, *What a draft is built on*). Without it, such a balance is not
+ * one to send from.
  */
 internal fun assetOptions(
     value: AccountValue,
     chosen: Address?,
     network: Network,
     everyToken: Boolean = false,
+    lastKnown: Boolean = false,
 ): List<AssetOption> {
     val native = value.native
+    val nativeKnown = (native as? BalanceReading.LastKnown)?.takeIf { lastKnown }
     val nativeOption = AssetOption(
         asset = TransferAsset.Native,
         symbol = network.nativeSymbol,
         name = network.nativeName,
         icon = network.nativeIcon,
         decimals = NATIVE_DECIMALS,
-        balance = (native as? BalanceReading.Verified)?.wei?.toUInt256OrNull(),
-        // A balance last verified at an older head is not one to send from: it may have changed.
+        balance = (native as? BalanceReading.Verified)?.wei?.toUInt256OrNull()
+            ?: nativeKnown?.wei?.toUInt256OrNull(),
+        // A balance last verified at an older head is not one to send from, but in a lenient
+        // draft: it may have changed.
         balanceText = when (native) {
             null -> CHECKING
-            is BalanceReading.LastKnown -> SYNCING
+            is BalanceReading.LastKnown -> if (nativeKnown != null) balanceText(native, network) else SYNCING
             else -> balanceText(native, network)
         },
-        verifiedAt = (native as? BalanceReading.Verified)?.let { block(it.blockNumber) },
-        provenAt = (native as? BalanceReading.Verified)?.provenAt,
-        valuation = value.nativeValue,
+        verifiedAt = (native as? BalanceReading.Verified)?.let { block(it.blockNumber) }
+            ?: nativeKnown?.let { block(it.blockNumber) },
+        provenAt = (native as? BalanceReading.Verified)?.provenAt ?: nativeKnown?.asOf,
+        valuation = value.nativeValue.takeIf { nativeKnown == null },
         warning = null,
+        lastKnown = nativeKnown != null,
     )
     val tokens = value.tokens.mapNotNull { (holding, valuation) ->
         val token = holding.token
         val reading = holding.reading
         val verified = reading as? TokenBalanceReading.Verified
-        if (!everyToken && token.address != chosen && (verified == null || verified.units.isZero)) {
-            return@mapNotNull null
-        }
+        val known = (reading as? TokenBalanceReading.LastKnown)?.takeIf { lastKnown }
+        val held = verified?.units?.isZero == false || known?.units?.isZero == false
+        if (!everyToken && token.address != chosen && !held) return@mapNotNull null
         val symbol = displaySymbol(token.symbol)
         AssetOption(
             asset = TransferAsset.Erc20Token(token),
@@ -105,17 +125,20 @@ internal fun assetOptions(
             name = displayName(token.name),
             icon = token.icon,
             decimals = token.decimals,
-            balance = verified?.let { UInt256.parse(it.units.decimal) },
+            balance = (verified?.units ?: known?.units)?.let { UInt256.parse(it.decimal) },
             balanceText = when (reading) {
                 is TokenBalanceReading.Verified -> formatUnits(reading.units.decimal, token.decimals, symbol)
-                null, TokenBalanceReading.Syncing, is TokenBalanceReading.LastKnown -> CHECKING
+                is TokenBalanceReading.LastKnown ->
+                    if (known != null) formatUnits(reading.units.decimal, token.decimals, symbol) else CHECKING
+                null, TokenBalanceReading.Syncing -> CHECKING
                 TokenBalanceReading.NotAToken -> "Not a token"
                 is TokenBalanceReading.Unavailable -> "Not verified"
             },
-            verifiedAt = verified?.blockNumber?.let(::block),
-            provenAt = verified?.provenAt,
-            valuation = valuation,
+            verifiedAt = (verified?.blockNumber ?: known?.blockNumber)?.let(::block),
+            provenAt = verified?.provenAt ?: known?.asOf,
+            valuation = valuation.takeIf { known == null },
             warning = if (holding.sharesBuiltInSymbol) "Not the built-in $symbol: another contract" else null,
+            lastKnown = known != null,
         )
     }
     return listOf(nativeOption) + tokens
