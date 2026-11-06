@@ -3,12 +3,20 @@ package eth.serotine.data.engine
 import eth.serotine.data.keys.fromHex
 import eth.serotine.domain.model.Address
 import eth.serotine.domain.model.Digest
+import eth.serotine.domain.model.UInt256
 
 /** The few pieces of the contract ABI the engine adapters speak: calldata in, words out. */
 internal object Abi {
 
     /** `balanceOf(address)`: the selector and [holder] as one left-padded word. */
     fun balanceOf(holder: Address): ByteArray = ("70a08231" + "0".repeat(24) + holder.hex.removePrefix("0x")).fromHex()
+
+    /** ERC-721's `ownerOf(uint256)`: the selector and [tokenId] as one word. */
+    fun ownerOf(tokenId: UInt256): ByteArray = "6352211e".fromHex() + tokenId.toBytes32()
+
+    /** ERC-1155's `balanceOf(address,uint256)`: the selector, [holder] as a left-padded word, and [id]. */
+    fun balanceOf(holder: Address, id: UInt256): ByteArray =
+        ("00fdd58e" + "0".repeat(24) + holder.hex.removePrefix("0x")).fromHex() + id.toBytes32()
 
     /**
      * A Safe's `approvedHashes(address,bytes32)`: the selector, [owner] as a left-padded word and

@@ -703,6 +703,100 @@ private fun AccountDetailNetworkOffPreview() = AccountDetailPreview(
     lightClient = LightClientItem("Turned off in this wallet", null, false, LightClientHealth.NOT_RUNNING),
 )
 
+/** The account's NFTs (docs/wallet-ux.md, *NFTs*): two ENS names shown, two unlisted collections' collapsed. */
+private val nfts = NftSection(
+    shown = listOf(
+        NftRow(
+            "multisig.eth",
+            "ENS",
+            null,
+            "0xD4eBcbBdF463C9c45784603Db0dDD499BC44A8B4",
+            "block 8,412,306",
+            "Expires Mar 3, 2032, 10:00 AM",
+        ),
+        NftRow(
+            "pay.alice.eth",
+            "ENS (wrapped)",
+            null,
+            "0x0635513f179D50A207757E05759CbD106d7dFcE8",
+            "block 8,412,306",
+            "Wrapped · expires Jan 12, 2027, 4:20 PM",
+        ),
+        NftRow("[27a0e0…0f90].eth", "ENS", null, "0x57f1887a8BF19b14fC0dF6Fd9B2acc9Af147eA85", "block 8,412,306"),
+    ),
+    unlisted = listOf(
+        NftRow("Sepolia Punks", "#4021", null, "0x5b5B5b5b5B5b5b5b5b5b5B5b5b5B5b5b5b5b5b5b"),
+        NftRow("Free Mint Pass", "#7", "×3", "0xA7a7A7A7a7a7A7A7a7A7a7A7a7a7A7A7a7a7A7A7"),
+    ),
+    note = "Received since block 8,100,000 · 1 not proven held yet",
+    simpleNote = "Received since this account was added here · 1 not proven held yet",
+)
+
+@Preview
+@Composable
+private fun AccountDetailNftsPreview() = AccountDetailPreview(daily.copy(nfts = nfts))
+
+/** The unlisted collections' NFTs opened, each marked as not confirmed. */
+@Preview
+@Composable
+private fun AccountDetailNftsUnlistedOpenDarkPreview() =
+    AccountDetailPreview(daily.copy(nfts = nfts.copy(unlistedOpen = true)), darkTheme = true)
+
+/** The NFTs still being looked for in the account's history. */
+@Preview
+@Composable
+private fun AccountDetailNftsCheckingPreview() = AccountDetailPreview(
+    daily.copy(nfts = NftSection(empty = "Checking NFTs…", note = "Received since block 8,100,000")),
+)
+
+/**
+ * An NFT the user added by contract and id, with Remove, and the *Add an NFT* dialog after a try that
+ * added nothing.
+ */
+@Preview
+@Composable
+private fun AccountDetailNftAddPreview() = AccountDetailPreview(
+    daily.copy(
+        nfts = nfts.copy(
+            unlistedOpen = true,
+            unlisted = nfts.unlisted + NftRow(
+                "Sepolia Punks",
+                "#4021",
+                null,
+                "0x5b5B5b5b5B5b5b5b5b5b5B5b5b5B5b5b5b5b5b5b",
+                "block 8,412,306",
+                addedKey = "0x5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b:4021:ERC721",
+            ),
+            adding = AddNftForm(error = "Nothing verified says this account holds token 7 of that contract."),
+        ),
+    ),
+)
+
+/** The *Add an NFT* dialog while the account's holding is proven: its fields and Add wait, Cancel does not. */
+@Preview
+@Composable
+private fun AccountDetailNftAddingPreview() =
+    AccountDetailPreview(daily.copy(nfts = nfts.copy(adding = AddNftForm(busy = true))))
+
+/** *Add an NFT* greyed out while the account's network is off. */
+@Preview
+@Composable
+private fun AccountDetailNftAddUnavailablePreview() = AccountDetailPreview(
+    daily.copy(
+        networkOn = false,
+        nfts = nfts.copy(
+            addReason = "Sepolia is off in this wallet, so nothing on it is checked and no NFT can be proven held.",
+        ),
+    ),
+)
+
+/** None found since the account's history starts. */
+@Preview
+@Composable
+private fun AccountDetailNftsNonePreview() = AccountDetailPreview(
+    daily.copy(nfts = NftSection(empty = "No NFTs found", note = "Received since block 8,100,000")),
+)
+
 /** Every preview above, which AccountDetailScreenPreviewsTest renders: a new preview goes in here too. */
 internal val accountDetailScreenPreviews: List<ScreenPreview> = listOf(
     ScreenPreview("assets") { AccountDetailAssetsPreview() },
@@ -740,4 +834,11 @@ internal val accountDetailScreenPreviews: List<ScreenPreview> = listOf(
     ScreenPreview("safe-owners-network-off") { AccountDetailSafeOwnersNetworkOffPreview() },
     ScreenPreview("assets-hidden") { AccountDetailAssetsHiddenPreview() },
     ScreenPreview("assets-hidden-dark") { AccountDetailAssetsHiddenDarkPreview() },
+    ScreenPreview("nfts") { AccountDetailNftsPreview() },
+    ScreenPreview("nfts-unlisted-open-dark") { AccountDetailNftsUnlistedOpenDarkPreview() },
+    ScreenPreview("nfts-checking") { AccountDetailNftsCheckingPreview() },
+    ScreenPreview("nfts-none") { AccountDetailNftsNonePreview() },
+    ScreenPreview("nft-add") { AccountDetailNftAddPreview() },
+    ScreenPreview("nft-add-unavailable") { AccountDetailNftAddUnavailablePreview() },
+    ScreenPreview("nft-adding") { AccountDetailNftAddingPreview() },
 )

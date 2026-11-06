@@ -103,8 +103,55 @@ class AccountDetailScreenTest {
                 onOpenActivity = { events += "open activity $it" },
                 onTurnOnNetwork = { events += "turn on" },
                 onSafeSettings = { events += "safe settings" },
+                onToggleUnlistedNfts = { events += "toggle unlisted nfts" },
             )
         }
+    }
+
+    @Test
+    fun theNftsAreBelowTheAssetsTheUnlistedOnesCollapsedAndMarked() {
+        val nfts = NftSection(
+            shown = listOf(NftRow("ENS", "#982531…4107", null, "0x57f1887a8BF19b14fC0dF6Fd9B2acc9Af147eA85")),
+            unlisted = listOf(NftRow("Free Mint Pass", "#7", "×3", "0x" + "a7".repeat(20))),
+            note = "Received since block 9,000",
+        )
+        var state by mutableStateOf(ready.copy(nfts = nfts))
+        rule.setContent {
+            SerotineTheme {
+                AccountDetailScreen(
+                    state,
+                    chrome = AccountChrome.Strip(verifiedStripSample),
+                    onBack = {},
+                    onSend = {},
+                    onSwap = {},
+                    onReceive = {},
+                    onCopy = {},
+                    onRename = {},
+                    onRemove = {},
+                    onHideToken = { _, _ -> },
+                    onMessageShown = {},
+                    onSort = {},
+                    onSegment = {},
+                    onOpenSafeTx = {},
+                    onImportRequest = {},
+                    onOpenActivity = {},
+                    onToggleUnlistedNfts = {
+                        events += "toggle"
+                        state = state.copy(nfts = nfts.copy(unlistedOpen = !(state.nfts?.unlistedOpen ?: false)))
+                    },
+                )
+            }
+        }
+
+        rule.onNodeWithTag(ACCOUNT_NFTS_TAG).performScrollTo()
+        rule.onNodeWithText("ENS", useUnmergedTree = true).assertExists()
+        rule.onNodeWithText("Received since block 9,000", useUnmergedTree = true).assertExists()
+        rule.onAllNodesWithTag(ACCOUNT_NFT_TAG).assertCountEquals(1)
+        rule.onNodeWithText("Unlisted collections (1)").performClick()
+        rule.onAllNodesWithTag(ACCOUNT_NFT_TAG).assertCountEquals(2)
+        rule.onNodeWithText("#7 · not confirmed · 0xa7a7…a7a7", useUnmergedTree = true).assertExists()
+        rule.onNodeWithText("×3", useUnmergedTree = true).assertExists()
+        assertEquals(listOf("toggle"), events)
     }
 
     @Test

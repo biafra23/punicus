@@ -35,7 +35,10 @@ import eth.serotine.domain.repository.InterfaceModeSetting
 import eth.serotine.domain.repository.KeyStore
 import eth.serotine.domain.repository.KnownUpgradeStore
 import eth.serotine.domain.repository.LightClient
+import eth.serotine.domain.repository.AddedNfts
+import eth.serotine.domain.repository.EnsNfts
 import eth.serotine.domain.repository.LogIndex
+import eth.serotine.domain.repository.NftContracts
 import eth.serotine.domain.repository.NameResolver
 import eth.serotine.domain.repository.NativeBalances
 import eth.serotine.domain.repository.NetworkFreshness
@@ -118,6 +121,9 @@ import eth.serotine.domain.usecase.ObserveSentTransfer
 import eth.serotine.domain.usecase.ObserveSwapVenue
 import eth.serotine.domain.usecase.ObserveTokenHoldings
 import eth.serotine.domain.usecase.ObserveTokenMetadata
+import eth.serotine.domain.usecase.AddNft
+import eth.serotine.domain.usecase.ObserveNfts
+import eth.serotine.domain.usecase.RemoveAddedNft
 import eth.serotine.domain.usecase.ObserveTokenTransfers
 import eth.serotine.domain.usecase.ObserveUpgradeWarnings
 import eth.serotine.domain.usecase.ObserveUsdPrice
@@ -282,6 +288,12 @@ class AppGraph(
     private val historyStarts: HistoryStarts,
     /** The light client's verified log index, which the host's `FollowAccountLogs` keeps following the accounts. */
     private val logIndex: LogIndex,
+    /** What NFT contracts say on chain, verified: who holds a token, and what a collection calls itself (#246). */
+    private val nfts: NftContracts,
+    /** What a built-in ENS collection's token stands for: its name, checked by hashing, and expiry (#246). */
+    private val ensNfts: EnsNfts,
+    /** The NFTs the user added to an account by contract and id, kept on this device (#246). */
+    private val addedNfts: AddedNfts,
     /** The Safe transactions waiting for their owners, kept on this device across restarts. */
     private val safeTxQueue: SafeTxQueue,
     /** The text a Safe's signing request travels in between devices, for every network the app knows. */
@@ -396,6 +408,9 @@ class AppGraph(
             DropWaitingSwap(waitingSwaps),
             ObserveAmountsHidden(amountsHidden),
             toggleAmountsHidden,
+            ObserveNfts(logIndex, historyStarts, nfts, ensNfts, receipts, addedNfts),
+            AddNft(nfts, addedNfts),
+            RemoveAddedNft(addedNfts),
             offerHandoff = OfferHandoff(walletHandoff),
         )
 

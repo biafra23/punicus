@@ -273,6 +273,28 @@ private fun SimpleAccountNetworkOffPreview() = SimpleAccountDetailPreview(
     ),
 )
 
+/** The account's NFTs in simple mode: what they cover said with no block. */
+@Preview
+@Composable
+private fun SimpleAccountNftsPreview() = SimpleAccountDetailPreview(
+    main.copy(
+        nfts = NftSection(
+            shown = listOf(
+                NftRow(
+                    "alice.eth",
+                    "ENS",
+                    null,
+                    "0x57f1887a8BF19b14fC0dF6Fd9B2acc9Af147eA85",
+                    detail = "Expires Mar 3, 2032, 10:00 AM",
+                ),
+            ),
+            unlisted = listOf(NftRow("Free Mint Pass", "#7", "×3", "0xA7a7A7A7a7a7A7A7a7A7a7A7a7a7A7A7a7a7A7A7")),
+            note = "Received since block 21,400,000",
+            simpleNote = "Received since this account was added here",
+        ),
+    ),
+)
+
 /** Every preview above, which SimpleAccountDetailScreenPreviewsTest renders: a new preview goes in here too. */
 internal val simpleAccountDetailScreenPreviews: List<ScreenPreview> = listOf(
     ScreenPreview("assets") { SimpleAccountAssetsPreview() },
@@ -285,4 +307,5 @@ internal val simpleAccountDetailScreenPreviews: List<ScreenPreview> = listOf(
     ScreenPreview("network-off") { SimpleAccountNetworkOffPreview() },
     ScreenPreview("hidden") { SimpleAccountHiddenPreview() },
     ScreenPreview("hidden-dark") { SimpleAccountHiddenDarkPreview() },
+    ScreenPreview("nfts") { SimpleAccountNftsPreview() },
 )

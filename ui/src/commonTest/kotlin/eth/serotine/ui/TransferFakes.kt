@@ -69,10 +69,24 @@ import eth.serotine.domain.repository.prunable
 import eth.serotine.domain.repository.yieldsTo
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.awaitCancellation
+import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.update
+import eth.serotine.domain.model.NftRef
+import eth.serotine.domain.repository.NftCollectionReading
+import eth.serotine.domain.repository.NftContracts
+import eth.serotine.domain.repository.NftHolding
+import eth.serotine.domain.model.KnownNftCollection
+import eth.serotine.domain.repository.EnsNftReading
+import eth.serotine.domain.repository.EnsNfts
+import eth.serotine.domain.repository.ReceiptLog
+import kotlinx.coroutines.flow.flowOf
+import eth.serotine.domain.repository.AddedNftList
+import eth.serotine.domain.repository.AddedNfts
+import eth.serotine.domain.repository.TokenChange
 
 /** One gwei, in wei. */
 internal const val GWEI = 1_000_000_000L
@@ -420,6 +434,59 @@ internal class MemorySwapVenue : SwapVenueSetting {
     override suspend fun choose(venue: SwapVenue): Boolean {
         choice.value = VenueChoice.Chosen(venue)
         return true
+    }
+}
+
+/**
+ * [NftContracts] answering from [held] (each NFT with the amount held, proven at block 9,500) and
+ * [names]; any other NFT is not held, and a collection without a name says none.
+ */
+internal class FakeNftContracts : NftContracts {
+    val held = mutableMapOf<NftRef, UInt256>()
+    val names = mutableMapOf<Address, NftCollectionReading.Read>()
+
+    override suspend fun holding(network: Network, holder: Address, nft: NftRef): NftHolding =
+        held[nft]?.let { NftHolding.Held(it, 9_500) } ?: NftHolding.NotHeld(9_500)
+
+    override suspend fun collection(network: Network, contract: Address): NftCollectionReading =
+        names[contract] ?: NftCollectionReading.Read(null, null, 9_500)
+}
+
+/** [EnsNfts] that names no token: a name cannot be had right now. */
+internal class FakeEnsNfts : EnsNfts {
+    override suspend fun name(
+        network: Network,
+        collection: KnownNftCollection,
+        nft: NftRef,
+        receiptLogs: List<ReceiptLog>,
+    ): EnsNftReading = EnsNftReading.Unavailable(ReadUnavailable.UNPROVEN)
+}
+
+/** [ReceiptTracker] for which no transaction is ever included: pending, as the port keeps saying, until cancelled. */
+internal class FakeReceiptsNever : ReceiptTracker {
+    override fun observe(network: Network, hash: String): Flow<TransactionProgress> = flow {
+        emit(TransactionProgress.Pending)
+        awaitCancellation()
+    }
+}
+
+/** [AddedNfts] in memory, as the port's contract says one behaves. */
+internal class MemoryAddedNfts : AddedNfts {
+    val added = MutableStateFlow<List<Pair<AccountId, NftRef>>>(emptyList())
+
+    override fun observe(account: AccountId): Flow<AddedNftList> =
+        added.map { all -> AddedNftList.Loaded(all.filter { it.first == account }.map { it.second }) }
+
+    override suspend fun add(account: AccountId, nft: NftRef): TokenChange {
+        if (account to nft in added.value) return TokenChange.AlreadyPresent
+        added.value += account to nft
+        return TokenChange.Changed
+    }
+
+    override suspend fun remove(account: AccountId, nft: NftRef): TokenChange {
+        if (account to nft !in added.value) return TokenChange.NotFound
+        added.value -= account to nft
+        return TokenChange.Changed
     }
 }
 

@@ -263,6 +263,9 @@ upgrades*).
      greyed-out Send button does. A long press opens 5. A token whose
      balance is not read at all yet holds a ghost row's place after the
      rows (*Rows on their way hold their room*).
+   - Below the assets, the account's NFTs (*NFTs*, issue #246): the built-in
+     collections' first, then a collapsed "Unlisted collections" row. None
+     counts in the total.
    - Footnote: the price source ("Chainlink, testnet prices") and the block
      the balances were verified at.
 5. **Asset menu**: Send ‹symbol› (7 with the asset chosen; greyed out as in 3) ·
@@ -1178,6 +1181,79 @@ address. Applied:
 - **Only known tokens show.** An account lists the built-in tokens it holds
   and the ones the user added, minus the hidden ones. Finding other tokens
   an address holds takes an indexer, which the *Trust* rules exclude.
+
+## NFTs
+
+The owner's request (2026-11-05, #246): "It should be possible to see any NFT
+associated with an address. Maybe below the tokens. Also decode ENS NFTs so
+they are helpful." The rulings (owner rulings, 2026-11-05, #246; the
+*Data sources* rules) applied:
+
+- **Found, then proven.** An NFT is found among the ERC-721 `Transfer`s and
+  ERC-1155 `TransferSingle`/`TransferBatch`es to the account that the
+  engine's log index holds (`ObserveNfts`). It is listed only once a verified
+  call at the head says the account holds it: `ownerOf(id)` names it, or
+  `balanceOf(account, id)` is above zero. One passed on or burned drops out
+  at its next proof. An NFT is proven again when a log naming it and the
+  account appears, when its last proof had no answer, and within the hour in
+  any case: an ENS name changes holder at expiry with no log. At most 100 are
+  checked, the built-in collections' first, then the most recently moved;
+  the rest are counted, so a flood of airdrops can neither flood the light
+  client with calls nor push the user's ENS names out.
+- **Where its coverage starts.** The index covers the account from its
+  history's start. The list says so ("NFTs received since block n"), and
+  offers *Add an NFT*: a contract and a token id (a whole number, or `0x`
+  and hex), kept once the account is proven to hold it (`AddNft`: ERC-721's
+  `ownerOf` first, then ERC-1155's `balanceOf`; one standard not answered is
+  never taken for "not held"). The added NFTs are the user's list, kept in
+  `nfts.json` beside `tokens.json` (`FileAddedNfts`); each is checked as the
+  ones found are, after the built-in collections' and before what anyone
+  could have sent, and listed only while it is held. An added row has
+  Remove. *Add an NFT* is greyed out while the account's network is off, a
+  tap saying why (owner ruling, 2026-10-18, #55).
+- **On chain only.** A row shows the collection's name (its `name()`, the
+  contract's claim, or the built-in name) and the token id; an ERC-1155
+  amount above one shows as "×n", masked while amounts are hidden. The
+  section says images are not shown: nothing is fetched from IPFS or HTTP,
+  and an image from an on-chain `data:` URI is drawn in a later part.
+- **Older answers.** Detailed view dates each row by the block it was
+  proven held at. While the account's network is off, nothing is proven
+  again, and the section says the NFTs were proven before and may have
+  changed since. They are read only while the Assets tab is shown.
+- **Below the assets** (screen 4, in both views): the built-in collections'
+  rows, then "Unlisted collections (n)", n the collections, collapsed until
+  tapped, each NFT's row under it saying "not confirmed" with its contract. A line under them says what the
+  list covers ("Received since block 9,000 · 1 not proven held yet"; simple
+  mode: "Received since this wallet began following this account"). While
+  some are still to be proven and none is yet, it says "Checking NFTs…",
+  never that there are none; past the cap, "None held among the NFTs
+  checked".
+- **Built in, or unlisted.** The built-in collections (`KnownNftCollections`)
+  are ENS's: the .eth registrar (ERC-721) and the NameWrapper (ERC-1155), on
+  Ethereum and Sepolia, and on Sepolia, which runs on ENSv2, ENSv2's .eth
+  registry (ERC-1155; owner ruling, 2026-11-06, #246). Their NFTs are shown openly. Any other collection's
+  sit under a collapsed "Unlisted collections" row, marked unconfirmed:
+  anyone can send an NFT to any address, and a name is only a contract's
+  claim.
+- **ENS names, decoded** (owner rulings, 2026-11-05 and 2026-11-06, #246),
+  every name checked by hashing against the token's id, and a label with a
+  character that renders as nothing refused (`VerifiedEnsNfts`):
+  - ENSv2's .eth registry (Sepolia): the token id is the label's hash with a
+    version in its low 32 bits; the registry's label store
+    (`LABEL_STORE()`, `getLabel(id)`) holds the label, and `getExpiry(id)`
+    the expiry. The registry is pinned by its code hash: a redeploy shows
+    its NFTs as unlisted until the pin is updated.
+  - The NameWrapper: the id is the name's namehash; `names(id)` gives the
+    DNS-encoded name, `getData(id)` the expiry.
+  - The .eth registrar: the id is the label's hash; the label comes from the
+    controller's `NameRegistered` log in the verified receipt of the
+    transaction that brought the token to the account, `nameExpires(id)` the
+    expiry.
+  - A name whose label could not be found and checked shows as its hash,
+    `[27a0e0…0f90].eth`. The row shows the name, the collection, whether it
+    is wrapped and when it expires. Nothing is read from ENS's metadata
+    service. What a name resolves to comes with the NFT's detail, later.
+- **No price.** An NFT never counts in a total.
 
 ## Safes
 

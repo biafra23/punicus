@@ -1,5 +1,5 @@
 ---
-description: "Data sources. The embedded engine is the only source of chain data; the three networks; Chainlink prices; the built-in token list; Safe co-signing without a service; history from the log index; swaps on Uniswap and CoW; CoW's order API; dApp connections over WalletConnect."
+description: "Data sources. The embedded engine is the only source of chain data; the three networks; Chainlink prices; the built-in token list; Safe co-signing without a service; history from the log index; an account's NFTs, on chain only; swaps on Uniswap and CoW; CoW's order API; dApp connections over WalletConnect."
 paths:
   - "domain/**/*"
   - "data/**/*"
@@ -150,6 +150,34 @@ of a stale feed.)
   contract and shown as the contract's claim, with a monogram icon.
 - No remote token list and no icon CDN: one would learn which tokens the user
   holds.
+
+## An account's NFTs: found in its verified history, proven held, read on chain only
+
+(Owner rulings, 2026-11-05, #246.)
+
+- **Found in the log index, proven at the head.** An NFT is found among the
+  ERC-721 `Transfer`s and ERC-1155 `TransferSingle`/`TransferBatch`es the
+  engine's log index holds for the account. It is shown only once a verified
+  `ownerOf` names the account, or a verified `balanceOf` is above zero. A log
+  alone never makes an NFT held.
+- **On-chain metadata only.** A collection's `name()` and `symbol()` and a
+  token's id, read with verified calls. An image or metadata is shown only
+  when `tokenURI`/`uri` is an on-chain `data:` URI. IPFS and HTTP are not
+  fetched: the screen says the image is not on chain.
+- **Unasked NFTs are collapsed.** The built-in collections (ENS's registrar
+  and NameWrapper, per network) are shown openly. Any other collection sits
+  under a collapsed "Unlisted collections" row, marked unconfirmed: anyone can
+  send an NFT to any address.
+- **Older NFTs are added by contract and id.** The index covers the account
+  from its start only. The list says so, and offers "Add an NFT": a contract
+  and a token id, kept once the account is proven to hold it.
+- ENS tokens are decoded on chain (the NameWrapper's `names`, the registrar's
+  labels from logs), never through ENS's metadata service.
+- **ENSv2 too** (owner ruling, 2026-11-06, #246): on Sepolia, which runs on
+  ENSv2, its .eth registry is a built-in collection, pinned by its code hash.
+  A label comes from its label store and is checked by hashing. A redeploy
+  shows its NFTs as unlisted until the pin is updated.
+- NFTs have no price and never count in a total.
 
 ## Safe co-signing uses no off-chain service
 
