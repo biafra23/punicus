@@ -11,6 +11,12 @@ import eth.serotine.domain.usecase.QUEUED_UNATTENDED_SECONDS
 import eth.serotine.ui.components.Eip55
 import eth.serotine.ui.components.NATIVE_DECIMALS
 import eth.serotine.ui.components.exactAmount
+import kotlin.time.Duration.Companion.seconds
+import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.flow.flow
 
 /**
  * What became of a queued transaction, as a notification says it (docs/lenient-mode.md, *The
@@ -95,3 +101,24 @@ private fun symbolOf(asset: TransferAsset, network: Network): String = when (ass
  * by itself: it waits for the user's answer (docs/lenient-mode.md, decision 4).
  */
 fun QueuedTransaction.pastItsHour(now: Long): Boolean = now - (confirmedAt ?: signedAt) > QUEUED_UNATTENDED_SECONDS
+
+/**
+ * Each list of queued transactions, emitted again the moment one of them passes its hour (at [now],
+ * unix seconds; [QueuedTransaction.pastItsHour]): what a summary line ("waiting to send", "waits for
+ * your answer") is drawn from, so it changes when the transaction does, with no tick in between.
+ */
+@OptIn(ExperimentalCoroutinesApi::class)
+internal fun Flow<List<QueuedTransaction>>.redatedAtTheirHour(now: () -> Long): Flow<List<QueuedTransaction>> =
+    flatMapLatest { queued ->
+        flow {
+            emit(queued)
+            val hours = queued.filter { it.conflict == null }
+                .map { (it.confirmedAt ?: it.signedAt) + QUEUED_UNATTENDED_SECONDS + 1 }
+                .sorted()
+            for (at in hours) {
+                val wait = at - now()
+                if (wait > 0) delay(wait.seconds)
+                emit(queued)
+            }
+        }
+    }

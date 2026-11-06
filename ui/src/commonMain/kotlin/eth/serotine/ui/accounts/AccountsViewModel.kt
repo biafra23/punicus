@@ -50,6 +50,7 @@ import eth.serotine.ui.components.redatedWhile
 import eth.serotine.ui.components.spokenList
 import eth.serotine.ui.components.totalNote
 import eth.serotine.ui.components.totalText
+import eth.serotine.ui.outbox.redatedAtTheirHour
 import eth.serotine.ui.platform.formatDateTime
 import eth.serotine.ui.update.UpgradeBannerItem
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -57,6 +58,8 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.onStart
 import kotlinx.coroutines.flow.shareIn
@@ -177,8 +180,12 @@ class AccountsViewModel(
     private data class OutboxLines(val byNetwork: Map<Long, String>, val lost: Boolean, val unreadable: Boolean)
 
     private val outboxLines = combine(
-        // Nothing queued until the outbox is read: Home never waits for it.
-        observeOutbox().onStart { emit(OutboxList.Loaded(emptyList())) },
+        // Nothing queued until the outbox is read: Home never waits for it. Drawn again when one
+        // passes its hour: "waiting to send" becomes "waits for your answer".
+        observeOutbox().onStart { emit(OutboxList.Loaded(emptyList())) }.flatMapLatest { list ->
+            val queued = (list as? OutboxList.Loaded)?.queued.orEmpty()
+            flowOf(queued).redatedAtTheirHour(clock).map { list }
+        },
         combine(clientStatuses) { statuses -> statuses.map { it is LightClientStatus.Synced } },
         observeEnabledNetworks(),
     ) { list, synced, on ->
