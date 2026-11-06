@@ -20,6 +20,7 @@ import eth.serotine.domain.repository.LightClientStatus
 import eth.serotine.domain.repository.NameResolution
 import eth.serotine.domain.repository.NameResolver
 import eth.serotine.domain.repository.NativeBalances
+import eth.serotine.domain.repository.Outbox
 import eth.serotine.domain.repository.ReadUnavailable
 import eth.serotine.domain.repository.ReceiptTracker
 import eth.serotine.domain.repository.SentAction
@@ -181,6 +182,9 @@ data class TransferQuote internal constructor(
  * cannot be read holds nothing back here, as an unreadable record of transfers holds none: a
  * transfer swaps nothing, and an order whose tokens are gone cannot fill. [clock] is in unix
  * seconds.
+ *
+ * What the sender has queued in [outbox] (lenient mode) holds a new quote back as an earlier
+ * transaction maybe sent does ([TransferQuoting.EarlierMaybeSent] with `queued`): one per account.
  */
 class QuoteTransfer(
     private val inputs: TransactionInputs,
@@ -191,9 +195,10 @@ class QuoteTransfer(
     private val cowChain: CowChain,
     private val lightClient: LightClient,
     private val network: Network,
+    outbox: Outbox,
     private val clock: () -> Long = ::epochSecondsNow,
 ) {
-    private val quoter = CallQuoter(inputs, sentTransfers, network, clock)
+    private val quoter = CallQuoter(inputs, sentTransfers, network, clock, outbox)
 
     /** [amount] of [asset] from [from] to [to], at [level]'s fees. */
     suspend operator fun invoke(
@@ -202,59 +207,94 @@ class QuoteTransfer(
         asset: TransferAsset,
         amount: UInt256,
         level: FeeLevel,
-    ): TransferQuoting = cancellingReads {
+    ): TransferQuoting = quote(from, to, asset, amount, level, forCheck = false).quoting
+
+    /**
+     * The quote the check of a queued transfer makes (docs/lenient-mode.md, *The check before
+     * sending*): this quote, fresh, with every test of the asset, but without the test of the
+     * native balance against the fresh fee, which the check makes on the signed figures, and
+     * without being held back by the queued transfer itself.
+     */
+    internal suspend fun quoteForCheck(
+        from: Address,
+        to: Address,
+        asset: TransferAsset,
+        amount: UInt256,
+        level: FeeLevel,
+    ): CheckQuoting = quote(from, to, asset, amount, level, forCheck = true)
+
+    private suspend fun quote(
+        from: Address,
+        to: Address,
+        asset: TransferAsset,
+        amount: UInt256,
+        level: FeeLevel,
+        forCheck: Boolean,
+    ): CheckQuoting = cancellingReads {
+        fun done(quoting: TransferQuoting) = CheckQuoting(quoting, nextBaseFee = null)
         val token = (asset as? TransferAsset.Erc20Token)?.token
         // Recipients that can never give it back, refused here as well as at the typed text: this
         // is the one maker of quotes, whichever way the recipient was chosen.
-        if (to == Address.ZERO) return@cancellingReads TransferQuoting.ToZeroAddress
-        if (token != null && to == token.address) return@cancellingReads TransferQuoting.ToTokenContract
+        if (to == Address.ZERO) return@cancellingReads done(TransferQuoting.ToZeroAddress)
+        if (token != null && to == token.address) return@cancellingReads done(TransferQuoting.ToTokenContract)
         // Nothing to move is nothing to pay a fee for.
-        if (amount.isZero) return@cancellingReads TransferQuoting.NothingToSend
+        if (amount.isZero) return@cancellingReads done(TransferQuoting.NothingToSend)
         val txTo = token?.address ?: to
         val value = if (token == null) amount else UInt256.ZERO
         val data = if (token == null) ByteArray(0) else Erc20.transferData(to, amount)
         // An earlier transfer maybe still on its way: refused before any balance is read.
-        quoter.heldBack(from)?.let { return@cancellingReads it.asTransferQuoting() }
+        quoter.heldBack(from, holdQueued = !forCheck)?.let { return@cancellingReads done(it.asTransferQuoting()) }
         val native = async { nativeBalances.observeBalance(network, from).first() }
         val tokenBalance =
             token?.let { async { tokenBalances.observeBalance(network, from, it.address).first() } }
 
         val nativeBefore = when (val read = NativeRead.of(native.await())) {
             is NativeRead.Before -> read
-            is NativeRead.NotRead -> return@cancellingReads read.refusal.asTransferQuoting()
+            is NativeRead.NotRead -> return@cancellingReads done(read.refusal.asTransferQuoting())
         }
         var tokenBlock: Long? = null
         val tokenBefore = when (val reading = tokenBalance?.await()) {
             null -> null
             is TokenBalanceReading.Verified -> {
                 tokenBlock = reading.blockNumber
-                UInt256.parse(reading.units.decimal) ?: return@cancellingReads UNPROVEN
+                UInt256.parse(reading.units.decimal) ?: return@cancellingReads done(UNPROVEN)
             }
             TokenBalanceReading.Syncing, is TokenBalanceReading.LastKnown ->
-                return@cancellingReads TransferQuoting.Syncing
-            TokenBalanceReading.NotAToken -> return@cancellingReads TransferQuoting.NotAToken
+                return@cancellingReads done(TransferQuoting.Syncing)
+            TokenBalanceReading.NotAToken -> return@cancellingReads done(TransferQuoting.NotAToken)
             is TokenBalanceReading.Unavailable ->
-                return@cancellingReads TransferQuoting.Unavailable(reading.reason, QuoteFigure.BALANCE)
+                return@cancellingReads done(TransferQuoting.Unavailable(reading.reason, QuoteFigure.BALANCE))
         }
-        if (tokenBefore != null && tokenBefore < amount) return@cancellingReads TransferQuoting.InsufficientToken
-        if (token == null && nativeBefore.wei < amount) return@cancellingReads TransferQuoting.InsufficientFunds
+        if (tokenBefore != null && tokenBefore < amount) return@cancellingReads done(TransferQuoting.InsufficientToken)
+        if (token == null && nativeBefore.wei < amount) return@cancellingReads done(TransferQuoting.InsufficientFunds)
         // A token that returns false refused the transfer as surely as one that reverts.
         val accepts: (String) -> Boolean = { returned ->
             token == null || returned.isEmpty() || returned.any { it != '0' }
         }
-        val (call, unmined) = when (val quoting = quoter.quote(from, txTo, value, data, level, nativeBefore, accepts)) {
+        val quoted = quoter.quote(
+            from,
+            txTo,
+            value,
+            data,
+            level,
+            nativeBefore,
+            testFunds = !forCheck,
+            holdQueued = !forCheck,
+            accepts = accepts,
+        )
+        val (call, unmined, nextBaseFee) = when (val quoting = quoted) {
             is CallQuoting.Quoted -> quoting
-            is CallQuoting.Refused -> return@cancellingReads quoting.refusal.asTransferQuoting()
+            is CallQuoting.Refused -> return@cancellingReads done(quoting.refusal.asTransferQuoting())
         }
         val pendingToken = token?.let { sending ->
             unmined.mapNotNull { it.tokenAmount(sending.address) }.sumOrNull()
-                ?: return@cancellingReads TransferQuoting.InsufficientToken
+                ?: return@cancellingReads done(TransferQuoting.InsufficientToken)
         }
         val held = token?.let { sending ->
             val orders = (cowOrders.observe().first() as? CowOrderList.Loaded)?.orders.orEmpty()
             val finalized = (lightClient.observeStatus(network).first() as? LightClientStatus.Synced)?.finalized
             orders.holding(network, from, sending.address, finalized, cowChain)
-                ?: return@cancellingReads TransferQuoting.InsufficientToken
+                ?: return@cancellingReads done(TransferQuoting.InsufficientToken)
         }
         // What the token's earlier transfers move is not this one's to move: kept, the later one
         // would pass the run at the head and revert once they are mined, its fee paid all the same.
@@ -262,9 +302,10 @@ class QuoteTransfer(
             before.minusOrNull(pendingToken ?: UInt256.ZERO)
                 ?.minusOrNull(held ?: UInt256.ZERO)
                 ?.takeIf { it >= amount }
-                ?: return@cancellingReads TransferQuoting.InsufficientToken
+                ?: return@cancellingReads done(TransferQuoting.InsufficientToken)
         }
-        TransferQuoting.Quoted(
+        CheckQuoting(
+            TransferQuoting.Quoted(
             TransferQuote(
                 network = network,
                 from = from,
@@ -286,9 +327,17 @@ class QuoteTransfer(
                 feeBlock = call.feeBlock,
                 simulationBlock = call.simulationBlock,
             ),
+            ),
+            nextBaseFee,
         )
     }
 }
+
+/**
+ * What [QuoteTransfer.quoteForCheck] gives: the [quoting], and when it was quoted, the base fee per
+ * gas the next block charges ([nextBaseFee], null otherwise).
+ */
+internal class CheckQuoting(val quoting: TransferQuoting, val nextBaseFee: UInt256?)
 
 private val UNPROVEN = TransferQuoting.Unavailable(ReadUnavailable.UNPROVEN, QuoteFigure.BALANCE)
 
@@ -314,7 +363,7 @@ private fun CallRefusal.asTransferQuoting(): TransferQuoting = when (this) {
     CallRefusal.Refused -> TransferQuoting.Refused
     CallRefusal.Syncing -> TransferQuoting.Syncing
     is CallRefusal.Unavailable -> TransferQuoting.Unavailable(reason, figure)
-    is CallRefusal.EarlierMaybeSent -> TransferQuoting.EarlierMaybeSent(hash)
+    is CallRefusal.EarlierMaybeSent -> TransferQuoting.EarlierMaybeSent(hash, queued)
 }
 
 /** The outcome of [QuoteTransfer]. */
@@ -362,8 +411,10 @@ sealed interface TransferQuoting {
     /**
      * An earlier transaction from the sender, [hash], may still be on its way
      * ([CallRefusal.EarlierMaybeSent]): it is retried from its status, not replaced by this one.
+     * [queued] when it waits in the outbox instead (lenient mode), [hash] its id: it is sent or
+     * discarded first.
      */
-    data class EarlierMaybeSent(val hash: String) : TransferQuoting
+    data class EarlierMaybeSent(val hash: String, val queued: Boolean = false) : TransferQuoting
 }
 
 /**

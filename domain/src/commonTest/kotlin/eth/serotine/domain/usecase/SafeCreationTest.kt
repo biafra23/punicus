@@ -16,6 +16,7 @@ import eth.serotine.domain.repository.AddressKinds
 import eth.serotine.domain.repository.BalanceReading
 import eth.serotine.domain.repository.FeeLevel
 import eth.serotine.domain.repository.KindReading
+import eth.serotine.domain.repository.Outbox
 import eth.serotine.domain.repository.ReadUnavailable
 import eth.serotine.domain.repository.SafeReleases
 import eth.serotine.domain.repository.SafeState
@@ -67,7 +68,7 @@ class SafeCreationTest {
     private val kinds = object : AddressKinds {
         override fun observeKind(network: Network, address: Address): Flow<KindReading> = kind
     }
-    private val quote = QuoteSafeDeployment(kinds, world.nativeBalances, world.inputs, world.sent) {
+    private val quote = QuoteSafeDeployment(kinds, world.nativeBalances, world.inputs, world.sent, outbox = Outbox.None) {
         1_800_000_000
     }
 

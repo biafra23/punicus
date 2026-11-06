@@ -18,6 +18,7 @@ import eth.serotine.domain.repository.DappRequest
 import eth.serotine.domain.repository.DappRequestError
 import eth.serotine.domain.repository.DappRequestId
 import eth.serotine.domain.repository.DappSessionId
+import eth.serotine.domain.repository.Outbox
 import eth.serotine.domain.repository.Signing
 import eth.serotine.domain.repository.Simulation
 import eth.serotine.domain.usecase.DescribeKeyStore
@@ -108,7 +109,9 @@ class DappTransactionViewModelTest {
         val vm = DappTransactionViewModel(
             "t/$id",
             ObserveDappMessages(requests, accounts, networks, catalog, clock = { now }),
-            QuoteDappTransaction(requests, accounts, networks, catalog, balances, inputs, sent, history, clock = { now }),
+            QuoteDappTransaction(
+                requests, accounts, networks, catalog, balances, inputs, sent, history, Outbox.None, clock = { now },
+            ),
             SendDappTransaction(requests, accounts, networks, signer, broadcaster, sent, history, FakeReceipts(), clock = { now }),
             // A Safe's side, never reached from an account held here.
             ProposeDappSafeTx(requests, accounts, networks, catalog, safes.observeSafe, balances, inputs, safes.queue, clock = { now }),

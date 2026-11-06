@@ -60,6 +60,7 @@ target is what resolves the engine's AAR. One package per area,
 | `handoff` | `NoWalletHandoff`: the `WalletHandoff` of a platform that hands no payment link to another wallet (the desktop, iOS for now; issue #255). Android's is the host's. |
 | `walletconnect` | WalletConnect v2 (docs/walletconnect.md): its crypto over libsodium, the relay client over Ktor's WebSocket client, the wallet role of the Sign protocol, and its state, the sessions' keys among it, in a file of its own. |
 | `transfers` | The record of sent transactions and the history of them, kept for good. |
+| `outbox` | Lenient mode's outbox (docs/lenient-mode.md): what is signed and waits for its check, in a file sealed with a hardware key of its own, or in memory only where there is none (docs/keys-and-signing.md, *The outbox's seal key*). |
 | `history` | Where each account's history starts. |
 | `rates` | The exchange rate last verified, for the home-screen widget. |
 | `logs` | The Debug tab's log, in memory only. The engine adapter writes each request into it. |

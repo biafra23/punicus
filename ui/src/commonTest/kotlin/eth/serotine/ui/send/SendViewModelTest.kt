@@ -35,6 +35,7 @@ import eth.serotine.domain.repository.LightClient
 import eth.serotine.domain.repository.LightClientStatus
 import eth.serotine.domain.repository.NameResolution
 import eth.serotine.domain.repository.NewMnemonic
+import eth.serotine.domain.repository.Outbox
 import eth.serotine.domain.repository.ReadUnavailable
 import eth.serotine.domain.repository.SentAction
 import eth.serotine.domain.repository.Signing
@@ -189,7 +190,7 @@ class SendViewModelTest {
             ),
             DescribeKeyStore(keys),
             ResolveRecipient(names),
-            QuoteTransfer(inputs, balances, tokenBalances, sent, cowOrders, FakeCowChain(), light, Network.SEPOLIA),
+            QuoteTransfer(inputs, balances, tokenBalances, sent, cowOrders, FakeCowChain(), light, Network.SEPOLIA, Outbox.None),
             SendTransfer(signer, broadcaster, sent) { 1_800_000_000 },
             RebroadcastTransfer(broadcaster, sent, receipts),
             WarmFeeHistory(inputs),

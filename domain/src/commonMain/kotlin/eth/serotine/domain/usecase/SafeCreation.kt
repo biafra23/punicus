@@ -14,6 +14,7 @@ import eth.serotine.domain.repository.FeeLevel
 import eth.serotine.domain.repository.KindReading
 import eth.serotine.domain.repository.NativeBalances
 import eth.serotine.domain.repository.NonceReading
+import eth.serotine.domain.repository.Outbox
 import eth.serotine.domain.repository.ReadUnavailable
 import eth.serotine.domain.repository.SafeReleases
 import eth.serotine.domain.repository.SentAction
@@ -276,12 +277,14 @@ class QuoteSafeDeployment(
     private val nativeBalances: NativeBalances,
     private val inputs: TransactionInputs,
     private val sentTransfers: SentTransfers,
+    /** What the account has queued in lenient mode, which holds a new quote back (docs/lenient-mode.md). */
+    private val outbox: Outbox,
     private val clock: () -> Long = ::epochSecondsNow,
 ) {
     suspend operator fun invoke(plan: SafePlan, payer: Address, level: FeeLevel): SafeDeploymentQuoting {
         fun refused(refusal: SafeDeploymentRefusal) = SafeDeploymentQuoting.Refused(refusal)
         val network = plan.network
-        val quoter = CallQuoter(inputs, sentTransfers, network, clock)
+        val quoter = CallQuoter(inputs, sentTransfers, network, clock, outbox)
         // A deployment of this Safe, or of one like it, sent and not mined is said as such first, even
         // the payer's own maybe sent: both read the record, and the engine only when a record matches.
         sentAndUnmined(plan)?.let { return refused(it) }

@@ -21,6 +21,7 @@ import eth.serotine.data.keys.desktopHardwareSecret
 import eth.serotine.data.keys.desktopPasswordOnlyProtection
 import eth.serotine.data.logs.MemoryDebugLog
 import eth.serotine.data.networks.FileNetworkSettings
+import eth.serotine.data.outbox.desktopOutbox
 import eth.serotine.data.safe.FileSafeTxQueue
 import eth.serotine.data.safe.JsonSigningRequestCodec
 import eth.serotine.data.safe.PinnedSafeReleases
@@ -39,14 +40,17 @@ import eth.serotine.data.transfers.FileSentTransfers
 import eth.serotine.data.transfers.FileTransactionHistory
 import eth.serotine.data.upgrade.FileKnownUpgradeStore
 import eth.serotine.domain.model.Network
+import eth.serotine.domain.usecase.CheckQueued
 import eth.serotine.domain.usecase.FollowAccountLogs
 import eth.serotine.domain.usecase.AnswerDappRequestsAtOnce
 import eth.serotine.domain.usecase.FollowDappAccounts
 import eth.serotine.domain.usecase.FollowDebugScreen
 import eth.serotine.domain.usecase.FollowInterfaceMode
 import eth.serotine.domain.usecase.FollowNetworks
+import eth.serotine.domain.usecase.FollowOutbox
 import eth.serotine.domain.usecase.FollowSafeDeployments
 import eth.serotine.domain.usecase.KeepTransactionInputs
+import eth.serotine.domain.usecase.OutboxLock
 import eth.serotine.domain.usecase.FollowSentTransactions
 import eth.serotine.domain.usecase.FollowUpgradeReports
 import eth.serotine.domain.usecase.HistoryNotingAccounts
@@ -55,6 +59,7 @@ import eth.serotine.domain.usecase.ListDeployedSafe
 import eth.serotine.domain.usecase.NetworkDemand
 import eth.serotine.domain.usecase.ObserveDebugTab
 import eth.serotine.domain.usecase.ProveCowOrderEnds
+import eth.serotine.domain.usecase.QuoteTransfer
 import eth.serotine.domain.usecase.UpgradeNotices
 import eth.serotine.domain.usecase.WatchAddress
 import eth.serotine.ui.APP_VERSION
@@ -186,6 +191,13 @@ private fun openWallet(dataDir: File) {
     // The CoW orders signed here, each live until its end is proven (docs/swaps.md): public data only.
     val cowOrders = FileCowOrders(dataDir.resolve("cow-orders.json").path)
     val sentTransfers = HistoryRecordingSentTransfers(sentRecord, transactionHistory)
+    // Lenient mode's outbox (docs/lenient-mode.md): sealed with an enclave key of its own on a Mac
+    // with one, in a directory kept out of backups as the keys' is; in memory only elsewhere. One
+    // instance, which the graph and the follower share, with the one lock they share too.
+    val outboxDir = dataDir.resolve("outbox")
+    excludeFromBackups(outboxDir)
+    val outbox = desktopOutbox(outboxDir.path)
+    val outboxLock = OutboxLock()
     // Which networks are on (docs/networks.md, *Networks on and off*). A network the file does not
     // mention yet gets this build's default: an installed app turns on the real networks and leaves
     // Sepolia off, a development run (its debug build, the property's) turns on Sepolia alone.
@@ -276,6 +288,36 @@ private fun openWallet(dataDir: File) {
                 throw e
             } catch (e: Exception) {
                 System.err.println("Serotine: following the Debug tab's switch stopped: ${e::class.simpleName}")
+            }
+        }
+        LaunchedEffect(Unit) {
+            // What is queued is checked at a fresh head and sent while the app runs (docs/lenient-mode.md).
+            try {
+                FollowOutbox(
+                    outbox,
+                    CheckQueued { network ->
+                        QuoteTransfer(
+                            node.transactionInputs,
+                            node.nativeBalances,
+                            node.tokenBalances,
+                            sentTransfers,
+                            cowOrders,
+                            node.cow,
+                            node.lightClient,
+                            network,
+                            outbox,
+                        )
+                    },
+                    node.lightClient,
+                    node.broadcaster,
+                    sentTransfers,
+                    TrayOutboxNotifier(),
+                    outboxLock,
+                )()
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                System.err.println("Serotine: sending what is queued stopped: ${e::class.simpleName}")
             }
         }
         LaunchedEffect(Unit) {
@@ -415,6 +457,7 @@ private fun openWallet(dataDir: File) {
                 cowChain = node.cow,
                 cowApi = HttpCowApi.create(),
                 cowOrders = cowOrders,
+                outbox = outbox,
                 swapVenue = FileSwapVenue(dataDir.resolve("swap-venue.json").path),
                 waitingSwaps = FileWaitingSwaps(dataDir.resolve("waiting-swaps.json").path),
                 debugLog = apiLog,

@@ -31,6 +31,7 @@ import eth.serotine.domain.repository.NameResolution
 import eth.serotine.domain.repository.NameResolver
 import eth.serotine.domain.repository.NativeBalances
 import eth.serotine.domain.repository.NonceReading
+import eth.serotine.domain.repository.Outbox
 import eth.serotine.domain.repository.ReadUnavailable
 import eth.serotine.domain.repository.ReceiptLog
 import eth.serotine.domain.repository.ReceiptTracker
@@ -83,7 +84,7 @@ class TransfersTest {
     private val light = FakeLightClient()
     private val cowChain = FakeCowChain()
     private val quoteTransfer =
-        QuoteTransfer(inputs, balances, tokens, sent, orders, cowChain, light, Network.SEPOLIA) { now }
+        QuoteTransfer(inputs, balances, tokens, sent, orders, cowChain, light, Network.SEPOLIA, outbox = Outbox.None) { now }
 
     @Test
     fun anAddressIsTakenAsIsAndANameIsResolved() = runTest {

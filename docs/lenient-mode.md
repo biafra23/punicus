@@ -462,15 +462,20 @@ follows the five steps of docs/architecture.md's checklist.
    this page's fixes from its review. Documents only.
 2. **The kept inputs.** The account's verified count of mined transactions
    and the network's fee quote, kept across restarts. No visible change.
-3. **The outbox, in the domain and in `:data`.** The port `Outbox`, its
-   sealed file adapter with each platform's seal key, and the memory-only
-   adapter where there is none. The use cases: `QueueTransfer` (the draft,
-   signed), `CheckQueued` (the check), `FollowOutbox` (run by the hosts),
-   `DiscardQueued`. Tests with fake ports, the conflicts of *The check
+3. **The outbox, in the domain and in `:data`, and run by the hosts.** The
+   port `Outbox`, its sealed file adapter with each platform's seal key, and
+   the memory-only adapter where there is none. The use cases:
+   `DraftTransfer` (the draft), `QueueTransfer` (the draft, signed),
+   `CheckQueued` (the check), `FollowOutbox` (run by the hosts, with each
+   host's `OutboxNotifier`), `DiscardQueued` and `ConfirmQueued` (the user's
+   tap past the hour), which share one `OutboxLock`. Every use case that
+   quotes from an account takes the outbox, so nothing new is quoted from
+   one with something queued. Nothing can be queued yet: the outbox stays
+   empty until part 4. Tests with fake ports, the conflicts of *The check
    before sending* each among them.
 4. **Send in lenient mode.** The setting, the draft's review in both views,
    the queued step on the status screen, Activity and Home, Sign again and
-   Discard, `OutboxNotifier` in the three hosts. The mockups and
+   Discard. The mockups and
    docs/wallet-ux.md's screens come first in this part.
 5. **Safe transactions in lenient mode**, on the rule changes part 1
    records, rule change 4's Safe values among them.

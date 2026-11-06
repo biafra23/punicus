@@ -12,6 +12,7 @@ import eth.serotine.domain.repository.DappRequests
 import eth.serotine.domain.repository.FeeLevel
 import eth.serotine.domain.repository.NativeBalances
 import eth.serotine.domain.repository.NetworkSettings
+import eth.serotine.domain.repository.Outbox
 import eth.serotine.domain.repository.ReceiptTracker
 import eth.serotine.domain.repository.SentAction
 import eth.serotine.domain.repository.SentTransfer
@@ -88,10 +89,12 @@ class QuoteDappTransaction(
     inputs: TransactionInputs,
     private val sentTransfers: SentTransfers,
     private val history: TransactionHistory,
+    /** What the account has queued in lenient mode, which holds a new quote back (docs/lenient-mode.md). */
+    private val outbox: Outbox,
     private val clock: () -> Long = ::epochSecondsNow,
 ) {
     /** One quoter per network: a request is quoted on its own network's verified state alone. */
-    private val quoters = Network.entries.associateWith { CallQuoter(inputs, sentTransfers, it, clock) }
+    private val quoters = Network.entries.associateWith { CallQuoter(inputs, sentTransfers, it, clock, outbox) }
 
     suspend operator fun invoke(id: DappRequestId, level: FeeLevel = FeeLevel.NORMAL): DappTransactionQuoting {
         val request = requests.observe().first().firstOrNull { it.id == id } ?: return DappTransactionQuoting.Gone

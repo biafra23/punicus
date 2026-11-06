@@ -28,6 +28,7 @@ import eth.serotine.domain.repository.KeyStoreDescription
 import eth.serotine.domain.repository.KindReading
 import eth.serotine.domain.repository.LightClientStatus
 import eth.serotine.domain.repository.NewMnemonic
+import eth.serotine.domain.repository.Outbox
 import eth.serotine.domain.repository.ReadUnavailable
 import eth.serotine.domain.repository.SentAction
 import eth.serotine.domain.repository.Signing
@@ -134,6 +135,7 @@ class SafeTxViewModelTest {
                 world.inputs,
                 world.sent,
                 Network.SEPOLIA,
+                Outbox.None,
                 now,
             ),
             ApproveSafeTxOnChain(world.signer, world.broadcaster, world.sent, now),
@@ -145,6 +147,7 @@ class SafeTxViewModelTest {
                 world.inputs,
                 world.sent,
                 Network.SEPOLIA,
+                Outbox.None,
                 now,
             ),
             ExecuteSafeTx(world.signer, world.broadcaster, world.sent, now),

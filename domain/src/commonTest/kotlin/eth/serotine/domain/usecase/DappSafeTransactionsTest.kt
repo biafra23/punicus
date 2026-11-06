@@ -19,6 +19,7 @@ import eth.serotine.domain.repository.DappRequestId
 import eth.serotine.domain.repository.DappRequests
 import eth.serotine.domain.repository.DappSessionId
 import eth.serotine.domain.repository.NetworkSettings
+import eth.serotine.domain.repository.Outbox
 import eth.serotine.domain.repository.SentAction
 import eth.serotine.domain.repository.SentTransfer
 import eth.serotine.domain.repository.Simulation
@@ -318,6 +319,7 @@ class DappSafeTransactionsTest {
         // Never quoted as an account's own transaction.
         val quote = QuoteDappTransaction(
             requests, world.accounts, networks, ListCatalog(), world.nativeBalances, world.inputs, world.sent, history,
+            outbox = Outbox.None,
             clock = { now },
         )
         assertEquals(DappTransactionQuoting.Gone, quote(request(payment).id))

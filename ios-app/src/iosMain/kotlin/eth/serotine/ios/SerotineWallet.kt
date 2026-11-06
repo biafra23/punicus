@@ -4,6 +4,7 @@ import eth.serotine.data.account.FileAccountRepository
 import eth.serotine.data.cow.FileCowOrders
 import eth.serotine.data.cow.HttpCowApi
 import eth.serotine.data.handoff.NoWalletHandoff
+import eth.serotine.data.outbox.iosOutbox
 import eth.serotine.data.walletconnect.WalletConnectDapps
 import eth.serotine.data.engine.MyotisHost
 import eth.serotine.data.history.FileHistoryStarts
@@ -31,14 +32,17 @@ import eth.serotine.data.transfers.FileSentTransfers
 import eth.serotine.data.transfers.FileTransactionHistory
 import eth.serotine.data.upgrade.FileKnownUpgradeStore
 import eth.serotine.domain.model.Network
+import eth.serotine.domain.usecase.CheckQueued
 import eth.serotine.domain.usecase.FollowAccountLogs
 import eth.serotine.domain.usecase.AnswerDappRequestsAtOnce
 import eth.serotine.domain.usecase.FollowDappAccounts
 import eth.serotine.domain.usecase.FollowDebugScreen
 import eth.serotine.domain.usecase.FollowInterfaceMode
 import eth.serotine.domain.usecase.FollowNetworks
+import eth.serotine.domain.usecase.FollowOutbox
 import eth.serotine.domain.usecase.FollowSafeDeployments
 import eth.serotine.domain.usecase.KeepTransactionInputs
+import eth.serotine.domain.usecase.OutboxLock
 import eth.serotine.domain.usecase.FollowSentTransactions
 import eth.serotine.domain.usecase.FollowUpgradeReports
 import eth.serotine.domain.usecase.HistoryNotingAccounts
@@ -47,6 +51,7 @@ import eth.serotine.domain.usecase.ListDeployedSafe
 import eth.serotine.domain.usecase.NetworkDemand
 import eth.serotine.domain.usecase.ObserveDebugTab
 import eth.serotine.domain.usecase.ProveCowOrderEnds
+import eth.serotine.domain.usecase.QuoteTransfer
 import eth.serotine.domain.usecase.UpgradeNotices
 import eth.serotine.domain.usecase.WatchAddress
 import eth.serotine.ui.APP_VERSION
@@ -203,6 +208,14 @@ class SerotineWallet {
     private val cowOrders = FileCowOrders("$dataDir/cow-orders.json")
     private val sentTransfers = HistoryRecordingSentTransfers(sentRecord, transactionHistory)
 
+    /**
+     * Lenient mode's outbox (docs/lenient-mode.md): sealed with a Secure Enclave key of its own, in
+     * a directory out of backups; in memory only on the simulator. One instance, which the graph and
+     * the follower share, with the one lock they share too.
+     */
+    private val outbox = iosOutbox("$dataDir/outbox")
+    private val outboxLock = OutboxLock()
+
     internal val graph: AppGraph = run {
         // This device's Secure Enclave; the password alone on a simulator without one, its Argon2id
         // tier sized by the memory the simulator reports (the Mac's). One instance is both the key
@@ -266,6 +279,7 @@ class SerotineWallet {
             cowChain = node.cow,
             cowApi = HttpCowApi.create(),
             cowOrders = cowOrders,
+            outbox = outbox,
             swapVenue = FileSwapVenue("$dataDir/swap-venue.json"),
             waitingSwaps = FileWaitingSwaps("$dataDir/waiting-swaps.json"),
             debugLog = debugLog,
@@ -407,6 +421,32 @@ class SerotineWallet {
                 }
             }
         } + listOf(
+            scope.launch {
+                // What is queued is checked at a fresh head and sent while the app is in front (docs/lenient-mode.md).
+                reportingFailure("sending what is queued") {
+                    FollowOutbox(
+                        outbox,
+                        CheckQueued { network ->
+                            QuoteTransfer(
+                                node.transactionInputs,
+                                node.nativeBalances,
+                                node.tokenBalances,
+                                sentTransfers,
+                                cowOrders,
+                                node.cow,
+                                node.lightClient,
+                                network,
+                                outbox,
+                            )
+                        },
+                        node.lightClient,
+                        node.broadcaster,
+                        sentTransfers,
+                        IosOutboxNotifier(),
+                        outboxLock,
+                    )()
+                }
+            },
             scope.launch {
                 // What a lenient draft is built on, kept recent while the light clients verify (docs/lenient-mode.md).
                 reportingFailure("keeping the transaction inputs") {

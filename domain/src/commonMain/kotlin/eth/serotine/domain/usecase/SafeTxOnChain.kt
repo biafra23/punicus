@@ -12,6 +12,7 @@ import eth.serotine.domain.repository.Broadcaster
 import eth.serotine.domain.repository.FeeLevel
 import eth.serotine.domain.repository.NativeBalances
 import eth.serotine.domain.repository.NonceReading
+import eth.serotine.domain.repository.Outbox
 import eth.serotine.domain.repository.ReadUnavailable
 import eth.serotine.domain.repository.SafeApprovals
 import eth.serotine.domain.repository.SafeState
@@ -165,9 +166,11 @@ class QuoteSafeApproval(
     inputs: TransactionInputs,
     sentTransfers: SentTransfers,
     private val network: Network,
+    /** What the account has queued in lenient mode, which holds a new quote back (docs/lenient-mode.md). */
+    private val outbox: Outbox,
     clock: () -> Long = ::epochSecondsNow,
 ) {
-    private val quoter = CallQuoter(inputs, sentTransfers, network, clock)
+    private val quoter = CallQuoter(inputs, sentTransfers, network, clock, outbox)
 
     /**
      * Quotes [owner]'s approval of [request] at the fee [level]. [safeChecked] is called once the
@@ -296,9 +299,11 @@ class QuoteSafeExecution(
     private val inputs: TransactionInputs,
     private val sentTransfers: SentTransfers,
     private val network: Network,
+    /** What the account has queued in lenient mode, which holds a new quote back (docs/lenient-mode.md). */
+    private val outbox: Outbox,
     private val clock: () -> Long = ::epochSecondsNow,
 ) {
-    private val quoter = CallQuoter(inputs, sentTransfers, network, clock)
+    private val quoter = CallQuoter(inputs, sentTransfers, network, clock, outbox)
 
     /**
      * Quotes [executor]'s execution of [request] at the fee [level]. [safeChecked] is called once
