@@ -135,7 +135,8 @@ class DappProposalViewModel(
             url = proposal.dapp.url,
             description = proposal.dapp.description,
             networks = held.map(::networkLine),
-            networksNote = if (held.map { it.testnet }.toSet().size > 1) BOTH_KINDS else null,
+            // Only while a choice can still decide: a refused proposal can only be rejected.
+            networksNote = BOTH_KINDS.takeIf { proposal.refusal == null && held.map { it.testnet }.toSet().size > 1 },
             asks = proposal.methods.sortedBy { METHOD_ORDER.indexOf(it) }.map(::methodLine),
             refusal = proposal.refusal?.let(::refusalLine),
             accounts = options,

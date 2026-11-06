@@ -102,7 +102,9 @@ private fun DappProposalMissingRequiredDarkPreview() = DappProposalPreview(missi
 @Composable
 private fun DappProposalMixedFundsRefusedPreview() = DappProposalPreview(
     request.copy(
-        networks = emptyList(),
+        // What the dApp asks for, of both kinds, as the ViewModel lists it, and no note: it can only be rejected.
+        networks = listOf(Network.ETHEREUM, Network.SEPOLIA).map(DappProposalViewModel::networkLine),
+        networksNote = null,
         refusal = DappProposalViewModel.refusalLine(DappRefusal.MIXED_FUNDS),
         accounts = accounts.map { it.copy(chosen = false) },
     ),

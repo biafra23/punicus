@@ -191,6 +191,26 @@ class DappViewModelsTest {
     }
 
     @Test
+    fun aProposalRequiringBothKindsListsThemWithoutSayingAChoiceDecides() = runTest {
+        main()
+        val wallet = FakeAccounts(held, account(Network.ETHEREUM, '1'))
+        val on = MemoryNetworkSettings(setOf(Network.ETHEREUM, Network.SEPOLIA))
+        val mixed = proposal(DappRefusal.MIXED_FUNDS).copy(requiredChains = setOf("eip155:1", "eip155:11155111"))
+        sessions.connections.value = DappConnections.On(DappRelayLink.CONNECTED, listOf(mixed), emptyList())
+        val vm = DappProposalViewModel(
+            "${proposalId.pairing}/7",
+            ObserveDappConnections(sessions, wallet, on),
+            ApproveDappProposal(sessions, wallet, on),
+            RejectDappProposal(sessions),
+        )
+        backgroundScope.launch { vm.uiState.collect {} }
+        runCurrent()
+        assertEquals(listOf("Ethereum, real funds", "Sepolia, a test network"), vm.uiState.value.networks)
+        assertNull(vm.uiState.value.networksNote, "it can only be rejected: no choice decides anything")
+        assertEquals(DappProposalViewModel.refusalLine(DappRefusal.MIXED_FUNDS), vm.uiState.value.refusal)
+    }
+
+    @Test
     fun theFirstAccountChosenDecidesBetweenRealFundsAndTestnet() = runTest {
         main()
         val ethereum = account(Network.ETHEREUM, '1')
