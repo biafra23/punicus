@@ -25,6 +25,7 @@ import eth.serotine.domain.repository.Signer
 import eth.serotine.domain.repository.TokenCatalog
 import eth.serotine.domain.repository.TransactionInputs
 import eth.serotine.domain.repository.Unlock
+import eth.serotine.domain.repository.Outbox
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.withContext
@@ -88,10 +89,12 @@ class QuoteDappTransaction(
     inputs: TransactionInputs,
     private val sentTransfers: SentTransfers,
     private val history: TransactionHistory,
+    /** What the account has queued in lenient mode, which holds a new quote back (docs/lenient-mode.md). */
+    private val outbox: Outbox = Outbox.None,
     private val clock: () -> Long = ::epochSecondsNow,
 ) {
     /** One quoter per network: a request is quoted on its own network's verified state alone. */
-    private val quoters = Network.entries.associateWith { CallQuoter(inputs, sentTransfers, it, clock) }
+    private val quoters = Network.entries.associateWith { CallQuoter(inputs, sentTransfers, it, clock, outbox) }
 
     suspend operator fun invoke(id: DappRequestId, level: FeeLevel = FeeLevel.NORMAL): DappTransactionQuoting {
         val request = requests.observe().first().firstOrNull { it.id == id } ?: return DappTransactionQuoting.Gone

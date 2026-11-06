@@ -40,6 +40,7 @@ import eth.serotine.domain.repository.TokenBalanceReading
 import eth.serotine.domain.repository.TokenBalances
 import eth.serotine.domain.repository.TransactionInputs
 import eth.serotine.domain.repository.Unlock
+import eth.serotine.domain.repository.Outbox
 import kotlinx.coroutines.async
 import kotlinx.coroutines.flow.first
 
@@ -138,9 +139,11 @@ class QuoteCowSwap(
     private val historyStarts: HistoryStarts,
     private val lightClient: LightClient,
     private val network: Network,
+    /** What the account has queued in lenient mode, which holds a new quote back (docs/lenient-mode.md). */
+    private val outbox: Outbox = Outbox.None,
     private val clock: () -> Long = ::epochSecondsNow,
 ) {
-    private val quoter = CallQuoter(inputs, sentTransfers, network, clock)
+    private val quoter = CallQuoter(inputs, sentTransfers, network, clock, outbox)
 
     /** Exactly [amountIn] of [sell] for [buy] from [from], at [tolerance]. */
     suspend operator fun invoke(
@@ -330,7 +333,7 @@ private fun followedBy(starts: HistoryStartList.Loaded, account: AccountId, fina
 
 /** This refusal, before any read, as the CoW swap's. */
 private fun CallRefusal.asCowSwapQuoting(): CowSwapQuoting = when (this) {
-    is CallRefusal.EarlierMaybeSent -> CowSwapQuoting.EarlierMaybeSent(hash)
+    is CallRefusal.EarlierMaybeSent -> CowSwapQuoting.EarlierMaybeSent(hash, queued)
     is CallRefusal.Unavailable -> CowSwapQuoting.Unavailable(reason, figure)
     CallRefusal.Syncing -> CowSwapQuoting.Syncing
     CallRefusal.Refused -> CowSwapQuoting.Refused
@@ -389,7 +392,7 @@ sealed interface CowSwapQuoting {
     data object HistoryUnreadable : CowSwapQuoting
 
     /** An earlier transaction from the sender, [hash], may still be on its way: retried, not replaced. */
-    data class EarlierMaybeSent(val hash: String) : CowSwapQuoting
+    data class EarlierMaybeSent(val hash: String, val queued: Boolean = false) : CowSwapQuoting
 
     /**
      * CoW is no venue here: no deployment is pinned for the network ([contract] null), or the

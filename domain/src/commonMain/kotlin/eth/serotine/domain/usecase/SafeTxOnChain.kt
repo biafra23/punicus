@@ -23,6 +23,7 @@ import eth.serotine.domain.repository.SignatureRecovery
 import eth.serotine.domain.repository.Signer
 import eth.serotine.domain.repository.TransactionInputs
 import eth.serotine.domain.repository.Unlock
+import eth.serotine.domain.repository.Outbox
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
@@ -165,9 +166,11 @@ class QuoteSafeApproval(
     inputs: TransactionInputs,
     sentTransfers: SentTransfers,
     private val network: Network,
+    /** What the account has queued in lenient mode, which holds a new quote back (docs/lenient-mode.md). */
+    private val outbox: Outbox = Outbox.None,
     clock: () -> Long = ::epochSecondsNow,
 ) {
-    private val quoter = CallQuoter(inputs, sentTransfers, network, clock)
+    private val quoter = CallQuoter(inputs, sentTransfers, network, clock, outbox)
 
     /**
      * Quotes [owner]'s approval of [request] at the fee [level]. [safeChecked] is called once the
@@ -296,9 +299,11 @@ class QuoteSafeExecution(
     private val inputs: TransactionInputs,
     private val sentTransfers: SentTransfers,
     private val network: Network,
+    /** What the account has queued in lenient mode, which holds a new quote back (docs/lenient-mode.md). */
+    private val outbox: Outbox = Outbox.None,
     private val clock: () -> Long = ::epochSecondsNow,
 ) {
-    private val quoter = CallQuoter(inputs, sentTransfers, network, clock)
+    private val quoter = CallQuoter(inputs, sentTransfers, network, clock, outbox)
 
     /**
      * Quotes [executor]'s execution of [request] at the fee [level]. [safeChecked] is called once

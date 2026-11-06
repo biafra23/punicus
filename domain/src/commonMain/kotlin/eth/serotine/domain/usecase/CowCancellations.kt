@@ -17,6 +17,7 @@ import eth.serotine.domain.repository.Signer
 import eth.serotine.domain.repository.Simulation
 import eth.serotine.domain.repository.TransactionInputs
 import eth.serotine.domain.repository.Unlock
+import eth.serotine.domain.repository.Outbox
 import kotlinx.coroutines.async
 import kotlinx.coroutines.flow.first
 
@@ -44,9 +45,11 @@ class QuoteCowCancellation(
     private val cowChain: CowChain,
     private val lightClient: LightClient,
     private val network: Network,
+    /** What the account has queued in lenient mode, which holds a new quote back (docs/lenient-mode.md). */
+    private val outbox: Outbox = Outbox.None,
     private val clock: () -> Long = ::epochSecondsNow,
 ) {
-    private val quoter = CallQuoter(inputs, sentTransfers, network, clock)
+    private val quoter = CallQuoter(inputs, sentTransfers, network, clock, outbox)
 
     /** [order] (an order on this quote's network) cancelled at [level]'s fees. */
     suspend operator fun invoke(order: CowOrderRecord, level: FeeLevel): CowCancellationQuoting = cancellingReads {
@@ -155,7 +158,7 @@ sealed interface CowCancellationQuoting {
     data class Unavailable(val reason: ReadUnavailable, val figure: QuoteFigure? = null) : CowCancellationQuoting
 
     /** An earlier transaction from the sender, [hash], may still be on its way: retried, not replaced. */
-    data class EarlierMaybeSent(val hash: String) : CowCancellationQuoting
+    data class EarlierMaybeSent(val hash: String, val queued: Boolean = false) : CowCancellationQuoting
 }
 
 /** This refusal of the transaction as the cancellation's. */
@@ -166,5 +169,5 @@ private fun CallRefusal.asCancellationQuoting(): CowCancellationQuoting = when (
     CallRefusal.Refused -> CowCancellationQuoting.Refused
     CallRefusal.Syncing -> CowCancellationQuoting.Syncing
     is CallRefusal.Unavailable -> CowCancellationQuoting.Unavailable(reason, figure)
-    is CallRefusal.EarlierMaybeSent -> CowCancellationQuoting.EarlierMaybeSent(hash)
+    is CallRefusal.EarlierMaybeSent -> CowCancellationQuoting.EarlierMaybeSent(hash, queued)
 }

@@ -27,6 +27,7 @@ import eth.serotine.domain.repository.TransactionInputs
 import eth.serotine.domain.repository.UniswapV3Chain
 import eth.serotine.domain.repository.Unlock
 import eth.serotine.domain.repository.VenueReading
+import eth.serotine.domain.repository.Outbox
 import kotlinx.coroutines.async
 import kotlinx.coroutines.flow.first
 
@@ -128,9 +129,11 @@ class QuoteWrap(
     private val cowChain: CowChain,
     private val lightClient: LightClient,
     private val network: Network,
+    /** What the account has queued in lenient mode, which holds a new quote back (docs/lenient-mode.md). */
+    private val outbox: Outbox = Outbox.None,
     private val clock: () -> Long = ::epochSecondsNow,
 ) {
-    private val quoter = CallQuoter(inputs, sentTransfers, network, clock)
+    private val quoter = CallQuoter(inputs, sentTransfers, network, clock, outbox)
 
     /** Exactly [amount] of [sell] for [buy] from [from], at [level]'s fees, when the two are a wrap. */
     suspend operator fun invoke(
@@ -201,7 +204,7 @@ class QuoteWrap(
             WrapDirection.UNWRAP -> Weth9.unwrap(deployment.weth9, amount)
         }
         val (quote, unmined) = when (
-            val quoting = quoter.quote(from, call.to, call.value, call.data, level, nativeBefore, Weth9::returnsNothing)
+            val quoting = quoter.quote(from, call.to, call.value, call.data, level, nativeBefore, accepts = Weth9::returnsNothing)
         ) {
             is CallQuoting.Quoted -> quoting
             is CallQuoting.Refused -> return@cancellingReads quoting.refusal.asWrapQuoting()
@@ -249,7 +252,7 @@ private fun CallRefusal.asWrapQuoting(): WrapQuoting = when (this) {
     CallRefusal.Refused -> WrapQuoting.Refused
     CallRefusal.Syncing -> WrapQuoting.Syncing
     is CallRefusal.Unavailable -> WrapQuoting.Unavailable(reason, figure)
-    is CallRefusal.EarlierMaybeSent -> WrapQuoting.EarlierMaybeSent(hash)
+    is CallRefusal.EarlierMaybeSent -> WrapQuoting.EarlierMaybeSent(hash, queued)
 }
 
 /** The outcome of [QuoteWrap]. */
@@ -289,7 +292,7 @@ sealed interface WrapQuoting {
     data class Unavailable(val reason: ReadUnavailable, val figure: QuoteFigure? = null) : WrapQuoting
 
     /** An earlier transaction from the sender, [hash], may still be on its way: retried, not replaced. */
-    data class EarlierMaybeSent(val hash: String) : WrapQuoting
+    data class EarlierMaybeSent(val hash: String, val queued: Boolean = false) : WrapQuoting
 
     /**
      * The record of the CoW orders signed here cannot be read: one selling WETH may still fill, so
