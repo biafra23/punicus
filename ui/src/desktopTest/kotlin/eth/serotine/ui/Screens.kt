@@ -22,6 +22,7 @@ import eth.serotine.ui.dapprequest.dappRequestScreenPreviews
 import eth.serotine.ui.dapptransaction.dappTransactionScreenPreviews
 import eth.serotine.ui.debug.debugScreenPreviews
 import eth.serotine.ui.deriveaccount.deriveAccountScreenPreviews
+import eth.serotine.ui.handoff.handoffScreenPreviews
 import eth.serotine.ui.mnemonicimport.mnemonicImportScreenPreviews
 import eth.serotine.ui.pairdapp.pairDappScreenPreviews
 import eth.serotine.ui.ratewidget.widgetPairScreenPreviews
@@ -77,6 +78,7 @@ internal object Screens {
     val dappTransaction = Screen("dapp-transaction", "dApp transaction", dappTransactionScreenPreviews)
     val debug = Screen("debug", "Debug", debugScreenPreviews)
     val deriveAccount = Screen("derive-account", "Add account from the same phrase", deriveAccountScreenPreviews)
+    val handoff = Screen("handoff", "Send from another wallet", handoffScreenPreviews)
     val mnemonicImport = Screen("mnemonic-import", "Import recovery phrase", mnemonicImportScreenPreviews)
     val pairDapp = Screen("pair-dapp", "Connect a dApp", pairDappScreenPreviews)
     val receive = Screen("receive", "Receive", receiveScreenPreviews)
@@ -138,6 +140,7 @@ internal object Screens {
         dappTransaction,
         debug,
         deriveAccount,
+        handoff,
         mnemonicImport,
         pairDapp,
         receive,

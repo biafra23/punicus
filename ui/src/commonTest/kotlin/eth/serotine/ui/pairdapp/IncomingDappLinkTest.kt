@@ -34,6 +34,34 @@ class IncomingDappLinkTest {
     }
 
     @Test
+    fun serotinesDeepLinkHandsOverTheWcLinkItCarries() {
+        val inbox = IncomingDappLink()
+        val wc = "wc:7f6e@2?relay-protocol=irn&symKey=587d&expiryTimestamp=1700000000"
+        // As WalletConnect's modals build it: encodeURIComponent of the wc: link.
+        val encoded = "wc%3A7f6e%402%3Frelay-protocol%3Dirn%26symKey%3D587d%26expiryTimestamp%3D1700000000"
+        assertTrue(inbox.offer("serotine://wc?uri=$encoded"))
+        assertEquals(wc, inbox.take())
+        // Another parameter beside it, in either order, changes nothing.
+        assertTrue(inbox.offer("serotine://wc?requestId=1&uri=$encoded"))
+        assertEquals(wc, inbox.take())
+    }
+
+    @Test
+    fun aDeepLinkWithoutOneWellEncodedWcLinkOffersNothing() {
+        val inbox = IncomingDappLink()
+        // A dApp bringing the wallet to the front for a request: no link.
+        assertFalse(inbox.offer("serotine://wc?requestId=1&sessionTopic=ab"))
+        assertFalse(inbox.offer("serotine://wc?uri=wc:abc@2?relay-protocol=irn&symKey=00"), "not encoded")
+        assertFalse(inbox.offer("serotine://wc?uri=wc%3Aa%402&uri=wc%3Ab%402"), "two links")
+        assertFalse(inbox.offer("serotine://wc?uri=wc%3Aabc%4"), "a broken escape")
+        assertFalse(inbox.offer("serotine://wc?uri=wc%3A%FF"), "not UTF-8")
+        assertFalse(inbox.offer("serotine://wc?uri=https%3A%2F%2Fexample.org"), "not a wc: link")
+        assertFalse(inbox.offer("serotine://other?uri=wc%3Aabc%402"), "another path")
+        assertFalse(inbox.offer("serotine://wc?uri=wc%3A" + "x".repeat(3000)), "too long")
+        assertNull(inbox.pending.value)
+    }
+
+    @Test
     fun connectADappFillsInTheLinkAndPairsOnlyOnConnect() = runTest {
         Dispatchers.setMain(UnconfinedTestDispatcher(testScheduler))
         val sessions = FakeDappSessions()

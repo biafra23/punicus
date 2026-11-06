@@ -48,12 +48,14 @@ jobs:
     # jpackage bundles a single-architecture JRE and can't emit a universal binary, so one
     # .dmg per arch. jpackage stamps the .app with the architecture of the JDK it runs under,
     # NOT the host — so the Intel dmg is cross-built on Apple Silicon by running an x86_64
-    # JDK under Rosetta 2. BOTH jobs therefore run on macos-14 (Apple Silicon):
+    # JDK under Rosetta 2. BOTH jobs therefore run on macos-15 (Apple Silicon):
     #   arm64 → native aarch64 JDK           (dmg runs on M-series Macs)
     #   x64   → x86_64 JDK under Rosetta 2    (dmg runs on Intel Macs)
     # Not the Intel macos-13 runner: GitHub is winding down Intel macOS capacity, so those
     # jobs queue until the 24h cap. An arm64 .dmg will NOT launch on an Intel Mac, so users
-    # download the one matching their Mac.
+    # download the one matching their Mac. macos-15, as the iOS workflow uses: GitHub retired
+    # the macos-14 image, whose jobs are now cancelled before their first step ("The
+    # configuration 'macos-14-arm64-us-default' is not supported", 2026-11-06).
     strategy:
       fail-fast: false
       # PRs — and a dispatch on a branch, which stands in for the PR leg a part
@@ -67,7 +69,7 @@ jobs:
         include: ${{ (github.event_name == 'pull_request' || (github.event_name == 'workflow_dispatch' && !startsWith(github.ref, 'refs/tags/')))
           && fromJSON('[{"arch":"arm64","java-arch":"aarch64"}]')
           || fromJSON('[{"arch":"arm64","java-arch":"aarch64"},{"arch":"x64","java-arch":"x64"}]') }}
-    runs-on: macos-14
+    runs-on: macos-15
     permissions:
       contents: read
     env:
