@@ -3,6 +3,8 @@
     <string name="app_name">Serotine</string>
     <string name="upgrade_channel_name">Network upgrades</string>
     <string name="upgrade_channel_description">Tells you to update Serotine before, and after, a network upgrade this version does not support.</string>
+    <string name="outbox_channel_name">Queued transactions</string>
+    <string name="outbox_channel_description">Tells you when a transaction you signed while syncing was sent, or needs your signature again.</string>
     <string name="biometric_prompt_title">Unlock your key</string>
     <string name="biometric_prompt_use_password">Use the password</string>
     <string name="rate_widget_label">Exchange rate</string>

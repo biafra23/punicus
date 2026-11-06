@@ -21,6 +21,7 @@ import eth.serotine.data.settings.FileDebugScreen
 import eth.serotine.data.settings.FileDisplayCurrency
 import eth.serotine.data.settings.FileAmountsHidden
 import eth.serotine.data.settings.FileInterfaceMode
+import eth.serotine.data.outbox.iosOutbox
 import eth.serotine.data.settings.FileSyncPolicy
 import eth.serotine.data.settings.FileSwapVenue
 import eth.serotine.data.swaps.FileWaitingSwaps
@@ -38,7 +39,11 @@ import eth.serotine.domain.usecase.FollowDebugScreen
 import eth.serotine.domain.usecase.FollowInterfaceMode
 import eth.serotine.domain.usecase.FollowNetworks
 import eth.serotine.domain.usecase.FollowSafeDeployments
+import eth.serotine.domain.usecase.CheckQueued
+import eth.serotine.domain.usecase.FollowOutbox
 import eth.serotine.domain.usecase.KeepTransactionInputs
+import eth.serotine.domain.usecase.OutboxLock
+import eth.serotine.domain.usecase.QuoteTransfer
 import eth.serotine.domain.usecase.FollowSentTransactions
 import eth.serotine.domain.usecase.FollowUpgradeReports
 import eth.serotine.domain.usecase.HistoryNotingAccounts
@@ -202,6 +207,14 @@ class SerotineWallet {
     /** The CoW orders signed here, each live until its end is proven (docs/swaps.md): public data only. */
     private val cowOrders = FileCowOrders("$dataDir/cow-orders.json")
     private val sentTransfers = HistoryRecordingSentTransfers(sentRecord, transactionHistory)
+
+    /**
+     * Lenient mode's outbox (docs/lenient-mode.md): sealed with a Secure Enclave key of its own, in
+     * a directory out of backups; in memory only on the simulator. One instance, which the graph and
+     * the follower share, with the one lock they share too.
+     */
+    private val outbox = iosOutbox("$dataDir/outbox")
+    private val outboxLock = OutboxLock()
 
     internal val graph: AppGraph = run {
         // This device's Secure Enclave; the password alone on a simulator without one, its Argon2id
@@ -407,6 +420,32 @@ class SerotineWallet {
                 }
             }
         } + listOf(
+            scope.launch {
+                // What is queued is checked at a fresh head and sent while the app is in front (docs/lenient-mode.md).
+                reportingFailure("sending what is queued") {
+                    FollowOutbox(
+                        outbox,
+                        CheckQueued { network ->
+                            QuoteTransfer(
+                                node.transactionInputs,
+                                node.nativeBalances,
+                                node.tokenBalances,
+                                sentTransfers,
+                                cowOrders,
+                                node.cow,
+                                node.lightClient,
+                                network,
+                                outbox,
+                            )
+                        },
+                        node.lightClient,
+                        node.broadcaster,
+                        sentTransfers,
+                        IosOutboxNotifier(),
+                        outboxLock,
+                    )()
+                }
+            },
             scope.launch {
                 // What a lenient draft is built on, kept recent while the light clients verify (docs/lenient-mode.md).
                 reportingFailure("keeping the transaction inputs") {
