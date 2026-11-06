@@ -649,4 +649,21 @@ class LenientSafeTxsTest {
         assertEquals(TransferQueuing.NotSaved, queueCall(draft, unlock))
         assertTrue(world.signer.asked.isEmpty(), "no key is asked for")
     }
+
+    @Test
+    fun aCoSignatureOfARequestRemovedMeanwhileIsReleasedNeverSavedBack() = runTest {
+        val request = world.request(usdcTransfer(4), world.bob.address)
+        world.queue.save(request)
+        val ready = assertIs<HeldSignCheck.Ready>(hold.check(request, world.alice.address))
+        assertIs<SafeSignatureHolding.Held>(hold.sign(ready, unlock))
+        // Removed from this device before its check.
+        world.queue.remove(request.hash)
+        caughtUp()
+
+        follower().round()
+
+        assertEquals(emptyList(), outbox.held.value)
+        assertEquals(emptyList(), world.queue.requests.value, "the removal stands")
+        assertEquals(emptyList(), notifier.told, "nothing says it is in the queue")
+    }
 }

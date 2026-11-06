@@ -1390,6 +1390,25 @@ class SafeTxViewModelTest {
     }
 
     @Test
+    fun removingATransactionDiscardsTheSignatureOfItHeldHere() = runTest {
+        lenientWhileSyncing()
+        val request = queued(world.request(world.ether(4)))
+        val viewModel = viewModel(request)
+        viewModel.startSigning()
+        viewModel.onPasswordChange("made-up test password")
+        viewModel.sign()
+        runCurrent()
+        assertEquals(1, world.outbox.held.size)
+
+        viewModel.remove()
+        runCurrent()
+
+        assertIs<SafeTxUiState.Removed>(viewModel.uiState.value)
+        assertEquals(emptyList(), world.queue.requests.value)
+        assertEquals(emptyList(), world.outbox.held, "never saved back into the queue once checked")
+    }
+
+    @Test
     fun anApprovalIsDraftedOnWhatWasVerifiedLastAndQueuedNotSent() = runTest {
         lenientWhileSyncing()
         val request = queued(world.request(world.ether(4)))

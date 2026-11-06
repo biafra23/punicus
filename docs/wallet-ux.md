@@ -900,7 +900,9 @@ upgrades*).
         it is turned on), then In the queue, to share, which waits for the
         check. Its QR code and text are not offered until then. Discard
         deletes it (`DiscardHeld`, under the outbox's lock): a co-signature's
-        request stays in the queue, unsigned by it.
+        request stays in the queue, unsigned by it. Remove from this device
+        discards a co-signature held of it too, and its confirmation says so;
+        one whose request left the queue is never saved back by its check.
       - The check (`CheckHeldSignature`, run by the outbox's follower at a
         fresh verified head): the Safe verified as a Safe, the transaction's
         nonce not used yet, the signer a current owner, and the threshold it

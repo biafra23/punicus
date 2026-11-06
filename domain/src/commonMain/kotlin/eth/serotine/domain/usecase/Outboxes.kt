@@ -288,7 +288,8 @@ class OutboxLock {
  * ([HeldConflict.NonceTaken]): only one of the two could ever run. So is one that finds the queue
  * short of it, a nonce before it taken by nothing queued or held ([HeldConflict.NonceGap]), as
  * strict mode never proposes past a gap; held ones are checked in their nonces' order, so one
- * held before it is saved first. A conflict deletes its signature,
+ * held before it is saved first. A co-signature whose request was removed from the queue meanwhile
+ * is released, never saved back. A conflict deletes its signature,
  * never shown, and keeps the rest so the user is told and can sign again or discard it. Each is
  * told through [notifier]. A held signature has no hour: passing its check shows it to nobody, and
  * sends nothing.
@@ -376,6 +377,9 @@ class FollowOutbox(
                 )
                 when {
                     taken -> heldConflicted(entry, HeldConflict.NonceTaken)
+                    // A co-signature whose request was removed from this device meanwhile: the removal
+                    // stands, and the signature goes, never saved back into the queue.
+                    !entry.proposed && after.requests.none { it.hash == hash } -> outbox.release(safe, hash)
                     !entry.proposed || entry.nonce <= queuedUpTo -> checked(entry, signed, safeNonce)
                     // One held before it fills the gap once it is checked: this one waits for it.
                     entry.nonce <= heldUpTo -> Unit

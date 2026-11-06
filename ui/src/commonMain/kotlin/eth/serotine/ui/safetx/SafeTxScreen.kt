@@ -463,7 +463,8 @@ private fun OverviewContent(
             text = {
                 Text(
                     "Only this device forgets it, with the signatures it collected here. A signature already " +
-                        "shared stays valid elsewhere until the Safe's nonce passes it.",
+                        "shared stays valid elsewhere until the Safe's nonce passes it." +
+                        if (state.held != null) " Your signature held here is discarded with it." else "",
                 )
             },
             confirmButton = {
