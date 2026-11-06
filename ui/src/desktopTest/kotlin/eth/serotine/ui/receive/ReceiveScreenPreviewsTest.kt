@@ -1,11 +1,12 @@
 package eth.serotine.ui.receive
 
 import eth.serotine.ui.renderEach
+import eth.serotine.ui.Screens
 import kotlin.test.Test
 
 /** Renders every preview in ReceiveScreenPreviews.kt. */
 class ReceiveScreenPreviewsTest {
 
     @Test
-    fun everyPreviewRenders() = renderEach("receiveScreen", receiveScreenPreviews)
+    fun everyPreviewRenders() = renderEach(Screens.receive)
 }

@@ -2,6 +2,7 @@ package eth.serotine.ui.ratewidget
 
 import androidx.compose.runtime.Composable
 import eth.serotine.ui.components.NetworkLabel
+import eth.serotine.ui.ScreenPreview
 import eth.serotine.ui.theme.SerotineTheme
 import org.jetbrains.compose.ui.tooling.preview.Preview
 
@@ -89,14 +90,14 @@ private fun WidgetPairQuotesPreview() = WidgetPairPreview(quotes)
 private fun WidgetPairQuotesDarkPreview() = WidgetPairPreview(quotes, darkTheme = true)
 
 /** Every preview above, which WidgetPairScreenPreviewsTest renders: a new preview goes in here too. */
-internal val widgetPairScreenPreviews: List<@Composable () -> Unit> = listOf(
-    { WidgetPairNetworksPreview() },
-    { WidgetPairNetworksDarkPreview() },
-    { WidgetPairNoneOnPreview() },
-    { WidgetPairBasesPreview() },
-    { WidgetPairBasesFilteredPreview() },
-    { WidgetPairBasesNoMatchPreview() },
-    { WidgetPairBasesFilteredDarkPreview() },
-    { WidgetPairQuotesPreview() },
-    { WidgetPairQuotesDarkPreview() },
+internal val widgetPairScreenPreviews: List<ScreenPreview> = listOf(
+    ScreenPreview("networks") { WidgetPairNetworksPreview() },
+    ScreenPreview("networks-dark") { WidgetPairNetworksDarkPreview() },
+    ScreenPreview("none-on") { WidgetPairNoneOnPreview() },
+    ScreenPreview("bases") { WidgetPairBasesPreview() },
+    ScreenPreview("bases-filtered") { WidgetPairBasesFilteredPreview() },
+    ScreenPreview("bases-no-match") { WidgetPairBasesNoMatchPreview() },
+    ScreenPreview("bases-filtered-dark") { WidgetPairBasesFilteredDarkPreview() },
+    ScreenPreview("quotes") { WidgetPairQuotesPreview() },
+    ScreenPreview("quotes-dark") { WidgetPairQuotesDarkPreview() },
 )

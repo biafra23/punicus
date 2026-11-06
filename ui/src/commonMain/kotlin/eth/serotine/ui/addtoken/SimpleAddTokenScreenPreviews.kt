@@ -3,6 +3,7 @@ package eth.serotine.ui.addtoken
 import androidx.compose.runtime.Composable
 import eth.serotine.ui.components.NetworkChip
 import eth.serotine.ui.components.NetworkLabel
+import eth.serotine.ui.ScreenPreview
 import eth.serotine.ui.theme.SerotineTheme
 import org.jetbrains.compose.ui.tooling.preview.Preview
 
@@ -44,7 +45,7 @@ private fun SimpleAddTokenClaimPreview() = SimpleAddTokenPreview(claimed)
 private fun SimpleAddTokenClaimDarkPreview() = SimpleAddTokenPreview(claimed, darkTheme = true)
 
 /** Every preview above, which SimpleAddTokenScreenPreviewsTest renders: a new preview goes in here too. */
-internal val simpleAddTokenScreenPreviews: List<@Composable () -> Unit> = listOf(
-    { SimpleAddTokenClaimPreview() },
-    { SimpleAddTokenClaimDarkPreview() },
+internal val simpleAddTokenScreenPreviews: List<ScreenPreview> = listOf(
+    ScreenPreview("claim") { SimpleAddTokenClaimPreview() },
+    ScreenPreview("claim-dark") { SimpleAddTokenClaimDarkPreview() },
 )

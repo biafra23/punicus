@@ -3,6 +3,7 @@ package eth.serotine.ui.deriveaccount
 import androidx.compose.runtime.Composable
 import eth.serotine.domain.model.WalletPassword
 import eth.serotine.ui.components.STEPPED_DOWN_TEXT
+import eth.serotine.ui.ScreenPreview
 import eth.serotine.ui.theme.SerotineTheme
 import org.jetbrains.compose.ui.tooling.preview.Preview
 
@@ -70,15 +71,15 @@ private fun DeriveAccountUnavailablePreview() = DeriveAccountPreview(
 private fun DeriveAccountLoadingPreview() = DeriveAccountPreview(DeriveAccountUiState.Loading)
 
 /** Every preview above, which DeriveAccountScreenPreviewsTest renders: a new preview goes in here too. */
-internal val deriveAccountScreenPreviews: List<@Composable () -> Unit> = listOf(
-    { DeriveAccountAskPreview() },
-    { DeriveAccountAskDarkPreview() },
-    { DeriveAccountTypedPreview() },
-    { DeriveAccountDerivingPreview() },
-    { DeriveAccountWrongPasswordPreview() },
-    { DeriveAccountAddedPreview() },
-    { DeriveAccountAddedSteppedDownPreview() },
-    { DeriveAccountAddedDarkPreview() },
-    { DeriveAccountUnavailablePreview() },
-    { DeriveAccountLoadingPreview() },
+internal val deriveAccountScreenPreviews: List<ScreenPreview> = listOf(
+    ScreenPreview("ask") { DeriveAccountAskPreview() },
+    ScreenPreview("ask-dark") { DeriveAccountAskDarkPreview() },
+    ScreenPreview("typed") { DeriveAccountTypedPreview() },
+    ScreenPreview("deriving") { DeriveAccountDerivingPreview() },
+    ScreenPreview("wrong-password") { DeriveAccountWrongPasswordPreview() },
+    ScreenPreview("added") { DeriveAccountAddedPreview() },
+    ScreenPreview("added-stepped-down") { DeriveAccountAddedSteppedDownPreview() },
+    ScreenPreview("added-dark") { DeriveAccountAddedDarkPreview() },
+    ScreenPreview("unavailable") { DeriveAccountUnavailablePreview() },
+    ScreenPreview("loading") { DeriveAccountLoadingPreview() },
 )

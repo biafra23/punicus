@@ -1,6 +1,7 @@
 package eth.serotine.ui.safeimport
 
 import androidx.compose.runtime.Composable
+import eth.serotine.ui.ScreenPreview
 import eth.serotine.ui.theme.SerotineTheme
 import org.jetbrains.compose.ui.tooling.preview.Preview
 
@@ -41,8 +42,8 @@ private fun SimpleSafeImportRefusedPreview() = SimpleSafeImportPreview(
 )
 
 /** Every preview above, which SimpleSafeImportScreenPreviewsTest renders: a new preview goes in here too. */
-internal val simpleSafeImportScreenPreviews: List<@Composable () -> Unit> = listOf(
-    { SimpleSafeImportEmptyPreview() },
-    { SimpleSafeImportEmptyDarkPreview() },
-    { SimpleSafeImportRefusedPreview() },
+internal val simpleSafeImportScreenPreviews: List<ScreenPreview> = listOf(
+    ScreenPreview("empty") { SimpleSafeImportEmptyPreview() },
+    ScreenPreview("empty-dark") { SimpleSafeImportEmptyDarkPreview() },
+    ScreenPreview("refused") { SimpleSafeImportRefusedPreview() },
 )

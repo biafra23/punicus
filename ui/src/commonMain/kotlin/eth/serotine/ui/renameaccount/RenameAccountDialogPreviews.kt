@@ -1,6 +1,7 @@
 package eth.serotine.ui.renameaccount
 
 import androidx.compose.runtime.Composable
+import eth.serotine.ui.ScreenPreview
 import eth.serotine.ui.theme.SerotineTheme
 import org.jetbrains.compose.ui.tooling.preview.Preview
 
@@ -45,11 +46,11 @@ private fun RenameAccountListUnavailablePreview() = RenameAccountPreview(
 private fun RenameAccountLoadingPreview() = RenameAccountPreview(RenameAccountUiState.Loading)
 
 /** Every preview above, which RenameAccountDialogPreviewsTest renders: a new preview goes in here too. */
-internal val renameAccountDialogPreviews: List<@Composable () -> Unit> = listOf(
-    { RenameAccountEditingPreview() },
-    { RenameAccountEditingDarkPreview() },
-    { RenameAccountBlankPreview() },
-    { RenameAccountSavingPreview() },
-    { RenameAccountListUnavailablePreview() },
-    { RenameAccountLoadingPreview() },
+internal val renameAccountDialogPreviews: List<ScreenPreview> = listOf(
+    ScreenPreview("editing") { RenameAccountEditingPreview() },
+    ScreenPreview("editing-dark") { RenameAccountEditingDarkPreview() },
+    ScreenPreview("blank") { RenameAccountBlankPreview() },
+    ScreenPreview("saving") { RenameAccountSavingPreview() },
+    ScreenPreview("list-unavailable") { RenameAccountListUnavailablePreview() },
+    ScreenPreview("loading") { RenameAccountLoadingPreview() },
 )

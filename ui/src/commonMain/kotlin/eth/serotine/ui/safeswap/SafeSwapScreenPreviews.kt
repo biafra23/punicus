@@ -14,6 +14,7 @@ import eth.serotine.ui.components.SpenderItem
 import eth.serotine.ui.components.SwapForm
 import eth.serotine.ui.components.UnlockStep
 import eth.serotine.ui.components.verifiedStripSample
+import eth.serotine.ui.ScreenPreview
 import eth.serotine.ui.theme.SerotineTheme
 import org.jetbrains.compose.ui.tooling.preview.Preview
 
@@ -258,18 +259,18 @@ private fun SafeSwapWatchOnlyPreview() = SafeSwapPreview(
 )
 
 /** Every preview above, which SafeSwapScreenPreviewsTest renders: a new preview goes in here too. */
-internal val safeSwapScreenPreviews: List<@Composable () -> Unit> = listOf(
-    { SafeSwapComposePreview() },
-    { SafeSwapComposeDarkPreview() },
-    { SafeSwapRefusedPreview() },
-    { SafeSwapProposeAgainPreview() },
-    { SafeSwapReviewPreview() },
-    { SafeSwapReviewDarkPreview() },
-    { SafeSwapReviewSwapOnlyPreview() },
-    { SafeSwapReviewResetFirstPreview() },
-    { SafeSwapReviewReplacesPreview() },
-    { SafeSwapReviewSigningPreview() },
-    { SafeSwapReviewHalfSignedPreview() },
-    { SafeSwapLoadingPreview() },
-    { SafeSwapWatchOnlyPreview() },
+internal val safeSwapScreenPreviews: List<ScreenPreview> = listOf(
+    ScreenPreview("compose") { SafeSwapComposePreview() },
+    ScreenPreview("compose-dark") { SafeSwapComposeDarkPreview() },
+    ScreenPreview("refused") { SafeSwapRefusedPreview() },
+    ScreenPreview("propose-again") { SafeSwapProposeAgainPreview() },
+    ScreenPreview("review") { SafeSwapReviewPreview() },
+    ScreenPreview("review-dark") { SafeSwapReviewDarkPreview() },
+    ScreenPreview("review-swap-only") { SafeSwapReviewSwapOnlyPreview() },
+    ScreenPreview("review-reset-first") { SafeSwapReviewResetFirstPreview() },
+    ScreenPreview("review-replaces") { SafeSwapReviewReplacesPreview() },
+    ScreenPreview("review-signing") { SafeSwapReviewSigningPreview() },
+    ScreenPreview("review-half-signed") { SafeSwapReviewHalfSignedPreview() },
+    ScreenPreview("loading") { SafeSwapLoadingPreview() },
+    ScreenPreview("watch-only") { SafeSwapWatchOnlyPreview() },
 )

@@ -2,6 +2,7 @@ package eth.serotine.ui.pairdapp
 
 import androidx.compose.runtime.Composable
 import eth.serotine.domain.repository.DappPairing
+import eth.serotine.ui.ScreenPreview
 import eth.serotine.ui.theme.SerotineTheme
 import org.jetbrains.compose.ui.tooling.preview.Preview
 
@@ -47,11 +48,11 @@ private fun PairDappUnreadablePreview() = PairDappPreview(
 )
 
 /** Every preview above, which PairDappScreenPreviewsTest renders: a new preview goes in here too. */
-internal val pairDappScreenPreviews: List<@Composable () -> Unit> = listOf(
-    { PairDappEmptyPreview() },
-    { PairDappPastedPreview() },
-    { PairDappPastedDarkPreview() },
-    { PairDappBusyPreview() },
-    { PairDappExpiredPreview() },
-    { PairDappUnreadablePreview() },
+internal val pairDappScreenPreviews: List<ScreenPreview> = listOf(
+    ScreenPreview("empty") { PairDappEmptyPreview() },
+    ScreenPreview("pasted") { PairDappPastedPreview() },
+    ScreenPreview("pasted-dark") { PairDappPastedDarkPreview() },
+    ScreenPreview("busy") { PairDappBusyPreview() },
+    ScreenPreview("expired") { PairDappExpiredPreview() },
+    ScreenPreview("unreadable") { PairDappUnreadablePreview() },
 )

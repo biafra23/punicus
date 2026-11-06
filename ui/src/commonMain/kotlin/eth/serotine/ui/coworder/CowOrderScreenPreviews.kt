@@ -9,6 +9,7 @@ import eth.serotine.ui.components.SendFrom
 import eth.serotine.ui.components.SpenderItem
 import eth.serotine.ui.components.UnlockStep
 import eth.serotine.ui.components.verifiedStripSample
+import eth.serotine.ui.ScreenPreview
 import eth.serotine.ui.theme.SerotineTheme
 import org.jetbrains.compose.ui.tooling.preview.Preview
 
@@ -229,21 +230,21 @@ private fun CowOrderKeyNotHerePreview() = CowOrderPreview(
 )
 
 /** Every preview above, which CowOrderScreenPreviewsTest renders: a new preview goes in here too. */
-internal val cowOrderScreenPreviews: List<@Composable () -> Unit> = listOf(
-    { CowOrderLivePreview() },
-    { CowOrderLiveDarkPreview() },
-    { CowOrderPastValidityPreview() },
-    { CowOrderCancellationOnItsWayPreview() },
-    { CowOrderQuotingCancellationPreview() },
-    { CowOrderCancelRefusedPreview() },
-    { CowOrderFilledPreview() },
-    { CowOrderNotFilledPreview() },
-    { CowOrderCancelledPreview() },
-    { CowOrderNotProvablePreview() },
-    { CowOrderCancelReviewPreview() },
-    { CowOrderCancelNotSentPreview() },
-    { CowOrderCancelSentPreview() },
-    { CowOrderMissingPreview() },
-    { CowOrderLoadingPreview() },
-    { CowOrderKeyNotHerePreview() },
+internal val cowOrderScreenPreviews: List<ScreenPreview> = listOf(
+    ScreenPreview("live") { CowOrderLivePreview() },
+    ScreenPreview("live-dark") { CowOrderLiveDarkPreview() },
+    ScreenPreview("past-validity") { CowOrderPastValidityPreview() },
+    ScreenPreview("cancellation-on-its-way") { CowOrderCancellationOnItsWayPreview() },
+    ScreenPreview("quoting-cancellation") { CowOrderQuotingCancellationPreview() },
+    ScreenPreview("cancel-refused") { CowOrderCancelRefusedPreview() },
+    ScreenPreview("filled") { CowOrderFilledPreview() },
+    ScreenPreview("not-filled") { CowOrderNotFilledPreview() },
+    ScreenPreview("cancelled") { CowOrderCancelledPreview() },
+    ScreenPreview("not-provable") { CowOrderNotProvablePreview() },
+    ScreenPreview("cancel-review") { CowOrderCancelReviewPreview() },
+    ScreenPreview("cancel-not-sent") { CowOrderCancelNotSentPreview() },
+    ScreenPreview("cancel-sent") { CowOrderCancelSentPreview() },
+    ScreenPreview("missing") { CowOrderMissingPreview() },
+    ScreenPreview("loading") { CowOrderLoadingPreview() },
+    ScreenPreview("key-not-here") { CowOrderKeyNotHerePreview() },
 )

@@ -223,4 +223,6 @@ android {
 val screenshotDir: String? = providers.gradleProperty("screenshots").orNull?.let { rootDir.resolve(it).absolutePath }
 tasks.named<Test>("desktopTest") {
     screenshotDir?.let { systemProperty("serotine.screenshots", it) }
+    // ScreensTest counts the previews files there against the screens registered in Screens.kt.
+    systemProperty("serotine.ui.sources", layout.projectDirectory.dir("src/commonMain/kotlin").asFile.absolutePath)
 }

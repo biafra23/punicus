@@ -4,6 +4,7 @@ import androidx.compose.runtime.Composable
 import eth.serotine.ui.components.LightClientHealth.NOT_RUNNING
 import eth.serotine.ui.components.LightClientHealth.NOT_VERIFIED
 import eth.serotine.ui.components.LightClientHealth.VERIFIED
+import eth.serotine.ui.ScreenPreview
 import eth.serotine.ui.theme.SerotineTheme
 import org.jetbrains.compose.ui.tooling.preview.Preview
 
@@ -82,8 +83,8 @@ private fun SimpleSettingsOffPreview() = SimpleSettingsPreview(
 )
 
 /** Every preview above, which SimpleSettingsScreenPreviewsTest renders: a new preview goes in here too. */
-internal val simpleSettingsScreenPreviews: List<@Composable () -> Unit> = listOf(
-    { SimpleSettingsPreviewDefault() },
-    { SimpleSettingsDarkPreview() },
-    { SimpleSettingsOffPreview() },
+internal val simpleSettingsScreenPreviews: List<ScreenPreview> = listOf(
+    ScreenPreview("default") { SimpleSettingsPreviewDefault() },
+    ScreenPreview("default-dark") { SimpleSettingsDarkPreview() },
+    ScreenPreview("off") { SimpleSettingsOffPreview() },
 )

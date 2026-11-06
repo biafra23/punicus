@@ -101,11 +101,39 @@ two repositories in step when one changes.
   it builds on `main`, and a dispatch on a tag publishes it.
 - The procedure for cutting a release: `.claude/skills/release/SKILL.md`.
 
+## The Screenshots workflow
+
+(Owner rulings, 2026-11-04; `.claude/skills/screenshots/SKILL.md`.)
+
+- `screenshots.yml` is the one workflow that writes to the repository. It
+  commits what it renders under `docs/screenshots/` (the PNGs and the
+  folder's `README.md` and `index.html`), and nothing else, to a same-repo
+  PR's branch, and never to `main`.
+- It pushes with the `SCREENSHOTS_DEPLOY_KEY` deploy key, because a push
+  with `GITHUB_TOKEN` starts no workflow and the new head would go untested.
+  The key, and any change to it, is the owner's.
+- The key is held by a job of its own, which runs none of the PR's code.
+  The render job, which runs the PR's build, holds no write credential and
+  hands its commit over as a git bundle. The push job pushes it only if it
+  is one commit on top of the PR's head that changes nothing outside
+  `docs/screenshots/`. The key never reaches the render job's runner: a
+  build script there could read it, or leave a process behind that reads it
+  later.
+- A fork PR gets no secrets: it renders, compares and fails when the
+  screens differ, and its description is left alone.
+- On `main` it only verifies that the committed set equals the render.
+- PR-controlled values reach its scripts through `env:`, and every action
+  is pinned to a commit, as `scripts/check_security_invariants.py` checks.
+
 ## Scripts
 
 - `scripts/check_apk_min_api.py` enforces the minSdk 29 JDK-API budget
   against the built APKs' dex. When it runs, and what may never be
   allowlisted: `.claude/rules/platform.md`, *The minSdk 29 JDK-API budget*.
+- `scripts/screenshots.py` writes the screenshots table into a PR's
+  description and holds `docs/screenshots/` to its size budget.
+  `scripts/test_screenshots.py` tests it, and the workflow runs those tests
+  first.
 - The APK workflow also checks the built manifests for the preview tooling's
   `PreviewActivity`, which must stay out of every APK (`.claude/rules/ui.md`,
   *Every screen has previews*).
