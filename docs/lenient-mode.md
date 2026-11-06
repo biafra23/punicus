@@ -273,7 +273,7 @@ own test of the fee. A peer tests the signed figures, not the fresh ones.
   (`.claude/rules/trust.md`, *What a dApp sends is untrusted input*; owner
   rulings, 2026-11-03, #22). Queued bytes can, so a place alone is not
   enough.
-- Proposed (decision 5): kept across restarts in an app-private file of its
+- Decided (decision 5): kept across restarts in an app-private file of its
   own, `outbox.json`, **sealed with a hardware key of its own**, out of
   cloud backup and device-to-device transfer, never logged, never in a
   UiState, and deleted with the queued transaction. The key is made as the
@@ -285,10 +285,11 @@ own test of the fee. A peer tests the signed figures, not the fresh ones.
   file, as it could send the transaction itself. On a Mac, so can any
   program running as the same user: the enclave's key is bound to the Mac,
   not to the app (docs/keys-and-signing.md, *A Mac with a Secure Enclave*).
-- **Where there is no seal, memory only.** A device whose hardware key
-  store Serotine does not use keeps the queued bytes in memory only: Windows
-  and Linux for now, a TPM present or not (owner ruling, 2026-10-16), a Mac
-  without a Secure Enclave, and the iOS simulator.
+- **Where there is no seal, memory only.** A device with no hardware key to
+  seal with keeps the queued bytes in memory only: an Android device whose
+  Keystore is software only, Windows and Linux for now, a TPM present or not
+  (owner ruling, 2026-10-16), a Mac without a Secure Enclave, and the iOS
+  simulator.
 - **A seal key lost loses the queued transaction.** When the key store no
   longer has the key (it was reset, or the app was restored on another
   device), the file cannot be opened. The queued transaction is said as
@@ -307,8 +308,8 @@ values, below.
 - **Drafted on the Safe last verified.** The Safe's nonce, owners and
   threshold, last verified and kept, labelled with their age. Today no
   other value than a balance is shown last known (docs/wallet-ux.md, *Rules
-  every screen follows*; owner's request, 2026-10-19), so this needs the
-  owner's word (*The rules it changes*, 4).
+  every screen follows*; owner's request, 2026-10-19), so rule change 4
+  covers them.
 - **The refusals apply when drafting, unchanged.** Setting a fallback
   handler other than the pinned one or none (owner ruling, 2026-10-18,
   #63), enabling a module (owner ruling, 2026-10-18, on #54), and a call of
@@ -396,7 +397,8 @@ each as proposed (owner rulings, 2026-11-06), and part 1 records them:
 6. The code that states these rules in its KDoc follows them in the part
    that changes them: `LastBalancesFile` ("Shown only, never acted on: a
    quote and a signature read a fresh proof"), `CallQuoter` and the quote
-   use cases that refuse a balance last verified as syncing.
+   use cases that refuse a balance last verified as syncing, and
+   `ProofSchedule` and `ProvenReads`, which quote the fresh-state sentence.
 
 ## Decisions for the owner
 

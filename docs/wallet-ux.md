@@ -73,7 +73,8 @@ the text wins.
   2026-11-06): a draft is built and signed on the balances last verified and
   on the other values it needs (the account's nonce, the network's fee
   quote; a Safe's nonce, owners and threshold), each labelled with its age,
-  never a price, and is sent only after the check at a fresh head.
+  never a price. It is sent, or shown to another owner, only after the
+  check at a fresh head.
 - **In simple mode a balance may be read a while ago** (owner's decisions,
   2026-10-26). On a network without block access lists (EIP-7928; Ethereum
   and Gnosis Chain today), simple mode proves balances when a screen opens
@@ -83,7 +84,9 @@ the text wins.
   (the rule above). A network with them (Sepolia) updates live. Nothing
   acts on an aged balance: a quote, a review and a signature read fresh
   state, and Send proves the balance it offers (Max included) when it
-  opens.
+  opens. The one exception is a lenient draft, labelled, which is sent only
+  after the check at a fresh head (docs/lenient-mode.md; owner rulings,
+  2026-11-06).
 - **Amounts are token units.** An amount is entered, reviewed and signed in
   the token's own units. Fiat values are display-only (owner ruling,
   2026-10-16, *Prices* below): a hint next to an amount, a total, a sort key,

@@ -115,7 +115,7 @@ change what it trusts.
   that has had one may be held a proof across heads. So a screen shows
   fresh values as it opens, and a quote, a review and a signature always
   read fresh state, in either view, except a lenient draft's
-  (docs/lenient-mode.md).
+  (docs/lenient-mode.md; owner rulings, 2026-11-06).
 - **On demand.** Each network has a `ProofSchedule`, which its native
   balances, token balances and prices share. In simple mode
   (`FollowInterfaceMode`, run by the hosts), on a network that is not live,

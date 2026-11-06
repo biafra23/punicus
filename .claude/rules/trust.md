@@ -47,8 +47,8 @@ the contract for keys.
 
 ## Lenient mode: sign early, never send early
 
-(Owner rulings, 2026-11-06, accepting every proposal of docs/lenient-mode.md,
-which has the detail.)
+(Owner rulings, 2026-11-06, on #258, accepting every proposal of
+docs/lenient-mode.md, which has the detail.)
 
 - **A switch, off by default.** Settings → Advanced → *Sign while syncing*,
   one for the app, off in every build. Off is strict mode: everything
@@ -62,26 +62,33 @@ which has the detail.)
   Safe, its nonce, owners and threshold. A pinned gas ceiling per kind of
   call stands in for the estimate. A draft has no simulation, no ENS name
   and no fiat value. With nothing kept, the draft waits.
-- **The check makes the strict quote again, fresh, and compares.** It passes
-  when the quote is made, the nonce is the one signed, the estimate is within
-  the signed gas limit, the signed fee cap covers 1.125² times the next base
-  fee plus the signed tip, and the fresh balance covers the signed
-  transaction's upfront cost and what the account's transactions not mined
-  yet may take. A conflict deletes the signed bytes and asks for a new
-  signature.
-- **The outbox:** one queued transaction per account. It is sent by itself
-  once it checks out, within an hour of its signature; later, only on the
-  user's tap. It runs while the app runs and during Android's grace period,
-  and says when it waits for the app to be opened.
-- **Queued signed bytes are neither public data nor key material:** whoever
-  has them can broadcast them, and they move only what the user signed. They
-  are kept in an app-private file of their own, sealed with a hardware key
-  of their own that needs no authorization (docs/keys-and-signing.md), out
-  of backups and device transfers, never logged and never in a UiState.
-  Where Serotine uses no hardware key store, they are kept in memory only. A
+- **The check makes the strict quote again, fresh, and compares.** The
+  quote must be made, except for its own funds test. The nonce must be the
+  one signed. The fresh estimate must be within the signed gas limit.
+- **The check's fees and funds use the signed figures.** The signed fee cap
+  must cover 1.125² times the next base fee, plus the signed tip. The fresh
+  balance must cover the signed transaction's upfront cost (its value plus
+  its gas limit times its fee cap) and what the account's transactions not
+  mined yet may take. A peer tests the signed bytes, not a fresh quote.
+- **A conflict deletes the signed bytes** and asks for a new signature.
+- **A held Safe signature is checked before it is shown to another owner:**
+  the Safe verified as a Safe, its `SafeTx` nonce not used yet, the signer
+  a current owner. A signer that is no longer an owner is told so, and the
+  request is discarded.
+- **The outbox holds one queued transaction per account.** It is sent by
+  itself once it checks out, within an hour of its signature; later, only
+  on the user's tap.
+- **The outbox runs while the app runs**, and during Android's grace period.
+  It says when it waits for the app to be opened.
+- **Queued signed bytes are neither public data nor key material.** Whoever
+  has them can broadcast them, and they move only what the user signed.
+- **They are sealed:** an app-private file of their own, sealed with a
+  hardware key of their own that needs no authorization
+  (docs/keys-and-signing.md). Never logged, never in a UiState. Where
+  Serotine has no hardware key to seal with, they are kept in memory only. A
   lost seal key loses the queued transaction, and says so.
 - **Strict in both modes:** swaps and dApp requests. Wraps and Create Safe
-  stay strict for now. The Safe refusals above apply when drafting.
+  stay strict for now. The Safe refusals below apply when drafting.
 - Turning the switch off leaves what is queued queued: it is checked and
   sent, or discarded by the user.
 
