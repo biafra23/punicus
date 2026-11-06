@@ -68,7 +68,9 @@ import eth.serotine.ui.FakeBalances
 import eth.serotine.ui.FakeFeeds
 import eth.serotine.ui.FakeFreshness
 import eth.serotine.ui.FakeLogIndex
+import eth.serotine.ui.FakeEnsNfts
 import eth.serotine.ui.FakeNftContracts
+import eth.serotine.ui.FakeReceiptsNever
 import eth.serotine.ui.FakeMetadata
 import eth.serotine.ui.FakeNames
 import eth.serotine.ui.FakeRecovery
@@ -194,7 +196,7 @@ class AccountDetailViewModelTest {
         DropWaitingSwap(waitingSwaps),
         ObserveAmountsHidden(amountsHidden),
         ToggleAmountsHidden(amountsHidden),
-        ObserveNfts(nftLogIndex, historyStarts, nftContracts),
+        ObserveNfts(nftLogIndex, historyStarts, nftContracts, FakeEnsNfts(), FakeReceiptsNever()),
         formatTime = { "<$it>" },
         clock = { NOW },
     )
@@ -1016,7 +1018,7 @@ class AccountDetailViewModelTest {
             DropWaitingSwap(waitingSwaps),
             ObserveAmountsHidden(amountsHidden),
             ToggleAmountsHidden(amountsHidden),
-            ObserveNfts(nftLogIndex, historyStarts, nftContracts),
+            ObserveNfts(nftLogIndex, historyStarts, nftContracts, FakeEnsNfts(), FakeReceiptsNever()),
         )
         backgroundScope.launch { viewModel.uiState.collect {} }
         runCurrent()

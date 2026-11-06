@@ -35,6 +35,7 @@ import eth.serotine.domain.repository.InterfaceModeSetting
 import eth.serotine.domain.repository.KeyStore
 import eth.serotine.domain.repository.KnownUpgradeStore
 import eth.serotine.domain.repository.LightClient
+import eth.serotine.domain.repository.EnsNfts
 import eth.serotine.domain.repository.LogIndex
 import eth.serotine.domain.repository.NftContracts
 import eth.serotine.domain.repository.NameResolver
@@ -273,6 +274,8 @@ class AppGraph(
     private val logIndex: LogIndex,
     /** What NFT contracts say on chain, verified: who holds a token, and what a collection calls itself (#246). */
     private val nfts: NftContracts,
+    /** What a built-in ENS collection's token stands for: its name, checked by hashing, and expiry (#246). */
+    private val ensNfts: EnsNfts,
     /** The Safe transactions waiting for their owners, kept on this device across restarts. */
     private val safeTxQueue: SafeTxQueue,
     /** The text a Safe's signing request travels in between devices, for every network the app knows. */
@@ -386,7 +389,7 @@ class AppGraph(
             DropWaitingSwap(waitingSwaps),
             ObserveAmountsHidden(amountsHidden),
             toggleAmountsHidden,
-            ObserveNfts(logIndex, historyStarts, nfts),
+            ObserveNfts(logIndex, historyStarts, nfts, ensNfts, receipts),
         )
 
     /**

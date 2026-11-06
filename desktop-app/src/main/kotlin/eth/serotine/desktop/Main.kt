@@ -377,6 +377,7 @@ private fun openWallet(dataDir: File) {
                 historyStarts = historyStarts,
                 logIndex = node.logIndex,
                 nfts = node.nfts,
+                ensNfts = node.ensNfts,
                 // The Safe transactions waiting for their owners, with the signatures collected (public).
                 safeTxQueue = FileSafeTxQueue(dataDir.resolve("safe-tx-queue.json").path),
                 signingRequests = JsonSigningRequestCodec(),

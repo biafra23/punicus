@@ -5,11 +5,14 @@ import eth.serotine.domain.model.Address
 import eth.serotine.domain.model.Erc1155Transfers
 import eth.serotine.domain.model.KnownNftCollection
 import eth.serotine.domain.model.KnownNftCollections
+import eth.serotine.domain.model.KnownNftKind
 import eth.serotine.domain.model.NftRef
 import eth.serotine.domain.model.NftStandard
 import eth.serotine.domain.model.TokenTransfer
 import eth.serotine.domain.model.TokenTransfers
 import eth.serotine.domain.model.UInt256
+import eth.serotine.domain.repository.EnsNftReading
+import eth.serotine.domain.repository.EnsNfts
 import eth.serotine.domain.repository.HistoryStarts
 import eth.serotine.domain.repository.IndexedLog
 import eth.serotine.domain.repository.LogIndex
@@ -18,22 +21,31 @@ import eth.serotine.domain.repository.LogWatchKey
 import eth.serotine.domain.repository.NftCollectionReading
 import eth.serotine.domain.repository.NftContracts
 import eth.serotine.domain.repository.NftHolding
+import eth.serotine.domain.repository.ReceiptLog
+import eth.serotine.domain.repository.ReceiptTracker
+import eth.serotine.domain.repository.TransactionProgress
+import kotlin.time.Duration
+import kotlin.time.Duration.Companion.seconds
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.emitAll
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.transformLatest
+import kotlinx.coroutines.withTimeoutOrNull
 
 /**
  * An NFT an account holds (issue #246): [amount] of [nft] (one for ERC-721), proven at [blockNumber]
- * (null: the engine did not say), of [collection].
+ * (null: the engine did not say), of [collection]; for a token of a built-in ENS collection, the name it
+ * stands for ([ens]; null until read, and for any other NFT).
  */
 data class HeldNft(
     val nft: NftRef,
     val amount: UInt256,
     val collection: NftCollection,
     val blockNumber: Long?,
+    val ens: EnsNftReading.Named? = null,
 )
 
 /**
@@ -96,12 +108,19 @@ sealed interface NftHoldings {
  * [MAX_CHECKED] NFTs are checked, the built-in collections' first, then the most recently moved, so
  * that a flood of airdrops can neither flood the light client with calls nor push out the user's
  * ENS names. Each unlisted collection's name is read once, right after its first NFT is proven
- * held, while this runs.
+ * held, while this runs, and each ENS token's name once too ([EnsNfts]; owner rulings, 2026-11-05 and
+ * 2026-11-06): a .eth registrar token's label is looked for in the verified receipt of the transaction
+ * that last brought it to the account. A pinned collection whose code is not its pin
+ * ([EnsNftReading.NotPinned]) is shown as unlisted.
  */
 class ObserveNfts(
     private val index: LogIndex,
     private val starts: HistoryStarts,
     private val contracts: NftContracts,
+    /** What a built-in ENS collection's token stands for: its name, expiry, wrapped or not. */
+    private val ens: EnsNfts,
+    /** The verified receipts a .eth registrar token's label is looked for in. */
+    private val receipts: ReceiptTracker,
 ) {
 
     @OptIn(ExperimentalCoroutinesApi::class)
@@ -130,6 +149,8 @@ class ObserveNfts(
         )
         val proofs = mutableMapOf<NftRef, Proof>()
         val names = mutableMapOf<Address, NftCollectionReading.Read>()
+        val ensNames = mutableMapOf<NftRef, EnsNftReading.Named>()
+        val unpinned = mutableSetOf<Address>()
         emitAll(
             reader.observe().transformLatest { history ->
                 when (history) {
@@ -138,10 +159,15 @@ class ObserveNfts(
                     IndexedHistory.Unavailable -> emit(NftHoldings.Unavailable)
                     is IndexedHistory.Read -> {
                         val moves = history.events
-                        // Each NFT the account received, with the last move naming it and the account:
-                        // the events are in block order, so the last one written stays.
+                        // Each NFT the account received, with the last move naming it and the account,
+                        // and the last that brought it here: the events are in block order, so the last
+                        // one written stays.
                         val last = mutableMapOf<NftRef, NftMove>()
-                        for (move in moves) move.nfts.forEach { last[it] = move }
+                        val lastIn = mutableMapOf<NftRef, NftMove>()
+                        for (move in moves) {
+                            move.nfts.forEach { last[it] = move }
+                            move.received.forEach { lastIn[it] = move }
+                        }
                         // An ERC-721 whose last move took it away is gone: only a log naming the account
                         // brings it back. An ERC-1155 may have left in part, and is checked.
                         val received = moves.flatMap { it.received }.toSet().filterNot { nft ->
@@ -157,7 +183,8 @@ class ObserveNfts(
                         val checking = ordered.take(MAX_CHECKED)
                         val head = history.checked.last
                         val reproveAfter = REPROVE_AFTER_SECONDS / account.network.secondsPerSlot
-                        fun shown() = holdings(account, history, checking, ordered.size, proofs, names)
+                        fun shown() =
+                            holdings(account, history, checking, ordered.size, proofs, names, ensNames, unpinned)
                         emit(shown())
                         for (nft in checking) {
                             val move = last.getValue(nft)
@@ -172,6 +199,21 @@ class ObserveNfts(
                                 if (reading is NftCollectionReading.Read) names[collection] = reading
                             }
                         }
+                        for (nft in checking) {
+                            if (proofs[nft]?.holding !is NftHolding.Held || nft in ensNames) continue
+                            if (nft.collection in unpinned) continue
+                            val known = KnownNftCollections.find(account.network, nft.collection) ?: continue
+                            val logs = if (known.kind == KnownNftKind.ENS_REGISTRAR) {
+                                lastIn[nft]?.let { receiptLogs(account, it.transactionHash) }.orEmpty()
+                            } else {
+                                emptyList()
+                            }
+                            when (val reading = ens.name(account.network, known, nft, logs)) {
+                                is EnsNftReading.Named -> ensNames[nft] = reading
+                                EnsNftReading.NotPinned -> unpinned += nft.collection
+                                is EnsNftReading.Unavailable -> Unit // asked again at the next reading
+                            }
+                        }
                         emit(shown())
                     }
                 }
@@ -179,7 +221,23 @@ class ObserveNfts(
         )
     }
 
-    /** What [proofs] and [names] show of [checking], in [history]'s span, with [received] NFTs found. */
+    /**
+     * The verified logs of the transaction [hash] on the account's network, once a verified block
+     * includes it; none when it cannot be had within [RECEIPT_WAIT].
+     */
+    private suspend fun receiptLogs(account: AccountId, hash: String): List<ReceiptLog> =
+        withTimeoutOrNull(RECEIPT_WAIT) {
+            when (val progress = receipts.observe(account.network, hash).first { it !is TransactionProgress.Pending }) {
+                is TransactionProgress.Included -> progress.logs
+                is TransactionProgress.Finalized -> progress.logs
+                else -> null
+            }
+        }.orEmpty()
+
+    /**
+     * What [proofs], [names] and [ensNames] show of [checking], in [history]'s span, with [received] NFTs
+     * found; a collection in [unpinned] is unlisted, whatever its address.
+     */
     private fun holdings(
         account: AccountId,
         history: IndexedHistory.Read<NftMove>,
@@ -187,13 +245,16 @@ class ObserveNfts(
         received: Int,
         proofs: Map<NftRef, Proof>,
         names: Map<Address, NftCollectionReading.Read>,
+        ensNames: Map<NftRef, EnsNftReading.Named>,
+        unpinned: Set<Address>,
     ): NftHoldings.Read {
         val held = checking.mapNotNull { nft ->
             val holding = proofs[nft]?.holding as? NftHolding.Held ?: return@mapNotNull null
             val known = KnownNftCollections.find(account.network, nft.collection)
+                ?.takeIf { nft.collection !in unpinned }
             val said = names[nft.collection]
             val collection = NftCollection(nft.collection, known, said?.name, said?.symbol)
-            HeldNft(nft, holding.amount, collection, holding.blockNumber)
+            HeldNft(nft, holding.amount, collection, holding.blockNumber, ensNames[nft].takeIf { known != null })
         }
         // Stable: the built-in collections' first, each part in the order checked, the newest first.
         val nfts = held.filter { it.collection.known != null } + held.filter { it.collection.known == null }
@@ -255,6 +316,9 @@ class ObserveNfts(
          * to read, is missed. So each NFT is proven again within the hour regardless.
          */
         const val REPROVE_AFTER_SECONDS: Long = 3_600
+
+        /** How long a .eth registrar token's receipt is waited for: one that cannot be had leaves it unnamed. */
+        val RECEIPT_WAIT: Duration = 30.seconds
     }
 }
 

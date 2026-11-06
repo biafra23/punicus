@@ -4,6 +4,7 @@ import eth.serotine.domain.model.Address
 import eth.serotine.domain.model.Digest
 import eth.serotine.domain.model.Network
 import eth.serotine.domain.model.NetworkUpgrade
+import eth.serotine.domain.model.KnownNftCollection
 import eth.serotine.domain.model.NftRef
 import eth.serotine.domain.model.PriceId
 import eth.serotine.domain.model.UInt256
@@ -12,6 +13,8 @@ import eth.serotine.domain.repository.ApprovalReading
 import eth.serotine.domain.repository.BalanceReading
 import eth.serotine.domain.repository.Broadcast
 import eth.serotine.domain.repository.Broadcaster
+import eth.serotine.domain.repository.EnsNftReading
+import eth.serotine.domain.repository.EnsNfts
 import eth.serotine.domain.repository.FeedReading
 import eth.serotine.domain.repository.FeeReading
 import eth.serotine.domain.repository.GasEstimate
@@ -39,6 +42,7 @@ import eth.serotine.domain.repository.PastReading
 import eth.serotine.domain.repository.PriceFeeds
 import eth.serotine.domain.repository.PriceHistory
 import eth.serotine.domain.repository.ReadUnavailable
+import eth.serotine.domain.repository.ReceiptLog
 import eth.serotine.domain.repository.ReceiptTracker
 import eth.serotine.domain.repository.SafeApprovals
 import eth.serotine.domain.repository.Simulation
@@ -197,6 +201,16 @@ class NetworkRoutedPorts(private val byNetwork: Map<Network, ChainPorts>) {
                 ?: NftCollectionReading.Unavailable(ReadUnavailable.NO_ENGINE)
     }
 
+    val ensNfts: EnsNfts = object : EnsNfts {
+        override suspend fun name(
+            network: Network,
+            collection: KnownNftCollection,
+            nft: NftRef,
+            receiptLogs: List<ReceiptLog>,
+        ): EnsNftReading = of(network)?.ensNfts?.name(network, collection, nft, receiptLogs)
+            ?: EnsNftReading.Unavailable(ReadUnavailable.NO_ENGINE)
+    }
+
     val logIndex: LogIndex = object : LogIndex {
         override suspend fun configure(network: Network, watch: List<LogWatch>, unwatch: List<LogWatchKey>): Boolean =
             of(network)?.logIndex?.configure(network, watch, unwatch) ?: false
@@ -228,4 +242,5 @@ class ChainPorts(
     val cow: CowChain,
     val logIndex: LogIndex,
     val nfts: NftContracts,
+    val ensNfts: EnsNfts,
 )

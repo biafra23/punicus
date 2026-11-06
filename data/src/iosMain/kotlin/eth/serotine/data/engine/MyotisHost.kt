@@ -17,6 +17,7 @@ import eth.serotine.domain.repository.CowChain
 import eth.serotine.domain.repository.LightClient
 import eth.serotine.domain.repository.LightClientControl
 import eth.serotine.domain.repository.LightClientRun
+import eth.serotine.domain.repository.EnsNfts
 import eth.serotine.domain.repository.LogIndex
 import eth.serotine.domain.repository.NftContracts
 import eth.serotine.domain.repository.NameResolver
@@ -176,6 +177,9 @@ class MyotisHost private constructor(
 
     /** What NFT contracts say, verified, each network's by its own light client (issue #246). */
     val nfts: NftContracts = routed.nfts
+
+    /** What a built-in ENS collection's token stands for, verified (issue #246). */
+    val ensNfts: EnsNfts = routed.ensNfts
 
     /** Starts [network]'s light client, or stops it ([LightClientRun.IDLE], [LightClientRun.OFF]). Returns at once. */
     override fun set(network: Network, run: LightClientRun) {
@@ -439,6 +443,7 @@ class MyotisHost private constructor(
             cow = VerifiedCow(chain, Dispatchers.IO, network),
             logIndex = EngineLogIndex(network, chain, Dispatchers.IO, POLL_INTERVAL),
             nfts = VerifiedNftContracts(chain, Dispatchers.IO, network),
+            ensNfts = VerifiedEnsNfts(chain, Dispatchers.IO, network),
         )
 
         /** Starts the light client, unless it runs already. Control dispatcher; blocks while the engine starts it. */

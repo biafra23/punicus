@@ -122,6 +122,7 @@ class NetworkRoutedPortsTest {
             cow = none.cow,
             logIndex = none.logIndex,
             nfts = none.nfts,
+            ensNfts = none.ensNfts,
         )
     }
 }

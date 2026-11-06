@@ -304,7 +304,10 @@ data class NftSection(
  * is), its token id ([tokenId], "#1234", shortened when long: "#982531…4107"), how many the account
  * holds when more than one ([amount], "×3", shortened as the id is), the collection's EIP-55
  * [contract], and the block it was proven held at ([provenAt], "block 9,500"; null where the engine
- * did not name it, and in simple mode, which shows no block).
+ * did not name it, and in simple mode, which shows no block). For an ENS token the [title] is the name
+ * it stands for ("multisig.eth", or its hash, "[27a0e0…0f90].eth", where no label could be checked),
+ * [tokenId] the collection's name, and [detail] whether it is wrapped and when it expires ("Wrapped ·
+ * expires Mar 3, 2032, 10:00 AM"); null for any other NFT.
  */
 data class NftRow(
     val title: String,
@@ -312,4 +315,5 @@ data class NftRow(
     val amount: String?,
     val contract: String,
     val provenAt: String? = null,
+    val detail: String? = null,
 )

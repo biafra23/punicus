@@ -12,9 +12,17 @@ import eth.serotine.ui.components.shortDigits
  * rulings, 2026-11-05, #246): the built-in collections' NFTs shown, the unlisted ones under a row
  * open while [unlistedOpen], and what the list covers. While the account's network is off ([off],
  * its name; null while it is on), nothing is proven again: the NFTs last proven stay, said to be
- * from before and possibly changed since (CLAUDE.md, *Trust*: one older answer, labelled as one).
+ * from before and possibly changed since (CLAUDE.md, *Trust*: one older answer, labelled as one). An
+ * ENS token's expiry is dated with [formatTime] and said to be past against [now] (unix seconds).
  */
-internal fun nftSection(holdings: NftHoldings, unlistedOpen: Boolean, off: String? = null): NftSection {
+internal fun nftSection(
+    holdings: NftHoldings,
+    unlistedOpen: Boolean,
+    off: String? = null,
+    formatTime: (Long) -> String = { it.toString() },
+    now: Long = 0,
+): NftSection {
+    val toRow = { held: HeldNft -> row(held, formatTime, now) }
     val before = off?.let { "$it is off: proven before, may have changed since" }
     return when (holdings) {
         NftHoldings.NotFollowed -> NftSection(unlistedOpen = unlistedOpen, empty = NOT_FOLLOWED)
@@ -31,8 +39,8 @@ internal fun nftSection(holdings: NftHoldings, unlistedOpen: Boolean, off: Strin
             val notChecked = "${holdings.notChecked} more not checked".takeIf { holdings.notChecked > 0 }
             val older = "still checking blocks ${grouped(holdings.start)} to ${grouped(holdings.checked.first - 1)}"
             NftSection(
-                shown = known.map(::row),
-                unlisted = unlisted.map(::row),
+                shown = known.map(toRow),
+                unlisted = unlisted.map(toRow),
                 unlistedOpen = unlistedOpen,
                 empty = when {
                     holdings.nfts.isNotEmpty() -> null
@@ -62,17 +70,31 @@ internal fun nftSection(holdings: NftHoldings, unlistedOpen: Boolean, off: Strin
     }
 }
 
-/** One NFT's row: its collection's name, its id, an ERC-1155 amount above one, and its proof's block. */
-private fun row(held: HeldNft): NftRow {
+/**
+ * One NFT's row: its collection's name, its id, an ERC-1155 amount above one, and its proof's block;
+ * an ENS token's the name it stands for, its collection, and whether it is wrapped and when it expires.
+ */
+private fun row(held: HeldNft, formatTime: (Long) -> String, now: Long): NftRow {
     val collection = held.collection
+    val ens = held.ens
     return NftRow(
-        title = collection.known?.name ?: collection.name ?: collection.symbol ?: UNNAMED,
-        tokenId = tokenId(held.nft.tokenId),
+        title = ens?.let { it.name ?: "[" + shortHash(it.labelHash) + "].eth" }
+            ?: collection.known?.name ?: collection.name ?: collection.symbol ?: UNNAMED,
+        tokenId = if (ens != null) collection.known?.name ?: "ENS" else tokenId(held.nft.tokenId),
         amount = ("×" + shortDigits(held.amount)).takeIf { held.amount > UInt256.ONE },
         contract = Eip55.format(collection.address),
         provenAt = held.blockNumber?.let { "block ${grouped(it)}" },
+        detail = ens?.let {
+            listOfNotNull(
+                "Wrapped".takeIf { _ -> it.wrapped },
+                it.expiry?.let { expiry -> (if (expiry <= now) "expired " else "expires ") + formatTime(expiry) },
+            ).joinToString(" · ").replaceFirstChar { c -> c.uppercase() }.ifEmpty { null }
+        },
     )
 }
+
+/** A hash (`0x` and 64 hex digits) by its first six and last four digits: "27a0e0…0f90". */
+private fun shortHash(hash: String): String = hash.removePrefix("0x").let { it.take(6) + "…" + it.takeLast(4) }
 
 /** [id] as "#1234", or its first and last digits around an ellipsis where it is long ([shortDigits]). */
 internal fun tokenId(id: UInt256): String = "#" + shortDigits(id)

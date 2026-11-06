@@ -79,17 +79,25 @@ enum class KnownNftKind {
 
     /** ENS's NameWrapper: an ERC-1155 whose token id is the name's namehash. */
     ENS_NAME_WRAPPER,
+
+    /**
+     * ENSv2's .eth registry: an ERC-1155 whose token id is the label's hash with its low 32 bits a
+     * version, and whose label store (`LABEL_STORE()`) holds each label in clear.
+     */
+    ENS_V2_REGISTRY,
 }
 
 /**
  * A collection built into the wallet: [address] on its network, of [standard], named [name], whose
- * tokens are [kind].
+ * tokens are [kind]; where [codeHash] is set (lower-case hex, no `0x`), it is that collection only
+ * while the code at [address] is proven to hash to it, and unlisted otherwise.
  */
 data class KnownNftCollection(
     val address: Address,
     val standard: NftStandard,
     val name: String,
     val kind: KnownNftKind,
+    val codeHash: String? = null,
 )
 
 /**
@@ -99,6 +107,15 @@ data class KnownNftCollection(
  * and Sepolia alike, and the NameWrapper, `0xD4416b13d2b3a9aBae7AcD5D6C2BbDBE25686401` on Ethereum
  * and `0x0635513f179D50A207757E05759CbD106d7dFcE8` on Sepolia. These are the addresses Myotis pins
  * (`io.myotis.ens.EnsAddresses`, checked against each chain's registry). Gnosis Chain has no ENS.
+ *
+ * Sepolia runs on ENSv2, and a name registered there now is a token of ENSv2's .eth registry
+ * (owner ruling, 2026-11-06, #246): `0xd4ebcbbdf463c9c45784603db0ddd499bc44a8b4`, from ENS's
+ * redeploy of 2026-10-01 (ensdomains/contracts-v2 #460, docs.ens.domains/learn/deployments). Read
+ * 2026-11-06 at Sepolia block 12,075,044: it answers `supportsInterface` for ERC-1155 and not
+ * ERC-721, its parent's label is "eth", its `LABEL_STORE()` is
+ * `0xed8246ff02203a4d4cb262bd78beaa7408a57cae`, and its code hashes to [ENS_V2_REGISTRY_CODE_HASH],
+ * which it is pinned by: a redeploy at another address is no longer this collection, and its NFTs show
+ * as unlisted until the pin is updated.
  */
 object KnownNftCollections {
 
@@ -109,10 +126,25 @@ object KnownNftCollections {
     private fun wrapper(address: String) =
         KnownNftCollection(Address.of(address), NftStandard.ERC1155, "ENS (wrapped)", KnownNftKind.ENS_NAME_WRAPPER)
 
+    /** The code hash Sepolia's ENSv2 .eth registry is pinned by. */
+    const val ENS_V2_REGISTRY_CODE_HASH: String = "ddb7698fc2857f7a9e726491025fead241791f113a19714149db8cbf87688e98"
+
+    private fun ensV2Registry(address: String) = KnownNftCollection(
+        Address.of(address),
+        NftStandard.ERC1155,
+        "ENS",
+        KnownNftKind.ENS_V2_REGISTRY,
+        ENS_V2_REGISTRY_CODE_HASH,
+    )
+
     /** The collections built in on [network]. */
     fun of(network: Network): List<KnownNftCollection> = when (network) {
         Network.ETHEREUM -> listOf(registrar(), wrapper("0xd4416b13d2b3a9abae7acd5d6c2bbdbe25686401"))
-        Network.SEPOLIA -> listOf(registrar(), wrapper("0x0635513f179d50a207757e05759cbd106d7dfce8"))
+        Network.SEPOLIA -> listOf(
+            ensV2Registry("0xd4ebcbbdf463c9c45784603db0ddd499bc44a8b4"),
+            registrar(),
+            wrapper("0x0635513f179d50a207757e05759cbd106d7dfce8"),
+        )
         Network.GNOSIS -> emptyList()
     }
 

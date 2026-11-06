@@ -235,6 +235,7 @@ class SerotineWallet {
             historyStarts = historyStarts,
             logIndex = node.logIndex,
             nfts = node.nfts,
+            ensNfts = node.ensNfts,
             // The Safe transactions waiting for their owners, with the signatures collected (public).
             safeTxQueue = FileSafeTxQueue("$dataDir/safe-tx-queue.json"),
             signingRequests = JsonSigningRequestCodec(),

@@ -1183,18 +1183,29 @@ they are helpful." The rulings (owner rulings, 2026-11-05, #246; the
   checked".
 - **Built in, or unlisted.** The built-in collections (`KnownNftCollections`)
   are ENS's: the .eth registrar (ERC-721) and the NameWrapper (ERC-1155), on
-  Ethereum and Sepolia. Their NFTs are shown openly. Any other collection's
+  Ethereum and Sepolia, and on Sepolia, which runs on ENSv2, ENSv2's .eth
+  registry (ERC-1155; owner ruling, 2026-11-06, #246). Their NFTs are shown openly. Any other collection's
   sit under a collapsed "Unlisted collections" row, marked unconfirmed:
   anyone can send an NFT to any address, and a name is only a contract's
   claim.
-- **ENS names, decoded.** A NameWrapper token's id is the name's namehash,
-  and the contract's own `names(id)` gives the name. A registrar token's id
-  is the label's hash: the label comes from the controller's
-  `NameRegistered` log, or from a name the user types, checked by hashing; one
-  not found shows as `[hash].eth`. The row shows the name, its expiry and
-  grace period, and whether it is wrapped; its detail adds what the name
-  resolves to, forward-resolved as Send does. Nothing is read from ENS's
-  metadata service.
+- **ENS names, decoded** (owner rulings, 2026-11-05 and 2026-11-06, #246),
+  every name checked by hashing against the token's id, and a label with a
+  character that renders as nothing refused (`VerifiedEnsNfts`):
+  - ENSv2's .eth registry (Sepolia): the token id is the label's hash with a
+    version in its low 32 bits; the registry's label store
+    (`LABEL_STORE()`, `getLabel(id)`) holds the label, and `getExpiry(id)`
+    the expiry. The registry is pinned by its code hash: a redeploy shows
+    its NFTs as unlisted until the pin is updated.
+  - The NameWrapper: the id is the name's namehash; `names(id)` gives the
+    DNS-encoded name, `getData(id)` the expiry.
+  - The .eth registrar: the id is the label's hash; the label comes from the
+    controller's `NameRegistered` log in the verified receipt of the
+    transaction that brought the token to the account, `nameExpires(id)` the
+    expiry.
+  - A name whose label could not be found and checked shows as its hash,
+    `[27a0e0…0f90].eth`. The row shows the name, the collection, whether it
+    is wrapped and when it expires. Nothing is read from ENS's metadata
+    service. What a name resolves to comes with the NFT's detail, later.
 - **No price.** An NFT never counts in a total.
 
 ## Safes

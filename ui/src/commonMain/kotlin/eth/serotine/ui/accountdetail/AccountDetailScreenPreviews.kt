@@ -705,8 +705,23 @@ private fun AccountDetailNetworkOffPreview() = AccountDetailPreview(
 /** The account's NFTs (docs/wallet-ux.md, *NFTs*): two ENS names shown, two unlisted collections' collapsed. */
 private val nfts = NftSection(
     shown = listOf(
-        NftRow("ENS", "#982531…4107", null, "0x57f1887a8BF19b14fC0dF6Fd9B2acc9Af147eA85"),
-        NftRow("ENS (wrapped)", "#310442…9921", null, "0x0635513f179D50A207757E05759CbD106d7dFcE8"),
+        NftRow(
+            "multisig.eth",
+            "ENS",
+            null,
+            "0xD4eBcbBdF463C9c45784603Db0dDD499BC44A8B4",
+            "block 8,412,306",
+            "Expires Mar 3, 2032, 10:00 AM",
+        ),
+        NftRow(
+            "pay.alice.eth",
+            "ENS (wrapped)",
+            null,
+            "0x0635513f179D50A207757E05759CbD106d7dFcE8",
+            "block 8,412,306",
+            "Wrapped · expires Jan 12, 2027, 4:20 PM",
+        ),
+        NftRow("[27a0e0…0f90].eth", "ENS", null, "0x57f1887a8BF19b14fC0dF6Fd9B2acc9Af147eA85", "block 8,412,306"),
     ),
     unlisted = listOf(
         NftRow("Sepolia Punks", "#4021", null, "0x5b5B5b5b5B5b5b5b5b5b5B5b5b5B5b5b5b5b5b5b"),
