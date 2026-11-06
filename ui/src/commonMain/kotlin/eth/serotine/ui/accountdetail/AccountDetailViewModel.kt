@@ -293,7 +293,9 @@ class AccountDetailViewModel(
             .flatMapLatest { shown -> if (shown) sharedNfts else flowOf(null) },
         unlistedNftsOpen,
         networkOn,
-    ) { holdings, open, on -> holdings?.let { nftSection(it, open, network.displayName.takeUnless { on }) } }
+    ) { holdings, open, on ->
+        holdings?.let { nftSection(it, open, network.displayName.takeUnless { on }, formatTime, clock()) }
+    }
 
     /** What the queue segment is drawn from. */
     private sealed interface QueueView {

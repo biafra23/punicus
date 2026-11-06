@@ -794,7 +794,11 @@ private fun Nfts(nfts: NftSection, onToggle: () -> Unit, modifier: Modifier) {
             val count = nfts.unlisted.distinctBy { it.contract }.size
             ListItem(
                 modifier = Modifier.clickable(
-                    onClickLabel = if (nfts.unlistedOpen) "Collapse unlisted collections" else "Show unlisted collections",
+                    onClickLabel = if (nfts.unlistedOpen) {
+                        "Collapse unlisted collections"
+                    } else {
+                        "Show unlisted collections"
+                    },
                     onClick = onToggle,
                 ),
                 headlineContent = { Text("Unlisted collections ($count)") },
@@ -833,7 +837,10 @@ private fun NftItem(row: NftRow, unconfirmed: Boolean) {
                 shortAddress(row.contract).takeIf { unconfirmed },
                 row.provenAt?.let { "verified at $it" },
             )
-            Text(marks.joinToString(" · "), style = MaterialTheme.typography.bodySmall)
+            Column {
+                Text(marks.joinToString(" · "), style = MaterialTheme.typography.bodySmall)
+                row.detail?.let { Text(it, style = MaterialTheme.typography.labelSmall) }
+            }
         },
         trailingContent = row.amount?.let { amount ->
             @Composable { Text(amount, style = MaterialTheme.typography.bodyLarge) }

@@ -63,6 +63,8 @@ import eth.serotine.domain.repository.prunable
 import eth.serotine.domain.repository.yieldsTo
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.awaitCancellation
+import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.map
@@ -71,6 +73,11 @@ import eth.serotine.domain.model.NftRef
 import eth.serotine.domain.repository.NftCollectionReading
 import eth.serotine.domain.repository.NftContracts
 import eth.serotine.domain.repository.NftHolding
+import eth.serotine.domain.model.KnownNftCollection
+import eth.serotine.domain.repository.EnsNftReading
+import eth.serotine.domain.repository.EnsNfts
+import eth.serotine.domain.repository.ReceiptLog
+import kotlinx.coroutines.flow.flowOf
 
 /** One gwei, in wei. */
 internal const val GWEI = 1_000_000_000L
@@ -434,4 +441,22 @@ internal class FakeNftContracts : NftContracts {
 
     override suspend fun collection(network: Network, contract: Address): NftCollectionReading =
         names[contract] ?: NftCollectionReading.Read(null, null, 9_500)
+}
+
+/** [EnsNfts] that names no token: a name cannot be had right now. */
+internal class FakeEnsNfts : EnsNfts {
+    override suspend fun name(
+        network: Network,
+        collection: KnownNftCollection,
+        nft: NftRef,
+        receiptLogs: List<ReceiptLog>,
+    ): EnsNftReading = EnsNftReading.Unavailable(ReadUnavailable.UNPROVEN)
+}
+
+/** [ReceiptTracker] for which no transaction is ever included: pending, as the port keeps saying, until cancelled. */
+internal class FakeReceiptsNever : ReceiptTracker {
+    override fun observe(network: Network, hash: String): Flow<TransactionProgress> = flow {
+        emit(TransactionProgress.Pending)
+        awaitCancellation()
+    }
 }

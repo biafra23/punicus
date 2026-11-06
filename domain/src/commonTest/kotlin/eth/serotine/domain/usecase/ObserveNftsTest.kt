@@ -2,12 +2,16 @@ package eth.serotine.domain.usecase
 
 import eth.serotine.domain.model.Address
 import eth.serotine.domain.model.Erc1155Transfers
+import eth.serotine.domain.model.KnownNftCollection
 import eth.serotine.domain.model.KnownNftCollections
+import eth.serotine.domain.model.KnownNftKind
 import eth.serotine.domain.model.Network
 import eth.serotine.domain.model.NftRef
 import eth.serotine.domain.model.NftStandard
 import eth.serotine.domain.model.TokenTransfers
 import eth.serotine.domain.model.UInt256
+import eth.serotine.domain.repository.EnsNftReading
+import eth.serotine.domain.repository.EnsNfts
 import eth.serotine.domain.repository.HistoryStart
 import eth.serotine.domain.repository.IndexedLog
 import eth.serotine.domain.repository.LogCoverage
@@ -19,8 +23,13 @@ import eth.serotine.domain.repository.NftContracts
 import eth.serotine.domain.repository.NftHolding
 import eth.serotine.domain.repository.ReadUnavailable
 import eth.serotine.domain.repository.ReceiptLog
+import eth.serotine.domain.repository.ReceiptTracker
+import eth.serotine.domain.repository.TransactionProgress
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import kotlin.test.Test
@@ -35,10 +44,18 @@ class ObserveNftsTest {
     private val bob = Address.of("0x" + "22".repeat(20))
     private val operator = Address.of("0x" + "0f".repeat(20))
     private val art = Address.of("0x" + "a7".repeat(20))
-    private val wrapper = KnownNftCollections.of(Network.SEPOLIA).single { it.standard == NftStandard.ERC1155 }.address
+    private val wrapper = known(KnownNftKind.ENS_NAME_WRAPPER)
+    private val ens = FakeEnsNfts()
+    private val receipts = FakeReceipts()
     private val index = RecordingLogIndex()
     private val starts = MemoryHistoryStarts(alice to HistoryStart.Fixed(9_000))
     private val contracts = FakeNftContracts()
+
+    private fun known(kind: KnownNftKind) = KnownNftCollections.of(Network.SEPOLIA).single { it.kind == kind }.address
+
+    private fun TestScope.collectInto(seen: MutableList<NftHoldings>) = backgroundScope.launch {
+        ObserveNfts(index, starts, contracts, ens, receipts)(alice.onSepolia).collect { seen += it }
+    }
 
     private fun topic(address: Address) = "0x" + "00".repeat(12) + address.hex.removePrefix("0x")
     private fun word(value: Long) = value.toString(16).padStart(64, '0')
@@ -76,7 +93,8 @@ class ObserveNftsTest {
                 },
             )
         }
-        index.coverage.value = LogCoverageReading.Read(mapOf(LogWatchKey.Mention(alice) to LogCoverage(9_000, 9_000L..to)))
+        val entry = LogWatchKey.Mention(alice) to LogCoverage(9_000, 9_000L..to)
+        index.coverage.value = LogCoverageReading.Read(mapOf(entry))
     }
 
     private fun nft(collection: Address, id: Long, standard: NftStandard) = NftRef(collection, UInt256.of(id), standard)
@@ -89,17 +107,25 @@ class ObserveNftsTest {
             batchTo(alice, listOf(1, 2), 9_120),
             erc721(alice, bob, 6, 9_150),
         )
-        contracts.held += listOf(nft(art, 5, NftStandard.ERC721), nft(wrapper, 1, NftStandard.ERC1155), nft(wrapper, 2, NftStandard.ERC1155))
+        contracts.held += listOf(
+            nft(art, 5, NftStandard.ERC721),
+            nft(wrapper, 1, NftStandard.ERC1155),
+            nft(wrapper, 2, NftStandard.ERC1155),
+        )
         contracts.names[art] = NftCollectionReading.Read("Art", "ART", 9_200)
         covered(9_200)
 
         val seen = mutableListOf<NftHoldings>()
-        backgroundScope.launch { ObserveNfts(index, starts, contracts)(alice.onSepolia).collect { seen += it } }
+        collectInto(seen)
         runCurrent()
 
         val read = assertIs<NftHoldings.Read>(seen.last())
         assertEquals(
-            listOf(nft(wrapper, 1, NftStandard.ERC1155), nft(wrapper, 2, NftStandard.ERC1155), nft(art, 5, NftStandard.ERC721)),
+            listOf(
+                nft(wrapper, 1, NftStandard.ERC1155),
+                nft(wrapper, 2, NftStandard.ERC1155),
+                nft(art, 5, NftStandard.ERC721),
+            ),
             read.nfts.map { it.nft },
         )
         assertEquals("ENS (wrapped)", read.nfts.first().collection.known?.name)
@@ -119,7 +145,7 @@ class ObserveNftsTest {
         contracts.held += nft(art, 5, NftStandard.ERC721)
         covered(9_200)
         val seen = mutableListOf<NftHoldings>()
-        backgroundScope.launch { ObserveNfts(index, starts, contracts)(alice.onSepolia).collect { seen += it } }
+        collectInto(seen)
         runCurrent()
         assertEquals(1, contracts.holdingCalls)
 
@@ -148,12 +174,13 @@ class ObserveNftsTest {
         val spam = Address.of("0x" + "5b".repeat(20))
         logs = listOf(batchTo(alice, listOf(1), 9_010)) +
             (1..ObserveNfts.MAX_CHECKED + 5).map { id ->
-                log(spam, listOf(TokenTransfers.TRANSFER, topic(bob), topic(alice), "0x" + word(id.toLong())), "0x", 9_100L + id, 0)
+                val topics = listOf(TokenTransfers.TRANSFER, topic(bob), topic(alice), "0x" + word(id.toLong()))
+                log(spam, topics, "0x", 9_100L + id, 0)
             }
         contracts.held += nft(wrapper, 1, NftStandard.ERC1155)
         covered(9_300)
         val seen = mutableListOf<NftHoldings>()
-        backgroundScope.launch { ObserveNfts(index, starts, contracts)(alice.onSepolia).collect { seen += it } }
+        collectInto(seen)
         runCurrent()
 
         val read = assertIs<NftHoldings.Read>(seen.last())
@@ -163,12 +190,88 @@ class ObserveNftsTest {
     }
 
     @Test
+    fun anEnsTokenIsNamedAndARegistrarsLabelComesFromTheReceiptThatBroughtIt() = runTest {
+        val registrar = known(KnownNftKind.ENS_REGISTRAR)
+        val minted = listOf(TokenTransfers.TRANSFER, topic(Address.ZERO), topic(alice), "0x" + word(77))
+        val mint = log(registrar, minted, "0x", 9_100, 0)
+        logs = listOf(mint, batchTo(alice, listOf(1), 9_120))
+        val name = nft(registrar, 77, NftStandard.ERC721)
+        val wrapped = nft(wrapper, 1, NftStandard.ERC1155)
+        contracts.held += listOf(name, wrapped)
+        receipts.logs[mint.transactionHash] = listOf(mint.log)
+        ens.needsLogs += name
+        ens.names[name] = EnsNftReading.Named("alice.eth", "0x" + word(77), 1_900_000_000, wrapped = false, 9_200)
+        ens.names[wrapped] = EnsNftReading.Named("pay.alice.eth", "0x" + word(1), 1_900_000_000, wrapped = true, 9_200)
+        covered(9_200)
+        val seen = mutableListOf<NftHoldings>()
+        collectInto(seen)
+        runCurrent()
+
+        val read = assertIs<NftHoldings.Read>(seen.last())
+        assertEquals(setOf("alice.eth", "pay.alice.eth"), read.nfts.mapNotNull { it.ens?.name }.toSet())
+        assertEquals(1, ens.asked.single { it.first == name }.second, "the registration's receipt logs were given")
+        assertEquals(0, ens.asked.single { it.first == wrapped }.second, "a wrapped name needs no receipt")
+
+        covered(9_300)
+        runCurrent()
+        assertEquals(2, ens.asked.size, "a name is read once")
+    }
+
+    @Test
+    fun aPinnedCollectionNotYetProvenKeepsItsPlaceBeforeAFloodOfAirdrops() = runTest {
+        val v2 = known(KnownNftKind.ENS_V2_REGISTRY)
+        val token = nft(v2, 5, NftStandard.ERC1155)
+        val topics = listOf(Erc1155Transfers.TRANSFER_SINGLE, topic(operator), topic(Address.ZERO), topic(alice))
+        val spam = Address.of("0x" + "5b".repeat(20))
+        logs = listOf(log(v2, topics, "0x" + word(5) + word(1), 9_010, 0)) +
+            (1..ObserveNfts.MAX_CHECKED + 5).map { id ->
+                val transfer = listOf(TokenTransfers.TRANSFER, topic(bob), topic(alice), "0x" + word(id.toLong()))
+                log(spam, transfer, "0x", 9_100L + id, 0)
+            }
+        contracts.held += token
+        ens.names[token] = EnsNftReading.Named("multisig.eth", "0x" + word(5), null, wrapped = false, 9_200)
+        covered(9_300)
+        val seen = mutableListOf<NftHoldings>()
+        collectInto(seen)
+        runCurrent()
+
+        val read = assertIs<NftHoldings.Read>(seen.last())
+        assertEquals("multisig.eth", read.nfts.single().ens?.name)
+        assertEquals(v2, read.nfts.single().collection.known?.address)
+    }
+
+    @Test
+    fun aPinnedCollectionWhoseCodeIsNotItsPinIsUnlisted() = runTest {
+        val v2 = known(KnownNftKind.ENS_V2_REGISTRY)
+        val token = nft(v2, 5, NftStandard.ERC1155)
+        logs = listOf(
+            log(
+                v2,
+                listOf(Erc1155Transfers.TRANSFER_SINGLE, topic(operator), topic(Address.ZERO), topic(alice)),
+                "0x" + word(5) + word(1),
+                9_100,
+                0,
+            ),
+        )
+        contracts.held += token
+        ens.names[token] = EnsNftReading.NotPinned
+        covered(9_200)
+        val seen = mutableListOf<NftHoldings>()
+        collectInto(seen)
+        runCurrent()
+
+        val held = assertIs<NftHoldings.Read>(seen.last()).nfts.single()
+        assertEquals(null, held.collection.known)
+        assertEquals(null, held.ens)
+    }
+
+    @Test
     fun aProofWithNoAnswerIsCountedAndAskedAgain() = runTest {
         logs = listOf(erc721(bob, alice, 5, 9_100))
         contracts.unavailable = true
         covered(9_200)
         val seen = mutableListOf<NftHoldings>()
-        backgroundScope.launch { ObserveNfts(index, starts, contracts)(alice.onSepolia).collect { seen += it } }
+        collectInto(seen)
         runCurrent()
         assertEquals(1, assertIs<NftHoldings.Read>(seen.last()).unproven)
 
@@ -180,6 +283,37 @@ class ObserveNftsTest {
         assertEquals(0, read.unproven)
         assertEquals(listOf(nft(art, 5, NftStandard.ERC721)), read.nfts.map { it.nft })
     }
+}
+
+/** [EnsNfts] answering from [names], each given only with the receipt logs it needs ([needsLogs]). */
+private class FakeEnsNfts : EnsNfts {
+    val names = mutableMapOf<NftRef, EnsNftReading>()
+    val needsLogs = mutableSetOf<NftRef>()
+    val asked = mutableListOf<Pair<NftRef, Int>>()
+
+    override suspend fun name(
+        network: Network,
+        collection: KnownNftCollection,
+        nft: NftRef,
+        receiptLogs: List<ReceiptLog>,
+    ): EnsNftReading {
+        asked += nft to receiptLogs.size
+        if (nft in needsLogs && receiptLogs.isEmpty()) {
+            return EnsNftReading.Named(null, "0x" + "00".repeat(32), null, false, 9_200)
+        }
+        return names[nft] ?: EnsNftReading.Unavailable(ReadUnavailable.UNPROVEN)
+    }
+}
+
+/** [ReceiptTracker] with [logs] per transaction hash, each included at block 9,100; any other never included. */
+private class FakeReceipts : ReceiptTracker {
+    val logs = mutableMapOf<String, List<ReceiptLog>>()
+
+    override fun observe(network: Network, hash: String): Flow<TransactionProgress> =
+        flowOf(
+            logs[hash]?.let { TransactionProgress.Included(9_100, true, it) }
+                ?: TransactionProgress.Unavailable(ReadUnavailable.UNPROVEN),
+        )
 }
 
 /** [NftContracts] answering from [held] and [names], counting what it is asked. */

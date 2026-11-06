@@ -2,10 +2,12 @@ package eth.serotine.ui.accountdetail
 
 import eth.serotine.domain.model.Address
 import eth.serotine.domain.model.KnownNftCollections
+import eth.serotine.domain.model.KnownNftKind
 import eth.serotine.domain.model.Network
 import eth.serotine.domain.model.NftRef
 import eth.serotine.domain.model.NftStandard
 import eth.serotine.domain.model.UInt256
+import eth.serotine.domain.repository.EnsNftReading
 import eth.serotine.domain.usecase.HeldNft
 import eth.serotine.domain.usecase.NftCollection
 import eth.serotine.domain.usecase.NftHoldings
@@ -15,7 +17,7 @@ import kotlin.test.assertEquals
 /** [nftSection]: an account's NFTs as its screen draws them (docs/wallet-ux.md, *NFTs*). */
 class AccountNftsTest {
 
-    private val registrar = KnownNftCollections.of(Network.SEPOLIA).first()
+    private val registrar = KnownNftCollections.of(Network.SEPOLIA).single { it.kind == KnownNftKind.ENS_REGISTRAR }
     private val art = Address.of("0x" + "a7".repeat(20))
 
     private fun held(collection: NftCollection, id: UInt256, amount: Long = 1) = HeldNft(
@@ -122,6 +124,32 @@ class AccountNftsTest {
         )
         assertEquals("Unnamed collection", section.unlisted.single().title)
         assertEquals(true, section.unlistedOpen)
+    }
+
+    @Test
+    fun anEnsTokenShowsItsNameWrappedOrNotAndWhenItExpires() {
+        val ens = NftCollection(registrar.address, registrar, null, null)
+        fun section(reading: EnsNftReading.Named) = nftSection(
+            NftHoldings.Read(
+                listOf(held(ens, UInt256.of(77)).copy(ens = reading)),
+                start = 9_000,
+                checked = 9_000L..9_600L,
+                unproven = 0,
+                notChecked = 0,
+            ),
+            unlistedOpen = false,
+            formatTime = { "<$it>" },
+            now = 1_800_000_000,
+        ).shown.single()
+
+        val named = section(EnsNftReading.Named("alice.eth", "0x" + "ab".repeat(32), 1_900_000_000, wrapped = true, 9_500))
+        assertEquals("alice.eth", named.title)
+        assertEquals("ENS", named.tokenId)
+        assertEquals("Wrapped · expires <1900000000>", named.detail)
+
+        val unnamed = section(EnsNftReading.Named(null, "0x27a0e0" + "11".repeat(27) + "0f90", 1_700_000_000, false, 9_500))
+        assertEquals("[27a0e0…0f90].eth", unnamed.title)
+        assertEquals("Expired <1700000000>", unnamed.detail)
     }
 
     @Test

@@ -173,6 +173,10 @@ of a stale feed.)
   and a token id, kept once the account is proven to hold it.
 - ENS tokens are decoded on chain (the NameWrapper's `names`, the registrar's
   labels from logs), never through ENS's metadata service.
+- **ENSv2 too** (owner ruling, 2026-11-06, #246): on Sepolia, which runs on
+  ENSv2, its .eth registry is a built-in collection, pinned by its code hash.
+  A label comes from its label store and is checked by hashing. A redeploy
+  shows its NFTs as unlisted until the pin is updated.
 - NFTs have no price and never count in a total.
 
 ## Safe co-signing uses no off-chain service
