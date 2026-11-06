@@ -48,6 +48,7 @@ import eth.serotine.domain.repository.TransactionInputs
 import eth.serotine.domain.repository.UniswapV3Chain
 import eth.serotine.domain.repository.Unlock
 import eth.serotine.domain.repository.VenueReading
+import eth.serotine.domain.repository.Outbox
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertIs
@@ -98,6 +99,7 @@ class CowSwapsTest {
         starts,
         light,
         Network.SEPOLIA,
+        outbox = Outbox.None,
         clock = { headTime },
     )
 
@@ -376,6 +378,7 @@ class CowSwapsTest {
             unreadable,
             light,
             Network.SEPOLIA,
+            outbox = Outbox.None,
             clock = { headTime },
         )
         assertEquals(

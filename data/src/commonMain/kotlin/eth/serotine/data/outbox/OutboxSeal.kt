@@ -13,22 +13,23 @@ import kotlinx.coroutines.CancellationException
  *
  * Sealed bytes are a version byte, a random 12-byte nonce, and the ciphertext with its tag,
  * authenticated with [AAD]. The key is derived for each seal and open and zeroed after it; the
- * plaintext is the caller's to zero. Nothing here throws: a seal that fails is null, and so is an
- * open whose tag does not verify (another key, or a damaged file).
+ * plaintext is the caller's to zero. Nothing here throws: a seal that fails is null, and an open
+ * says what it found ([Opening]).
  */
 internal class OutboxSeal(private val hardware: HardwareSecret) {
 
     /**
      * Whether the hardware key existed when this seal was made, asked before anything could make
      * one: a sealed file found without it is a lost key (the key store reset, or a copy restored on
-     * another device), said, never guessed around.
+     * another device), said, never guessed around. Null when the key store would not say: nothing
+     * is concluded from that.
      */
-    val keyExistedAtStart: Boolean = try {
+    val keyExistedAtStart: Boolean? = try {
         hardware.isProvisioned()
     } catch (e: CancellationException) {
         throw e
     } catch (e: Exception) {
-        false
+        null
     }
 
     /** [plaintext] sealed, or null when the hardware or the cipher failed. */
@@ -37,12 +38,41 @@ internal class OutboxSeal(private val hardware: HardwareSecret) {
         byteArrayOf(VERSION) + nonce + EnvelopeCrypto.aesGcmSeal(key, nonce, plaintext, AAD)
     }
 
-    /** What [sealed] holds, or null when it does not open: another key, a damaged file, or a failure. */
-    fun open(sealed: ByteArray): ByteArray? {
-        if (sealed.size < 1 + NONCE_BYTES + TAG_BYTES || sealed[0] != VERSION) return null
+    /**
+     * What [sealed] holds ([Opening.Opened]); [Opening.WrongKey] when its tag does not verify
+     * (another key, or damage), [Opening.Newer] when a newer version sealed it, [Opening.Failed]
+     * when the hardware or the cipher failed, which says nothing about the file.
+     */
+    fun open(sealed: ByteArray): Opening {
+        if (sealed.isNotEmpty() && sealed[0] > VERSION) return Opening.Newer
+        if (sealed.size < 1 + NONCE_BYTES + TAG_BYTES || sealed[0] != VERSION) return Opening.WrongKey
         val nonce = sealed.copyOfRange(1, 1 + NONCE_BYTES)
         val ciphertext = sealed.copyOfRange(1 + NONCE_BYTES, sealed.size)
-        return withKey { key -> EnvelopeCrypto.aesGcmOpen(key, nonce, ciphertext, AAD) }
+        var tagFailed = false
+        val opened = withKey { key ->
+            EnvelopeCrypto.aesGcmOpen(key, nonce, ciphertext, AAD).also { if (it == null) tagFailed = true }
+        }
+        return when {
+            opened != null -> Opening.Opened(opened)
+            // The key was had and the tag did not verify: not this key's file.
+            tagFailed -> Opening.WrongKey
+            else -> Opening.Failed
+        }
+    }
+
+    /** What [open] found. */
+    sealed interface Opening {
+        /** The [plaintext] (the caller's to zero). */
+        class Opened(val plaintext: ByteArray) : Opening
+
+        /** Sealed under another key, or damaged: it will never open here. */
+        data object WrongKey : Opening
+
+        /** Sealed by a newer version: it opens there, not here. */
+        data object Newer : Opening
+
+        /** The hardware or the cipher failed: it may open later. */
+        data object Failed : Opening
     }
 
     private fun <T> withKey(use: (ByteArray) -> T?): T? {

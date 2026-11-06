@@ -34,6 +34,7 @@ import eth.serotine.domain.repository.Signing
 import eth.serotine.domain.repository.Simulation
 import eth.serotine.domain.repository.TransactionProgress
 import eth.serotine.domain.repository.Unlock
+import eth.serotine.domain.repository.Outbox
 import eth.serotine.domain.usecase.ApproveSafeTxOnChain
 import eth.serotine.domain.usecase.CheckSafeSwap
 import eth.serotine.domain.usecase.DescribeKeyStore
@@ -134,6 +135,7 @@ class SafeTxViewModelTest {
                 world.inputs,
                 world.sent,
                 Network.SEPOLIA,
+                Outbox.None,
                 now,
             ),
             ApproveSafeTxOnChain(world.signer, world.broadcaster, world.sent, now),
@@ -145,6 +147,7 @@ class SafeTxViewModelTest {
                 world.inputs,
                 world.sent,
                 Network.SEPOLIA,
+                Outbox.None,
                 now,
             ),
             ExecuteSafeTx(world.signer, world.broadcaster, world.sent, now),

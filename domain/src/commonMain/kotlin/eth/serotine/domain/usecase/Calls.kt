@@ -187,7 +187,7 @@ internal class CallQuoter(
     private val sentTransfers: SentTransfers,
     private val network: Network,
     private val clock: () -> Long,
-    private val outbox: Outbox = Outbox.None,
+    private val outbox: Outbox,
 ) {
 
     /**

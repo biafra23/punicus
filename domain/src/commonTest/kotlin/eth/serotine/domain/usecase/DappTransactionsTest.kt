@@ -31,6 +31,7 @@ import eth.serotine.domain.repository.Signing
 import eth.serotine.domain.repository.Simulation
 import eth.serotine.domain.repository.TransactionProgress
 import eth.serotine.domain.repository.Unlock
+import eth.serotine.domain.repository.Outbox
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.flowOf
@@ -97,7 +98,7 @@ class DappTransactionsTest {
         DappTransactionRequest(from, to, UInt256.of(1_000_000_000_000_000), ByteArray(0), gas)
 
     private fun quote() =
-        QuoteDappTransaction(requests, accounts, networks, ListCatalog(), balances, inputs, sent, history, clock = { now })
+        QuoteDappTransaction(requests, accounts, networks, ListCatalog(), balances, inputs, sent, history, outbox = Outbox.None, clock = { now })
 
     private fun send() =
         SendDappTransaction(requests, accounts, networks, signer, broadcaster, sent, history, receipts, clock = { now })
@@ -137,7 +138,7 @@ class DappTransactionsTest {
     fun aRequestOnGnosisChainIsQuotedOnGnosisChain() = runTest {
         requests.waiting.value = listOf(onGnosis(1))
         val quoting = QuoteDappTransaction(
-            requests, bothAccounts, bothNetworks, ListCatalog(), balances, inputs, sent, history, clock = { now },
+            requests, bothAccounts, bothNetworks, ListCatalog(), balances, inputs, sent, history, outbox = Outbox.None, clock = { now },
         )
         val quoted = assertIs<DappTransactionQuoting.Quoted>(quoting(onGnosis(1).id)).quote
         assertEquals(Network.GNOSIS.chainId, quoted.call.transaction.chainId, "the request network's quoter")

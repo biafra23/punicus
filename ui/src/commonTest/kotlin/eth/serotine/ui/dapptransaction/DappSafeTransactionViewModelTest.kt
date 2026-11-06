@@ -13,6 +13,7 @@ import eth.serotine.domain.repository.DappRequestId
 import eth.serotine.domain.repository.DappSessionId
 import eth.serotine.domain.repository.Signing
 import eth.serotine.domain.repository.Simulation
+import eth.serotine.domain.repository.Outbox
 import eth.serotine.domain.model.Network
 import eth.serotine.domain.usecase.DescribeKeyStore
 import eth.serotine.domain.usecase.ObserveDappMessages
@@ -81,6 +82,7 @@ class DappSafeTransactionViewModelTest {
             ObserveDappMessages(requests, world.accounts, networks, world.catalog, clock = { now }),
             QuoteDappTransaction(
                 requests, world.accounts, networks, world.catalog, world.balances, world.inputs, world.sent, history,
+                outbox = Outbox.None,
                 clock = { now },
             ),
             SendDappTransaction(
@@ -125,6 +127,7 @@ class DappSafeTransactionViewModelTest {
             ObserveDappMessages(requests, gnosis.accounts, on, gnosis.catalog, clock = { now }),
             QuoteDappTransaction(
                 requests, gnosis.accounts, on, gnosis.catalog, gnosis.balances, gnosis.inputs, gnosis.sent, history,
+                outbox = Outbox.None,
                 clock = { now },
             ),
             SendDappTransaction(

@@ -194,6 +194,7 @@ import eth.serotine.domain.repository.DappRequest
 import eth.serotine.domain.repository.DappRequestError
 import eth.serotine.domain.repository.DappRequestId
 import eth.serotine.domain.repository.DappSessionId
+import eth.serotine.domain.repository.Outbox
 import eth.serotine.ui.dapprequest.DAPP_REQUEST_REFUSE_TAG
 
 /**
@@ -305,6 +306,7 @@ class AppNavigationTest {
 
     private val graph = AppGraph(
         accounts = accountRepository,
+        outbox = Outbox.None,
         keys = object : KeyStore {
             override suspend fun newMnemonic(): NewMnemonic = NewMnemonic.Unavailable
 

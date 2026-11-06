@@ -48,6 +48,7 @@ import eth.serotine.domain.repository.TransactionInputs
 import eth.serotine.domain.repository.TransactionProgress
 import eth.serotine.domain.repository.Unlock
 import eth.serotine.domain.repository.prunable
+import eth.serotine.domain.repository.Outbox
 import kotlin.test.Test
 import kotlin.test.assertContentEquals
 import kotlin.test.assertEquals
@@ -83,7 +84,7 @@ class TransfersTest {
     private val light = FakeLightClient()
     private val cowChain = FakeCowChain()
     private val quoteTransfer =
-        QuoteTransfer(inputs, balances, tokens, sent, orders, cowChain, light, Network.SEPOLIA) { now }
+        QuoteTransfer(inputs, balances, tokens, sent, orders, cowChain, light, Network.SEPOLIA, outbox = Outbox.None) { now }
 
     @Test
     fun anAddressIsTakenAsIsAndANameIsResolved() = runTest {

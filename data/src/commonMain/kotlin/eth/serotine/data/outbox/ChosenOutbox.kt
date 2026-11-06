@@ -11,9 +11,12 @@ import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.emitAll
 import kotlinx.coroutines.flow.flow
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
+import kotlinx.io.files.Path
+import kotlinx.io.files.SystemFileSystem
 
 /**
  * The outbox of a device, chosen at its first use, on [dispatcher], never on the caller's thread:
@@ -23,6 +26,10 @@ import kotlinx.coroutines.withContext
  * device's storage as the file and would seal nothing (docs/keys-and-signing.md, *The outbox's seal
  * key*). Null [hardware]: no hardware key store here, memory only. The seal asks whether its key
  * exists before anything else touches it, so a lost one is told apart from a new one.
+ *
+ * A key store that fails while it is asked never hides a sealed file behind memory: with the file
+ * there, the outbox is unreadable for this run (said, and tried again at the next start), so
+ * nothing in it is lost, sent unchecked or forgotten; with none, memory only for this run.
  */
 internal class ChosenOutbox(
     private val path: String,
@@ -37,22 +44,31 @@ internal class ChosenOutbox(
     }
 
     private fun choose(): Outbox {
-        val secret = try {
-            hardware?.invoke()
-        } catch (e: CancellationException) {
-            throw e
+        val make = hardware ?: return MemoryOutbox()
+        val sealedThere = try {
+            SystemFileSystem.exists(Path(path))
         } catch (e: Exception) {
-            null
-        } ?: return MemoryOutbox()
-        val seal = OutboxSeal(secret)
-        val inHardware = try {
-            secret.protection == KeyProtection.HARDWARE
-        } catch (e: CancellationException) {
-            throw e
-        } catch (e: Exception) {
-            false
+            true
         }
-        return if (inHardware) SealedOutboxFile(path, seal, dispatcher) else MemoryOutbox()
+        val failed = if (sealedThere) UnreadableOutbox else MemoryOutbox()
+        val secret = try {
+            make()
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            println("Serotine: the outbox's key store is not available (${e::class.simpleName})")
+            return failed
+        }
+        val seal = OutboxSeal(secret)
+        val protection = try {
+            secret.protection
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            println("Serotine: the outbox's key store does not answer (${e::class.simpleName})")
+            return failed
+        }
+        return if (protection == KeyProtection.HARDWARE) SealedOutboxFile(path, seal, dispatcher) else MemoryOutbox()
     }
 
     override fun observe(): Flow<OutboxList> = flow { emitAll(outbox().observe()) }
@@ -62,4 +78,15 @@ internal class ChosenOutbox(
     override suspend fun remove(account: AccountId): Boolean = outbox().remove(account)
 
     override suspend fun acknowledgeLost(): Boolean = outbox().acknowledgeLost()
+}
+
+/** The outbox of a run whose key store failed with a sealed file there: unreadable, and nothing changes. */
+private object UnreadableOutbox : Outbox {
+    override fun observe(): Flow<OutboxList> = flowOf(OutboxList.Unreadable)
+
+    override suspend fun put(queued: QueuedTransaction): Boolean = false
+
+    override suspend fun remove(account: AccountId): Boolean = false
+
+    override suspend fun acknowledgeLost(): Boolean = false
 }

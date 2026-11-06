@@ -119,6 +119,37 @@ class SealedOutboxFileTest {
     }
 
     @Test
+    fun aKeyStoreThatFailsToOpenLeavesTheFileAsItIsAndUnreadable() = runTest {
+        outbox().put(queued())
+
+        // The key is there, but the hardware fails this time: nothing is concluded, nothing deleted.
+        val failing = outbox(FakeHardware(mixed = { error("the hardware is busy") }))
+        assertEquals(OutboxList.Unreadable, failing.observe().first())
+        assertTrue(SystemFileSystem.exists(file))
+
+        // A key store that will not say whether its key exists: the same.
+        val silent = outbox(FakeHardware(provisioned = { error("the key store will not say") }))
+        assertEquals(OutboxList.Unreadable, silent.observe().first())
+        assertTrue(SystemFileSystem.exists(file))
+
+        // It opens again once the hardware answers.
+        assertEquals(1, (outbox().observe().first() as OutboxList.Loaded).queued.size)
+    }
+
+    @Test
+    fun aKeyStoreThatFailsWhileChosenNeverHidesASealedFileBehindMemory() = runTest {
+        outbox().put(queued())
+        val chosen = ChosenOutbox(
+            file.toString(),
+            { FakeHardware(claims = { error("the key store does not answer") }) },
+            StandardTestDispatcher(testScheduler),
+        )
+        assertEquals(OutboxList.Unreadable, chosen.observe().first())
+        assertFalse(chosen.put(queued(account = bob)))
+        assertTrue(SystemFileSystem.exists(file))
+    }
+
+    @Test
     fun aSealThatFailsSavesNothing() = runTest {
         val failing = FakeHardware(mixed = { error("the hardware refused") })
         assertFalse(outbox(failing).put(queued()))

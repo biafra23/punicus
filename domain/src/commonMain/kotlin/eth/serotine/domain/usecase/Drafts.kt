@@ -28,6 +28,7 @@ import eth.serotine.domain.repository.TokenBalanceReading
 import eth.serotine.domain.repository.TokenBalances
 import eth.serotine.domain.repository.Unlock
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.sync.withLock
 
 /**
  * A transfer drafted in lenient mode for review (docs/lenient-mode.md, *The draft's review*): the
@@ -175,13 +176,16 @@ class DraftTransfer(
             is BalanceReading.Verified -> Read(reading.wei.toUInt256OrNull(), reading.blockNumber, reading.provenAt)
             is BalanceReading.LastKnown -> Read(reading.wei.toUInt256OrNull(), reading.blockNumber, reading.asOf)
             BalanceReading.Syncing -> return TransferDrafting.Waits(DraftInput.BALANCE)
-            is BalanceReading.Unavailable -> return refused(TransferQuoting.Unavailable(reading.reason, QuoteFigure.BALANCE))
+            is BalanceReading.Unavailable ->
+                return refused(TransferQuoting.Unavailable(reading.reason, QuoteFigure.BALANCE))
         }
         val nativeBefore = native.amount ?: return refused(UNPROVEN)
         val tokenRead = token?.let {
             when (val reading = tokenBalances.observeBalance(network, from, it.address).first()) {
-                is TokenBalanceReading.Verified -> Read(UInt256.parse(reading.units.decimal), reading.blockNumber, reading.provenAt)
-                is TokenBalanceReading.LastKnown -> Read(UInt256.parse(reading.units.decimal), reading.blockNumber, reading.asOf)
+                is TokenBalanceReading.Verified ->
+                    Read(UInt256.parse(reading.units.decimal), reading.blockNumber, reading.provenAt)
+                is TokenBalanceReading.LastKnown ->
+                    Read(UInt256.parse(reading.units.decimal), reading.blockNumber, reading.asOf)
                 TokenBalanceReading.Syncing -> return TransferDrafting.Waits(DraftInput.BALANCE)
                 TokenBalanceReading.NotAToken -> return refused(TransferQuoting.NotAToken)
                 is TokenBalanceReading.Unavailable ->
@@ -258,7 +262,7 @@ class DraftTransfer(
         )
     }
 
-    /** The id of what [from] has queued on this network, or null; an outbox that cannot be read holds nothing back here. */
+    /** The id of what [from] has queued on this network, or null; an unreadable outbox holds nothing back here. */
     private suspend fun queuedId(from: Address): String? =
         (outbox.observe().first() as? OutboxList.Loaded)?.queued
             ?.firstOrNull { it.network == network && it.account == from }
@@ -280,18 +284,19 @@ class DraftTransfer(
  * outbox*): its EIP-1559 signing digest signed by the sender's key as [unlock] opens it
  * ([Signer]), exactly what was drafted and reviewed. Nothing is broadcast: the outbox sends it once
  * the check at a fresh head passes ([CheckQueued]). Queued in place of nothing: an account with
- * something queued already is refused before anything is signed. [clock] is in unix seconds.
+ * something queued already is refused before anything is signed, and again under [lock] before it
+ * is put, so nothing the follower or a discard does meanwhile is overwritten. [clock] is in unix
+ * seconds.
  */
 class QueueTransfer(
     private val signer: Signer,
     private val outbox: Outbox,
+    private val lock: OutboxLock,
     private val clock: () -> Long = ::epochSecondsNow,
 ) {
     /** Signs [draft] and queues it. */
     suspend operator fun invoke(draft: TransferDraft, unlock: Unlock): TransferQueuing {
-        val busy = (outbox.observe().first() as? OutboxList.Loaded)?.queued
-            ?.firstOrNull { it.network == draft.network && it.account == draft.from }
-        if (busy != null) return TransferQueuing.AccountBusy(busy.id)
+        busy(draft)?.let { return TransferQueuing.AccountBusy(it.id) }
         val transaction = draft.transaction
         val signature = when (val signed = signer.sign(draft.from, transaction.signingDigest(), unlock)) {
             is Signing.Signed -> signed.signature
@@ -310,8 +315,15 @@ class QueueTransfer(
             signedAt = clock(),
             builtOn = draft.builtOn,
         )
-        return if (outbox.put(queued)) TransferQueuing.Queued(queued) else TransferQueuing.NotSaved
+        return lock.mutex.withLock {
+            busy(draft)?.let { return@withLock TransferQueuing.AccountBusy(it.id) }
+            if (outbox.put(queued)) TransferQueuing.Queued(queued) else TransferQueuing.NotSaved
+        }
     }
+
+    private suspend fun busy(draft: TransferDraft): QueuedTransaction? =
+        (outbox.observe().first() as? OutboxList.Loaded)?.queued
+            ?.firstOrNull { it.network == draft.network && it.account == draft.from }
 }
 
 /** The outcome of [QueueTransfer]. */

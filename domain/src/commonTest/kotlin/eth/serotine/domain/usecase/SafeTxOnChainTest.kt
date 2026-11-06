@@ -23,6 +23,7 @@ import eth.serotine.domain.repository.SentAction
 import eth.serotine.domain.repository.SentTransfer
 import eth.serotine.domain.repository.Simulation
 import eth.serotine.domain.repository.Unlock
+import eth.serotine.domain.repository.Outbox
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.currentTime
@@ -46,6 +47,7 @@ class SafeTxOnChainTest {
         world.inputs,
         world.sent,
         Network.SEPOLIA,
+        outbox = Outbox.None,
     ) { 1_800_000_000 }
     private val quoteExecution = QuoteSafeExecution(
         world.observeSafe,
@@ -55,6 +57,7 @@ class SafeTxOnChainTest {
         world.inputs,
         world.sent,
         Network.SEPOLIA,
+        outbox = Outbox.None,
     ) { 1_800_000_000 }
 
     private val executed = "0".repeat(63) + "1"

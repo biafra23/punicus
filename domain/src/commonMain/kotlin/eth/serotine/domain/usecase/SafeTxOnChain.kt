@@ -167,7 +167,7 @@ class QuoteSafeApproval(
     sentTransfers: SentTransfers,
     private val network: Network,
     /** What the account has queued in lenient mode, which holds a new quote back (docs/lenient-mode.md). */
-    private val outbox: Outbox = Outbox.None,
+    private val outbox: Outbox,
     clock: () -> Long = ::epochSecondsNow,
 ) {
     private val quoter = CallQuoter(inputs, sentTransfers, network, clock, outbox)
@@ -300,7 +300,7 @@ class QuoteSafeExecution(
     private val sentTransfers: SentTransfers,
     private val network: Network,
     /** What the account has queued in lenient mode, which holds a new quote back (docs/lenient-mode.md). */
-    private val outbox: Outbox = Outbox.None,
+    private val outbox: Outbox,
     private val clock: () -> Long = ::epochSecondsNow,
 ) {
     private val quoter = CallQuoter(inputs, sentTransfers, network, clock, outbox)

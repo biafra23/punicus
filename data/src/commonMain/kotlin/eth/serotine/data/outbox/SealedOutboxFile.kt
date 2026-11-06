@@ -26,11 +26,14 @@ import kotlinx.io.readByteArray
  * An empty outbox has no file. The host keeps it out of backups and device transfers, as it keeps
  * the envelopes.
  *
- * A file that does not open (its seal key gone, a copy restored on another device, or damage that
- * fails the tag) is deleted and said once as lost ([OutboxList.Loaded.lost], a marker beside it,
- * `<path>.lost`, which holds nothing, until [acknowledgeLost]): the user signs again. A file that
- * cannot be read at all right now is [OutboxList.Unreadable], untouched, and nothing changes until
- * it can be read. File work runs on [dispatcher].
+ * A file that will never open here is deleted and said once as lost ([OutboxList.Loaded.lost], a
+ * marker beside it, `<path>.lost`, which holds nothing, written before the file is deleted, until
+ * [acknowledgeLost]): the user signs again. That is a seal key known to be gone (the key store
+ * reset, a copy restored on another device), a file sealed under another key, and one damaged. A
+ * file that cannot be read right now (the key store would not say whether its key exists, the
+ * hardware failed, a newer version wrote it, an I/O error) is [OutboxList.Unreadable], untouched,
+ * read again by the next subscriber, and nothing changes until it can be read. File work runs on
+ * [dispatcher].
  */
 internal class SealedOutboxFile(
     private val path: String,
@@ -52,7 +55,8 @@ internal class SealedOutboxFile(
         current.filterNot { it.accountId == queued.accountId } + queued
     }
 
-    override suspend fun remove(account: AccountId): Boolean = change { current -> current.filterNot { it.accountId == account } }
+    override suspend fun remove(account: AccountId): Boolean =
+        change { current -> current.filterNot { it.accountId == account } }
 
     override suspend fun acknowledgeLost(): Boolean = lock.withLock {
         val loaded = loadedOrNull() ?: return@withLock false
@@ -83,30 +87,54 @@ internal class SealedOutboxFile(
         try {
             val lost = SystemFileSystem.exists(lostMarker)
             if (!SystemFileSystem.exists(file)) return@withContext OutboxList.Loaded(emptyList(), lost)
-            // A sealed file whose key did not exist before anything could make one cannot be opened.
-            val keyLost = !keyChecked && !seal.keyExistedAtStart
-            keyChecked = true
-            val opened = if (keyLost) null else seal.open(SystemFileSystem.source(file).buffered().use { it.readByteArray() })
-            val queued = opened?.let { bytes -> StoredOutbox.decode(bytes).also { bytes.fill(0) } }
-            if (queued != null) return@withContext OutboxList.Loaded(queued, lost)
-            markLost()
-            OutboxList.Loaded(emptyList(), lost = true)
+            // Whether the key existed before anything could make one: asked of the first read only.
+            if (!keyChecked) {
+                when (seal.keyExistedAtStart) {
+                    false -> return@withContext lostNow("its seal key is gone")
+                    null -> return@withContext unreadable("the key store would not say whether its key exists")
+                    true -> keyChecked = true
+                }
+            }
+            val sealed = SystemFileSystem.source(file).buffered().use { it.readByteArray() }
+            when (val opening = seal.open(sealed)) {
+                OutboxSeal.Opening.WrongKey -> lostNow("it was sealed under another key, or is damaged")
+                OutboxSeal.Opening.Newer -> unreadable("a newer version of Serotine wrote it")
+                OutboxSeal.Opening.Failed -> unreadable("the hardware key store failed")
+                is OutboxSeal.Opening.Opened -> {
+                    val decoding = StoredOutbox.decode(opening.plaintext)
+                    opening.plaintext.fill(0)
+                    when (decoding) {
+                        is StoredOutbox.Decoding.Read -> OutboxList.Loaded(decoding.queued, lost)
+                        StoredOutbox.Decoding.Newer -> unreadable("a newer version of Serotine wrote it")
+                        StoredOutbox.Decoding.Damaged -> lostNow("it is damaged")
+                    }
+                }
+            }
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
-            println("Serotine: the outbox cannot be read (${e::class.simpleName})")
-            OutboxList.Unreadable
+            unreadable(e::class.simpleName ?: "an error")
         }
     }
 
-    /** Deletes what does not open and leaves the marker that says so. */
-    private fun markLost() {
-        SystemFileSystem.delete(file, mustExist = false)
+    private fun unreadable(why: String): OutboxList {
+        println("Serotine: the outbox cannot be read now ($why); it is left as it is")
+        return OutboxList.Unreadable
+    }
+
+    /**
+     * Says what will never open as lost, the marker first so a crash between the two never hides
+     * it, then deletes it.
+     */
+    private fun lostNow(why: String): OutboxList {
         if (!SystemFileSystem.exists(lostMarker)) {
             lostMarker.parent?.let { EnvelopeCrypto.createPrivateDirectory(it.toString()) }
             EnvelopeCrypto.writeDurably(lostMarker.toString(), ByteArray(0))
         }
-        println("Serotine: the outbox could not be opened; what it held is deleted")
+        SystemFileSystem.delete(file, mustExist = false)
+        keyChecked = true
+        println("Serotine: the outbox could not be opened ($why); what it held is deleted")
+        return OutboxList.Loaded(emptyList(), lost = true)
     }
 
     /** Stores what [next] makes of what is queued, under [lock]; false when it cannot be read or written. */

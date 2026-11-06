@@ -279,6 +279,7 @@ class SerotineWallet {
             cowChain = node.cow,
             cowApi = HttpCowApi.create(),
             cowOrders = cowOrders,
+            outbox = outbox,
             swapVenue = FileSwapVenue("$dataDir/swap-venue.json"),
             waitingSwaps = FileWaitingSwaps("$dataDir/waiting-swaps.json"),
             debugLog = debugLog,

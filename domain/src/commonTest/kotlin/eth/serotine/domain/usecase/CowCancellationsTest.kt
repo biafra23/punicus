@@ -22,6 +22,7 @@ import eth.serotine.domain.repository.SentAction
 import eth.serotine.domain.repository.SentTransfer
 import eth.serotine.domain.repository.Simulation
 import eth.serotine.domain.repository.Unlock
+import eth.serotine.domain.repository.Outbox
 import kotlin.test.Test
 import kotlin.test.assertContentEquals
 import kotlin.test.assertEquals
@@ -58,6 +59,7 @@ class CowCancellationsTest {
         cowChain,
         light,
         Network.SEPOLIA,
+        outbox = Outbox.None,
         clock = { validTo - 200 },
     )
     private val filledAmountCall = COW_SEPOLIA.settlement to GPv2Settlement.filledAmount(record.uid).toHex()

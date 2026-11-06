@@ -72,7 +72,12 @@ sealed interface OutboxList {
  * (null once a conflict deleted them: the user signs again or discards it), [action] what it does,
  * as its record says once it is sent, and [maxCost] the most it can take of the native balance
  * (its value and its gas limit times its fee cap). [signedAt] (unix seconds) starts its hour: past
- * it, it is sent only after the user's tap ([confirmedAt]).
+ * it, it is sent only after the user's tap ([confirmedAt]), which starts an hour of its own.
+ *
+ * [sending] from just before its broadcast until its outcome is recorded: one found so (the process
+ * ended, or a record could not be saved, in between) may have reached the network, so it is
+ * resolved as strict mode resolves a broadcast no peer answered: recorded as maybe sent, its status
+ * offering to try the same bytes again, never checked or signed again.
  */
 data class QueuedTransaction(
     val network: Network,
@@ -88,10 +93,12 @@ data class QueuedTransaction(
     val builtOn: DraftBasis,
     val conflict: QueueConflict? = null,
     val confirmedAt: Long? = null,
+    val sending: Boolean = false,
 ) {
     init {
         require(transaction.chainId == network.chainId) { "a queued transaction is signed for its own network" }
-        require((signed == null) == (conflict != null)) { "the signed bytes are kept until a conflict, and only then deleted" }
+        require((signed == null) == (conflict != null)) { "the signed bytes are kept until a conflict deletes them" }
+        require(!sending || signed != null) { "only signed bytes are sent" }
     }
 
     /** The account it waits to be sent from. */
@@ -144,10 +151,10 @@ sealed interface QueueConflict {
     /** It needs more gas ([estimate]) than it was signed for ([limit]). */
     data class NeedsMoreGas(val limit: Long, val estimate: Long) : QueueConflict
 
-    /** Fees rose since it was signed: the cap no longer leaves the headroom asked for; [nowAtMost] is the most it would cost now. */
+    /** Fees rose since it was signed, past the headroom asked: [nowAtMost] is the most it would cost now. */
     data class FeesRose(val nowAtMost: UInt256) : QueueConflict
 
-    /** The fresh native balance does not cover what the signed bytes may take and what earlier transactions may still take. */
+    /** The fresh native balance does not cover what the signed bytes and the earlier transactions may still take. */
     data object InsufficientFunds : QueueConflict
 
     /** The network refused the broadcast ([detail], its words); nothing is recorded, so it holds no nonce. */

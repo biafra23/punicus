@@ -90,7 +90,7 @@ class QuoteDappTransaction(
     private val sentTransfers: SentTransfers,
     private val history: TransactionHistory,
     /** What the account has queued in lenient mode, which holds a new quote back (docs/lenient-mode.md). */
-    private val outbox: Outbox = Outbox.None,
+    private val outbox: Outbox,
     private val clock: () -> Long = ::epochSecondsNow,
 ) {
     /** One quoter per network: a request is quoted on its own network's verified state alone. */

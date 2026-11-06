@@ -62,7 +62,7 @@ class StoredOutboxTest {
     fun aQueuedTransferComesBackAsItWasStored() {
         val stored = listOf(queued(), queued(asset = TransferAsset.Erc20Token(usdc)).copy(account = bob))
 
-        val back = StoredOutbox.decode(StoredOutbox.encode(stored))!!
+        val back = (StoredOutbox.decode(StoredOutbox.encode(stored)) as StoredOutbox.Decoding.Read).queued
 
         assertEquals(2, back.size)
         stored.zip(back).forEach { (e, a) -> assertSame(e, a) }
@@ -80,15 +80,24 @@ class StoredOutboxTest {
             QueueConflict.Rejected("nonce too low"),
         )
         for (conflict in conflicts) {
-            val back = StoredOutbox.decode(StoredOutbox.encode(listOf(queued(conflict))))!!.single()
+            val back = (StoredOutbox.decode(StoredOutbox.encode(listOf(queued(conflict)))) as StoredOutbox.Decoding.Read)
+                .queued.single()
             assertEquals(conflict, back.conflict)
             assertNull(back.signed)
         }
     }
 
     @Test
-    fun aNewerOrDamagedContentDoesNotOpen() {
-        assertNull(StoredOutbox.decode("""{"version":2,"queued":[]}""".encodeToByteArray()))
-        assertNull(StoredOutbox.decode("not json".encodeToByteArray()))
+    fun aNewerContentIsToldFromADamagedOne() {
+        assertEquals(StoredOutbox.Decoding.Newer, StoredOutbox.decode("""{"version":2,"queued":[],"x":1}""".encodeToByteArray()))
+        assertEquals(StoredOutbox.Decoding.Damaged, StoredOutbox.decode("not json".encodeToByteArray()))
+        assertEquals(StoredOutbox.Decoding.Damaged, StoredOutbox.decode("""{"version":1,"queued":[{}]}""".encodeToByteArray()))
+    }
+
+    @Test
+    fun aMarkedSendingSurvivesTheRoundTrip() {
+        val sending = queued().copy(sending = true)
+        val back = (StoredOutbox.decode(StoredOutbox.encode(listOf(sending))) as StoredOutbox.Decoding.Read).queued.single()
+        assertEquals(true, back.sending)
     }
 }

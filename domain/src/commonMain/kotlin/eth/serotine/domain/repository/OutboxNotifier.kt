@@ -15,7 +15,7 @@ interface OutboxNotifier {
      */
     fun sent(queued: QueuedTransaction, hash: String)
 
-    /** [queued] no longer stands, for [conflict]: its signature was deleted, and it asks to be signed again. Never throws. */
+    /** [queued] no longer stands, for [conflict]: its signature was deleted, and it asks to be signed again. */
     fun conflict(queued: QueuedTransaction, conflict: QueueConflict)
 
     companion object {

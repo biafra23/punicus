@@ -17,6 +17,7 @@ import eth.serotine.domain.repository.QueuedTransaction
 import eth.serotine.domain.repository.ReadUnavailable
 import eth.serotine.domain.repository.SentAction
 import eth.serotine.domain.repository.SentTransfer
+import eth.serotine.domain.repository.SentTransferList
 import eth.serotine.domain.repository.SentTransfers
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.NonCancellable
@@ -100,9 +101,17 @@ class CheckQueued(private val quotes: (Network) -> QuoteTransfer) {
             else -> return conflictOrWait(quoting)
         }
         val fresh = quote.transaction
+        // The same transaction, quoted again: what the check judges is what was signed.
+        if (fresh.chainId != signed.chainId || fresh.to != signed.to || fresh.value != signed.value ||
+            !fresh.data.contentEquals(signed.data)
+        ) {
+            return conflict(QueueConflict.Refused(QueueRefusal.ENGINE_REFUSED))
+        }
         if (fresh.nonce > signed.nonce) return conflict(QueueConflict.NonceUsed(signed.nonce, fresh.nonce))
         if (fresh.nonce < signed.nonce) return conflict(QueueConflict.NonceGap(signed.nonce, fresh.nonce))
-        if (fresh.gasLimit > signed.gasLimit) return conflict(QueueConflict.NeedsMoreGas(signed.gasLimit, fresh.gasLimit))
+        if (fresh.gasLimit > signed.gasLimit) {
+            return conflict(QueueConflict.NeedsMoreGas(signed.gasLimit, fresh.gasLimit))
+        }
         val nextBaseFee = checked.nextBaseFee ?: return QueuedCheck.Waits(FEES_UNPROVEN)
         val needed = nextBaseFee.withHeadroom()?.plusOrNull(signed.maxPriorityFeePerGas)
             ?: return QueuedCheck.Waits(FEES_UNPROVEN)
@@ -153,12 +162,16 @@ class OutboxLock {
 /**
  * Sends what is queued once it checks out (docs/lenient-mode.md, *The outbox*): every [interval],
  * each queued transaction whose bytes are kept and whose network's light client verifies is
- * checked ([CheckQueued]) and, within its hour ([QUEUED_UNATTENDED_SECONDS]) or after the user's
- * tap ([QueuedTransaction.confirmedAt]), sent as strict mode sends: a peer took it, recorded in
- * [SentTransfers] and gone from the outbox; no peer answered, recorded as maybe sent, as strict mode
- * does, and gone from the outbox, its status offering to try it again; rejected, a conflict. A
- * conflict deletes the signed bytes and keeps the rest, so the user can sign again or discard it.
- * Each send and each conflict is told through [notifier], once.
+ * checked ([CheckQueued]) and, within its hour ([QUEUED_UNATTENDED_SECONDS]) from its signature or
+ * from the user's tap ([QueuedTransaction.confirmedAt]), asked again right before the broadcast,
+ * sent as strict mode sends. It is marked as sending in the outbox first, and not sent when that
+ * mark cannot be saved. Then: a peer took it, recorded in [SentTransfers] and gone from the outbox;
+ * no peer answered, recorded as maybe sent, as strict mode does, and gone from the outbox, its
+ * status offering to try it again; rejected, a conflict. One still marked as sending (the process
+ * ended, or a record could not be saved, after its broadcast) is recorded as maybe sent and gone
+ * from the outbox, never checked again: its own record would read as another transaction having
+ * taken its nonce. A conflict deletes the signed bytes and keeps the rest, so the user can sign
+ * again or discard it. Each send and each conflict is told through [notifier].
  *
  * Run for as long as the app runs (the hosts start it, never `App`): the check needs a verified
  * head, which only a light client that is awake has. [clock] is in unix seconds. Runs until
@@ -205,44 +218,69 @@ class FollowOutbox(
             ?.firstOrNull { it.accountId == account }
             ?: return
         val bytes = entry.signed ?: return
-        if (entry.confirmedAt == null && clock() - entry.signedAt > QUEUED_UNATTENDED_SECONDS) return
+        if (entry.sending) return resolveSending(entry, bytes)
+        if (!withinItsHour(entry)) return
         when (val result = check(entry)) {
-            QueuedCheck.Passes -> send(entry, bytes)
+            // The check's reads can take a while: the hour is asked again right before the broadcast.
+            QueuedCheck.Passes -> if (withinItsHour(entry)) send(entry, bytes)
             is QueuedCheck.Waits -> Unit
             is QueuedCheck.Conflicts -> conflicted(entry, result.conflict)
         }
     }
 
-    private suspend fun send(entry: QueuedTransaction, bytes: SignedTransfer) =
+    /** Whether [entry] may still be sent by itself: within an hour of its signature, or of the user's tap. */
+    private fun withinItsHour(entry: QueuedTransaction): Boolean =
+        clock() - (entry.confirmedAt ?: entry.signedAt) <= QUEUED_UNATTENDED_SECONDS
+
+    private suspend fun send(entry: QueuedTransaction, bytes: SignedTransfer): Unit = withContext(NonCancellable) {
+        // Marked first: a broadcast whose outcome is not recorded is never taken for a conflict.
+        if (!outbox.put(entry.copy(sending = true))) return@withContext
+        val transfer = record(entry, bytes)
+        when (val broadcast = broadcaster.send(entry.network, bytes.raw)) {
+            is Broadcast.Sent -> settle(entry, transfer.copy(sentAt = clock(), maybeSent = false))
+            is Broadcast.Unavailable -> settle(entry, transfer.copy(sentAt = clock(), maybeSent = true))
+            is Broadcast.Rejected -> conflicted(entry, QueueConflict.Rejected(broadcast.detail))
+            is Broadcast.Refused -> conflicted(entry, QueueConflict.Refused(QueueRefusal.ENGINE_REFUSED))
+        }
+    }
+
+    /**
+     * [entry], found still marked as sending: its broadcast may have reached the network. Recorded
+     * as maybe sent, unless its record is there already, and gone from the outbox.
+     */
+    private suspend fun resolveSending(entry: QueuedTransaction, bytes: SignedTransfer): Unit =
         withContext(NonCancellable) {
-            val transfer = SentTransfer(
-                network = entry.network,
-                account = entry.account,
-                nonce = entry.transaction.nonce,
-                signed = bytes,
-                action = entry.action,
-                maxCost = entry.maxCost,
-                sentAt = clock(),
-            )
-            when (val broadcast = broadcaster.send(entry.network, bytes.raw)) {
-                is Broadcast.Sent -> {
-                    sent(sentTransfers, transfer, clock)
-                    outbox.remove(entry.accountId)
-                    notifier.sent(entry, transfer.hash)
-                }
-                is Broadcast.Unavailable -> {
-                    maybeSent(sentTransfers, broadcast, transfer, clock)
-                    outbox.remove(entry.accountId)
-                    notifier.sent(entry, transfer.hash)
-                }
-                is Broadcast.Rejected -> conflicted(entry, QueueConflict.Rejected(broadcast.detail))
-                else -> conflicted(entry, QueueConflict.Refused(QueueRefusal.ENGINE_REFUSED))
+            val recorded = (sentTransfers.observe().first() as? SentTransferList.Loaded)?.transfers.orEmpty()
+                .any { it.hash == bytes.hash }
+            if (recorded) {
+                outbox.remove(entry.accountId)
+                Unit
+            } else {
+                settle(entry, record(entry, bytes).copy(sentAt = clock(), maybeSent = true))
             }
         }
 
+    /** Records [transfer] and only then lets [entry] go from the outbox: one that is not recorded stays, marked. */
+    private suspend fun settle(entry: QueuedTransaction, transfer: SentTransfer) {
+        if (!sentTransfers.record(transfer)) return
+        outbox.remove(entry.accountId)
+        notifier.sent(entry, transfer.hash)
+    }
+
+    private fun record(entry: QueuedTransaction, bytes: SignedTransfer) = SentTransfer(
+        network = entry.network,
+        account = entry.account,
+        nonce = entry.transaction.nonce,
+        signed = bytes,
+        action = entry.action,
+        maxCost = entry.maxCost,
+        sentAt = clock(),
+    )
+
     private suspend fun conflicted(entry: QueuedTransaction, conflict: QueueConflict) {
         // The signed bytes go first: nothing can send them once the conflict is found.
-        if (outbox.put(entry.copy(signed = null, conflict = conflict))) notifier.conflict(entry, conflict)
+        val kept = outbox.put(entry.copy(signed = null, conflict = conflict, sending = false))
+        if (kept) notifier.conflict(entry, conflict)
     }
 }
 
@@ -257,8 +295,9 @@ class DiscardQueued(private val outbox: Outbox, private val lock: OutboxLock) {
 
 /**
  * The user's tap on "Still send this?" for what [account] had queued past its hour
- * ([QUEUED_UNATTENDED_SECONDS]): from then on it is sent once its check passes. [clock] is in unix
- * seconds. False when nothing with kept bytes is queued from [account], or it could not be saved.
+ * ([QUEUED_UNATTENDED_SECONDS]): it is sent once its check passes within an hour of the tap; past
+ * that, it asks again (decision 4). [clock] is in unix seconds. False when nothing with kept bytes
+ * is queued from [account], or it could not be saved.
  */
 class ConfirmQueued(
     private val outbox: Outbox,

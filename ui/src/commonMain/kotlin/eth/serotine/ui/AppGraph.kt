@@ -41,6 +41,7 @@ import eth.serotine.domain.repository.LogIndex
 import eth.serotine.domain.repository.NftContracts
 import eth.serotine.domain.repository.NameResolver
 import eth.serotine.domain.repository.NativeBalances
+import eth.serotine.domain.repository.Outbox
 import eth.serotine.domain.repository.NetworkFreshness
 import eth.serotine.domain.repository.NetworkSettings
 import eth.serotine.domain.repository.NetworkUpgrades
@@ -315,6 +316,11 @@ class AppGraph(
     private val cowApi: CowApi,
     /** The CoW orders signed here, live until their end is proven: what Send and a swap hold back. */
     private val cowOrders: CowOrders,
+    /**
+     * Lenient mode's outbox (docs/lenient-mode.md): the host's one instance, which its follower sends
+     * from. Every quote from an account with something queued is held back by it.
+     */
+    private val outbox: Outbox,
     /** The venue the user last chose on Swap, compose, which the next swap starts at. */
     private val swapVenue: SwapVenueSetting,
     /** The swaps whose next step waits for the user, which the account's Activity offers with Continue. */
@@ -440,7 +446,15 @@ class AppGraph(
         EncodeSigningRequest(signingRequests),
         DescribeKeyStore(keys),
         signSafeTx(safe.network),
-        QuoteSafeApproval(observeSafe(), safeApprovals, nativeBalances, transactionInputs, sentTransfers, safe.network),
+        QuoteSafeApproval(
+            observeSafe(),
+            safeApprovals,
+            nativeBalances,
+            transactionInputs,
+            sentTransfers,
+            safe.network,
+            outbox = outbox,
+        ),
         ApproveSafeTxOnChain(signer, broadcaster, sentTransfers),
         QuoteSafeExecution(
             observeSafe(),
@@ -450,6 +464,7 @@ class AppGraph(
             transactionInputs,
             sentTransfers,
             safe.network,
+            outbox = outbox,
         ),
         ExecuteSafeTx(signer, broadcaster, sentTransfers),
         RebroadcastTransfer(broadcaster, sentTransfers, receipts),
@@ -548,6 +563,7 @@ class AppGraph(
             cowChain,
             lightClient,
             from.network,
+            outbox = outbox,
         ),
         SendTransfer(signer, broadcaster, sentTransfers),
         RebroadcastTransfer(broadcaster, sentTransfers, receipts),
@@ -580,6 +596,7 @@ class AppGraph(
             cowChain,
             lightClient,
             from.network,
+            outbox = outbox,
         ),
         EstimateSwap(FindUniswapRoute(uniswap, transactionInputs), RouteRanking.NET_OF_FEES),
         SendSwap(transactionInputs, signer, broadcaster, sentTransfers),
@@ -593,9 +610,10 @@ class AppGraph(
             cowChain,
             lightClient,
             from.network,
+            outbox = outbox,
         ),
         SendWrap(signer, broadcaster, sentTransfers),
-        QuoteTokenApproval(transactionInputs, nativeBalances, sentTransfers, from.network),
+        QuoteTokenApproval(transactionInputs, nativeBalances, sentTransfers, from.network, outbox = outbox),
         SendTokenApproval(signer, broadcaster, sentTransfers),
         RebroadcastTransfer(broadcaster, sentTransfers, receipts),
         WarmFeeHistory(transactionInputs),
@@ -613,6 +631,7 @@ class AppGraph(
             historyStarts,
             lightClient,
             from.network,
+            outbox = outbox,
         ),
         PlaceCowOrder(FindUniswapRoute(uniswap, transactionInputs), signer, cowOrders, cowApi, lightClient),
         KeepWaitingSwap(waitingSwaps),
@@ -632,7 +651,15 @@ class AppGraph(
         ObserveCowOrderLife(cowApi, network),
         ObserveAccounts(accounts),
         DescribeKeyStore(keys),
-        QuoteCowCancellation(transactionInputs, nativeBalances, sentTransfers, cowChain, lightClient, network),
+        QuoteCowCancellation(
+            transactionInputs,
+            nativeBalances,
+            sentTransfers,
+            cowChain,
+            lightClient,
+            network,
+            outbox = outbox,
+        ),
         SendCowCancellation(signer, broadcaster, sentTransfers),
         RebroadcastTransfer(broadcaster, sentTransfers, receipts),
         network,
@@ -688,7 +715,7 @@ class AppGraph(
         DescribeKeyStore(keys),
         ResolveRecipient(names),
         PlanSafe(safeReleases),
-        QuoteSafeDeployment(addressKinds, nativeBalances, transactionInputs, sentTransfers),
+        QuoteSafeDeployment(addressKinds, nativeBalances, transactionInputs, sentTransfers, outbox = outbox),
         DeploySafe(signer, broadcaster, sentTransfers),
         RebroadcastTransfer(broadcaster, sentTransfers, receipts),
         WarmFeeHistory(transactionInputs),
@@ -786,6 +813,7 @@ class AppGraph(
             transactionInputs,
             sentTransfers,
             transactionHistory,
+            outbox = outbox,
         ),
         SendDappTransaction(
             dappRequests,

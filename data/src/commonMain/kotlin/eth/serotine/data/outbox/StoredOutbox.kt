@@ -27,21 +27,51 @@ internal class StoredOutbox(val version: Int, val queued: List<StoredQueued>) {
     companion object {
         const val VERSION = 1
         private val JSON = Json { ignoreUnknownKeys = false }
+        private val VERSION_JSON = Json { ignoreUnknownKeys = true }
 
         /** [queued] as the bytes sealed. */
         fun encode(queued: List<QueuedTransaction>): ByteArray =
             JSON.encodeToString(serializer(), StoredOutbox(VERSION, queued.map(::stored))).encodeToByteArray()
 
-        /** What [bytes] hold, or null when they are not an outbox this version reads. */
-        fun decode(bytes: ByteArray): List<QueuedTransaction>? = try {
-            val stored = JSON.decodeFromString(serializer(), bytes.decodeToString())
-            if (stored.version != VERSION) null else stored.queued.map(StoredQueued::toQueued)
-        } catch (e: Exception) {
-            // A SerializationException, a field out of range as the domain's types refuse it, or
-            // a name this version does not know: an outbox it cannot read.
-            null
+        /** What [bytes] hold: the queued transactions, that a newer version wrote them, or that they are damaged. */
+        fun decode(bytes: ByteArray): Decoding {
+            val text = bytes.decodeToString()
+            val version = try {
+                VERSION_JSON.decodeFromString(VersionOnly.serializer(), text).version
+            } catch (e: Exception) {
+                return Decoding.Damaged
+            }
+            if (version > VERSION) return Decoding.Newer
+            return try {
+                val stored = JSON.decodeFromString(serializer(), text)
+                if (stored.version != VERSION) {
+                    Decoding.Damaged
+                } else {
+                    Decoding.Read(stored.queued.map(StoredQueued::toQueued))
+                }
+            } catch (e: Exception) {
+                // A SerializationException, a field out of range as the domain's types refuse it,
+                // or a name this version does not know though it wrote this version: damaged.
+                Decoding.Damaged
+            }
         }
     }
+
+    /** What [decode] found. */
+    sealed interface Decoding {
+        /** The [queued] transactions. */
+        data class Read(val queued: List<QueuedTransaction>) : Decoding
+
+        /** A newer version wrote it: it is left as it is. */
+        data object Newer : Decoding
+
+        /** It is not an outbox: damaged. */
+        data object Damaged : Decoding
+    }
+
+    /** The version alone, read first, so a newer layout is told from a damaged one. */
+    @Serializable
+    private class VersionOnly(val version: Int)
 }
 
 /**
@@ -58,6 +88,7 @@ internal class StoredQueued(
     val builtOn: StoredBasis,
     val conflict: StoredConflict? = null,
     val confirmedAt: Long? = null,
+    val sending: Boolean = false,
 ) {
     fun toQueued(): QueuedTransaction {
         val record = transfer.toTransfer()
@@ -75,6 +106,7 @@ internal class StoredQueued(
             builtOn = builtOn.toBasis(),
             conflict = conflict?.toConflict(),
             confirmedAt = confirmedAt,
+            sending = sending,
         )
     }
 }
@@ -97,6 +129,7 @@ private fun stored(queued: QueuedTransaction) = StoredQueued(
     builtOn = StoredBasis.of(queued.builtOn),
     conflict = queued.conflict?.let(StoredConflict::of),
     confirmedAt = queued.confirmedAt,
+    sending = queued.sending,
 )
 
 /** The signed fields of an EIP-1559 transaction, amounts in decimal, the address and the data in hex. */

@@ -195,7 +195,7 @@ class QuoteTransfer(
     private val cowChain: CowChain,
     private val lightClient: LightClient,
     private val network: Network,
-    outbox: Outbox = Outbox.None,
+    outbox: Outbox,
     private val clock: () -> Long = ::epochSecondsNow,
 ) {
     private val quoter = CallQuoter(inputs, sentTransfers, network, clock, outbox)

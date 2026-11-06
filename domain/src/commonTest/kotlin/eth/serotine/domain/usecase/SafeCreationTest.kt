@@ -23,6 +23,7 @@ import eth.serotine.domain.repository.SentAction
 import eth.serotine.domain.repository.SentTransfer
 import eth.serotine.domain.repository.Simulation
 import eth.serotine.domain.repository.Unlock
+import eth.serotine.domain.repository.Outbox
 import kotlinx.coroutines.async
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -67,7 +68,7 @@ class SafeCreationTest {
     private val kinds = object : AddressKinds {
         override fun observeKind(network: Network, address: Address): Flow<KindReading> = kind
     }
-    private val quote = QuoteSafeDeployment(kinds, world.nativeBalances, world.inputs, world.sent) {
+    private val quote = QuoteSafeDeployment(kinds, world.nativeBalances, world.inputs, world.sent, outbox = Outbox.None) {
         1_800_000_000
     }
 

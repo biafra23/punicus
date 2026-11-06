@@ -439,6 +439,7 @@ class SerotineApplication : Application() {
             cowChain = node.cow,
             cowApi = HttpCowApi.create(),
             cowOrders = cowOrders,
+            outbox = outbox,
             swapVenue = swapVenue,
             waitingSwaps = waitingSwaps,
             debugLog = debugLog,

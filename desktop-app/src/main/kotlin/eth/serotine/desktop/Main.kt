@@ -457,6 +457,7 @@ private fun openWallet(dataDir: File) {
                 cowChain = node.cow,
                 cowApi = HttpCowApi.create(),
                 cowOrders = cowOrders,
+                outbox = outbox,
                 swapVenue = FileSwapVenue(dataDir.resolve("swap-venue.json").path),
                 waitingSwaps = FileWaitingSwaps(dataDir.resolve("waiting-swaps.json").path),
                 debugLog = apiLog,

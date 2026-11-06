@@ -57,6 +57,7 @@ import eth.serotine.domain.repository.Unlock
 import eth.serotine.domain.repository.VenueChoice
 import eth.serotine.domain.repository.VenueReading
 import eth.serotine.domain.repository.WaitingSwap
+import eth.serotine.domain.repository.Outbox
 import eth.serotine.domain.usecase.ChooseSwapVenue
 import eth.serotine.domain.usecase.CowOfferedOnThisDevice
 import eth.serotine.domain.usecase.DescribeKeyStore
@@ -246,13 +247,14 @@ class SwapViewModelTest {
                 cowChain,
                 light,
                 Network.SEPOLIA,
+                Outbox.None,
                 now,
             ),
             EstimateSwap(FindUniswapRoute(uniswap, inputs), RouteRanking.NET_OF_FEES),
             SendSwap(inputs, signer, broadcaster, sent, now),
-            QuoteWrap(uniswap, inputs, balances, tokenBalances, sent, cowOrders, cowChain, light, Network.SEPOLIA, now),
+            QuoteWrap(uniswap, inputs, balances, tokenBalances, sent, cowOrders, cowChain, light, Network.SEPOLIA, Outbox.None, now),
             SendWrap(signer, broadcaster, sent, now),
-            QuoteTokenApproval(inputs, balances, sent, Network.SEPOLIA, now),
+            QuoteTokenApproval(inputs, balances, sent, Network.SEPOLIA, Outbox.None, now),
             SendTokenApproval(signer, broadcaster, sent, now),
             RebroadcastTransfer(broadcaster, sent, FakeReceipts()),
             WarmFeeHistory(inputs),
@@ -270,6 +272,7 @@ class SwapViewModelTest {
                 historyStarts,
                 light,
                 Network.SEPOLIA,
+                Outbox.None,
                 now,
             ),
             PlaceCowOrder(FindUniswapRoute(uniswap, inputs), signer, cowOrders, cowApi, light),

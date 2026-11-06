@@ -23,6 +23,7 @@ import eth.serotine.domain.repository.LightClient
 import eth.serotine.domain.repository.LightClientStatus
 import eth.serotine.domain.repository.SentAction
 import eth.serotine.domain.repository.Simulation
+import eth.serotine.domain.repository.Outbox
 import eth.serotine.domain.usecase.DescribeKeyStore
 import eth.serotine.domain.usecase.ObserveAccounts
 import eth.serotine.domain.usecase.ObserveCowOrder
@@ -136,7 +137,7 @@ class CowOrderViewModelTest {
             ObserveCowOrderLife(cowApi, Network.SEPOLIA),
             ObserveAccounts(accounts),
             DescribeKeyStore(FakeKeys()),
-            QuoteCowCancellation(inputs, balances, sent, cowChain, light, Network.SEPOLIA) { now },
+            QuoteCowCancellation(inputs, balances, sent, cowChain, light, Network.SEPOLIA, Outbox.None) { now },
             SendCowCancellation(signer, broadcaster, sent) { now },
             RebroadcastTransfer(broadcaster, sent, FakeReceipts()),
             Network.SEPOLIA,

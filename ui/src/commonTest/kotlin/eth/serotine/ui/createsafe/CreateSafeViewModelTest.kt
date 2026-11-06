@@ -31,6 +31,7 @@ import eth.serotine.domain.repository.SentAction
 import eth.serotine.domain.repository.Signing
 import eth.serotine.domain.repository.Simulation
 import eth.serotine.domain.repository.Unlock
+import eth.serotine.domain.repository.Outbox
 import eth.serotine.domain.usecase.DeploySafe
 import eth.serotine.domain.usecase.DescribeKeyStore
 import eth.serotine.domain.usecase.ObserveAccounts
@@ -167,7 +168,7 @@ class CreateSafeViewModelTest {
             DescribeKeyStore(keys),
             ResolveRecipient(names),
             PlanSafe(releases) { UInt256.of(++salts) },
-            QuoteSafeDeployment(kinds, balances, inputs, sent) { 1_800_000_000 },
+            QuoteSafeDeployment(kinds, balances, inputs, sent, Outbox.None) { 1_800_000_000 },
             DeploySafe(signer, broadcaster, sent) { 1_800_000_000 },
             RebroadcastTransfer(broadcaster, sent, receipts),
             WarmFeeHistory(inputs),

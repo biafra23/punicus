@@ -85,6 +85,7 @@ class LenientTransfersTest {
     private val draft = DraftTransfer(kept, balances, tokens, sent, orders, cowChain, outbox, network) { now }
     private val signature = Signature("1".padStart(64, '0'), "2".padStart(64, '0'), recoveryId = 0)
     private val unlock = Unlock.WithPassword(WalletPassword("correct horse battery"))
+    private val queueLock = OutboxLock()
 
     // The check's fresh state: the head verifies, the same balance, count and fees.
     private val inputs = FakeInputs()
@@ -177,7 +178,7 @@ class LenientTransfersTest {
     fun queueingSignsTheDraftAndPutsItInTheOutboxSendingNothing() = runTest {
         val drafted = assertIs<TransferDrafting.Drafted>(draftTenth()).draft
         val signer = FakeSigner(Signing.Signed(signature))
-        val queuing = QueueTransfer(signer, outbox) { now }(drafted, unlock)
+        val queuing = QueueTransfer(signer, outbox, queueLock) { now }(drafted, unlock)
 
         val queued = assertIs<TransferQueuing.Queued>(queuing).queued
         assertEquals(drafted.transaction.signingDigest(), signer.asked.single().second)
@@ -187,7 +188,7 @@ class LenientTransfersTest {
         assertEquals(SentAction.Transfer(bob, TransferAsset.Native, UInt256.of(eth / 10)), queued.action)
 
         // A second one from the same account is refused before anything is signed.
-        assertEquals(TransferQueuing.AccountBusy(queued.id), QueueTransfer(signer, outbox) { now }(drafted, unlock))
+        assertEquals(TransferQueuing.AccountBusy(queued.id), QueueTransfer(signer, outbox, queueLock) { now }(drafted, unlock))
         assertEquals(1, signer.asked.size)
     }
 
@@ -257,7 +258,7 @@ class LenientTransfersTest {
         val drafted = assertIs<TransferDrafting.Drafted>(
             draft(alice, bob, TransferAsset.Erc20Token(usdc), UInt256.of(5_000_000), FeeLevel.NORMAL),
         ).draft
-        val queued = assertIs<TransferQueuing.Queued>(QueueTransfer(FakeSigner(Signing.Signed(signature)), outbox) { now }(drafted, unlock)).queued
+        val queued = assertIs<TransferQueuing.Queued>(QueueTransfer(FakeSigner(Signing.Signed(signature)), outbox, queueLock) { now }(drafted, unlock)).queued
         freshToken = TokenBalanceReading.Verified(TokenUnits.of("4000000"), 100)
 
         assertEquals(QueuedCheck.Conflicts(QueueConflict.Refused(QueueRefusal.INSUFFICIENT_TOKEN)), check(queued))
@@ -335,6 +336,95 @@ class LenientTransfersTest {
     }
 
     @Test
+    fun aBroadcastNoPeerAnsweredIsRecordedAsMaybeSentAndLeavesTheOutbox() = runTest {
+        val queued = queuedTenth()
+        follower(FakeBroadcaster(Broadcast.Unavailable(null)), RecordingNotifier()).round()
+
+        assertEquals(emptyList(), outbox.queued.value)
+        val record = (sent.observe().first() as SentTransferList.Loaded).transfers.single()
+        assertEquals(queued.hash, record.hash)
+        assertTrue(record.maybeSent)
+    }
+
+    @Test
+    fun oneFoundStillMarkedAsSendingIsRecordedAsMaybeSentNeverCheckedOrSentAgain() = runTest {
+        val queued = queuedTenth()
+        outbox.put(queued.copy(sending = true))
+        // Its own nonce reads as used now: it was broadcast before the process ended.
+        inputs.pending = 8
+        val broadcaster = FakeBroadcaster(Broadcast.Sent(queued.hash!!))
+        val notifier = RecordingNotifier()
+        follower(broadcaster, notifier).round()
+
+        assertEquals(0, broadcaster.sent.size, "never broadcast again by itself")
+        assertEquals(emptyList(), outbox.queued.value)
+        val record = (sent.observe().first() as SentTransferList.Loaded).transfers.single()
+        assertEquals(queued.hash, record.hash)
+        assertTrue(record.maybeSent, "its status offers to try the same bytes again")
+        assertEquals(listOf("sent ${queued.hash}"), notifier.told, "never told as a conflict")
+    }
+
+    @Test
+    fun aSendWhoseRecordCannotBeSavedStaysMarkedAndIsNeverTakenForAConflict() = runTest {
+        val queued = queuedTenth()
+        val broadcaster = FakeBroadcaster(Broadcast.Sent(queued.hash!!))
+        val follow = follower(broadcaster, RecordingNotifier())
+        sent.failRecords = true
+        follow.round()
+        assertEquals(1, broadcaster.sent.size)
+        assertTrue(outbox.queued.value.single().sending)
+
+        sent.failRecords = false
+        inputs.pending = 8
+        follow.round()
+        assertEquals(1, broadcaster.sent.size)
+        assertEquals(emptyList(), outbox.queued.value)
+        assertEquals(queued.hash, (sent.observe().first() as SentTransferList.Loaded).transfers.single().hash)
+    }
+
+    @Test
+    fun aConflictedEntryStillHoldsTheAccount() = runTest {
+        val queued = queuedTenth()
+        inputs.pending = 8
+        follower(FakeBroadcaster(Broadcast.Sent("0x")), RecordingNotifier()).round()
+        assertNull(outbox.queued.value.single().signed)
+        inputs.pending = 7
+
+        assertEquals(TransferDrafting.AccountBusy(queued.id), draftTenth())
+        assertEquals(
+            TransferQuoting.EarlierMaybeSent(queued.id, queued = true),
+            quotes(alice, bob, TransferAsset.Native, UInt256.of(1), FeeLevel.NORMAL),
+        )
+    }
+
+    @Test
+    fun theSignedCapMustCoverExactlyEightyOneSixtyFourthsOfTheNextBaseFeePlusTheTip() = runTest {
+        val queued = queuedTenth()
+        // The signed cap is 22 gwei and the tip 2: the base fee may reach 20 gwei × 64/81.
+        inputs.fees = FeeReading.Quoted(feeQuote(base = 15_802_469_135L, block = 100))
+        assertEquals(QueuedCheck.Passes, check(queued))
+        inputs.fees = FeeReading.Quoted(feeQuote(base = 15_802_469_136L, block = 100))
+        assertIs<QueueConflict.FeesRose>(assertIs<QueuedCheck.Conflicts>(check(queued)).conflict)
+    }
+
+    @Test
+    fun aTapGivesAnHourOfItsOwnAndThenAsksAgain() = runTest {
+        val queued = queuedTenth()
+        val broadcaster = FakeBroadcaster(Broadcast.Sent(queued.hash!!))
+        val lock = OutboxLock()
+        val follow = follower(broadcaster, RecordingNotifier(), lock)
+        light.status.value = LightClientStatus.CatchingUp(1, 3)
+        now += QUEUED_UNATTENDED_SECONDS + 1
+        assertTrue(ConfirmQueued(outbox, lock) { now }(queued.accountId))
+
+        // The light client catches up only after the tap's hour: it asks again.
+        now += QUEUED_UNATTENDED_SECONDS + 1
+        light.status.value = LightClientStatus.Synced(100, 1_800_000_090, null)
+        follow.round()
+        assertEquals(0, broadcaster.sent.size)
+    }
+
+    @Test
     fun theHeadroomIsEightyOneSixtyFourthsRoundedUp() {
         assertEquals(UInt256.of(81), UInt256.of(64).withHeadroom())
         assertEquals(UInt256.of(2), UInt256.of(1).withHeadroom())
@@ -345,7 +435,7 @@ class LenientTransfersTest {
 
     private suspend fun queued(amount: UInt256): QueuedTransaction {
         val drafted = assertIs<TransferDrafting.Drafted>(draft(alice, bob, TransferAsset.Native, amount, FeeLevel.NORMAL)).draft
-        return assertIs<TransferQueuing.Queued>(QueueTransfer(FakeSigner(Signing.Signed(signature)), outbox) { now }(drafted, unlock)).queued
+        return assertIs<TransferQueuing.Queued>(QueueTransfer(FakeSigner(Signing.Signed(signature)), outbox, queueLock) { now }(drafted, unlock)).queued
     }
 
     private suspend fun queuedTenth() = queued(UInt256.of(eth / 10))
@@ -402,10 +492,12 @@ class LenientTransfersTest {
 
     private class FakeSentTransfers : SentTransfers {
         val transfers = MutableStateFlow<List<SentTransfer>>(emptyList())
+        var failRecords = false
 
         override fun observe(): Flow<SentTransferList> = transfers.map { SentTransferList.Loaded(it) }
 
         override suspend fun record(transfer: SentTransfer): Boolean {
+            if (failRecords) return false
             transfers.value = transfers.value.filterNot { it.hash == transfer.hash } + transfer
             return true
         }
