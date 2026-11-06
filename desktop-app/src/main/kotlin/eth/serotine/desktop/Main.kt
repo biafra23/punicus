@@ -21,6 +21,7 @@ import eth.serotine.data.keys.desktopHardwareSecret
 import eth.serotine.data.keys.desktopPasswordOnlyProtection
 import eth.serotine.data.logs.MemoryDebugLog
 import eth.serotine.data.networks.FileNetworkSettings
+import eth.serotine.data.outbox.desktopOutbox
 import eth.serotine.data.safe.FileSafeTxQueue
 import eth.serotine.data.safe.JsonSigningRequestCodec
 import eth.serotine.data.safe.PinnedSafeReleases
@@ -28,7 +29,6 @@ import eth.serotine.data.settings.FileDebugScreen
 import eth.serotine.data.settings.FileDisplayCurrency
 import eth.serotine.data.settings.FileAmountsHidden
 import eth.serotine.data.settings.FileInterfaceMode
-import eth.serotine.data.outbox.desktopOutbox
 import eth.serotine.data.settings.FileSyncPolicy
 import eth.serotine.data.settings.FileSwapVenue
 import eth.serotine.data.swaps.FileWaitingSwaps
@@ -40,18 +40,17 @@ import eth.serotine.data.transfers.FileSentTransfers
 import eth.serotine.data.transfers.FileTransactionHistory
 import eth.serotine.data.upgrade.FileKnownUpgradeStore
 import eth.serotine.domain.model.Network
+import eth.serotine.domain.usecase.CheckQueued
 import eth.serotine.domain.usecase.FollowAccountLogs
 import eth.serotine.domain.usecase.AnswerDappRequestsAtOnce
 import eth.serotine.domain.usecase.FollowDappAccounts
 import eth.serotine.domain.usecase.FollowDebugScreen
 import eth.serotine.domain.usecase.FollowInterfaceMode
 import eth.serotine.domain.usecase.FollowNetworks
-import eth.serotine.domain.usecase.FollowSafeDeployments
-import eth.serotine.domain.usecase.CheckQueued
 import eth.serotine.domain.usecase.FollowOutbox
+import eth.serotine.domain.usecase.FollowSafeDeployments
 import eth.serotine.domain.usecase.KeepTransactionInputs
 import eth.serotine.domain.usecase.OutboxLock
-import eth.serotine.domain.usecase.QuoteTransfer
 import eth.serotine.domain.usecase.FollowSentTransactions
 import eth.serotine.domain.usecase.FollowUpgradeReports
 import eth.serotine.domain.usecase.HistoryNotingAccounts
@@ -60,6 +59,7 @@ import eth.serotine.domain.usecase.ListDeployedSafe
 import eth.serotine.domain.usecase.NetworkDemand
 import eth.serotine.domain.usecase.ObserveDebugTab
 import eth.serotine.domain.usecase.ProveCowOrderEnds
+import eth.serotine.domain.usecase.QuoteTransfer
 import eth.serotine.domain.usecase.UpgradeNotices
 import eth.serotine.domain.usecase.WatchAddress
 import eth.serotine.ui.APP_VERSION

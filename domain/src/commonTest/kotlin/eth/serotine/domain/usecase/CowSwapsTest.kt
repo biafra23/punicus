@@ -38,6 +38,7 @@ import eth.serotine.domain.repository.HistoryStartList
 import eth.serotine.domain.repository.HistoryStarts
 import eth.serotine.domain.repository.LightClientStatus
 import eth.serotine.domain.repository.NonceReading
+import eth.serotine.domain.repository.Outbox
 import eth.serotine.domain.repository.ReadUnavailable
 import eth.serotine.domain.repository.SentAction
 import eth.serotine.domain.repository.SentTransfer
@@ -48,7 +49,6 @@ import eth.serotine.domain.repository.TransactionInputs
 import eth.serotine.domain.repository.UniswapV3Chain
 import eth.serotine.domain.repository.Unlock
 import eth.serotine.domain.repository.VenueReading
-import eth.serotine.domain.repository.Outbox
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertIs

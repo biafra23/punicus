@@ -19,11 +19,11 @@ import eth.serotine.domain.repository.DappRequestId
 import eth.serotine.domain.repository.DappRequests
 import eth.serotine.domain.repository.DappSessionId
 import eth.serotine.domain.repository.NetworkSettings
+import eth.serotine.domain.repository.Outbox
 import eth.serotine.domain.repository.SentAction
 import eth.serotine.domain.repository.SentTransfer
 import eth.serotine.domain.repository.Simulation
 import eth.serotine.domain.repository.Unlock
-import eth.serotine.domain.repository.Outbox
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.flowOf

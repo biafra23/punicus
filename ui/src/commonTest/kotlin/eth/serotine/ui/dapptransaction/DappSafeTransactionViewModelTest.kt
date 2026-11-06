@@ -1,6 +1,7 @@
 package eth.serotine.ui.dapptransaction
 
 import eth.serotine.domain.model.DappTransactionRequest
+import eth.serotine.domain.repository.Outbox
 import eth.serotine.domain.repository.SafeState
 import eth.serotine.domain.model.UInt256
 import eth.serotine.domain.model.Wei
@@ -13,7 +14,6 @@ import eth.serotine.domain.repository.DappRequestId
 import eth.serotine.domain.repository.DappSessionId
 import eth.serotine.domain.repository.Signing
 import eth.serotine.domain.repository.Simulation
-import eth.serotine.domain.repository.Outbox
 import eth.serotine.domain.model.Network
 import eth.serotine.domain.usecase.DescribeKeyStore
 import eth.serotine.domain.usecase.ObserveDappMessages

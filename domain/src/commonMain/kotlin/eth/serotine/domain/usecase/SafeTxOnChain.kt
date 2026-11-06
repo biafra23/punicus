@@ -12,6 +12,7 @@ import eth.serotine.domain.repository.Broadcaster
 import eth.serotine.domain.repository.FeeLevel
 import eth.serotine.domain.repository.NativeBalances
 import eth.serotine.domain.repository.NonceReading
+import eth.serotine.domain.repository.Outbox
 import eth.serotine.domain.repository.ReadUnavailable
 import eth.serotine.domain.repository.SafeApprovals
 import eth.serotine.domain.repository.SafeState
@@ -23,7 +24,6 @@ import eth.serotine.domain.repository.SignatureRecovery
 import eth.serotine.domain.repository.Signer
 import eth.serotine.domain.repository.TransactionInputs
 import eth.serotine.domain.repository.Unlock
-import eth.serotine.domain.repository.Outbox
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope

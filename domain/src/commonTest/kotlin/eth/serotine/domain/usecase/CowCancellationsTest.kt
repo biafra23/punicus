@@ -18,11 +18,11 @@ import eth.serotine.domain.repository.CowOrderRecord
 import eth.serotine.domain.repository.FeeLevel
 import eth.serotine.domain.repository.FinalizedBlock
 import eth.serotine.domain.repository.LightClientStatus
+import eth.serotine.domain.repository.Outbox
 import eth.serotine.domain.repository.SentAction
 import eth.serotine.domain.repository.SentTransfer
 import eth.serotine.domain.repository.Simulation
 import eth.serotine.domain.repository.Unlock
-import eth.serotine.domain.repository.Outbox
 import kotlin.test.Test
 import kotlin.test.assertContentEquals
 import kotlin.test.assertEquals

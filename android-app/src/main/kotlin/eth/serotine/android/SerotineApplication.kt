@@ -23,6 +23,7 @@ import eth.serotine.android.widget.RateWidgetPairs
 import eth.serotine.data.account.FileAccountRepository
 import eth.serotine.data.cow.FileCowOrders
 import eth.serotine.data.cow.HttpCowApi
+import eth.serotine.data.outbox.androidOutbox
 import eth.serotine.data.walletconnect.WalletConnectDapps
 import eth.serotine.data.engine.AndroidDnsServers
 import eth.serotine.data.engine.MyotisHost
@@ -43,7 +44,6 @@ import eth.serotine.data.settings.FileDebugScreen
 import eth.serotine.data.settings.FileDisplayCurrency
 import eth.serotine.data.settings.FileAmountsHidden
 import eth.serotine.data.settings.FileInterfaceMode
-import eth.serotine.data.outbox.androidOutbox
 import eth.serotine.data.settings.FileSyncPolicy
 import eth.serotine.data.settings.FileSwapVenue
 import eth.serotine.data.swaps.FileWaitingSwaps
@@ -57,6 +57,7 @@ import eth.serotine.domain.model.Network
 import eth.serotine.domain.model.PriceId
 import eth.serotine.domain.model.RatePair
 import eth.serotine.domain.repository.AccountList
+import eth.serotine.domain.usecase.CheckQueued
 import eth.serotine.domain.usecase.FollowAccountLogs
 import eth.serotine.domain.usecase.AnswerDappRequestsAtOnce
 import eth.serotine.domain.usecase.FollowDappAccounts
@@ -64,12 +65,10 @@ import eth.serotine.domain.usecase.FollowDebugScreen
 import eth.serotine.domain.usecase.FollowExchangeRate
 import eth.serotine.domain.usecase.FollowInterfaceMode
 import eth.serotine.domain.usecase.FollowNetworks
-import eth.serotine.domain.usecase.FollowSafeDeployments
-import eth.serotine.domain.usecase.CheckQueued
 import eth.serotine.domain.usecase.FollowOutbox
+import eth.serotine.domain.usecase.FollowSafeDeployments
 import eth.serotine.domain.usecase.KeepTransactionInputs
 import eth.serotine.domain.usecase.OutboxLock
-import eth.serotine.domain.usecase.QuoteTransfer
 import eth.serotine.domain.usecase.FollowSentTransactions
 import eth.serotine.domain.usecase.FollowUpgradeReports
 import eth.serotine.domain.usecase.HistoryNotingAccounts
@@ -79,6 +78,7 @@ import eth.serotine.domain.usecase.NetworkDemand
 import eth.serotine.domain.usecase.ObserveDebugTab
 import eth.serotine.domain.usecase.ObserveDisplayCurrencies
 import eth.serotine.domain.usecase.ProveCowOrderEnds
+import eth.serotine.domain.usecase.QuoteTransfer
 import eth.serotine.domain.usecase.ReadExchangeRate
 import eth.serotine.domain.usecase.RateWidgetChoices
 import eth.serotine.domain.usecase.RefreshExchangeRate

@@ -48,6 +48,7 @@ import eth.serotine.domain.repository.KeyStoreDescription
 import eth.serotine.domain.repository.LightClient
 import eth.serotine.domain.repository.LightClientStatus
 import eth.serotine.domain.repository.NewMnemonic
+import eth.serotine.domain.repository.Outbox
 import eth.serotine.domain.repository.ReadUnavailable
 import eth.serotine.domain.repository.SentAction
 import eth.serotine.domain.repository.Simulation
@@ -57,7 +58,6 @@ import eth.serotine.domain.repository.Unlock
 import eth.serotine.domain.repository.VenueChoice
 import eth.serotine.domain.repository.VenueReading
 import eth.serotine.domain.repository.WaitingSwap
-import eth.serotine.domain.repository.Outbox
 import eth.serotine.domain.usecase.ChooseSwapVenue
 import eth.serotine.domain.usecase.CowOfferedOnThisDevice
 import eth.serotine.domain.usecase.DescribeKeyStore

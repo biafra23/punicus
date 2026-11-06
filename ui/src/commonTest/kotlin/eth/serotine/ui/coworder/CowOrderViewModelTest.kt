@@ -21,9 +21,9 @@ import eth.serotine.domain.repository.CowPlacement
 import eth.serotine.domain.repository.FinalizedBlock
 import eth.serotine.domain.repository.LightClient
 import eth.serotine.domain.repository.LightClientStatus
+import eth.serotine.domain.repository.Outbox
 import eth.serotine.domain.repository.SentAction
 import eth.serotine.domain.repository.Simulation
-import eth.serotine.domain.repository.Outbox
 import eth.serotine.domain.usecase.DescribeKeyStore
 import eth.serotine.domain.usecase.ObserveAccounts
 import eth.serotine.domain.usecase.ObserveCowOrder
