@@ -37,7 +37,8 @@ sealed interface EnsNftReading {
 
     /**
      * The token is the name [name] ("multisig.eth"; null when no label could be found and checked, when
-     * the screen shows its hash), whose label hash is [labelHash] (`0x` and 64 lower-case hex digits),
+     * the screen shows its hash), whose label hash is [labelHash] (`0x` and 64 lower-case hex digits; for a
+     * wrapped name not decoded, its namehash, the token's id),
      * registered until [expiry] (unix seconds; null when not said), [wrapped] by the NameWrapper or not,
      * read at block [blockNumber] (null: not said).
      */

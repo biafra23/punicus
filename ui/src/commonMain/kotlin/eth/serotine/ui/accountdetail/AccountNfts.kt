@@ -78,7 +78,8 @@ private fun row(held: HeldNft, formatTime: (Long) -> String, now: Long): NftRow 
     val collection = held.collection
     val ens = held.ens
     return NftRow(
-        title = ens?.let { it.name ?: "[" + shortHash(it.labelHash) + "].eth" }
+        // An undecoded name by its hash: a label's, under .eth; a wrapped one's namehash, alone.
+        title = ens?.let { it.name ?: "[" + shortHash(it.labelHash) + "]" + if (it.wrapped) "" else ".eth" }
             ?: collection.known?.name ?: collection.name ?: collection.symbol ?: UNNAMED,
         tokenId = if (ens != null) collection.known?.name ?: "ENS" else tokenId(held.nft.tokenId),
         amount = ("×" + shortDigits(held.amount)).takeIf { held.amount > UInt256.ONE },

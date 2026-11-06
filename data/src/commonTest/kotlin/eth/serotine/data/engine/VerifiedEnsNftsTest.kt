@@ -42,6 +42,9 @@ class VerifiedEnsNftsTest {
         return word(32) + word(bytes.size.toLong()) + padded
     }
 
+    private fun wrapped() =
+        KnownNftCollection(wrapper, NftStandard.ERC1155, "ENS (wrapped)", KnownNftKind.ENS_NAME_WRAPPER)
+
     private fun id(bytes: ByteArray) = UInt256.fromBigEndian(bytes)
 
     private fun v2(pin: String = codeHash(registryCode)) =
@@ -55,7 +58,8 @@ class VerifiedEnsNftsTest {
         chain.codes[registry] = ProvenCode(registryCode, 100)
         chain.calls[registry to "9dbba19d"] = CallOutcome.Returned(word(store), 100)
         val tokenId = v2Id(label, version)
-        chain.calls[store to "b21bf7fa" + tokenId.toHex()] = CallOutcome.Returned(abi(label.encodeToByteArray()), 100)
+        val stored = v2Id(label, 0)
+        chain.calls[store to "b21bf7fa" + stored.toHex()] = CallOutcome.Returned(abi(label.encodeToByteArray()), 100)
         chain.calls[registry to "13c72608" + tokenId.toHex()] = CallOutcome.Returned(word(1_980_000_000), 100)
     }
 
@@ -85,7 +89,8 @@ class VerifiedEnsNftsTest {
         setUpV2("multisig", version = 0)
         val tokenId = v2Id("multisig", 0)
         // The store answers another label for the same id.
-        chain.calls[store to "b21bf7fa" + tokenId.toHex()] = CallOutcome.Returned(abi("mu1tisig".encodeToByteArray()), 100)
+        chain.calls[store to "b21bf7fa" + tokenId.toHex()] =
+            CallOutcome.Returned(abi("mu1tisig".encodeToByteArray()), 100)
         val reading = ens().name(Network.SEPOLIA, v2(), NftRef(registry, id(tokenId), NftStandard.ERC1155))
 
         assertNull((reading as EnsNftReading.Named).name)
@@ -101,7 +106,8 @@ class VerifiedEnsNftsTest {
     fun aRegistryWhoseCodeIsNotItsPinIsNotNamed() = runTest {
         setUpV2("multisig", version = 0)
         val tokenId = v2Id("multisig", 0)
-        val reading = ens().name(Network.SEPOLIA, v2(pin = "00".repeat(32)), NftRef(registry, id(tokenId), NftStandard.ERC1155))
+        val token = NftRef(registry, id(tokenId), NftStandard.ERC1155)
+        val reading = ens().name(Network.SEPOLIA, v2(pin = "00".repeat(32)), token)
 
         assertEquals(EnsNftReading.NotPinned, reading)
     }
@@ -110,10 +116,12 @@ class VerifiedEnsNftsTest {
     fun aWrappedNameIsItsDnsEncodedNameWhenItsNamehashIsTheId() = runTest {
         val labels = listOf("pay".encodeToByteArray(), "alice".encodeToByteArray(), "eth".encodeToByteArray())
         val node = VerifiedEnsNfts.namehash(labels)
-        val dns = labels.fold(ByteArray(0)) { acc, label -> acc + byteArrayOf(label.size.toByte()) + label } + byteArrayOf(0)
+        val dns = labels.fold(ByteArray(0)) { acc, label -> acc + byteArrayOf(label.size.toByte()) + label } +
+            byteArrayOf(0)
         chain.calls[wrapper to "20c38e2b" + node.toHex()] = CallOutcome.Returned(abi(dns), 120)
-        chain.calls[wrapper to "0178fe3f" + node.toHex()] = CallOutcome.Returned(word(wrapper) + word(0) + word(1_990_000_000), 120)
-        val collection = KnownNftCollection(wrapper, NftStandard.ERC1155, "ENS (wrapped)", KnownNftKind.ENS_NAME_WRAPPER)
+        chain.calls[wrapper to "0178fe3f" + node.toHex()] =
+            CallOutcome.Returned(word(wrapper) + word(0) + word(1_990_000_000), 120)
+        val collection = wrapped()
         val reading = ens().name(Network.SEPOLIA, collection, NftRef(wrapper, id(node), NftStandard.ERC1155))
 
         assertEquals(
@@ -129,22 +137,42 @@ class VerifiedEnsNftsTest {
     }
 
     @Test
+    fun aWrappedSecondLevelNamesExpiryIsTheRegistrarsAndNoExpiryIsNone() = runTest {
+        val labels = listOf("alice".encodeToByteArray(), "eth".encodeToByteArray())
+        val node = VerifiedEnsNfts.namehash(labels)
+        val dns = byteArrayOf(5) + labels[0] + byteArrayOf(3) + labels[1] + byteArrayOf(0)
+        chain.calls[wrapper to "20c38e2b" + node.toHex()] = CallOutcome.Returned(abi(dns), 120)
+        val collection = wrapped()
+        val token = NftRef(wrapper, id(node), NftStandard.ERC1155)
+        val grace = 90L * 24 * 60 * 60
+        chain.calls[wrapper to "0178fe3f" + node.toHex()] =
+            CallOutcome.Returned(word(wrapper) + word(0) + word(1_990_000_000 + grace), 120)
+        assertEquals(1_990_000_000, (ens().name(Network.SEPOLIA, collection, token) as EnsNftReading.Named).expiry)
+
+        chain.calls[wrapper to "0178fe3f" + node.toHex()] = CallOutcome.Returned(word(wrapper) + word(0) + word(0), 120)
+        assertNull((ens().name(Network.SEPOLIA, collection, token) as EnsNftReading.Named).expiry)
+    }
+
+    @Test
     fun aRegistrarTokensLabelComesFromAReceiptLogThatHashesToIt() = runTest {
         val label = VerifiedEnsNfts.keccak("alice".encodeToByteArray())
         chain.calls[registrar to "d6e4fa86" + label.toHex()] = CallOutcome.Returned(word(1_970_000_000), 130)
         // NameRegistered(string label, bytes32 indexed labelhash, address indexed owner, uint256 baseCost, ...):
         // the string's offset, two more words, then the string.
-        val data = "0x" + word(96) + word(5) + word(1_970_000_000) + word(5) + "alice".encodeToByteArray().toHex().padEnd(64, '0')
+        val data = "0x" + word(96) + word(5) + word(1_970_000_000) + word(5) +
+            "alice".encodeToByteArray().toHex().padEnd(64, '0')
         val other = ReceiptLog(registrar, listOf("0x" + "11".repeat(32), "0x" + "22".repeat(32)), data)
-        val registered = ReceiptLog(Address.of("0x" + "c0".repeat(20)), listOf("0x" + "33".repeat(32), "0x" + label.toHex()), data)
+        val controller = Address.of("0x" + "c0".repeat(20))
+        val registered = ReceiptLog(controller, listOf("0x" + "33".repeat(32), "0x" + label.toHex()), data)
         val collection = KnownNftCollection(registrar, NftStandard.ERC721, "ENS", KnownNftKind.ENS_REGISTRAR)
-        val reading = ens().name(Network.SEPOLIA, collection, NftRef(registrar, id(label), NftStandard.ERC721), listOf(other, registered))
+        val token = NftRef(registrar, id(label), NftStandard.ERC721)
+        val reading = ens().name(Network.SEPOLIA, collection, token, listOf(other, registered))
 
         assertEquals(
             EnsNftReading.Named("alice.eth", "0x" + label.toHex(), 1_970_000_000, wrapped = false, 130),
             reading,
         )
-        val unnamed = ens().name(Network.SEPOLIA, collection, NftRef(registrar, id(label), NftStandard.ERC721), listOf(other))
+        val unnamed = ens().name(Network.SEPOLIA, collection, token, listOf(other))
         assertNull((unnamed as EnsNftReading.Named).name)
     }
 

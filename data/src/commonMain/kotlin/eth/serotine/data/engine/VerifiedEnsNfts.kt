@@ -86,7 +86,8 @@ class VerifiedEnsNfts internal constructor(
             null -> return EnsNftReading.Unavailable(ReadUnavailable.UNPROVEN)
         }
         val label = store?.let { address ->
-            when (val outcome = verified.call(address, GET_LABEL + id)) {
+            // Asked by the label's own id, version bits aside, as the store keeps it.
+            when (val outcome = verified.call(address, GET_LABEL + unversioned)) {
                 is CallOutcome.Returned -> abiBytes(outcome.hex)
                 is CallOutcome.Reverted -> null
                 CallOutcome.Refused -> return EnsNftReading.Unavailable(ReadUnavailable.REFUSED)
@@ -104,7 +105,7 @@ class VerifiedEnsNfts internal constructor(
         return EnsNftReading.Named(
             name = label?.let { "$it.eth" },
             labelHash = labelHash,
-            expiry = expiry?.let { Abi.uint256(it.hex) }?.toLongOrNull(),
+            expiry = expiry?.let { Abi.uint256(it.hex) }?.toLongOrNull()?.takeIf { it > 0 },
             wrapped = false,
             blockNumber = expiry?.blockNumber,
         )
@@ -112,7 +113,9 @@ class VerifiedEnsNfts internal constructor(
 
     /**
      * The NameWrapper: `names(id)`, the DNS-encoded name, kept when its namehash is [id]; the expiry,
-     * the third word of `getData(id)`.
+     * the third word of `getData(id)`: none when it is zero (a subname given no expiry), and for a .eth
+     * name of the second level the registrar's, which the wrapper keeps with the 90 days' grace added.
+     * A name not decoded is shown by [id], its namehash.
      */
     private fun wrapped(verified: VerifiedChain, wrapper: Address, id: ByteArray): EnsNftReading {
         val labels = when (val outcome = verified.call(wrapper, NAMES + id)) {
@@ -131,8 +134,11 @@ class VerifiedEnsNfts internal constructor(
         return EnsNftReading.Named(
             name = shown?.takeIf { parts -> parts.all { it != null } }?.joinToString("."),
             labelHash = "0x" + (labels?.firstOrNull()?.let { keccak(it) } ?: id).toHex(),
-            expiry = data?.hex?.takeIf { it.length == 3 * WORD * 2 }?.let { Abi.uint256(it.substring(2 * WORD * 2)) }
-                ?.toLongOrNull(),
+            expiry = data?.hex?.takeIf { it.length == 3 * WORD * 2 }
+                ?.let { Abi.uint256(it.substring(2 * WORD * 2)) }
+                ?.toLongOrNull()
+                ?.takeIf { it > 0 }
+                ?.let { expiry -> if (labels != null && isEthSecondLevel(labels)) expiry - GRACE_SECONDS else expiry },
             wrapped = true,
             blockNumber = data?.blockNumber,
         )
@@ -175,6 +181,13 @@ class VerifiedEnsNfts internal constructor(
 
         /** The low bytes of an ENSv2 token id that are its version, not its label's hash. */
         private const val VERSION_BYTES = 4
+
+        /** The .eth registrar's grace period, which the NameWrapper adds to a second-level name's expiry. */
+        private const val GRACE_SECONDS = 90L * 24 * 60 * 60
+
+        /** Whether [labels] are a .eth name of the second level, as "alice.eth". */
+        private fun isEthSecondLevel(labels: List<ByteArray>) =
+            labels.size == 2 && labels[1].contentEquals("eth".encodeToByteArray())
 
         /** The longest label read, in bytes: longer than any name a row shows. */
         private const val MAX_LABEL_BYTES = 255
