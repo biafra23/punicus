@@ -42,7 +42,6 @@ import eth.serotine.domain.usecase.SafeTxQueueReading
 import eth.serotine.domain.usecase.ObserveOutbox
 import eth.serotine.domain.repository.HeldConflict
 import eth.serotine.domain.repository.HeldSafeSignature
-import eth.serotine.domain.repository.Outbox
 import eth.serotine.domain.repository.OutboxList
 import eth.serotine.domain.usecase.SafeTxRefusal
 import eth.serotine.domain.usecase.SetNetworkEnabled
@@ -154,17 +153,17 @@ class AccountDetailViewModel(
     private val proveAndAddNft: AddNft,
     /** Takes an added NFT off the account's list. */
     private val removeAddedNft: RemoveAddedNft,
+    /**
+     * The Safe signatures held in lenient mode until their check (docs/lenient-mode.md, *Safe
+     * transactions in lenient mode*): a Safe's queue lists them too.
+     */
+    observeOutbox: ObserveOutbox,
     /** How a row dates a balance last verified (unix seconds). */
     private val formatTime: (Long) -> String = ::formatDateTime,
     /** Now, in unix seconds: what simple mode's ages are dated against. */
     private val clock: () -> Long = ::epochSecondsNow,
     /** Whether Send from another wallet is offered (issue #255), asked anew for each state built. Null: never. */
     private val offerHandoff: OfferHandoff? = null,
-    /**
-     * The Safe signatures held in lenient mode until their check (docs/lenient-mode.md, *Safe
-     * transactions in lenient mode*): a Safe's queue lists them too. None by default.
-     */
-    observeOutbox: ObserveOutbox = ObserveOutbox(Outbox.None),
 ) : ViewModel() {
     /** The account this screen is about: its address, on its network. */
     private val address: Address = account.address

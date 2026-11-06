@@ -85,6 +85,20 @@ class LenientSafeTxScreenTest {
     }
 
     @Test
+    fun aHeldCoSignatureIsShownOnTheTransactionsOverviewWithItsActions() {
+        show(heldCoSignatureSample.copy(canApprove = true, canExecute = true))
+
+        rule.onNodeWithTag(SAFE_TX_PREPARED_ON_TAG).assertIsDisplayed()
+        assertEquals(3, rule.onAllNodesWithTag(SAFE_TX_HELD_STEP_TAG).fetchSemanticsNodes().size)
+        rule.onNodeWithText("Approve on chain").performScrollTo().assertIsDisplayed()
+        rule.onNodeWithText("Execute").performScrollTo().assertIsDisplayed()
+        assertEquals(0, rule.onAllNodesWithTag(SAFE_TX_SHARE_TAG).fetchSemanticsNodes().size, "nothing to share")
+
+        rule.onNodeWithTag(SAFE_TX_DISCARD_HELD_TAG).performScrollTo().performClick()
+        assertEquals(listOf("discard held"), events)
+    }
+
+    @Test
     fun aHeldProposalWhoseNonceWasUsedOffersToBeProposedAgain() {
         show(
             heldSample.copy(

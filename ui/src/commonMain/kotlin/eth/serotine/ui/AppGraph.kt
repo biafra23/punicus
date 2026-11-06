@@ -458,9 +458,9 @@ class AppGraph(
             ObserveNfts(logIndex, historyStarts, nfts, ensNfts, receipts, addedNfts),
             AddNft(nfts, addedNfts),
             RemoveAddedNft(addedNfts),
-            offerHandoff = OfferHandoff(walletHandoff),
             // A Safe's queue lists the signatures held for it too (lenient mode).
-            observeOutbox = ObserveOutbox(outbox),
+            ObserveOutbox(outbox),
+            offerHandoff = OfferHandoff(walletHandoff),
         )
 
     /** Send from another wallet (#255) from [from], with the token at [asset] chosen (null: the network's currency). */
@@ -589,6 +589,8 @@ class AppGraph(
             safeTxQueue,
             lightClient,
             safe.network,
+            // A proposal never takes the nonce of a signature held in lenient mode.
+            outbox,
         ),
         signSafeTx(safe.network),
     )
@@ -599,7 +601,7 @@ class AppGraph(
         ObserveAccounts(accounts),
         observeSafe(),
         DescribeKeyStore(keys),
-        ProposeSafeSettingsChange(observeSafe(), transactionInputs, safeTxQueue, safe.network),
+        ProposeSafeSettingsChange(observeSafe(), transactionInputs, safeTxQueue, safe.network, outbox),
         signSafeTx(safe.network),
         EncodeSigningRequest(signingRequests),
     )
@@ -949,6 +951,7 @@ class AppGraph(
             nativeBalances,
             transactionInputs,
             safeTxQueue,
+            outbox,
         ),
         SignDappSafeTx(dappRequests, ::signSafeTx),
         RefuseDappRequest(dappRequests, accounts, networkSettings),

@@ -47,7 +47,9 @@ sealed interface SafeTxUiState {
      * in its words, null where they are the same. [draftNote] in lenient mode while the light client
      * catches up (docs/lenient-mode.md, *Safe transactions in lenient mode*): what Sign, Approve on
      * chain and Execute are prepared on (the Safe as last verified, its age), and that each is checked
-     * on chain before it is shown or sent; [simpleDraftNote] that with no block.
+     * on chain before it is shown or sent; [simpleDraftNote] that with no block. [held], an owner's
+     * signature of it held on this device until its check (a co-signature: the transaction is in this
+     * device's queue), shown with every action on the transaction still offered.
      */
     data class Overview(
         override val network: String,
@@ -71,6 +73,7 @@ sealed interface SafeTxUiState {
         val simpleMessage: String? = null,
         val draftNote: String? = null,
         val simpleDraftNote: String? = null,
+        val held: HeldSignatureItem? = null,
     ) : SafeTxUiState
 
     /**
@@ -259,6 +262,22 @@ sealed interface SafeTxUiState {
 
 /** One step of a held signature's way: its [label] ("Held"), where it stands ([state]), and its [detail]. */
 data class HeldStep(val label: String, val state: HeldStepState, val detail: String?)
+
+/**
+ * A co-signature held on this device in lenient mode until its check (docs/lenient-mode.md, *Safe
+ * transactions in lenient mode*), on the overview of the transaction it signs: its [steps] (as
+ * [SafeTxUiState.Held]'s), [shareNote] saying when it is shown to anyone, [discardLabel] and
+ * [discardNote] for removing it, [discarding] while that runs, and [error] a change that could not be
+ * saved. Never the signature itself.
+ */
+data class HeldSignatureItem(
+    val steps: List<HeldStep>,
+    val shareNote: String,
+    val discardLabel: String,
+    val discardNote: String,
+    val discarding: Boolean = false,
+    val error: String? = null,
+)
 
 /** Where a [HeldStep] stands. */
 enum class HeldStepState {

@@ -200,6 +200,17 @@ internal val heldSample = SafeTxUiState.Held(
     discardNote = "Discard deletes the signature and the proposal: nothing was shown to anyone.",
 )
 
+/** A co-signature held until its check, on the overview of the queued transaction it signs. */
+internal val heldCoSignatureSample = lenientOverviewSample.copy(
+    held = HeldSignatureItem(
+        steps = heldSample.steps,
+        shareNote = heldSample.shareNote,
+        discardLabel = "Discard",
+        discardNote = "Discard deletes the signature: the transaction stays in this device's queue, unsigned by " +
+            "Daily.",
+    ),
+)
+
 private val heldConflict = heldSample.copy(
     steps = listOf(
         HeldStep("Signed", HeldStepState.UNKNOWN, "As Daily on this device, 6 Nov 2026, 14:02: deleted since"),
@@ -652,6 +663,11 @@ private fun SafeTxHeldConflictPreview() = SafeTxPreview(heldConflict)
 
 @Preview
 @Composable
+private fun SafeTxHeldCoSignaturePreview() =
+    SafeTxPreview(heldCoSignatureSample, lightClient = catchingUpStripSample)
+
+@Preview
+@Composable
 private fun SafeTxHeldDiscardedPreview() = SafeTxPreview(
     SafeTxUiState.Discarded("Sepolia", "Discarded: your signature was deleted, and it was never shown to anyone."),
 )
@@ -722,6 +738,7 @@ internal val safeTxScreenPreviews: List<ScreenPreview> = listOf(
     ScreenPreview("held-checking") { SafeTxHeldCheckingPreview() },
     ScreenPreview("held-conflict") { SafeTxHeldConflictPreview() },
     ScreenPreview("held-discarded") { SafeTxHeldDiscardedPreview() },
+    ScreenPreview("held-co-signature") { SafeTxHeldCoSignaturePreview() },
     ScreenPreview("draft-approval") { SafeTxDraftApprovalPreview() },
     ScreenPreview("draft-execution") { SafeTxDraftExecutionPreview() },
     ScreenPreview("draft-dark") { SafeTxDraftDarkPreview() },

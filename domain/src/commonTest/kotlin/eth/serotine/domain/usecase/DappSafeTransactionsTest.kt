@@ -91,6 +91,7 @@ class DappSafeTransactionsTest {
         world.nativeBalances,
         world.inputs,
         world.queue,
+        Outbox.None,
         clock = { now },
     )
 
@@ -131,7 +132,7 @@ class DappSafeTransactionsTest {
         requests.waiting.value = listOf(asked)
         val propose = ProposeDappSafeTx(
             requests, gnosis.accounts, on, ListCatalog(), gnosis.observeSafe, gnosis.nativeBalances,
-            gnosis.inputs, gnosis.queue, clock = { now },
+            gnosis.inputs, gnosis.queue, Outbox.None, clock = { now },
         )
         val proposed = assertIs<DappSafeProposing.Proposed>(propose(asked.id)).proposal
         assertEquals(Network.GNOSIS, proposed.proposal.request.network)

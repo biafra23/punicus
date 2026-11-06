@@ -182,6 +182,11 @@ private fun SimpleSafeTxHeldPreview() = SimpleSafeTxPreview(heldSample)
 @Composable
 private fun SimpleSafeTxHeldDarkPreview() = SimpleSafeTxPreview(heldSample, darkTheme = true)
 
+/** A co-signature held until its check, on the overview of the queued transaction it signs. */
+@Preview
+@Composable
+private fun SimpleSafeTxHeldCoSignaturePreview() = SimpleSafeTxPreview(heldCoSignatureSample)
+
 /** An approval drafted on what was verified last: each figure's age, the blocks behind Details. */
 @Preview
 @Composable
@@ -199,5 +204,6 @@ internal val simpleSafeTxScreenPreviews: List<ScreenPreview> = listOf(
     ScreenPreview("lenient-overview") { SimpleSafeTxLenientOverviewPreview() },
     ScreenPreview("held") { SimpleSafeTxHeldPreview() },
     ScreenPreview("held-dark") { SimpleSafeTxHeldDarkPreview() },
+    ScreenPreview("held-co-signature") { SimpleSafeTxHeldCoSignaturePreview() },
     ScreenPreview("draft") { SimpleSafeTxDraftPreview() },
 )

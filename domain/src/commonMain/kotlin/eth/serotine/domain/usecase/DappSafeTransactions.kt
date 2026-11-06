@@ -15,6 +15,7 @@ import eth.serotine.domain.repository.DappRequests
 import eth.serotine.domain.repository.HistoryEntry
 import eth.serotine.domain.repository.NativeBalances
 import eth.serotine.domain.repository.NetworkSettings
+import eth.serotine.domain.repository.Outbox
 import eth.serotine.domain.repository.SafeTxQueue
 import eth.serotine.domain.repository.SafeTxQueueList
 import eth.serotine.domain.repository.SentAction
@@ -96,6 +97,8 @@ sealed interface DappSafeProposing {
  * the Safe, which must not revert (nor, for a token's `transfer` or `approve`, return false), and its value
  * must be in the Safe's verified balance with what its queued transactions may move. A request is the Safe
  * transaction recorded for it ([DappRequest.safeTx]) once one is, never another. [clock] is in unix seconds.
+ * Its nonce and its funds come after what is queued and what is held in lenient mode ([pendingOf]):
+ * it never lands at the nonce of a signature held until its check.
  */
 class ProposeDappSafeTx(
     private val requests: DappRequests,
@@ -106,6 +109,7 @@ class ProposeDappSafeTx(
     private val nativeBalances: NativeBalances,
     private val inputs: TransactionInputs,
     private val queue: SafeTxQueue,
+    private val outbox: Outbox,
     private val clock: () -> Long = ::epochSecondsNow,
 ) {
     suspend operator fun invoke(id: DappRequestId): DappSafeProposing = cancellingReads {
@@ -137,8 +141,9 @@ class ProposeDappSafeTx(
         // run as a verified call below.
         val balance = async { safeNativeBalanceOf(network, nativeBalances, safe.address) }
         val queuedList = async { queue.observe(safe).first() }
+        val held = async { outbox.observe().first() }
         val safeNonce = reading.state.nonce
-        val pending = pendingOf(queuedList.await(), safeNonce, network)
+        val pending = pendingOf(queuedList.await(), held.await(), safeNonce, safe)
         val nonce = nextNonce(pending, safeNonce)
         val signingRequest =
             SigningRequest.of(

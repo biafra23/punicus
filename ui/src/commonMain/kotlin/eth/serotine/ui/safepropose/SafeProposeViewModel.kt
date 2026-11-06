@@ -798,13 +798,20 @@ class SafeProposeViewModel(
     /**
      * Signs [draft] and holds the signature ([HoldSafeSignature]): nothing is queued or shared. Once
      * held, the Safe transaction's screen shows where it stands. A signature the outbox could not keep
-     * is dropped, and said.
+     * is dropped, and said. Not once lenient mode no longer applies, or the Safe is verified now (the
+     * light client caught up), as the Safe transaction's screen refuses: the strict review signs then.
      */
     private fun hold(draft: Step.Drafting, unlock: Unlock) {
         // Sign while syncing turned off, or the network, since the draft was made: it follows strict
         // mode now, and is not signed.
-        if (model.value?.lenient != true) {
+        val model = model.value
+        if (model?.lenient != true) {
             step.value = Step.Composing(error = NO_LONGER_LENIENT)
+            return
+        }
+        // The light client caught up meanwhile: the Safe is verified now, so the strict review proposes it.
+        if (model.sender is Sender.From) {
+            step.value = Step.Composing(error = CAUGHT_UP)
             return
         }
         // The password leaves the state now: it is in the unlock, which the signer zeroes after use.
@@ -1166,6 +1173,8 @@ class SafeProposeViewModel(
             "has caught up: to prepare this proposal now, enter the address, or pick one of your accounts."
         const val NO_LONGER_LENIENT = "Sign while syncing, or the network, was turned off since this was " +
             "prepared, so it was not signed: review it again."
+        const val CAUGHT_UP = "The light client has caught up since this was prepared, so it was not signed: " +
+            "review it again to check it on chain."
         const val NONCE_BUSY = "A signature of another transaction at this Safe nonce is held on this device: one " +
             "per nonce. Discard it, or wait for its check, to sign this one."
         const val NOT_HELD = "Signed, but the outbox could not keep it, so the signature was dropped: nothing is " +

@@ -212,9 +212,9 @@ class AccountDetailViewModelTest {
         ObserveNfts(nftLogIndex, historyStarts, nftContracts, FakeEnsNfts(), FakeReceiptsNever(), addedNfts),
         AddNft(nftContracts, addedNfts),
         RemoveAddedNft(addedNfts),
+        ObserveOutbox(outbox),
         formatTime = { "<$it>" },
         clock = { NOW },
-        observeOutbox = ObserveOutbox(outbox),
     )
 
     private val upgradeReports = FakeUpgradeReports()
@@ -1079,6 +1079,7 @@ class AccountDetailViewModelTest {
             ObserveNfts(nftLogIndex, historyStarts, nftContracts, FakeEnsNfts(), FakeReceiptsNever(), addedNfts),
         AddNft(nftContracts, addedNfts),
         RemoveAddedNft(addedNfts),
+        ObserveOutbox(outbox),
         )
         backgroundScope.launch { viewModel.uiState.collect {} }
         runCurrent()

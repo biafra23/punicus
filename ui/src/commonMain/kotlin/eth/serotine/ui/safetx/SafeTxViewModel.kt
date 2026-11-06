@@ -104,6 +104,7 @@ import eth.serotine.ui.components.shortAddress
 import eth.serotine.ui.components.verifiedAt
 import eth.serotine.ui.outbox.QUEUED_FIRST
 import eth.serotine.ui.outbox.heldConflictReason
+import eth.serotine.ui.outbox.proposesAgain
 import eth.serotine.ui.platform.formatDateTime
 import kotlin.time.TimeMark
 import kotlin.time.TimeSource
@@ -1505,7 +1506,10 @@ class SafeTxViewModel(
         val held = heldInputs.held ?: lastHeld.takeIf { changes.discarding }
         val inStep = step is Step.Signing || step is Step.Reviewing || step is Step.Quoting ||
             step is Step.Drafting || step is Step.DraftReviewing
-        if (held != null && !inStep) return heldState(held, heldInputs, context as? Context)
+        // A proposal held here is in no queue yet, so the held signature is its screen. A co-signature's
+        // transaction is in this device's queue: its overview stays, every action on it offered as before,
+        // with the signature held shown on it.
+        if (held != null && !inStep && context !is Context) return heldState(held, heldInputs, null)
         val shown = when {
             context is Context -> context
             inStep && lastContext != null -> lastContext!!
@@ -1589,9 +1593,20 @@ class SafeTxViewModel(
                 simpleRefusal = (tx.refusal ?: read?.refusal)?.let(::simpleSafeTxRefusalText),
                 draftNote = kept?.let { draftNoteOf(it, withBlock = true) },
                 simpleDraftNote = kept?.let { draftNoteOf(it, withBlock = false) },
+                held = held?.let { heldItemOf(heldState(it, heldInputs, shown)) },
             )
         }
     }
+
+    /** [held]'s signature as the overview of the transaction it signs shows it. */
+    private fun heldItemOf(held: SafeTxUiState.Held) = HeldSignatureItem(
+        steps = held.steps,
+        shareNote = held.shareNote,
+        discardLabel = held.discardLabel,
+        discardNote = held.discardNote,
+        discarding = held.discarding,
+        error = held.error,
+    )
 
     /** What lenient mode's actions are prepared on, and that each is checked before it is shown or sent. */
     private fun draftNoteOf(kept: SafeTxOwnersReading.LastVerified, withBlock: Boolean): String {
@@ -1678,12 +1693,12 @@ class SafeTxViewModel(
 
     /**
      * What Send for a Safe opens with to propose [held] again: only a transfer this device proposed,
-     * whose nonce another transaction used or took in the queue (a new nonce makes a new hash, so its
-     * owner signs anew), of the network's currency or of a token among [tokens].
+     * whose nonce another transaction used or took in the queue, or that found the queue short of it
+     * (a new nonce makes a new hash, so its owner signs anew), of the network's currency or of a token among [tokens].
      */
     private fun proposeAgainOf(held: HeldSafeSignature, tokens: List<DecodingToken> = heldTokens): SafeProposeAgain? {
         val conflict = held.conflict
-        if (!held.proposed || conflict !is HeldConflict.NonceUsed && conflict != HeldConflict.NonceTaken) return null
+        if (!held.proposed || conflict?.proposesAgain != true) return null
         val action = SafeTxAction.of(held.request.safe, held.request.tx)
         val asset: Address?
         val to: Address

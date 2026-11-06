@@ -670,7 +670,7 @@ class ProposeSafeTx(
             safeChecked()
             val balance = async { safeBalanceOf(network, nativeBalances, tokenBalances, safe, token?.address) }
             val queued = async { queue.observe(AccountId(network, safe)).first() }
-            val held = async { heldOf(outbox.observe().first(), AccountId(network, safe)) }
+            val held = async { outbox.observe().first() }
 
             val (before, balanceBlock) = when (val read = balance.await()) {
                 is SafeBalanceRead.Read -> read.amount to read.blockNumber
@@ -679,8 +679,7 @@ class ProposeSafeTx(
             }
             if (before < amount) return@cancellingReads insufficient(token != null)
             val safeNonce = reading.state.nonce
-            val pending = pendingOf(queued.await(), safeNonce, network) +
-                held.await().filter { it.nonce >= safeNonce }
+            val pending = pendingOf(queued.await(), held.await(), safeNonce, AccountId(network, safe))
             val nonce = nextNonce(pending, safeNonce)
             val ahead = pending.filter { it.nonce < nonce }
             val queuedAmount = ahead.queuedMoves(token?.address) ?: return@cancellingReads insufficient(token != null)
@@ -728,11 +727,26 @@ internal fun pendingOf(queued: SafeTxQueueList, safeNonce: Long, network: Networ
 
 /**
  * The requests of the signatures [list] holds for the Safe [safe] in lenient mode, each without its
- * signature, conflicted ones too (one waits to be dismissed at its nonce): what takes a nonce and
- * moves funds before a new proposal. None from an outbox that cannot be read.
+ * signature: what takes a nonce and moves funds before a new proposal. Not a conflicted one: its
+ * signature is deleted already, so it takes no nonce, and a signature held at its nonce takes its
+ * place. None from an outbox that cannot be read.
  */
 internal fun heldOf(list: OutboxList, safe: AccountId): List<SigningRequest> =
-    (list as? OutboxList.Loaded)?.held.orEmpty().filter { it.safe == safe }.map { it.request }
+    (list as? OutboxList.Loaded)?.held.orEmpty().filter { it.safe == safe && it.signature != null }.map { it.request }
+
+/**
+ * The requests that run before a new proposal from the Safe [safe] at its nonce [safeNonce]: those
+ * of its queue ([pendingOf]) and those of the signatures held for it in lenient mode ([heldOf]), each
+ * at a nonce the Safe has not passed. Every proposer takes its nonce and its funds after them, so a
+ * proposal never lands at the nonce of one held.
+ */
+internal fun pendingOf(
+    queued: SafeTxQueueList,
+    held: OutboxList,
+    safeNonce: Long,
+    safe: AccountId,
+): List<SigningRequest> =
+    pendingOf(queued, safeNonce, safe.network) + heldOf(held, safe).filter { it.nonce >= safeNonce }
 
 /**
  * A Safe's next nonce: its own, or the first after the requests [pending] from it without a gap.

@@ -6,6 +6,7 @@ import eth.serotine.domain.model.Network
 import eth.serotine.domain.model.SafeCalls
 import eth.serotine.domain.model.SafeOperation
 import eth.serotine.domain.model.SafeSettingsCalls
+import eth.serotine.domain.model.SafeSettingsChange
 import eth.serotine.domain.model.SafeTx
 import eth.serotine.domain.model.SigningRequest
 import eth.serotine.domain.model.Token
@@ -578,5 +579,74 @@ class LenientSafeTxsTest {
             ),
             1_800_000_000,
         )
+    }
+
+    // The nonces held signatures take
+
+    @Test
+    fun aHeldProposalPastAGapIsProposedAgainNeverSavedBehindIt() = runTest {
+        val first = heldProposal()
+        val second = heldProposal()
+        assertEquals(listOf(4L, 5L), listOf(first.nonce, second.nonce))
+        // The one before it is discarded: nothing takes nonce 4.
+        assertEquals(HeldDiscard.Discarded, DiscardHeld(outbox, lock)(first.safe, first.hash))
+        caughtUp()
+
+        follower().round()
+
+        assertEquals(HeldConflict.NonceGap(4), outbox.held.value.single().conflict)
+        assertNull(outbox.held.value.single().signature)
+        assertTrue(world.queue.requests.value.none { it.hash == second.hash }, "never saved past the gap")
+    }
+
+    @Test
+    fun heldProposalsAreSavedInTheirNoncesOrder() = runTest {
+        val first = heldProposal()
+        val second = heldProposal()
+        // Listed the other way round: the one at nonce 4 is still checked first, and the one at 5 after it.
+        outbox.held.value = outbox.held.value.reversed()
+        caughtUp()
+
+        follower().round()
+
+        assertEquals(emptyList(), outbox.held.value)
+        assertEquals(listOf(first.hash, second.hash), world.queue.requests.value.sortedBy { it.nonce }.map { it.hash })
+    }
+
+    @Test
+    fun aConflictedHeldProposalTakesNoNonceAndOneSignedThereIsHeldInItsPlace() = runTest {
+        val held = heldProposal()
+        outbox.held.value = listOf(held.copy(signature = null, conflict = HeldConflict.NotAnOwner))
+
+        val draft = assertIs<SafeTxDrafting.Drafted>(draftEth(200_000_000_000_000_000)).draft
+        assertEquals(4, draft.request.nonce, "its signature deleted, it takes no nonce")
+        val ready = assertIs<HeldSignCheck.Ready>(hold.check(draft.request, world.alice.address))
+        val again = assertIs<SafeSignatureHolding.Held>(hold.sign(ready, unlock, draft)).held
+        assertEquals(listOf(again), outbox.held.value, "held in the conflicted one's place")
+    }
+
+    @Test
+    fun aStrictProposalOfAnyKindTakesItsNonceAfterTheSignaturesHeld() = runTest {
+        heldProposal()
+        caughtUp()
+        val settings = ProposeSafeSettingsChange(world.observeSafe, world.inputs, world.queue, network, outbox)
+
+        val change = assertIs<SafeSettingsProposing.Proposed>(
+            settings(world.safe, SafeSettingsChange.ThresholdChanged(1)),
+        ).proposal
+
+        assertEquals(5, change.request.nonce, "behind the held one, never at its nonce")
+    }
+
+    @Test
+    fun aSafeCallIsNotSignedForAnOutboxThatCannotBeRead() = runTest {
+        val request = world.request(usdcTransfer(4), world.bob.address)
+        val draft = assertIs<SafeCallDrafting.Drafted>(
+            draftCall.execution(request, world.alice.address, FeeLevel.NORMAL),
+        ).draft
+        outbox.unreadable = true
+
+        assertEquals(TransferQueuing.NotSaved, queueCall(draft, unlock))
+        assertTrue(world.signer.asked.isEmpty(), "no key is asked for")
     }
 }

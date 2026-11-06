@@ -384,6 +384,7 @@ private fun OverviewContent(
         }
         state.refusal?.let { Text(it, color = MaterialTheme.colorScheme.error) }
         Owners(state.owners, actions.onCheckAgain)
+        state.held?.let { HeldSignature(it, actions.onDiscardHeld) }
         if (details.isNotEmpty()) HiddenDetails(SAFE_TX_DETAILS_TAG) { details.forEach { Note(it) } }
         state.message?.let { message ->
             Surface(
@@ -781,9 +782,7 @@ private fun HeldContent(state: SafeTxUiState.Held, actions: SafeTxActions, detai
         HashLine(state.hash)
         // Empty in simple mode, which keeps it behind Details.
         state.safeVerifiedAt.takeIf { it.isNotEmpty() }?.let { Note(it) }
-        Heading("Your signature")
-        state.steps.forEach { HeldStepItem(it) }
-        Note(state.shareNote)
+        HeldSteps(state.steps, state.shareNote)
         if (details.isNotEmpty()) HiddenDetails(SAFE_TX_DETAILS_TAG) { details.forEach { Note(it) } }
         state.error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
         HorizontalDivider()
@@ -797,18 +796,43 @@ private fun HeldContent(state: SafeTxUiState.Held, actions: SafeTxActions, detai
             }
             Note("Propose again discards it and opens Send from this Safe with it filled in, at the Safe's next nonce.")
         }
-        OutlinedButton(
-            onClick = actions.onDiscardHeld,
-            enabled = !state.discarding,
-            modifier = Modifier.fillMaxWidth().testTag(SAFE_TX_DISCARD_HELD_TAG),
-        ) {
-            if (state.discarding) {
-                CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp)
-                Spacer(Modifier.size(8.dp))
-            }
-            Text(state.discardLabel)
-        }
+        DiscardHeldButton(state.discardLabel, state.discarding, actions.onDiscardHeld)
         Note(state.discardNote)
+    }
+}
+
+/** A co-signature held here, on the overview of the transaction it signs: where it stands, and its Discard. */
+@Composable
+private fun HeldSignature(held: HeldSignatureItem, onDiscard: () -> Unit) {
+    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        HeldSteps(held.steps, held.shareNote)
+        held.error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
+        DiscardHeldButton(held.discardLabel, held.discarding, onDiscard)
+        Note(held.discardNote)
+    }
+}
+
+/** A held signature's steps, and when it is shown to anyone. */
+@Composable
+private fun HeldSteps(steps: List<HeldStep>, shareNote: String) {
+    Heading("Your signature")
+    steps.forEach { HeldStepItem(it) }
+    Note(shareNote)
+}
+
+/** Removes a held signature: Discard, or Dismiss once a conflict deleted it; a spinner while that runs. */
+@Composable
+private fun DiscardHeldButton(label: String, discarding: Boolean, onClick: () -> Unit) {
+    OutlinedButton(
+        onClick = onClick,
+        enabled = !discarding,
+        modifier = Modifier.fillMaxWidth().testTag(SAFE_TX_DISCARD_HELD_TAG),
+    ) {
+        if (discarding) {
+            CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp)
+            Spacer(Modifier.size(8.dp))
+        }
+        Text(label)
     }
 }
 

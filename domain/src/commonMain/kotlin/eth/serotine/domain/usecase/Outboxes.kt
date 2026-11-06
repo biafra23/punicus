@@ -285,7 +285,10 @@ class OutboxLock {
  * and only once saved is it released from the outbox; one that could not be saved stays held and is
  * checked again, and one found saved already (its release could not be saved) is only released. A
  * transfer proposed here that finds another transaction at its nonce in the queue is a conflict
- * ([HeldConflict.NonceTaken]): only one of the two could ever run. A conflict deletes its signature,
+ * ([HeldConflict.NonceTaken]): only one of the two could ever run. So is one that finds the queue
+ * short of it, a nonce before it taken by nothing queued or held ([HeldConflict.NonceGap]), as
+ * strict mode never proposes past a gap; held ones are checked in their nonces' order, so one
+ * held before it is saved first. A conflict deletes its signature,
  * never shown, and keeps the rest so the user is told and can sign again or discard it. Each is
  * told through [notifier]. A held signature has no hour: passing its check shows it to nobody, and
  * sends nothing.
@@ -336,7 +339,8 @@ class FollowOutbox(
             }
             lock.mutex.withLock { follow(entry.accountId) }
         }
-        for (held in list.held) {
+        // In their nonces' order: a proposal is saved only after those held before it.
+        for (held in list.held.sortedBy { it.nonce }) {
             if (held.signature == null) continue
             if (lightClient.observeStatus(held.network).first() !is LightClientStatus.Synced) continue
             lock.mutex.withLock { followHeld(held.safe, held.hash) }
@@ -362,10 +366,20 @@ class FollowOutbox(
                 // read again, as it is after the check, which may have waited a while.
                 val after = safeTxQueue.observe(safe).first() as? SafeTxQueueList.Loaded ?: return@withContext
                 val taken = entry.proposed && after.requests.any { it.nonce == entry.nonce && it.hash != hash }
-                if (taken) {
-                    heldConflicted(entry, HeldConflict.NonceTaken)
-                } else {
-                    checked(entry, signed, result.state.nonce)
+                val safeNonce = result.state.nonce
+                // Nor past a gap: the first nonce nothing in the queue takes, and nothing held before it.
+                val queuedUpTo = nextNonce(pendingOf(after, safeNonce, safe.network), safeNonce)
+                val heldUpTo = nextNonce(
+                    pendingOf(after, safeNonce, safe.network) +
+                        heldOf(outbox.observe().first(), safe).filter { it.hash != hash },
+                    safeNonce,
+                )
+                when {
+                    taken -> heldConflicted(entry, HeldConflict.NonceTaken)
+                    !entry.proposed || entry.nonce <= queuedUpTo -> checked(entry, signed, safeNonce)
+                    // One held before it fills the gap once it is checked: this one waits for it.
+                    entry.nonce <= heldUpTo -> Unit
+                    else -> heldConflicted(entry, HeldConflict.NonceGap(queuedUpTo))
                 }
             }
             HeldCheck.Waits -> Unit

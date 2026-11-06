@@ -159,12 +159,9 @@ class DraftSafeTx(
         val id = AccountId(network, safe)
         val keptSafe = kept.observe(id).first() ?: return SafeTxDrafting.Waits(DraftInput.SAFE)
         keptSafe.state.tooOldToSign()?.let { return refused(SafeTxProposing.Refused(it)) }
-        val held = when (val list = outbox.observe().first()) {
-            // It may hold a signature at the nonce this one would take.
-            OutboxList.Unreadable -> return refused(SafeTxProposing.Refused(UNPROVEN))
-            // Conflicted ones too: one waits at its nonce to be dismissed, and a hold there would wait.
-            is OutboxList.Loaded -> heldOf(list, id)
-        }
+        // It may hold a signature at the nonce this one would take.
+        val held = outbox.observe().first()
+        if (held == OutboxList.Unreadable) return refused(SafeTxProposing.Refused(UNPROVEN))
         val (before, balanceBlock, balanceAsOf) = when (val read = lastVerifiedBalance(safe, token?.address)) {
             is KnownBalance.Read -> Triple(read.amount, read.block, read.asOf)
             KnownBalance.Waits -> return SafeTxDrafting.Waits(DraftInput.BALANCE)
@@ -174,7 +171,7 @@ class DraftSafeTx(
         if (before < amount) return insufficient(token != null)
         val safeNonce = keptSafe.state.nonce
         // What is queued here, and what is held, from the kept nonce on: both run before this one.
-        val pending = pendingOf(queue.observe(id).first(), safeNonce, network) + held.filter { it.nonce >= safeNonce }
+        val pending = pendingOf(queue.observe(id).first(), held, safeNonce, id)
         val nonce = nextNonce(pending, safeNonce)
         val ahead = pending.filter { it.nonce < nonce }
         val queuedAmount = ahead.queuedMoves(token?.address) ?: return insufficient(token != null)
@@ -365,11 +362,17 @@ class HoldSafeSignature(
         }
     }
 
-    /** What holds [request] back in the outbox: another held at its nonce, or an outbox that cannot be read. */
+    /**
+     * What holds [request] back in the outbox: another signature held at its nonce, or an outbox that
+     * cannot be read. A conflicted one, its signature deleted already, gives way: this one is held in
+     * its place ([Outbox.hold]), as [heldOf] counts it for no nonce.
+     */
     private suspend fun busy(request: SigningRequest): HeldSignCheck? = when (val list = outbox.observe().first()) {
         OutboxList.Unreadable -> HeldSignCheck.Refused(SafeTxRefusal.Unavailable(ReadUnavailable.UNPROVEN))
         is OutboxList.Loaded -> list.held
-            .firstOrNull { it.safe == AccountId(request.network, request.safe) && it.nonce == request.nonce }
+            .firstOrNull {
+                it.signature != null && it.safe == AccountId(request.network, request.safe) && it.nonce == request.nonce
+            }
             ?.let { HeldSignCheck.NonceBusy(it.hash) }
     }
 }
@@ -775,8 +778,9 @@ class DraftSafeCall(
  * the outbox, like a transfer ([QueueTransfer]): its EIP-1559 signing digest signed by the sending
  * account's key as the unlock opens it, exactly what was drafted and reviewed, recorded as the action
  * it is ([SafeCallDraft.action]). Nothing is broadcast: the outbox sends it once the check at a fresh
- * head passes ([CheckQueued]). An account with something queued already is refused before anything
- * is signed, and again under [lock] before it is put. [clock] is in unix seconds.
+ * head passes ([CheckQueued]). An account with something queued already, or an outbox that cannot be
+ * read, is refused before anything is signed, and again under [lock] before it is put. [clock] is in
+ * unix seconds.
  */
 class QueueSafeCall(
     private val signer: Signer,
@@ -787,7 +791,9 @@ class QueueSafeCall(
     /** Signs [draft] and queues it. */
     suspend operator fun invoke(draft: SafeCallDraft, unlock: Unlock): TransferQueuing {
         val call = draft.call
-        busy(call)?.let { return TransferQueuing.AccountBusy(it.id) }
+        // An outbox that cannot be read could not keep it: refused before the key is asked for.
+        val list = outbox.observe().first() as? OutboxList.Loaded ?: return TransferQueuing.NotSaved
+        busy(list, call)?.let { return TransferQueuing.AccountBusy(it.id) }
         val transaction = call.transaction
         val signature = when (val signed = signer.sign(call.from, transaction.signingDigest(), unlock)) {
             is Signing.Signed -> signed.signature
@@ -807,12 +813,12 @@ class QueueSafeCall(
             builtOn = call.builtOn,
         )
         return lock.mutex.withLock {
-            busy(call)?.let { return@withLock TransferQueuing.AccountBusy(it.id) }
+            val now = outbox.observe().first() as? OutboxList.Loaded ?: return@withLock TransferQueuing.NotSaved
+            busy(now, call)?.let { return@withLock TransferQueuing.AccountBusy(it.id) }
             if (outbox.put(queued)) TransferQueuing.Queued(queued) else TransferQueuing.NotSaved
         }
     }
 
-    private suspend fun busy(call: CallDraft): QueuedTransaction? =
-        (outbox.observe().first() as? OutboxList.Loaded)?.queued
-            ?.firstOrNull { it.network.chainId == call.transaction.chainId && it.account == call.from }
+    private fun busy(list: OutboxList.Loaded, call: CallDraft): QueuedTransaction? =
+        list.queued.firstOrNull { it.network.chainId == call.transaction.chainId && it.account == call.from }
 }

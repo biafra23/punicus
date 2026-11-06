@@ -257,6 +257,14 @@ sealed interface HeldConflict {
      */
     data object NonceTaken : HeldConflict
 
+    /**
+     * A transfer this device proposed found the Safe's queue short of it: nothing takes the nonce
+     * [next], which comes first (the transaction held before it was discarded or did not check out).
+     * It could not run until another filled [next], so it is proposed again, at the next nonce, and
+     * signed anew, as strict mode proposes.
+     */
+    data class NonceGap(val next: Long) : HeldConflict
+
     /** The signer is no longer an owner of the Safe: it cannot sign it at all, so it is discarded. */
     data object NotAnOwner : HeldConflict
 

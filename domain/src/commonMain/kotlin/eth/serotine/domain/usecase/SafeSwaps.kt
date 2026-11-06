@@ -1,8 +1,8 @@
 package eth.serotine.domain.usecase
 
+import eth.serotine.domain.model.AccountId
 import eth.serotine.domain.model.Address
 import eth.serotine.domain.model.Erc20
-import eth.serotine.domain.model.AccountId
 import eth.serotine.domain.model.Network
 import eth.serotine.domain.model.PriceImpact
 import eth.serotine.domain.model.QuoterV2
@@ -22,6 +22,7 @@ import eth.serotine.domain.model.tokenOn
 import eth.serotine.domain.repository.LightClient
 import eth.serotine.domain.repository.LightClientStatus
 import eth.serotine.domain.repository.NativeBalances
+import eth.serotine.domain.repository.Outbox
 import eth.serotine.domain.repository.ReadUnavailable
 import eth.serotine.domain.repository.SafeTxQueue
 import eth.serotine.domain.repository.Simulation
@@ -214,6 +215,8 @@ const val SAFE_SWAP_DEADLINE_SECONDS: Long = 24 * 60 * 60
  * What refuses it from the queue and the light client alone is said before the engine is asked
  * for a balance or a route. Nothing is saved: signing each ([SignSafeTx]) queues it. On [network]
  * only.
+ * Its nonce and its funds come after what is queued and what is held in lenient mode ([pendingOf]):
+ * it never lands at the nonce of a signature held until its check.
  */
 class ProposeSafeSwap(
     private val observeSafe: ObserveSafe,
@@ -225,6 +228,7 @@ class ProposeSafeSwap(
     private val queue: SafeTxQueue,
     private val lightClient: LightClient,
     private val network: Network,
+    private val outbox: Outbox,
 ) {
     /**
      * Exactly [amountIn] of [sell] for [buy] from [safe], at [tolerance]; at the nonce
@@ -263,7 +267,8 @@ class ProposeSafeSwap(
         // The queue and the light client are this device's own: what they refuse is said before
         // the engine is asked for anything.
         val safeNonce = reading.state.nonce
-        val pending = pendingOf(queue.observe(AccountId(network, safe)).first(), safeNonce, network)
+        val id = AccountId(network, safe)
+        val pending = pendingOf(queue.observe(id).first(), outbox.observe().first(), safeNonce, id)
         // Each decoded once: a swap's decoding builds the call again to compare it.
         val actions = pending.associateWith { SafeTxAction.of(it.safe, it.tx) }
         val next = nextNonce(pending, safeNonce)

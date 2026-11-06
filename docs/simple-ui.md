@@ -405,8 +405,9 @@ stays under *Details*, as Send's draft does (S2):
   prepared on. Sign holds its signature: Signed, then Held ("Waits for
   Ethereum to catch up. Keep Serotine open to check it sooner."), then In the
   queue, to share, once it checks out; no QR code or text before then;
-  Discard, or Dismiss and, for a proposal whose nonce was used, Propose
-  again. Approve on chain and Execute show their draft as S2 does, "Sign and
+  Discard, or Dismiss and, for a proposal whose nonce was used, taken or
+  left behind a gap, Propose again. A co-signature's stand is shown on the
+  transaction's own screen, its other actions still offered. Approve on chain and Execute show their draft as S2 does, "Sign and
   queue on ‹network›", and their queued transaction's status is S3's.
 
 As built in part 10, a Safe's settings follow them too (owner's request,

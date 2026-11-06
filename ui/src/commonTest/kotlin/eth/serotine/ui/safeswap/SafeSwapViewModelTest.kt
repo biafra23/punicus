@@ -24,6 +24,7 @@ import eth.serotine.domain.repository.KeyProtection
 import eth.serotine.domain.repository.KeyStore
 import eth.serotine.domain.repository.KeyStoreDescription
 import eth.serotine.domain.repository.NewMnemonic
+import eth.serotine.domain.repository.Outbox
 import eth.serotine.domain.repository.Signer
 import eth.serotine.domain.repository.Signing
 import eth.serotine.domain.repository.Simulation
@@ -158,6 +159,7 @@ class SafeSwapViewModelTest {
                 world.queue,
                 world.lightClient,
                 Network.SEPOLIA,
+                Outbox.None,
             ),
             SignSafeTx(signer, world.observeSafe, world.recovery, world.queue, Network.SEPOLIA),
             clock,

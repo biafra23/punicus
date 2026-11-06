@@ -1362,11 +1362,14 @@ class SafeTxViewModelTest {
         assertEquals(world.alice.address, held.owner)
         assertFalse(held.proposed)
         assertEquals(emptyList(), world.queue.requests.value.single().signers, "never queued before its check")
-        val state = assertIs<SafeTxUiState.Held>(viewModel.uiState.value)
-        assertEquals(listOf("Signed", "Held", "In the queue, to share"), state.steps.map { it.label })
-        assertEquals("Waits for Sepolia to catch up. Keep Serotine open to check it sooner.", state.steps[1].detail)
-        assertEquals("Discard", state.discardLabel)
-        assertEquals(null, state.again)
+        // A co-signature: the transaction's overview stays, every action on it with it, the signature on it.
+        val state = assertIs<SafeTxUiState.Overview>(viewModel.uiState.value)
+        val signature = assertNotNull(state.held)
+        assertEquals(listOf("Signed", "Held", "In the queue, to share"), signature.steps.map { it.label })
+        assertEquals("Waits for Sepolia to catch up. Keep Serotine open to check it sooner.", signature.steps[1].detail)
+        assertEquals("Discard", signature.discardLabel)
+        assertTrue(signature.discardNote.contains("stays in this device's queue"), signature.discardNote)
+        assertFalse(state.canShare, "nothing is shared while the Safe is not verified")
     }
 
     @Test

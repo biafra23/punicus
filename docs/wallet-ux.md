@@ -673,10 +673,12 @@ upgrades*).
       the Safe's nonce a request may be signed is not bounded, the owner's
       open question, issue #59). A signature held here in lenient mode (17)
       takes its nonce and what it moves as a queued one does, so a proposal
-      never lands at the nonce of one held. The Safe's balance less what the
-      transactions queued before it move must cover it, and the Safe's call
-      is run as a verified call from the Safe; the review says when the
-      engine would not run it ("Not simulated"). The review shows the Safe
+      never lands at the nonce of one held; so does every other proposal of a
+      Safe's (a swap, a settings change, a dApp's), strict as they stay. One
+      whose conflict deleted its signature takes none. The Safe's balance
+      less what the transactions queued before it move must cover it, and
+      the Safe's call is run as a verified call from the Safe; the review
+      says when the engine would not run it ("Not simulated"). The review shows the Safe
       transaction decoded here, its Safe nonce and how many queued here run
       before it, and the Safe's balance before, what those move, and after,
       with its block. It is proposed again on Refresh, when the screen is shown
@@ -887,10 +889,13 @@ upgrades*).
       Safe is not verified.
       - Sign ("Sign and hold") holds the owner's signature in the outbox
         until its check, never in the queue: one per Safe and nonce, so a
-        second at a nonce with one held waits for it. The screen then shows
-        the held signature: Signed (when, as whom), Held ("Waits for
-        ‹network› to catch up. Keep Serotine open to check it sooner.";
-        once it has caught up, that it is checked and saved to the queue once
+        second at a nonce with one held waits for it; one whose conflict
+        deleted its signature gives way, and the new one is held in its
+        place. The screen then shows the held signature, a proposal's on a
+        screen of its own and a co-signature's on the transaction's, every
+        action on the transaction still offered: Signed (when, as whom),
+        Held ("Waits for ‹network› to catch up. Keep Serotine open to check
+        it sooner."; once it has caught up, that it is checked and saved to the queue once
         it checks out; on a network that is off, that nothing checks it until
         it is turned on), then In the queue, to share, which waits for the
         check. Its QR code and text are not offered until then. Discard
@@ -905,7 +910,12 @@ upgrades*).
         signature again"): a proposal offers Propose again, which discards it
         and opens Send from the Safe filled in, at the Safe's next nonce. So
         does a proposal that finds another transaction at its nonce in the
-        queue, put there meanwhile: only one of the two could ever run. A
+        queue, put there meanwhile: only one of the two could ever run. And
+        one that finds the queue short of it, a nonce before it taken by
+        nothing queued or held (the one held before it discarded, or not
+        checked out): it could not run until another filled that nonce, and
+        strict mode never proposes past a gap. Held ones are checked in their
+        nonces' order, so one held before it is saved first. A
         signer no longer an owner deletes it too ("Discarded"); Dismiss
         clears it. Each is told in a notification. One found in the queue
         already, its release from the outbox not saved before, is only

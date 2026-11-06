@@ -357,12 +357,16 @@ internal class StoredSafeBasis(
     }
 }
 
-/** A [HeldConflict] as stored: its [kind], and the Safe's nonce or the refusal that kind has. */
+/**
+ * A [HeldConflict] as stored: its [kind], and the Safe's nonce (for [HeldConflict.NonceGap], the
+ * nonce nothing takes) or the refusal that kind has.
+ */
 @Serializable
 internal class StoredHeldConflict(val kind: String, val safeNonce: Long? = null, val refusal: String? = null) {
     fun toConflict(): HeldConflict = when (kind) {
         NONCE_USED -> HeldConflict.NonceUsed(requireNotNull(safeNonce))
         NONCE_TAKEN -> HeldConflict.NonceTaken
+        NONCE_GAP -> HeldConflict.NonceGap(requireNotNull(safeNonce))
         NOT_AN_OWNER -> HeldConflict.NotAnOwner
         REFUSED -> HeldConflict.Refused(HeldRefusal.entries.first { it.code == refusal })
         else -> throw IllegalArgumentException("an unknown conflict")
@@ -371,12 +375,14 @@ internal class StoredHeldConflict(val kind: String, val safeNonce: Long? = null,
     companion object {
         private const val NONCE_USED = "nonce-used"
         private const val NONCE_TAKEN = "nonce-taken"
+        private const val NONCE_GAP = "nonce-gap"
         private const val NOT_AN_OWNER = "not-an-owner"
         private const val REFUSED = "refused"
 
         fun of(conflict: HeldConflict): StoredHeldConflict = when (conflict) {
             is HeldConflict.NonceUsed -> StoredHeldConflict(NONCE_USED, safeNonce = conflict.safeNonce)
             HeldConflict.NonceTaken -> StoredHeldConflict(NONCE_TAKEN)
+            is HeldConflict.NonceGap -> StoredHeldConflict(NONCE_GAP, safeNonce = conflict.next)
             HeldConflict.NotAnOwner -> StoredHeldConflict(NOT_AN_OWNER)
             is HeldConflict.Refused -> StoredHeldConflict(REFUSED, refusal = conflict.reason.code)
         }

@@ -117,6 +117,8 @@ class StoredOutboxTest {
 
         val conflicts = listOf(
             HeldConflict.NonceUsed(13),
+            HeldConflict.NonceTaken,
+            HeldConflict.NonceGap(11),
             HeldConflict.NotAnOwner,
             HeldConflict.Refused(HeldRefusal.NEEDS_RECOVERY_MODULE),
         )

@@ -55,7 +55,7 @@ data class OutboxNotificationText(val title: String, val text: String) {
             OutboxNotificationText(
                 title = when {
                     conflict == HeldConflict.NotAnOwner -> "A Safe signature was discarded"
-                    held.proposed && (conflict is HeldConflict.NonceUsed || conflict == HeldConflict.NonceTaken) ->
+                    held.proposed && conflict.proposesAgain ->
                         "A Safe transaction needs your signature again"
                     else -> "A Safe signature did not check out"
                 },
@@ -85,6 +85,13 @@ data class OutboxNotificationText(val title: String, val text: String) {
 }
 
 /**
+ * Whether a proposal this device made is proposed again after [this]: its nonce was used, taken or
+ * left behind a gap, so a new nonce makes a new hash and its owner signs anew.
+ */
+val HeldConflict.proposesAgain: Boolean
+    get() = this is HeldConflict.NonceUsed || this == HeldConflict.NonceTaken || this is HeldConflict.NonceGap
+
+/**
  * Why a held Safe signature no longer stands (docs/lenient-mode.md, *Safe transactions in lenient
  * mode*), in the words the Safe transaction screen and the notification share: one sentence.
  */
@@ -94,6 +101,9 @@ fun heldConflictReason(conflict: HeldConflict, held: HeldSafeSignature): String 
     HeldConflict.NonceTaken ->
         "Another transaction at nonce ${held.nonce} was put in this Safe's queue meanwhile: only one of the two " +
             "could ever run."
+    is HeldConflict.NonceGap ->
+        "Nothing in this Safe's queue takes nonce ${conflict.next}, which comes before it, so nonce ${held.nonce} " +
+            "could not run."
     HeldConflict.NotAnOwner -> "${Eip55.format(held.owner)} is no longer an owner of this Safe, so it cannot sign it."
     is HeldConflict.Refused -> when (conflict.reason) {
         HeldRefusal.NOT_A_SAFE -> "The address no longer holds a Safe this app recognises."
