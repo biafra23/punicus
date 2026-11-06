@@ -14,7 +14,8 @@ class WcRequestsTest {
 
     private val account = Address.of("0x00000000000000000000000000000000000000a1")
 
-    private fun decode(method: String, params: String): DappAsk = WcRequests.decode(method, Json.parseToJsonElement(params))
+    private fun decode(method: String, params: String, chain: String = "eip155:11155111"): DappAsk =
+        WcRequests.decode(method, Json.parseToJsonElement(params), chain)
 
     @Test
     fun personalSignTakesTheMessageAndTheAccountInThatOrder() {
@@ -96,6 +97,23 @@ class WcRequestsTest {
         }
         // No contract creation: a recipient is required.
         assertEquals(malformed, decode("eth_sendTransaction", """[{"from": "${account.hex}"}]"""))
+    }
+
+    @Test
+    fun aTransactionsChainIsTheRequestsAndItsGasFitsATransactionOnEveryNetwork() {
+        fun on(chain: String, fields: String) =
+            decode("eth_sendTransaction", """[{"from": "${account.hex}", "to": "${other.hex}"$fields}]""", chain)
+        val plain = DappAsk.SendTransaction(DappTransactionRequest(account, other, UInt256.ZERO, ByteArray(0), null))
+        assertEquals(plain, on("eip155:1", """, "chainId": "0x1""""))
+        assertEquals(plain, on("eip155:100", """, "chainId": "0x64""""))
+        val malformed = DappAsk.Malformed("eth_sendTransaction")
+        // Another chain than the request's is refused, never sent there or here.
+        assertEquals(malformed, on("eip155:100", """, "chainId": "0x1""""))
+        assertEquals(malformed, on("eip155:1", """, "chainId": "0xaa36a7""""))
+        assertEquals(malformed, on("eip155:137", ""), "a chain Serotine does not serve")
+        // EIP-7825's cap, 2^24: below it is applied, above it refused.
+        assertEquals(16_777_216L, (on("eip155:1", """, "gas": "0x1000000"""") as DappAsk.SendTransaction).transaction.gas)
+        assertEquals(malformed, on("eip155:1", """, "gas": "0x1000001""""))
     }
 
     @Test

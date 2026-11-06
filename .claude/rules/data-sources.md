@@ -252,18 +252,54 @@ docs/walletconnect.md is the contract.)
 - **What arrives through it is untrusted input**, decoded and shown as such.
   The dApp's name and URL are shown as "stated by the dApp, not verified".
 - **The Reown project ID is never committed.** A Gradle property supplies it
-  at build time, from a CI secret, with separate IDs for debug and release. A
-  build without one has WalletConnect switched off and says so.
+  at build time, from a CI secret or variable. A build without one has
+  WalletConnect switched off and says so.
+- **One project ID serves debug and release builds, for now** (owner ruling,
+  2026-11-05; it amends the separate IDs of 2026-11-03, #22). A free-tier
+  Reown account has one project. CI reads it from one repository secret or
+  variable, `WALLETCONNECT_PROJECT_ID`, for both builds. The build keeps a
+  debug and a release property, so a second project later needs only the
+  workflows to pass two names again.
 - **The optional services stay off:** the Verify API, fetching dApp icons
   (a request to a host the dApp chooses, which reveals the IP address), the
   push (echo) server and Link Mode.
-- **A dApp session names Sepolia alone, for now.** Ethereum and Gnosis Chain
-  come by a later ruling, recorded here first. A proposal that requires
-  another chain is rejected.
+- **A dApp session holds real funds or testnet, never both** (owner ruling,
+  2026-11-05, on #22; it amends "a dApp session names Sepolia alone, for
+  now" of 2026-11-03, #22, ruling 9).
+  - One session may hold Ethereum and Gnosis Chain accounts, and the dApp
+    may switch between them with `wallet_switchEthereumChain`.
+  - A Sepolia session is Sepolia alone. A dApp can never switch a session
+    from testnet to real funds, nor back.
+  - A proposal that requires a chain Serotine does not serve, or chains of
+    both kinds, is rejected. Accounts of the other kind than those already
+    chosen are greyed out on the proposal screen, a tap saying why.
+  - Each request names one of its session's networks and an account of the
+    session on that network, or it is refused.
 - **dApps connecting to Serotine come first**; an external wallet as a Safe
   owner's signer follows (docs/walletconnect.md, *The plan*).
 
+## Send from another wallet hands a payment link to another wallet app
+
+(Owner rulings, 2026-11-05, #255, accepting its recommendations.)
+
+- For an EOA whose key is not on this device, a transfer of the network's
+  currency or of an ERC-20 token is handed to another wallet app as an
+  EIP-681 payment link. That wallet signs and broadcasts it, through its own
+  provider, which the review says learns the transfer and the IP address.
+  Serotine contacts no service.
+- Every network that is on. It is not a dApp session, so the ruling on dApp
+  sessions' networks (real funds or testnet, never both; owner ruling,
+  2026-11-05, on #22) does not bind it.
+- Only `ethereum:` and `metamask://` links, never MetaMask's `https://` form,
+  which falls back to its website.
+- Nothing comes back through the link. What the transfer became is read from
+  verified blocks alone, for 10 minutes after the handoff; after that, the
+  account's history.
+- On mobile; not on the desktop. Built for Android so far. iOS is not built
+  yet, which is no ruling: the engine's iOS reads have no verified block body,
+  and iOS opens an undefined one of several apps that claim `ethereum:`.
+
 ## Open decisions
 
-Each is recorded here before its code lands. Today: dApp sessions on
-Ethereum and Gnosis Chain, and each optional WalletConnect service above.
+Each is recorded here before its code lands. Today: each optional
+WalletConnect service above.

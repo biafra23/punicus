@@ -9,6 +9,7 @@ import eth.serotine.ui.activity.ActivityState
 import eth.serotine.ui.activity.ActivityUiState
 import eth.serotine.ui.components.Control
 import eth.serotine.ui.components.NetworkLabel
+import eth.serotine.ui.ScreenPreview
 import eth.serotine.ui.theme.SerotineTheme
 import org.jetbrains.compose.ui.tooling.preview.Preview
 
@@ -295,16 +296,16 @@ private fun SimpleAccountNftsPreview() = SimpleAccountDetailPreview(
 )
 
 /** Every preview above, which SimpleAccountDetailScreenPreviewsTest renders: a new preview goes in here too. */
-internal val simpleAccountDetailScreenPreviews: List<@Composable () -> Unit> = listOf(
-    { SimpleAccountAssetsPreview() },
-    { SimpleAccountAssetsDarkPreview() },
-    { SimpleAccountLastVerifiedPreview() },
-    { SimpleAccountSyncingPreview() },
-    { SimpleAccountActivityPreview() },
-    { SimpleAccountWaitingSwapPreview() },
-    { SimpleAccountSafePreview() },
-    { SimpleAccountNetworkOffPreview() },
-    { SimpleAccountHiddenPreview() },
-    { SimpleAccountHiddenDarkPreview() },
-    { SimpleAccountNftsPreview() },
+internal val simpleAccountDetailScreenPreviews: List<ScreenPreview> = listOf(
+    ScreenPreview("assets") { SimpleAccountAssetsPreview() },
+    ScreenPreview("assets-dark") { SimpleAccountAssetsDarkPreview() },
+    ScreenPreview("last-verified") { SimpleAccountLastVerifiedPreview() },
+    ScreenPreview("syncing") { SimpleAccountSyncingPreview() },
+    ScreenPreview("activity") { SimpleAccountActivityPreview() },
+    ScreenPreview("waiting-swap") { SimpleAccountWaitingSwapPreview() },
+    ScreenPreview("safe") { SimpleAccountSafePreview() },
+    ScreenPreview("network-off") { SimpleAccountNetworkOffPreview() },
+    ScreenPreview("hidden") { SimpleAccountHiddenPreview() },
+    ScreenPreview("hidden-dark") { SimpleAccountHiddenDarkPreview() },
+    ScreenPreview("nfts") { SimpleAccountNftsPreview() },
 )

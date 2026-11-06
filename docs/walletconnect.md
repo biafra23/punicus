@@ -24,6 +24,9 @@ two open points, the chains and the order.
    dashboard.reown.com under the owner's account. A Gradle property supplies
    it at build time, from a CI secret, with separate IDs for debug and
    release. A build without an ID has WalletConnect switched off and says so.
+   Amended (owner ruling, 2026-11-05): one project ID serves both builds for
+   now, since a free-tier account has one project. CI reads it from one
+   repository secret or variable, `WALLETCONNECT_PROJECT_ID`.
 3. **A new key tier: an owner key in an external wallet.** The key lives in
    the other wallet, and so do its backup and its unlock. Serotine keeps only
    the address and the session. Safe owners first. An EOA whose key is in
@@ -40,7 +43,8 @@ two open points, the chains and the order.
    signing.
 6. **A dApp may call a closed list of methods:** `eth_sendTransaction`,
    `personal_sign`, `eth_signTypedData_v4`, and `wallet_switchEthereumChain`
-   to Sepolia only. Every other method gets an
+   to a network the session holds (ruling 9, as amended). Every other method
+   gets an
    unsupported-method error. `eth_sign` is refused in every case: it signs a
    raw digest, which is what phishing asks for.
 7. **WalletConnect's optional services stay off:** the Verify API, fetching
@@ -51,12 +55,21 @@ two open points, the chains and the order.
    cannot move funds, though whoever holds them can read and inject messages
    on that session. The file is kept out of backups and device transfers like
    the rest of the app's data, is never logged, and is not under the wallet
-   password, so sessions resume without an unlock.
-9. **Sepolia first.** A dApp session names Sepolia (`eip155:11155111`) alone.
-   Ethereum and Gnosis Chain come by a later ruling, once dApp connections
-   have been tried against real dApps. #22 was written when Sepolia was the
-   only network; this keeps its scope after the networks ruling of
-   2026-10-22.
+   password, so sessions resume without an unlock. Its format is 2 since
+   sessions keep their chains (2026-11-05): an older build reads such a file
+   as written by a newer version and leaves it untouched, so its sessions
+   come back once the newer build is installed again. A file at 1 still
+   loads, its sessions Sepolia's.
+9. **Real funds or testnet, never both** (owner ruling, 2026-11-05, on #22).
+   A dApp session holds Ethereum (`eip155:1`) and Gnosis Chain
+   (`eip155:100`) accounts together, and the dApp may switch between them;
+   or it holds Sepolia (`eip155:11155111`) alone. A dApp can never switch a
+   session from testnet to real funds, nor back. Sepolia keeps every testnet
+   warning and is never added to a total with real funds.
+   - It amends the ruling of 2026-11-03 (#22), which read: "**Sepolia
+     first.** A dApp session names Sepolia (`eip155:11155111`) alone.
+     Ethereum and Gnosis Chain come by a later ruling, once dApp connections
+     have been tried against real dApps." 
 10. **dApps connecting to Serotine come first** (direction 1, below):
     signing in and requests for EOAs first. An external wallet as a Safe
     owner's signer (direction 2) follows. #22 had them the other way round.
@@ -111,21 +124,42 @@ everything on the chain side: the verified `call`, `estimateGasDetailed`,
 
 ### Pairing and the session proposal
 
-- The user pastes a `wc:` URI, or opens one from a `wc:` link on Android.
-  Scanning a QR code needs a camera library, chosen later.
-- A proposal whose required namespaces name any chain but Sepolia is
-  rejected. Optional namespaces are approved with Sepolia alone (ruling 9):
-  an optional namespace that does not name Sepolia adds no method or event
-  to the session.
+- The user pastes a `wc:` URI, opens one from a `wc:` link on Android, or
+  scans the dApp's QR code on Android. On Android, Serotine's own deep link
+  `serotine://wc?uri=` with the `wc:` link percent-encoded, the form a
+  wallet picker opens for a wallet it lists, carries one in the same way;
+  such a link with no `uri`, or one not well encoded, offers nothing. Each
+  fills Connect a dApp's field, and the pairing starts only on Connect.
+  - **The scanner** is CameraX, with each frame decoded on the device by
+    ZXing: no Google Play services, and nothing leaves the device.
+  - The camera permission is asked for on the first tap of *Scan the QR
+    code*. Refused, or with no camera to start, Scan is greyed out and says
+    why, and a tap asks again. The camera is not required to install the
+    app.
+  - A code that is no `wc:` link, the scheme in lower case as the pairing
+    parser reads it, is refused with what it is not.
+  - iOS and the desktop have no scanner yet, and offer no Scan button.
+- A proposal is rejected when its required namespaces name a chain
+  Serotine does not serve, or chains of both kinds (real funds and testnet,
+  ruling 9), or when it asks for no chain Serotine serves at all.
+- The session's chains are its required chains and the chains of the
+  accounts the user chooses, of those the dApp asked for. An optional
+  namespace adds its methods and events only where it names one of them.
+- Each chain the dApp requires needs a chosen account, as WalletConnect's
+  namespaces conform only then. Until each has one, Approve is greyed out
+  and still tappable, and the screen says which network still needs an
+  account (owner ruling, 2026-10-18, #55).
 - A pairing has at most 5 proposals waiting, as a session has at most 20
   requests. One more is answered with -32005, so no peer holding a
   pairing's key can grow the stored state without bound.
 - The proposal screen lists every account, and the user chooses which the
   dApp sees. An account that cannot be offered is greyed out, never hidden
   (owner ruling, 2026-10-18, #55), and a tap says why:
-  - an account on Ethereum or Gnosis Chain: dApp connections are on Sepolia
-    only for now;
-  - a Sepolia account while Sepolia is off: "Turn on" Sepolia (Settings →
+  - an account on a network the dApp did not ask for;
+  - an account of the other kind than the dApp requires, or than an account
+    already chosen: a session is real funds or testnet, never both
+    (ruling 9);
+  - an account on a network that is off: "Turn on" its network (Settings →
     Networks);
   - an EOA watched with no key on this device: it can sign nothing here. A
     watched Safe is offered, since its owners sign for it; until Safe
@@ -146,20 +180,27 @@ everything on the chain side: the verified `call`, `estimateGasDetailed`,
 | `personal_sign` | signed, after review | refused until Safe messages (EIP-1271) come | the signature |
 | `eth_signTypedData_v4` | signed, after review | refused until Safe messages come | the signature |
 | `eth_sendTransaction` | signed and sent, after review | a `SafeTx`, signed by its owners and executed | the hash of the transaction sent |
-| `wallet_switchEthereumChain` | to Sepolia only, which the session already is | the same | null, or an error for any other chain |
+| `wallet_switchEthereumChain` | to a network the session holds; `chainChanged` follows | the same | null, or 4902 for any other chain |
 | `eth_sign` | refused | refused | an error |
 | anything else | unsupported method | unsupported method | an error |
 
 - A user who declines gets the "user rejected" error (EIP-1193 4001), and an
   unsupported method the 4200 one. A request is never left unanswered while
   the session lives.
-- Every request must name `eip155:11155111`. A request for another chain, or
-  a `from` or an address that is not one of the session's accounts, is
-  refused.
+- Every request must name one of its session's chains. A request for
+  another chain, or a `from` or an address that is not one of the session's
+  accounts on that chain, is refused. Everything about it is read, simulated
+  and sent on that chain's network.
 - The errors: 4001 when the user declines; 4100 for an account or a chain
   the session does not give the dApp, or an account that cannot sign here;
-  4200 for a method not answered; 4902 for a switch to a chain other than
-  Sepolia (EIP-3326); -32602 for parameters that are not the method's.
+  4200 for a method not answered; 4902 for a switch to a chain the session
+  does not hold (EIP-3326); -32602 for parameters that are not the method's.
+- A switch to a chain the session holds is answered with null, and then, where
+  the session carries it, the `chainChanged` event names that chain.
+- A switch to a chain the session holds whose network is turned off, or where
+  the session has no account left, is refused with 4902 too: a switch the
+  wallet could not serve is never answered as made. The session keeps its
+  chains; turning the network on again makes the switch possible.
 - **What needs no one's decision is answered at once**, by the app while it
   runs: `wallet_switchEthereumChain`, and parameters out of shape.
 - JSON from outside the device (the relay's frames, a dApp's messages, typed
@@ -265,8 +306,12 @@ everything on the chain side: the verified `call`, `estimateGasDetailed`,
   - `gas` is applied as the gas limit when it covers the verified estimate;
     below it the transaction would run out of gas, so it is refused (-32602),
     never raised.
-  - `chainId` must be Sepolia's, `type` `0x2` (EIP-1559, which every
-    transaction here is), and an `accessList` empty.
+  - `chainId` must be the request's chain's, `type` `0x2` (EIP-1559, which
+    every transaction here is), and an `accessList` empty.
+  - `gas` is at most 2^24 (16,777,216) on every network: EIP-7825's
+    per-transaction cap, on Ethereum and Sepolia since Fusaka. It is below
+    the block gas limit of every network served; Gnosis Chain's, about
+    17,000,000, is the lowest.
   - Refused: `nonce` (the account's next one is the wallet's, behind its own
     transactions not mined yet), `gasPrice`, `maxFeePerGas` and
     `maxPriorityFeePerGas` (the fees are the wallet's, from the verified fee
@@ -302,7 +347,7 @@ everything on the chain side: the verified `call`, `estimateGasDetailed`,
     while it runs. One whose nonce another transaction took can never be
     mined: the request can then only be refused.
   - It is reviewed again just before it is signed: an account removed, a key
-    gone or Sepolia turned off since the quote refuses it.
+    gone or its network turned off since the quote refuses it.
   - While a transaction signed for it may be on its way, Refuse is greyed
     out, and a tap says why: refusing would tell the dApp no while it may
     still be mined.
@@ -351,7 +396,8 @@ everything on the chain side: the verified `call`, `estimateGasDetailed`,
 - **A dApp is answered only with an Ethereum transaction hash.** For a Safe,
   that is the hash of the `execTransaction` sent, never the `safeTxHash`. The
   app answers it while it runs, once a peer takes an execution of the Safe
-  transaction recorded for it, sent from this device on Sepolia, or a
+  transaction recorded for it, sent from this device on the request's
+  network, or a
   verified block includes one. An execution a co-signer sends from another
   device does not answer it. If the request expires first (the threshold
   not met in time, or executed elsewhere), the dApp gets an error, and the
@@ -363,10 +409,17 @@ everything on the chain side: the verified `call`, `estimateGasDetailed`,
 - Sessions are listed in Connections, each with its dApp's stated name, its
   accounts and its expiry, and each can be disconnected.
 - Expiry, extension, ping and delete follow the protocol. When the user
-  changes which accounts a session sees, the dApp gets `accountsChanged`.
+  changes which accounts a session sees, the dApp gets `accountsChanged`:
+  one event per chain of the session that has an account, naming its
+  addresses there, the chain the dApp is on now last. That is the chain it
+  last switched to, else the session's first. The dApp's provider takes each
+  event's accounts as its own, whatever chain the event names, so the last
+  one is what it shows: a chain with no account is never told an empty list.
 - An account removed from the wallet, whose key was removed, or whose
-  network was turned off leaves every session that sees it, and a session
-  left with none ends. A network counts as turned off only once the setting
+  network was turned off leaves every session that sees it. A session left
+  with none ends, and so does one left with no account on a chain its dApp
+  required: it ends rather than shrinks to a session the dApp did not agree
+  to. A network counts as turned off only once the setting
   has answered it as on while the app runs, a default included. A network
   setting that cannot be read is answered with the build's defaults, and a
   release build's has Sepolia off, so that alone ends no session. Its
@@ -475,33 +528,43 @@ the first thing that does.
 
 1. **An account on the WalletConnect (Reown) dashboard**, under the owner's
    own account: the project is the owner's.
-2. **Two projects of type Wallet (WalletKit)**, one for the debug build and
-   one for the release build. They are separate because ruling 2 asks for
-   separate IDs, and because the two Android apps have different package
-   names.
-3. **App ID on each project**: the Android package name and the iOS bundle
-   ID of that build. With those set, another app cannot use the project's ID
-   to pass itself off as Serotine.
-4. **The two IDs as GitHub Actions secrets** on the repository, named
-   `WALLETCONNECT_PROJECT_ID_DEBUG` and `WALLETCONNECT_PROJECT_ID_RELEASE`
-   (Settings → Secrets and variables → Actions → New repository secret).
-   - The steps that build what users install pass them to Gradle as the
+2. **One project of type Wallet (WalletKit)**, for the debug and the
+   release build alike (owner ruling, 2026-11-05: a free-tier account has
+   one project). Ruling 2 asked for two, one per build. The build keeps a
+   debug and a release property, so a second project, on a paid plan, needs
+   only the workflows to pass two names again.
+3. **No App ID or Domain allowlist, for now.** An empty list lets every app
+   use the ID. Serotine sends the relay its project ID and its signed login,
+   and no app ID, so a list could keep it out. Whether one does is for the
+   live relay test to show (`WalletConnectRelayLiveTest`). If it passes with
+   a list set, the list holds the Android package names `eth.serotine` and
+   `eth.serotine.debug` and the iOS bundle ID `eth.serotine`. With a list
+   set, another app cannot use the ID to pass itself off as Serotine. A
+   change to the list takes about 15 minutes to apply.
+4. **The ID as one GitHub Actions secret or variable** on the repository,
+   named `WALLETCONNECT_PROJECT_ID` (Settings → Secrets and variables →
+   Actions). A secret wins over a variable of the same name. The ID is not a
+   credential: it ships in every binary. So a variable, which shows in logs,
+   is fine.
+   - The steps that build what users install pass it to Gradle as the
      properties `walletConnectProjectIdDebug` and
      `walletConnectProjectIdRelease`, through the environment variables
      `ORG_GRADLE_PROJECT_walletConnectProjectIdDebug` and
      `ORG_GRADLE_PROJECT_walletConnectProjectIdRelease`, each in that step
-     alone. The APK build (`android-apk.yml`) passes both, since it builds
-     the debug and the release app. The macOS dmg, the Linux deb and the
-     Windows msi are release builds, and get the release ID alone. Build and
+     alone. The APK build (`android-apk.yml`) sets both, since it builds the
+     debug and the release app. The macOS dmg, the Linux deb and the Windows
+     msi are release builds, and set the release property alone. Build and
      Test and the iOS compile jobs need neither.
    - `:data` writes them into a generated, uncommitted source file, trimmed
      of spaces and line breaks. An ID that is not letters and digits fails
      the build.
-   - Until the secrets exist, CI builds with WalletConnect switched off. So
-     does a pull request from a fork or from Dependabot, which gets no
-     secrets.
-5. **For a local build**, the debug ID goes in `~/.gradle/gradle.properties`
-   as `walletConnectProjectIdDebug=<id>`, never in a file of the repository.
+   - Until the ID is set, CI builds with WalletConnect switched off. So does
+     a pull request from a fork or from Dependabot if it gets neither the
+     secret nor the variable.
+5. **For a local build**, the ID goes in `~/.gradle/gradle.properties` as
+   `walletConnectProjectIdDebug=<id>`, and as
+   `walletConnectProjectIdRelease=<id>` for a local release build, never in
+   a file of the repository.
    Which ID a build uses: the Android debug app, a desktop development run
    and the iOS debug binary the debug one; the release app, the desktop
    installers and the iOS release binary the release one. Without one, the
@@ -512,8 +575,9 @@ the first thing that does.
    number of sessions, and reads the terms (*Risks to check early*).
 
 Not needed, since rulings 7 and 9 leave them out: the Verify API, push and
-Link Mode need no registration. The `wc:` scheme on Android is a manifest
-entry, with no domain to verify. A listing in WalletGuide, WalletConnect's
+Link Mode need no registration. The `wc:` scheme and Serotine's deep link
+`serotine://wc` on Android are manifest entries, with no domain to verify.
+The deep link is the native link a WalletGuide listing names. A listing in WalletGuide, WalletConnect's
 directory of wallets, is what puts Serotine in the wallet pickers dApps
 show. It is optional, reviewed by WalletConnect, and asked for by the owner
 when the time comes, likely not before dApp sessions reach Ethereum. Until
@@ -526,7 +590,8 @@ their mockups come with the PR that builds each.
 
 - **D1 Connections** (Settings): the dApp sessions, and in direction 2 the
   external wallets; each can be disconnected.
-- **D2 Pair**: paste a `wc:` URI, or arrive from a `wc:` link.
+- **D2 Pair**: paste a `wc:` URI, arrive from a `wc:` link or a
+  `serotine://wc` deep link, or scan the dApp's QR code (Android).
 - **D3 Session proposal**: the dApp's stated name and URL, marked as not
   verified; the chain; the methods it asks for, those outside the closed list
   marked as refused; the accounts to choose from; Approve and Reject.
@@ -569,7 +634,8 @@ merge part PRs into the feature branch itself.
       real relay runs only with a project ID
       (`-PwalletConnectLiveTest=<id>`); pairing with Reown's sample dApp on
       Sepolia is the spike once the ID exists.
-   2. dApp sessions: pairing, the proposal, the Sepolia-only namespace, the
+   2. dApp sessions: pairing, the proposal, the namespace (Sepolia alone
+      then; ruling 9 as amended adds Ethereum and Gnosis Chain), the
       session list, disconnect, expiry and extend, `accountsChanged`. Screens
       D1 to D3. Opening a `wc:` link on Android, which arrives at D2 with the
       link filled in, follows in a part of its own (1.2a).
@@ -587,18 +653,19 @@ merge part PRs into the feature branch itself.
       request and the local check of its signature, the executor of ruling
       4, inclusion from a verified receipt and log. Screen D8. A dApp's Safe
       request (1.5) then takes the external wallet's signature too.
-3. **Later, each its own issue:** QR scanning on Android; a `wc:` URL scheme
+3. **Later, each its own issue:** QR scanning on iOS (Android's is built); a
+   `wc:` URL scheme
    registered by the desktop installers; requests delivered while Serotine is
    in the background; `wallet_sendCalls` (EIP-5792) through MultiSend for a
    Safe; Safe messages (EIP-1271), which `personal_sign` and typed data on a
-   Safe wait for; the Verify API; and dApp sessions on Ethereum and Gnosis
-   Chain. Each needs the owner's ruling where it touches one.
+   Safe wait for; and the Verify API. Each needs the owner's ruling where it
+   touches one. dApp sessions on Ethereum and Gnosis Chain came by ruling 9
+   as amended (owner ruling, 2026-11-05, on #22).
 
 ## Open decisions
 
 The owner's, each recorded here and in the rules before its code lands:
 
-- dApp sessions on Ethereum and Gnosis Chain (ruling 9).
 - Each optional WalletConnect service (ruling 7).
 
 ## Risks to check early
@@ -621,11 +688,11 @@ The owner's, each recorded here and in the rules before its code lands:
 
 ## Done when
 
-- A Sepolia dApp connects to Serotine, and the user signs in to it with an
-  EOA whose key is on this device. Its transaction request, for an EOA or a
-  Safe, is reviewed, signed, sent and answered with the transaction hash.
-  Anything outside the closed method list, or off Sepolia, is refused with an
-  error.
+- A dApp connects to Serotine on Sepolia, or on Ethereum and Gnosis Chain,
+  and the user signs in to it with an EOA whose key is on this device. Its
+  transaction request, for an EOA or a Safe, is reviewed, signed, sent and
+  answered with the transaction hash. Anything outside the closed method
+  list, or off the session's networks, is refused with an error.
 - A user with no key in Serotine connects an external wallet, which is
   recognised as a verified owner of a watched Safe, sends ETH from that Safe
   with the signature made in that wallet, and Serotine shows the execution,

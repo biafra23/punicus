@@ -2,19 +2,24 @@ package eth.serotine.data.engine
 
 import eth.serotine.domain.model.Address
 import eth.serotine.domain.model.UInt256
+import eth.serotine.domain.repository.ChainTransaction
 import eth.serotine.domain.repository.FeeLevel
 import eth.serotine.domain.repository.FeeQuote
 import eth.serotine.domain.repository.ReceiptLog
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonElement
+import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 
-/** The engine's JSON answers (fee history, receipts), read strictly: a field missing or malformed is no answer. */
+/**
+ * The engine's JSON answers (fee history, receipts, block bodies), read strictly: a field missing or
+ * malformed is no answer.
+ */
 internal object EngineJson {
 
     /** The fee levels' percentiles, in [FeeLevel] order. */
@@ -65,6 +70,34 @@ internal object EngineJson {
         val status = quantity(root.getValue("status")) ?: throw IllegalArgumentException("no status")
         return Receipt(block, succeeded = status == "1", logs = logsOf(root["logs"]))
     }
+
+    /**
+     * The transactions of block [number] from a `getBlockByNumber` answer with full transactions:
+     * null for the "null" literal (the engine does not hold the block yet). A block that is not the
+     * one asked for, or a transaction without a well-formed hash, sender, value or input, is no
+     * answer: it throws, and the caller reads it as unproven. A contract's creation has no `to`.
+     */
+    fun blockTransactions(json: String, number: Long): List<ChainTransaction>? {
+        if (json.trim() == "null") return null
+        val root = Json.parseToJsonElement(json) as? JsonObject ?: throw IllegalArgumentException("not a block")
+        val answered = quantity(root.getValue("number"))?.toLongOrNull() ?: throw IllegalArgumentException("no number")
+        require(answered == number) { "block $answered, not $number" }
+        val transactions = root.getValue("transactions") as? JsonArray ?: throw IllegalArgumentException("no body")
+        return transactions.map { entry ->
+            val tx = entry as? JsonObject ?: throw IllegalArgumentException("a transaction hash, not its body")
+            val hash = text(tx["hash"])?.lowercase()?.takeIf(TOPIC::matches) ?: throw IllegalArgumentException("hash")
+            val from = text(tx["from"])?.let(Address::parse) ?: throw IllegalArgumentException("from")
+            val to = when (val field = tx["to"]) {
+                null, JsonNull -> null
+                else -> text(field)?.let(Address::parse) ?: throw IllegalArgumentException("to")
+            }
+            val value = quantity(tx.getValue("value")) ?: throw IllegalArgumentException("value")
+            val input = text(tx["input"])?.lowercase()?.takeIf(DATA::matches) ?: throw IllegalArgumentException("input")
+            ChainTransaction(hash, from, to, UInt256.of(value), input)
+        }
+    }
+
+    private fun text(element: JsonElement?): String? = (element as? JsonPrimitive)?.contentOrNull
 
     /** A receipt's block, outcome and [logs] (null when it carried none that could be read). */
     data class Receipt(val blockNumber: Long, val succeeded: Boolean, val logs: List<ReceiptLog>? = null)

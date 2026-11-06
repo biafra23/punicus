@@ -54,7 +54,7 @@ internal class WcStoredSession(
     val selfPublicKey: String,
     val peerPublicKey: String,
     val dapp: WcMetadata,
-    /** CAIP-10 accounts, `eip155:11155111:0x…`. */
+    /** CAIP-10 accounts, `eip155:11155111:0x…`, each on one of [chains]. */
     val accounts: List<String>,
     val methods: List<String>,
     val events: List<String>,
@@ -65,6 +65,13 @@ internal class WcStoredSession(
     val settleRequestId: Long,
     val requiredNamespaces: JsonObject = JsonObject(emptyMap()),
     val optionalNamespaces: JsonObject = JsonObject(emptyMap()),
+    /**
+     * The CAIP-2 chains it holds, of one kind of funds ([WcProtocol.fundsOf]): its requests may name these
+     * alone. A session stored before chains were kept was a Sepolia session, and reads as one.
+     */
+    val chains: List<String> = listOf(WcProtocol.SEPOLIA),
+    /** The chain the dApp last switched to ([WcWallet.respondChainSwitch]); null before any switch: its first chain. */
+    val currentChain: String? = null,
 ) {
     override fun toString(): String = "WcStoredSession(topic=$topic, symKey=redacted)"
 
@@ -72,10 +79,14 @@ internal class WcStoredSession(
         accounts: List<String> = this.accounts,
         expirySeconds: Long = this.expirySeconds,
         acknowledged: Boolean = this.acknowledged,
+        currentChain: String? = this.currentChain,
     ) = WcStoredSession(
         topic, symKey, pairingTopic, selfPublicKey, peerPublicKey, dapp, accounts, methods, events,
-        expirySeconds, acknowledged, settleRequestId, requiredNamespaces, optionalNamespaces,
+        expirySeconds, acknowledged, settleRequestId, requiredNamespaces, optionalNamespaces, chains, currentChain,
     )
+
+    /** The chain the dApp is on now, as far as this wallet told it: the one last switched to, else the first. */
+    val chainNow: String get() = currentChain?.takeIf { it in chains } ?: chains.first()
 }
 
 /**
@@ -230,5 +241,11 @@ internal class WcStore(
 
 }
 
-private const val FORMAT_VERSION = 1
+/**
+ * 2 since sessions keep their [WcStoredSession.chains] and [WcStoredSession.currentChain]
+ * (owner ruling, 2026-11-05, on #22). An older build would read those as unknown keys and set the
+ * file aside as damaged, losing every session; at 2 it reads the file as written by a newer version
+ * and leaves it untouched. A file at 1 still loads here: its sessions are Sepolia's.
+ */
+private const val FORMAT_VERSION = 2
 private val JSON = Json

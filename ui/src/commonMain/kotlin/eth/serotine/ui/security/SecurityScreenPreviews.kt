@@ -6,6 +6,7 @@ import eth.serotine.domain.repository.KeyProtection
 import eth.serotine.domain.repository.KeyStoreDescription
 import eth.serotine.domain.repository.PasswordCost
 import eth.serotine.ui.components.protectionText
+import eth.serotine.ui.ScreenPreview
 import eth.serotine.ui.theme.SerotineTheme
 import org.jetbrains.compose.ui.tooling.preview.Preview
 
@@ -157,20 +158,20 @@ private fun SecurityLoadingPreview() = SecurityPreview(SecurityUiState.Loading)
 private fun SecurityUnavailablePreview() = SecurityPreview(SecurityUiState.Unavailable)
 
 /** Every preview above, which SecurityScreenPreviewsTest renders: a new preview goes in here too. */
-internal val securityScreenPreviews: List<@Composable () -> Unit> = listOf(
-    { SecurityOffPreview() },
-    { SecurityOffDarkPreview() },
-    { SecurityAskingPasswordPreview() },
-    { SecurityWrongPasswordPreview() },
-    { SecurityTurningOnPreview() },
-    { SecurityOnPreview() },
-    { SecurityInvalidatedPreview() },
-    { SecurityTurningOffPreview() },
-    { SecurityWeakOnlyPreview() },
-    { SecurityDesktopPreview() },
-    { SecurityLessMemoryPreview() },
-    { SecurityNotEnoughMemoryPreview() },
-    { SecurityNoKeysPreview() },
-    { SecurityLoadingPreview() },
-    { SecurityUnavailablePreview() },
+internal val securityScreenPreviews: List<ScreenPreview> = listOf(
+    ScreenPreview("off") { SecurityOffPreview() },
+    ScreenPreview("off-dark") { SecurityOffDarkPreview() },
+    ScreenPreview("asking-password") { SecurityAskingPasswordPreview() },
+    ScreenPreview("wrong-password") { SecurityWrongPasswordPreview() },
+    ScreenPreview("turning-on") { SecurityTurningOnPreview() },
+    ScreenPreview("on") { SecurityOnPreview() },
+    ScreenPreview("invalidated") { SecurityInvalidatedPreview() },
+    ScreenPreview("turning-off") { SecurityTurningOffPreview() },
+    ScreenPreview("weak-only") { SecurityWeakOnlyPreview() },
+    ScreenPreview("desktop") { SecurityDesktopPreview() },
+    ScreenPreview("less-memory") { SecurityLessMemoryPreview() },
+    ScreenPreview("not-enough-memory") { SecurityNotEnoughMemoryPreview() },
+    ScreenPreview("no-keys") { SecurityNoKeysPreview() },
+    ScreenPreview("loading") { SecurityLoadingPreview() },
+    ScreenPreview("unavailable") { SecurityUnavailablePreview() },
 )

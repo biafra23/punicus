@@ -63,6 +63,8 @@ import eth.serotine.domain.repository.TransactionHistory
 import eth.serotine.domain.repository.TransactionInputs
 import eth.serotine.domain.repository.UniswapV3Chain
 import eth.serotine.domain.repository.UserTokens
+import eth.serotine.domain.repository.BlockTransactions
+import eth.serotine.domain.repository.WalletHandoff
 import eth.serotine.domain.usecase.AddOnNetworks
 import eth.serotine.domain.usecase.AddToken
 import eth.serotine.domain.usecase.ApproveSafeTxOnChain
@@ -166,6 +168,9 @@ import eth.serotine.domain.usecase.ToggleAmountsHidden
 import eth.serotine.domain.usecase.WalletChanges
 import eth.serotine.domain.usecase.WarmFeeHistory
 import eth.serotine.domain.usecase.WatchAddress
+import eth.serotine.domain.usecase.HandOffTransfer
+import eth.serotine.domain.usecase.OfferHandoff
+import eth.serotine.domain.usecase.WatchHandoff
 import eth.serotine.ui.accountdetail.AccountDetailViewModel
 import eth.serotine.ui.accounts.AccountsViewModel
 import eth.serotine.ui.activity.AccountActivity
@@ -182,6 +187,7 @@ import eth.serotine.ui.dappproposal.DappProposalViewModel
 import eth.serotine.ui.dapprequest.DappRequestViewModel
 import eth.serotine.ui.dapptransaction.DappTransactionViewModel
 import eth.serotine.ui.dapprequest.DappRequestsWaitingViewModel
+import eth.serotine.ui.handoff.HandoffViewModel
 import eth.serotine.ui.pairdapp.IncomingDappLink
 import eth.serotine.ui.pairdapp.PairDappViewModel
 import eth.serotine.ui.debug.DebugTabViewModel
@@ -257,6 +263,13 @@ class AppGraph(
     private val broadcaster: Broadcaster,
     /** A sent transfer's receipt, verified by that light client. */
     private val receipts: ReceiptTracker,
+    /** The transactions of verified blocks, which Send from another wallet finds its transfer in (#255). */
+    private val blockTransactions: BlockTransactions,
+    /**
+     * Hands a payment link to another wallet app on this device (#255): the host's, the platform's
+     * own output; a host that hands none over answers that it cannot.
+     */
+    private val walletHandoff: WalletHandoff,
     /** ENS names, resolved by that light client against finalized state. */
     private val names: NameResolver,
     /**
@@ -368,6 +381,7 @@ class AppGraph(
             ObserveNetworkLive(networkFreshness),
             ObserveAmountsHidden(amountsHidden),
             toggleAmountsHidden,
+            offerHandoff = OfferHandoff(walletHandoff),
         )
 
     /** The light clients' status strips of the screens that depend on them: one for the app, in the host's scope. */
@@ -397,7 +411,20 @@ class AppGraph(
             ObserveNfts(logIndex, historyStarts, nfts, ensNfts, receipts, addedNfts),
             AddNft(nfts, addedNfts),
             RemoveAddedNft(addedNfts),
+            offerHandoff = OfferHandoff(walletHandoff),
         )
+
+    /** Send from another wallet (#255) from [from], with the token at [asset] chosen (null: the network's currency). */
+    fun handoffViewModel(from: AccountId, asset: Address?): HandoffViewModel = HandoffViewModel(
+        from,
+        asset,
+        ObserveAccounts(accounts),
+        accountValue(),
+        ResolveRecipient(names),
+        OfferHandoff(walletHandoff),
+        HandOffTransfer(walletHandoff, blockTransactions),
+        WatchHandoff(blockTransactions, receipts),
+    )
 
     /**
      * The Safe transaction [hash] of the Safe at [safe] (docs/wallet-ux.md, screen 17); [imported]
@@ -780,7 +807,7 @@ class AppGraph(
             transactionInputs,
             safeTxQueue,
         ),
-        SignDappSafeTx(dappRequests, signSafeTx(Network.SEPOLIA)),
+        SignDappSafeTx(dappRequests, ::signSafeTx),
         RefuseDappRequest(dappRequests, accounts, networkSettings),
         DescribeKeyStore(keys),
     )

@@ -3,7 +3,9 @@
 package eth.serotine.data.walletconnect
 
 import eth.serotine.data.walletconnect.FakeDapp.Companion.namespace
+import eth.serotine.domain.model.AccountId
 import eth.serotine.domain.model.Address
+import eth.serotine.domain.model.Network
 import eth.serotine.domain.model.Digest
 import eth.serotine.domain.model.PersonalMessage
 import eth.serotine.domain.model.Signature
@@ -54,7 +56,8 @@ class WalletConnectDappsTest {
 
     private val directory = Path(SystemTemporaryDirectory, "serotine-wcd-${Random.nextLong().toULong()}")
     private val relay = FakeRelay()
-    private val account = Address.of("0x00000000000000000000000000000000000000a1")
+    private val address = Address.of("0x00000000000000000000000000000000000000a1")
+    private val account = AccountId(Network.SEPOLIA, address)
 
     @AfterTest
     fun cleanUp() {
@@ -119,7 +122,7 @@ class WalletConnectDappsTest {
     }
 
     @Test
-    fun aProposalWithoutSepoliaIsRefusedAsSuchAndItsRejectionSaysSo() = runTest {
+    fun aProposalForNoNetworkServedHereIsRefusedAsSuchAndItsRejectionSaysSo() = runTest {
         val dapps = dapps()
         val dapp = FakeDapp(relay, backgroundScope) { now() }
         dapp.subscribePairing()
@@ -127,15 +130,89 @@ class WalletConnectDappsTest {
         dapp.propose(
             2,
             JsonObject(emptyMap()),
-            buildJsonObject { put("eip155", namespace(listOf("eip155:1"), listOf("personal_sign"), emptyList())) },
+            buildJsonObject { put("eip155", namespace(listOf("eip155:137"), listOf("personal_sign"), emptyList())) },
         )
         settle()
         val proposal = assertIs<DappConnections.On>(dapps.observe().first()).proposals.single()
-        assertEquals(DappRefusal.NO_SEPOLIA, proposal.refusal)
+        assertEquals(DappRefusal.NO_NETWORK, proposal.refusal)
         assertTrue(dapps.reject(proposal.id))
         settle()
         val answer = dapp.received.getValue(dapp.pairingTopic).single()
         assertEquals(5100, answer.getValue("error").jsonObject.getValue("code").jsonPrimitive.int)
+    }
+
+    @Test
+    fun aProposalRequiringRealFundsAndTestnetTogetherIsRefusedAsSuch() = runTest {
+        val dapps = dapps()
+        val dapp = FakeDapp(relay, backgroundScope) { now() }
+        dapp.subscribePairing()
+        dapps.pair(dapp.uri())
+        dapp.propose(
+            5,
+            buildJsonObject { put("eip155", namespace(listOf("eip155:1", WcProtocol.SEPOLIA), listOf("personal_sign"), emptyList())) },
+            JsonObject(emptyMap()),
+        )
+        settle()
+        val proposal = assertIs<DappConnections.On>(dapps.observe().first()).proposals.single()
+        assertEquals(DappRefusal.MIXED_FUNDS, proposal.refusal)
+    }
+
+    @Test
+    fun aRealFundsSessionHoldsEthereumAndGnosisChainAndSwitchesBetweenThemOnly() = runTest {
+        val dapps = dapps()
+        val dapp = FakeDapp(relay, backgroundScope) { now() }
+        dapp.subscribePairing()
+        dapps.pair(dapp.uri())
+        val methods = listOf("personal_sign", "wallet_switchEthereumChain")
+        dapp.propose(
+            6,
+            buildJsonObject { put("eip155", namespace(listOf("eip155:1"), methods, listOf("chainChanged"))) },
+            buildJsonObject { put("eip155", namespace(listOf("eip155:100", WcProtocol.SEPOLIA), methods, emptyList())) },
+        )
+        settle()
+        val proposal = assertIs<DappConnections.On>(dapps.observe().first()).proposals.single()
+        assertEquals(setOf(Network.ETHEREUM, Network.GNOSIS), proposal.networks)
+        val ethereum = AccountId(Network.ETHEREUM, address)
+        val gnosis = AccountId(Network.GNOSIS, address)
+        // Testnet beside real funds, or a chain not asked for, is no approval.
+        assertEquals(DappApproval.InvalidAccounts, dapps.approve(proposal.id, listOf(ethereum, account)))
+        assertIs<DappApproval.Approved>(dapps.approve(proposal.id, listOf(ethereum, gnosis)))
+        settle()
+        val session = assertIs<DappConnections.On>(dapps.observe().first()).sessions.single()
+        assertEquals(listOf(ethereum, gnosis), session.accounts)
+        assertEquals(setOf(Network.ETHEREUM, Network.GNOSIS), session.networks)
+        assertTrue(dapp.followSession(6))
+        fun sessionRequest(id: Long, chain: String, chainId: String) = FakeDapp.request(
+            id,
+            "wc_sessionRequest",
+            buildJsonObject {
+                putJsonObject("request") {
+                    put("method", "wallet_switchEthereumChain")
+                    put("params", buildJsonArray { addJsonObject { put("chainId", chainId) } })
+                }
+                put("chainId", chain)
+            },
+        )
+        dapp.sendOnSession(sessionRequest(40, "eip155:1", "0x64"))
+        // Asked on Sepolia, a chain the session does not hold: refused by the adapter at once.
+        dapp.sendOnSession(sessionRequest(41, WcProtocol.SEPOLIA, "0x1"))
+        settle()
+        val switch = dapps.requests.observe().first().single()
+        assertEquals(40L, switch.id.id)
+        assertEquals(Network.ETHEREUM, switch.network)
+        assertEquals(setOf(Network.ETHEREUM, Network.GNOSIS), switch.sessionNetworks)
+        assertEquals(listOf(ethereum, gnosis), switch.sessionAccounts)
+        assertEquals(DappAnswer.DELIVERED, dapps.requests.answerChainSwitch(switch.id, Network.GNOSIS))
+        settle()
+        val received = dapp.received.getValue(checkNotNull(dapp.sessionTopic))
+        val answers = received.filter { "id" in it && ("result" in it || "error" in it) }
+            .associateBy { it.getValue("id").jsonPrimitive.content }
+        assertEquals("null", answers.getValue("40").getValue("result").toString())
+        assertEquals(5100, answers.getValue("41").getValue("error").jsonObject.getValue("code").jsonPrimitive.int)
+        val event = received.single { it["method"]?.jsonPrimitive?.content == "wc_sessionEvent" }.getValue("params").jsonObject
+        assertEquals("eip155:100", event.getValue("chainId").jsonPrimitive.content)
+        assertEquals("chainChanged", event.getValue("event").jsonObject.getValue("name").jsonPrimitive.content)
+        assertEquals(100, event.getValue("event").jsonObject.getValue("data").jsonPrimitive.int)
     }
 
     @Test
@@ -167,7 +244,7 @@ class WalletConnectDappsTest {
             },
         )
         dapp.sendOnSession(
-            sessionRequest(20, "personal_sign", buildJsonArray { add(JsonPrimitive("0x68656c6c6f")); add(JsonPrimitive(account.hex)) }),
+            sessionRequest(20, "personal_sign", buildJsonArray { add(JsonPrimitive("0x68656c6c6f")); add(JsonPrimitive(address.hex)) }),
         )
         dapp.sendOnSession(
             sessionRequest(21, "wallet_switchEthereumChain", buildJsonArray { addJsonObject { put("chainId", "0x1") } }),
@@ -179,7 +256,7 @@ class WalletConnectDappsTest {
         assertEquals(listOf(account), sign.sessionAccounts)
         assertEquals("Test dApp", sign.dapp.name)
         assertEquals(WcProtocol.SEPOLIA, sign.chain)
-        assertEquals(DappAsk.PersonalSign(account, PersonalMessage.ofHex("68656c6c6f")!!), sign.ask)
+        assertEquals(DappAsk.PersonalSign(address, PersonalMessage.ofHex("68656c6c6f")!!), sign.ask)
         assertEquals(DappAsk.SwitchChain(1), waiting.last().ask)
 
         val signature = Signature("1".padStart(64, '0'), "2".padStart(64, '0'), 0)
@@ -220,7 +297,7 @@ class WalletConnectDappsTest {
                             "params",
                             buildJsonArray {
                                 addJsonObject {
-                                    put("from", account.hex)
+                                    put("from", address.hex)
                                     put("to", "0x00000000000000000000000000000000000000b2")
                                     put("value", "0x1")
                                 }

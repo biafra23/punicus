@@ -2,6 +2,7 @@ package eth.serotine.ui.addnetwork
 
 import androidx.compose.runtime.Composable
 import eth.serotine.ui.components.NetworkChoice
+import eth.serotine.ui.ScreenPreview
 import eth.serotine.ui.theme.SerotineTheme
 import org.jetbrains.compose.ui.tooling.preview.Preview
 
@@ -52,10 +53,10 @@ private fun AddOnNetworksSafePreview() = AddOnNetworksPreview(
 )
 
 /** Every preview above, which AddOnNetworksDialogPreviewsTest renders: a new preview goes in here too. */
-internal val addOnNetworksDialogPreviews: List<@Composable () -> Unit> = listOf(
-    { AddOnNetworksChoosePreview() },
-    { AddOnNetworksChooseDarkPreview() },
-    { AddOnNetworksNotSavedPreview() },
-    { AddOnNetworksOnEveryNetworkPreview() },
-    { AddOnNetworksSafePreview() },
+internal val addOnNetworksDialogPreviews: List<ScreenPreview> = listOf(
+    ScreenPreview("choose") { AddOnNetworksChoosePreview() },
+    ScreenPreview("choose-dark") { AddOnNetworksChooseDarkPreview() },
+    ScreenPreview("not-saved") { AddOnNetworksNotSavedPreview() },
+    ScreenPreview("on-every-network") { AddOnNetworksOnEveryNetworkPreview() },
+    ScreenPreview("safe") { AddOnNetworksSafePreview() },
 )

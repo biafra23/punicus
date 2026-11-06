@@ -13,6 +13,7 @@ import eth.serotine.ui.components.SendFrom
 import eth.serotine.ui.components.TransferForm
 import eth.serotine.ui.components.UnlockStep
 import eth.serotine.ui.components.verifiedStripSample
+import eth.serotine.ui.ScreenPreview
 import eth.serotine.ui.theme.SerotineTheme
 import org.jetbrains.compose.ui.tooling.preview.Preview
 
@@ -167,18 +168,18 @@ private fun SafeProposeWatchOnlyPreview() = SafeProposePreview(
 )
 
 /** Every preview above, which SafeProposeScreenPreviewsTest renders: a new preview goes in here too. */
-internal val safeProposeScreenPreviews: List<@Composable () -> Unit> = listOf(
-    { SafeProposeComposePreview() },
-    { SafeProposeComposeDarkPreview() },
-    { SafeProposeRefusedPreview() },
-    { SafeProposeProposingPreview() },
-    { SafeProposeReviewPreview() },
-    { SafeProposeReviewDarkPreview() },
-    { SafeProposeReviewQueuedNotSimulatedPreview() },
-    { SafeProposeReviewNotSavedPreview() },
-    { SafeProposeReviewAskingToDropPreview() },
-    { SafeProposeReviewSigningPreview() },
-    { SafeProposeReviewCheckingPreview() },
-    { SafeProposeLoadingPreview() },
-    { SafeProposeWatchOnlyPreview() },
+internal val safeProposeScreenPreviews: List<ScreenPreview> = listOf(
+    ScreenPreview("compose") { SafeProposeComposePreview() },
+    ScreenPreview("compose-dark") { SafeProposeComposeDarkPreview() },
+    ScreenPreview("refused") { SafeProposeRefusedPreview() },
+    ScreenPreview("proposing") { SafeProposeProposingPreview() },
+    ScreenPreview("review") { SafeProposeReviewPreview() },
+    ScreenPreview("review-dark") { SafeProposeReviewDarkPreview() },
+    ScreenPreview("review-queued-not-simulated") { SafeProposeReviewQueuedNotSimulatedPreview() },
+    ScreenPreview("review-not-saved") { SafeProposeReviewNotSavedPreview() },
+    ScreenPreview("review-asking-to-drop") { SafeProposeReviewAskingToDropPreview() },
+    ScreenPreview("review-signing") { SafeProposeReviewSigningPreview() },
+    ScreenPreview("review-checking") { SafeProposeReviewCheckingPreview() },
+    ScreenPreview("loading") { SafeProposeLoadingPreview() },
+    ScreenPreview("watch-only") { SafeProposeWatchOnlyPreview() },
 )

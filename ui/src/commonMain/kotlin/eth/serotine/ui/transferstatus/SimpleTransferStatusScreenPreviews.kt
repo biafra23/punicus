@@ -2,6 +2,7 @@ package eth.serotine.ui.transferstatus
 
 import androidx.compose.runtime.Composable
 import eth.serotine.ui.components.NotSentItem
+import eth.serotine.ui.ScreenPreview
 import eth.serotine.ui.theme.SerotineTheme
 import org.jetbrains.compose.ui.tooling.preview.Preview
 
@@ -140,10 +141,10 @@ private fun SimpleTransferMaybeSentPreview() = SimpleTransferStatusPreview(
 )
 
 /** Every preview above, which SimpleTransferStatusScreenPreviewsTest renders: a new preview goes in here too. */
-internal val simpleTransferStatusScreenPreviews: List<@Composable () -> Unit> = listOf(
-    { SimpleTransferConfirmedPreview() },
-    { SimpleTransferConfirmedDarkPreview() },
-    { SimpleTransferFinalPreview() },
-    { SimpleTransferFailedPreview() },
-    { SimpleTransferMaybeSentPreview() },
+internal val simpleTransferStatusScreenPreviews: List<ScreenPreview> = listOf(
+    ScreenPreview("confirmed") { SimpleTransferConfirmedPreview() },
+    ScreenPreview("confirmed-dark") { SimpleTransferConfirmedDarkPreview() },
+    ScreenPreview("final") { SimpleTransferFinalPreview() },
+    ScreenPreview("failed") { SimpleTransferFailedPreview() },
+    ScreenPreview("maybe-sent") { SimpleTransferMaybeSentPreview() },
 )

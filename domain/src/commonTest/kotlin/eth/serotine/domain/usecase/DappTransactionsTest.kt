@@ -70,6 +70,7 @@ class DappTransactionsTest {
         override fun observe(): Flow<List<DappRequest>> = waiting
         override suspend fun answerSignature(request: DappRequestId, signature: Signature) = error("not used")
         override suspend fun answerNull(request: DappRequestId) = error("not used")
+        override suspend fun answerChainSwitch(request: DappRequestId, network: Network) = error("not used")
         override suspend fun refuse(request: DappRequestId, why: DappRequestError) = error("not used")
         override suspend fun recordSafeTx(request: DappRequestId, safeTx: eth.serotine.domain.model.Digest) =
             error("not used")
@@ -86,7 +87,7 @@ class DappTransactionsTest {
     private fun request(id: Long, transaction: DappTransactionRequest) = DappRequest(
         DappRequestId(DappSessionId("t"), id),
         DappMetadata("Example dApp", "https://app.example.org", ""),
-        listOf(held.address, safe.address),
+        listOf(held.id, safe.id),
         "eip155:11155111",
         DappAsk.SendTransaction(transaction),
         now + 300,
@@ -118,6 +119,48 @@ class DappTransactionsTest {
         assertEquals(SentAction.DappCall(recipient, transaction.value, "Example dApp", quoted.id), record.action)
     }
 
+    /** The wallet with [held]'s address on Gnosis Chain too, both networks on: for requests on Gnosis Chain. */
+    private val onGnosis = Account(Network.GNOSIS, held.address, AccountKind.EOA, "Main", AccountCustody.InKeyStore)
+    private val bothAccounts = ListAccountRepository(held, onGnosis)
+    private val bothNetworks = object : NetworkSettings {
+        override fun observe(): Flow<Set<Network>> = flowOf(setOf(Network.SEPOLIA, Network.GNOSIS))
+        override suspend fun setEnabled(network: Network, on: Boolean): Boolean = error("not used")
+    }
+
+    private fun onGnosis(id: Long) = request(id, payment()).copy(
+        chain = "eip155:100",
+        sessionAccounts = listOf(onGnosis.id),
+        sessionNetworks = setOf(Network.GNOSIS, Network.ETHEREUM),
+    )
+
+    @Test
+    fun aRequestOnGnosisChainIsQuotedOnGnosisChain() = runTest {
+        requests.waiting.value = listOf(onGnosis(1))
+        val quoting = QuoteDappTransaction(
+            requests, bothAccounts, bothNetworks, ListCatalog(), balances, inputs, sent, history, clock = { now },
+        )
+        val quoted = assertIs<DappTransactionQuoting.Quoted>(quoting(onGnosis(1).id)).quote
+        assertEquals(Network.GNOSIS.chainId, quoted.call.transaction.chainId, "the request network's quoter")
+        assertEquals(onGnosis, quoted.review.account)
+    }
+
+    @Test
+    fun aQuoteForAnotherChainThanTheRequestsIsNeverSent() = runTest {
+        // Quoted on Sepolia; the request with that id now names Gnosis Chain: the quote is not for it.
+        requests.waiting.value = listOf(request(1, payment()))
+        val quoted = assertIs<DappTransactionQuoting.Quoted>(quote()(request(1, payment()).id)).quote
+        requests.waiting.value = listOf(onGnosis(1))
+        val sending = SendDappTransaction(
+            requests, bothAccounts, bothNetworks, signer, broadcaster, sent, history, receipts, clock = { now },
+        )
+        assertEquals(
+            DappTransactionSending.Refused(DappSignRefusal.OTHER_CHAIN),
+            sending(quoted, Unlock.WithBiometrics("x")),
+        )
+        assertTrue(sent.transfers.value.isEmpty(), "nothing signed, nothing sent")
+        assertTrue(signer.asked.isEmpty())
+    }
+
     @Test
     fun aRequestSignedOnceIsNeverSignedAgainAndOnceSentItsDappIsAnsweredAtOnce() = runTest {
         requests.waiting.value = listOf(request(1, payment()))
@@ -136,7 +179,7 @@ class DappTransactionsTest {
         accounts.setCustody(held.id, AccountCustody.InKeyStore)
         assertEquals(1, broadcaster.sent.size)
         // Sent by a retry from its status: the dApp is answered with its hash at once.
-        val answering = backgroundScope.launch { AnswerDappRequestsAtOnce(requests, sent, history)() }
+        val answering = backgroundScope.launch { AnswerDappRequestsAtOnce(requests, sent, history, networks)() }
         runCurrent()
         assertTrue(requests.hashes.isEmpty())
         sent.transfers.value = listOf(record.copy(maybeSent = false))
@@ -156,7 +199,7 @@ class DappTransactionsTest {
         history.entries.value = listOf(HistoryEntry(record, SentOutcome.Included(120, succeeded = true)))
         sent.transfers.value = emptyList()
         assertEquals(DappTransactionQuoting.AlreadySigned(SignedAnswer(record, SignedState.MINED)), quote()(quoted.id))
-        val answering = backgroundScope.launch { AnswerDappRequestsAtOnce(requests, sent, history)() }
+        val answering = backgroundScope.launch { AnswerDappRequestsAtOnce(requests, sent, history, networks)() }
         runCurrent()
         assertEquals(listOf(quoted.id to record.hash), requests.hashes)
         answering.cancel()

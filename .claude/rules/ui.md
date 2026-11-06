@@ -130,6 +130,19 @@ that show them call `protectFromScreenCapture()`.
 
 ## A PR that changes the UI needs screenshots
 
-Follow `.claude/skills/screenshots/SKILL.md`. A PR with no visible change says
-"No UI change" in its description, so a reader can tell an omission from a
-decision.
+(Owner's request, 2026-10-19; where they live and who renders them: owner
+rulings, 2026-11-04.)
+
+- CI renders every screen into `docs/screenshots/<screen>/<state>.png`,
+  commits the changed images to the PR's branch and writes a before/after
+  table into the description. It works the same from every kind of session.
+- The map of screens is `Screens.kt` (`ui/src/desktopTest`). A slug or a
+  state name, once on `main`, stays, so the same screen is at the same path
+  in every commit.
+- Never commit a PNG under `docs/screenshots/` yourself: CI's render is the
+  only source.
+- The description's `## Screenshots` section says in a line what the PR
+  changes on screen, or "No UI change", so a reader can tell an omission
+  from a decision. CI's table below it is the check.
+- The procedure and what each failure means:
+  `.claude/skills/screenshots/SKILL.md`.

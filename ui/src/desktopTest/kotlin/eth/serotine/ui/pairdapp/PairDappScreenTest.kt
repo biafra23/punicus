@@ -23,8 +23,42 @@ class PairDappScreenTest {
     private val edits = mutableListOf<String>()
     private var connects = 0
 
-    private fun show(state: PairDappUiState) = rule.setContent {
-        SerotineTheme { PairDappScreen(state, onEdit = { edits += it }, onConnect = { connects++ }, onBack = {}) }
+    private var scans = 0
+
+    private fun show(state: PairDappUiState, scanner: Boolean = false) = rule.setContent {
+        SerotineTheme {
+            PairDappScreen(
+                state,
+                onEdit = { edits += it },
+                onConnect = { connects++ },
+                onBack = {},
+                onScan = if (scanner) ({ scans++ }) else null,
+            )
+        }
+    }
+
+    @Test
+    fun scanIsOfferedOnlyWhereThePlatformHasAScanner() {
+        show(PairDappUiState())
+        rule.onNodeWithTag(PAIR_DAPP_SCAN_TAG).assertDoesNotExist()
+    }
+
+    @Test
+    fun scanStartsTheScanner() {
+        show(PairDappUiState(), scanner = true)
+        rule.onNodeWithTag(PAIR_DAPP_SCAN_TAG).assertIsEnabled().performClick()
+        assertEquals(1, scans)
+    }
+
+    @Test
+    fun aRefusedCameraGreysScanOutWithItsReasonAndAskingAgainStaysPossible() {
+        show(PairDappUiState(message = PairDappViewModel.CAMERA_REFUSED, cameraUnavailable = true), scanner = true)
+        rule.onNodeWithText(PairDappViewModel.CAMERA_REFUSED).assertExists()
+        rule.onNodeWithTag(PAIR_DAPP_SCAN_TAG)
+            .assertIsEnabled()
+            .assert(SemanticsMatcher.expectValue(SemanticsProperties.StateDescription, "Unavailable"))
+            .performClick()
+        assertEquals(1, scans)
     }
 
     @Test

@@ -1,6 +1,7 @@
 package eth.serotine.ui
 
-import eth.serotine.domain.model.Address
+import eth.serotine.domain.model.AccountId
+import eth.serotine.domain.model.Network
 import eth.serotine.domain.model.Digest
 import eth.serotine.domain.model.Signature
 import eth.serotine.domain.repository.DappAnswer
@@ -23,33 +24,33 @@ import kotlinx.coroutines.flow.flowOf
 internal object OffDappSessions : DappSessions {
     override fun observe(): Flow<DappConnections> = flowOf(DappConnections.Off)
     override suspend fun pair(uri: String): DappPairing = DappPairing.Off
-    override suspend fun approve(proposal: DappProposalId, accounts: List<Address>): DappApproval = DappApproval.Off
+    override suspend fun approve(proposal: DappProposalId, accounts: List<AccountId>): DappApproval = DappApproval.Off
     override suspend fun reject(proposal: DappProposalId) = false
     override suspend fun disconnect(session: DappSessionId) = false
     override suspend fun extend(session: DappSessionId) = false
-    override suspend fun updateAccounts(session: DappSessionId, accounts: List<Address>) = false
+    override suspend fun updateAccounts(session: DappSessionId, accounts: List<AccountId>) = false
 }
 
 /** [DappSessions] over [connections], a test sets; it records what it is asked and answers what the test says. */
 internal class FakeDappSessions : DappSessions {
     val connections = MutableStateFlow<DappConnections>(DappConnections.On(DappRelayLink.CONNECTED, emptyList(), emptyList()))
     var pairing: DappPairing = DappPairing.Paired(waitingForRelay = false)
-    var approval: (DappProposalId, List<Address>) -> DappApproval = { _, _ -> DappApproval.Approved(DappSessionId("t"), true) }
+    var approval: (DappProposalId, List<AccountId>) -> DappApproval = { _, _ -> DappApproval.Approved(DappSessionId("t"), true) }
     var saves = true
     val paired = mutableListOf<String>()
-    val approved = mutableListOf<Pair<DappProposalId, List<Address>>>()
+    val approved = mutableListOf<Pair<DappProposalId, List<AccountId>>>()
     val rejected = mutableListOf<DappProposalId>()
     val disconnected = mutableListOf<DappSessionId>()
     val extended = mutableListOf<DappSessionId>()
 
     override fun observe(): Flow<DappConnections> = connections
     override suspend fun pair(uri: String): DappPairing = pairing.also { paired += uri }
-    override suspend fun approve(proposal: DappProposalId, accounts: List<Address>): DappApproval =
+    override suspend fun approve(proposal: DappProposalId, accounts: List<AccountId>): DappApproval =
         approval(proposal, accounts).also { approved += proposal to accounts }
     override suspend fun reject(proposal: DappProposalId) = saves.also { rejected += proposal }
     override suspend fun disconnect(session: DappSessionId) = saves.also { disconnected += session }
     override suspend fun extend(session: DappSessionId) = saves.also { extended += session }
-    override suspend fun updateAccounts(session: DappSessionId, accounts: List<Address>) = saves
+    override suspend fun updateAccounts(session: DappSessionId, accounts: List<AccountId>) = saves
 }
 
 /** [DappRequests] of a build without a project ID: none, and every answer says it is off. */
@@ -57,6 +58,7 @@ internal object OffDappRequests : DappRequests {
     override fun observe(): Flow<List<DappRequest>> = flowOf(emptyList())
     override suspend fun answerSignature(request: DappRequestId, signature: Signature) = DappAnswer.OFF
     override suspend fun answerNull(request: DappRequestId) = DappAnswer.OFF
+    override suspend fun answerChainSwitch(request: DappRequestId, network: Network) = DappAnswer.OFF
     override suspend fun answerTransaction(request: DappRequestId, hash: String) = DappAnswer.OFF
     override suspend fun refuse(request: DappRequestId, why: DappRequestError) = DappAnswer.OFF
     override suspend fun recordSafeTx(request: DappRequestId, safeTx: Digest) = false
@@ -79,6 +81,9 @@ internal class FakeDappRequests : DappRequests {
     override suspend fun answerSignature(request: DappRequestId, signature: Signature): DappAnswer =
         answered(request).also { signatures += request to signature }
     override suspend fun answerNull(request: DappRequestId): DappAnswer = answered(request)
+    val switches = mutableListOf<Pair<DappRequestId, Network>>()
+    override suspend fun answerChainSwitch(request: DappRequestId, network: Network): DappAnswer =
+        answered(request).also { switches += request to network }
     val hashes = mutableListOf<Pair<DappRequestId, String>>()
     override suspend fun answerTransaction(request: DappRequestId, hash: String): DappAnswer =
         answered(request).also { hashes += request to hash }
