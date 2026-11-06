@@ -436,7 +436,7 @@ figcaption { font: .75rem/1.3 monospace; text-align: center; word-break: break-w
 </div>
 </section>
 <section id="safe-propose">
-<h2>Propose Safe transaction <small>safe-propose/ · 13 states</small></h2>
+<h2>Propose Safe transaction <small>safe-propose/ · 17 states</small></h2>
 <div class="shots">
 <figure><a href="safe-propose/compose.png"><img src="safe-propose/compose.png" loading="lazy" alt="compose"></a><figcaption>compose</figcaption></figure>
 <figure><a href="safe-propose/compose-dark.png"><img src="safe-propose/compose-dark.png" loading="lazy" alt="compose-dark"></a><figcaption>compose-dark</figcaption></figure>
@@ -451,6 +451,10 @@ figcaption { font: .75rem/1.3 monospace; text-align: center; word-break: break-w
 <figure><a href="safe-propose/review-checking.png"><img src="safe-propose/review-checking.png" loading="lazy" alt="review-checking"></a><figcaption>review-checking</figcaption></figure>
 <figure><a href="safe-propose/loading.png"><img src="safe-propose/loading.png" loading="lazy" alt="loading"></a><figcaption>loading</figcaption></figure>
 <figure><a href="safe-propose/watch-only.png"><img src="safe-propose/watch-only.png" loading="lazy" alt="watch-only"></a><figcaption>watch-only</figcaption></figure>
+<figure><a href="safe-propose/draft.png"><img src="safe-propose/draft.png" loading="lazy" alt="draft"></a><figcaption>draft</figcaption></figure>
+<figure><a href="safe-propose/draft-dark.png"><img src="safe-propose/draft-dark.png" loading="lazy" alt="draft-dark"></a><figcaption>draft-dark</figcaption></figure>
+<figure><a href="safe-propose/draft-nonce-busy.png"><img src="safe-propose/draft-nonce-busy.png" loading="lazy" alt="draft-nonce-busy"></a><figcaption>draft-nonce-busy</figcaption></figure>
+<figure><a href="safe-propose/never-verified.png"><img src="safe-propose/never-verified.png" loading="lazy" alt="never-verified"></a><figcaption>never-verified</figcaption></figure>
 </div>
 </section>
 <section id="safe-settings">
@@ -494,7 +498,7 @@ figcaption { font: .75rem/1.3 monospace; text-align: center; word-break: break-w
 </div>
 </section>
 <section id="safe-tx">
-<h2>Safe transaction <small>safe-tx/ · 34 states</small></h2>
+<h2>Safe transaction <small>safe-tx/ · 45 states</small></h2>
 <div class="shots">
 <figure><a href="safe-tx/overview.png"><img src="safe-tx/overview.png" loading="lazy" alt="overview"></a><figcaption>overview</figcaption></figure>
 <figure><a href="safe-tx/overview-dark.png"><img src="safe-tx/overview-dark.png" loading="lazy" alt="overview-dark"></a><figcaption>overview-dark</figcaption></figure>
@@ -530,6 +534,17 @@ figcaption { font: .75rem/1.3 monospace; text-align: center; word-break: break-w
 <figure><a href="safe-tx/swap-approval.png"><img src="safe-tx/swap-approval.png" loading="lazy" alt="swap-approval"></a><figcaption>swap-approval</figcaption></figure>
 <figure><a href="safe-tx/swap-propose-again-greyed.png"><img src="safe-tx/swap-propose-again-greyed.png" loading="lazy" alt="swap-propose-again-greyed"></a><figcaption>swap-propose-again-greyed</figcaption></figure>
 <figure><a href="safe-tx/fallback-handler-removed.png"><img src="safe-tx/fallback-handler-removed.png" loading="lazy" alt="fallback-handler-removed"></a><figcaption>fallback-handler-removed</figcaption></figure>
+<figure><a href="safe-tx/lenient-overview.png"><img src="safe-tx/lenient-overview.png" loading="lazy" alt="lenient-overview"></a><figcaption>lenient-overview</figcaption></figure>
+<figure><a href="safe-tx/lenient-signing.png"><img src="safe-tx/lenient-signing.png" loading="lazy" alt="lenient-signing"></a><figcaption>lenient-signing</figcaption></figure>
+<figure><a href="safe-tx/held.png"><img src="safe-tx/held.png" loading="lazy" alt="held"></a><figcaption>held</figcaption></figure>
+<figure><a href="safe-tx/held-dark.png"><img src="safe-tx/held-dark.png" loading="lazy" alt="held-dark"></a><figcaption>held-dark</figcaption></figure>
+<figure><a href="safe-tx/held-checking.png"><img src="safe-tx/held-checking.png" loading="lazy" alt="held-checking"></a><figcaption>held-checking</figcaption></figure>
+<figure><a href="safe-tx/held-conflict.png"><img src="safe-tx/held-conflict.png" loading="lazy" alt="held-conflict"></a><figcaption>held-conflict</figcaption></figure>
+<figure><a href="safe-tx/held-discarded.png"><img src="safe-tx/held-discarded.png" loading="lazy" alt="held-discarded"></a><figcaption>held-discarded</figcaption></figure>
+<figure><a href="safe-tx/held-co-signature.png"><img src="safe-tx/held-co-signature.png" loading="lazy" alt="held-co-signature"></a><figcaption>held-co-signature</figcaption></figure>
+<figure><a href="safe-tx/draft-approval.png"><img src="safe-tx/draft-approval.png" loading="lazy" alt="draft-approval"></a><figcaption>draft-approval</figcaption></figure>
+<figure><a href="safe-tx/draft-execution.png"><img src="safe-tx/draft-execution.png" loading="lazy" alt="draft-execution"></a><figcaption>draft-execution</figcaption></figure>
+<figure><a href="safe-tx/draft-dark.png"><img src="safe-tx/draft-dark.png" loading="lazy" alt="draft-dark"></a><figcaption>draft-dark</figcaption></figure>
 </div>
 </section>
 <section id="screen-capture-warning-dialog">
@@ -702,12 +717,14 @@ figcaption { font: .75rem/1.3 monospace; text-align: center; word-break: break-w
 </div>
 </section>
 <section id="simple-safe-propose">
-<h2>Propose Safe transaction (simple mode) <small>simple-safe-propose/ · 4 states</small></h2>
+<h2>Propose Safe transaction (simple mode) <small>simple-safe-propose/ · 6 states</small></h2>
 <div class="shots">
 <figure><a href="simple-safe-propose/compose.png"><img src="simple-safe-propose/compose.png" loading="lazy" alt="compose"></a><figcaption>compose</figcaption></figure>
 <figure><a href="simple-safe-propose/refused.png"><img src="simple-safe-propose/refused.png" loading="lazy" alt="refused"></a><figcaption>refused</figcaption></figure>
 <figure><a href="simple-safe-propose/review.png"><img src="simple-safe-propose/review.png" loading="lazy" alt="review"></a><figcaption>review</figcaption></figure>
 <figure><a href="simple-safe-propose/review-dark.png"><img src="simple-safe-propose/review-dark.png" loading="lazy" alt="review-dark"></a><figcaption>review-dark</figcaption></figure>
+<figure><a href="simple-safe-propose/draft.png"><img src="simple-safe-propose/draft.png" loading="lazy" alt="draft"></a><figcaption>draft</figcaption></figure>
+<figure><a href="simple-safe-propose/draft-dark.png"><img src="simple-safe-propose/draft-dark.png" loading="lazy" alt="draft-dark"></a><figcaption>draft-dark</figcaption></figure>
 </div>
 </section>
 <section id="simple-safe-settings">
@@ -730,7 +747,7 @@ figcaption { font: .75rem/1.3 monospace; text-align: center; word-break: break-w
 </div>
 </section>
 <section id="simple-safe-tx">
-<h2>Safe transaction (simple mode) <small>simple-safe-tx/ · 7 states</small></h2>
+<h2>Safe transaction (simple mode) <small>simple-safe-tx/ · 12 states</small></h2>
 <div class="shots">
 <figure><a href="simple-safe-tx/overview.png"><img src="simple-safe-tx/overview.png" loading="lazy" alt="overview"></a><figcaption>overview</figcaption></figure>
 <figure><a href="simple-safe-tx/overview-dark.png"><img src="simple-safe-tx/overview-dark.png" loading="lazy" alt="overview-dark"></a><figcaption>overview-dark</figcaption></figure>
@@ -739,6 +756,11 @@ figcaption { font: .75rem/1.3 monospace; text-align: center; word-break: break-w
 <figure><a href="simple-safe-tx/refused.png"><img src="simple-safe-tx/refused.png" loading="lazy" alt="refused"></a><figcaption>refused</figcaption></figure>
 <figure><a href="simple-safe-tx/signing.png"><img src="simple-safe-tx/signing.png" loading="lazy" alt="signing"></a><figcaption>signing</figcaption></figure>
 <figure><a href="simple-safe-tx/approval.png"><img src="simple-safe-tx/approval.png" loading="lazy" alt="approval"></a><figcaption>approval</figcaption></figure>
+<figure><a href="simple-safe-tx/lenient-overview.png"><img src="simple-safe-tx/lenient-overview.png" loading="lazy" alt="lenient-overview"></a><figcaption>lenient-overview</figcaption></figure>
+<figure><a href="simple-safe-tx/held.png"><img src="simple-safe-tx/held.png" loading="lazy" alt="held"></a><figcaption>held</figcaption></figure>
+<figure><a href="simple-safe-tx/held-dark.png"><img src="simple-safe-tx/held-dark.png" loading="lazy" alt="held-dark"></a><figcaption>held-dark</figcaption></figure>
+<figure><a href="simple-safe-tx/held-co-signature.png"><img src="simple-safe-tx/held-co-signature.png" loading="lazy" alt="held-co-signature"></a><figcaption>held-co-signature</figcaption></figure>
+<figure><a href="simple-safe-tx/draft.png"><img src="simple-safe-tx/draft.png" loading="lazy" alt="draft"></a><figcaption>draft</figcaption></figure>
 </div>
 </section>
 <section id="simple-send">
@@ -787,7 +809,7 @@ figcaption { font: .75rem/1.3 monospace; text-align: center; word-break: break-w
 </div>
 </section>
 <section id="simple-transfer-status">
-<h2>Transfer status (simple mode) <small>simple-transfer-status/ · 9 states</small></h2>
+<h2>Transfer status (simple mode) <small>simple-transfer-status/ · 10 states</small></h2>
 <div class="shots">
 <figure><a href="simple-transfer-status/confirmed.png"><img src="simple-transfer-status/confirmed.png" loading="lazy" alt="confirmed"></a><figcaption>confirmed</figcaption></figure>
 <figure><a href="simple-transfer-status/confirmed-dark.png"><img src="simple-transfer-status/confirmed-dark.png" loading="lazy" alt="confirmed-dark"></a><figcaption>confirmed-dark</figcaption></figure>
@@ -798,6 +820,7 @@ figcaption { font: .75rem/1.3 monospace; text-align: center; word-break: break-w
 <figure><a href="simple-transfer-status/queued-dark.png"><img src="simple-transfer-status/queued-dark.png" loading="lazy" alt="queued-dark"></a><figcaption>queued-dark</figcaption></figure>
 <figure><a href="simple-transfer-status/queued-past-its-hour.png"><img src="simple-transfer-status/queued-past-its-hour.png" loading="lazy" alt="queued-past-its-hour"></a><figcaption>queued-past-its-hour</figcaption></figure>
 <figure><a href="simple-transfer-status/queued-conflict.png"><img src="simple-transfer-status/queued-conflict.png" loading="lazy" alt="queued-conflict"></a><figcaption>queued-conflict</figcaption></figure>
+<figure><a href="simple-transfer-status/queued-safe-approval.png"><img src="simple-transfer-status/queued-safe-approval.png" loading="lazy" alt="queued-safe-approval"></a><figcaption>queued-safe-approval</figcaption></figure>
 </div>
 </section>
 <section id="simple-watch">
@@ -870,7 +893,7 @@ figcaption { font: .75rem/1.3 monospace; text-align: center; word-break: break-w
 </div>
 </section>
 <section id="transfer-status">
-<h2>Transfer status <small>transfer-status/ · 35 states</small></h2>
+<h2>Transfer status <small>transfer-status/ · 36 states</small></h2>
 <div class="shots">
 <figure><a href="transfer-status/pending.png"><img src="transfer-status/pending.png" loading="lazy" alt="pending"></a><figcaption>pending</figcaption></figure>
 <figure><a href="transfer-status/pending-dark.png"><img src="transfer-status/pending-dark.png" loading="lazy" alt="pending-dark"></a><figcaption>pending-dark</figcaption></figure>
@@ -907,6 +930,7 @@ figcaption { font: .75rem/1.3 monospace; text-align: center; word-break: break-w
 <figure><a href="transfer-status/queued-discarding.png"><img src="transfer-status/queued-discarding.png" loading="lazy" alt="queued-discarding"></a><figcaption>queued-discarding</figcaption></figure>
 <figure><a href="transfer-status/queued-not-discarded.png"><img src="transfer-status/queued-not-discarded.png" loading="lazy" alt="queued-not-discarded"></a><figcaption>queued-not-discarded</figcaption></figure>
 <figure><a href="transfer-status/queued-outbox-unreadable.png"><img src="transfer-status/queued-outbox-unreadable.png" loading="lazy" alt="queued-outbox-unreadable"></a><figcaption>queued-outbox-unreadable</figcaption></figure>
+<figure><a href="transfer-status/queued-safe-approval.png"><img src="transfer-status/queued-safe-approval.png" loading="lazy" alt="queued-safe-approval"></a><figcaption>queued-safe-approval</figcaption></figure>
 </div>
 </section>
 <section id="update-required">
