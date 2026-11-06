@@ -28,8 +28,8 @@ import kotlinx.io.files.SystemFileSystem
  * exists before anything else touches it, so a lost one is told apart from a new one.
  *
  * A key store that fails while it is asked never hides a sealed file behind memory: with the file
- * there, the outbox is unreadable for this run (said, and tried again at the next start), so
- * nothing in it is lost, sent unchecked or forgotten; with none, memory only for this run.
+ * there, the outbox is unreadable, nothing in it lost, sent unchecked or forgotten, and the choice
+ * is made again at the next use; with none, memory only for this run.
  */
 internal class ChosenOutbox(
     private val path: String,
@@ -40,7 +40,8 @@ internal class ChosenOutbox(
     private var chosen: Outbox? = null
 
     private suspend fun outbox(): Outbox = lock.withLock {
-        chosen ?: withContext(dispatcher) { choose() }.also { chosen = it }
+        // A key store that failed is asked again next time: only a choice made is kept.
+        chosen ?: withContext(dispatcher) { choose() }.also { if (it !== UnreadableOutbox) chosen = it }
     }
 
     private fun choose(): Outbox {

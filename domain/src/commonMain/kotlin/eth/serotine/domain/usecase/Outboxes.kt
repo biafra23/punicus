@@ -202,12 +202,18 @@ class FollowOutbox(
         }
     }
 
-    /** One pass over what is queued; each transaction under [lock], read again inside it. */
+    /**
+     * One pass over what is queued; each transaction under [lock], read again inside it. One still
+     * marked as sending is resolved whatever the light client does: it reads nothing from the
+     * chain, and until it is resolved its bytes are in no record. The rest wait for a verified head.
+     */
     internal suspend fun round() {
         val queued = (outbox.observe().first() as? OutboxList.Loaded)?.queued.orEmpty()
         for (entry in queued) {
             if (entry.signed == null) continue
-            if (lightClient.observeStatus(entry.network).first() !is LightClientStatus.Synced) continue
+            if (!entry.sending && lightClient.observeStatus(entry.network).first() !is LightClientStatus.Synced) {
+                continue
+            }
             lock.mutex.withLock { follow(entry.accountId) }
         }
     }
@@ -279,8 +285,9 @@ class FollowOutbox(
 
     private suspend fun conflicted(entry: QueuedTransaction, conflict: QueueConflict) {
         // The signed bytes go first: nothing can send them once the conflict is found.
-        val kept = outbox.put(entry.copy(signed = null, conflict = conflict, sending = false))
-        if (kept) notifier.conflict(entry, conflict)
+        val stripped = entry.copy(signed = null, conflict = conflict, sending = false)
+        // The notifier is told the copy kept, never the bytes of a transaction not sent.
+        if (outbox.put(stripped)) notifier.conflict(stripped, conflict)
     }
 }
 

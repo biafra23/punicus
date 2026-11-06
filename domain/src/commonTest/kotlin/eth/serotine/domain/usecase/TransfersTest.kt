@@ -31,6 +31,7 @@ import eth.serotine.domain.repository.NameResolution
 import eth.serotine.domain.repository.NameResolver
 import eth.serotine.domain.repository.NativeBalances
 import eth.serotine.domain.repository.NonceReading
+import eth.serotine.domain.repository.Outbox
 import eth.serotine.domain.repository.ReadUnavailable
 import eth.serotine.domain.repository.ReceiptLog
 import eth.serotine.domain.repository.ReceiptTracker
@@ -48,7 +49,6 @@ import eth.serotine.domain.repository.TransactionInputs
 import eth.serotine.domain.repository.TransactionProgress
 import eth.serotine.domain.repository.Unlock
 import eth.serotine.domain.repository.prunable
-import eth.serotine.domain.repository.Outbox
 import kotlin.test.Test
 import kotlin.test.assertContentEquals
 import kotlin.test.assertEquals

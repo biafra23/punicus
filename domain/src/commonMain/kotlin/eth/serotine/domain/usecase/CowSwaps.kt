@@ -29,6 +29,7 @@ import eth.serotine.domain.repository.HistoryStartList
 import eth.serotine.domain.repository.HistoryStarts
 import eth.serotine.domain.repository.LightClient
 import eth.serotine.domain.repository.LightClientStatus
+import eth.serotine.domain.repository.Outbox
 import eth.serotine.domain.repository.ReadUnavailable
 import eth.serotine.domain.repository.SentAction
 import eth.serotine.domain.repository.SentTransfer
@@ -40,7 +41,6 @@ import eth.serotine.domain.repository.TokenBalanceReading
 import eth.serotine.domain.repository.TokenBalances
 import eth.serotine.domain.repository.TransactionInputs
 import eth.serotine.domain.repository.Unlock
-import eth.serotine.domain.repository.Outbox
 import kotlinx.coroutines.async
 import kotlinx.coroutines.flow.first
 

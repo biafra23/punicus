@@ -10,6 +10,7 @@ import eth.serotine.domain.repository.FeeLevel
 import eth.serotine.domain.repository.LightClient
 import eth.serotine.domain.repository.LightClientStatus
 import eth.serotine.domain.repository.NativeBalances
+import eth.serotine.domain.repository.Outbox
 import eth.serotine.domain.repository.ReadUnavailable
 import eth.serotine.domain.repository.SentAction
 import eth.serotine.domain.repository.SentTransfers
@@ -17,7 +18,6 @@ import eth.serotine.domain.repository.Signer
 import eth.serotine.domain.repository.Simulation
 import eth.serotine.domain.repository.TransactionInputs
 import eth.serotine.domain.repository.Unlock
-import eth.serotine.domain.repository.Outbox
 import kotlinx.coroutines.async
 import kotlinx.coroutines.flow.first
 

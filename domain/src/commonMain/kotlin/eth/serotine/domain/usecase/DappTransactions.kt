@@ -12,6 +12,7 @@ import eth.serotine.domain.repository.DappRequests
 import eth.serotine.domain.repository.FeeLevel
 import eth.serotine.domain.repository.NativeBalances
 import eth.serotine.domain.repository.NetworkSettings
+import eth.serotine.domain.repository.Outbox
 import eth.serotine.domain.repository.ReceiptTracker
 import eth.serotine.domain.repository.SentAction
 import eth.serotine.domain.repository.SentTransfer
@@ -25,7 +26,6 @@ import eth.serotine.domain.repository.Signer
 import eth.serotine.domain.repository.TokenCatalog
 import eth.serotine.domain.repository.TransactionInputs
 import eth.serotine.domain.repository.Unlock
-import eth.serotine.domain.repository.Outbox
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.withContext

@@ -205,13 +205,17 @@ internal class CallQuoter(
      * Before that, with [holdQueued], what [from] has queued in the [outbox] (lenient mode): one
      * per account, so nothing new is quoted from it, in either mode, until it is sent or discarded
      * ([CallRefusal.EarlierMaybeSent] with `queued`). The check of that very transaction quotes
-     * without it. An outbox that cannot be read holds nothing back here.
+     * without it. An outbox that cannot be read holds every account back, as the nonce free next
+     * cannot be told ([CallRefusal.Unavailable] for the nonce): it may hold a transaction already
+     * broadcast whose record is not written yet.
      */
     suspend fun heldBack(from: Address, holdQueued: Boolean = true): CallRefusal? {
         if (holdQueued) {
-            val queued = (outbox.observe().first() as? OutboxList.Loaded)?.queued
-                ?.firstOrNull { it.network == network && it.account == from }
-            if (queued != null) return CallRefusal.EarlierMaybeSent(queued.id, queued = true)
+            when (val list = outbox.observe().first()) {
+                OutboxList.Unreadable -> return CallRefusal.Unavailable(ReadUnavailable.UNPROVEN, QuoteFigure.NONCE)
+                is OutboxList.Loaded -> list.queued.firstOrNull { it.network == network && it.account == from }
+                    ?.let { return CallRefusal.EarlierMaybeSent(it.id, queued = true) }
+            }
         }
         val since = clock() - RECORD_LIFETIME_SECONDS
         val maybe = (sentTransfers.observe().first() as? SentTransferList.Loaded)?.transfers.orEmpty()

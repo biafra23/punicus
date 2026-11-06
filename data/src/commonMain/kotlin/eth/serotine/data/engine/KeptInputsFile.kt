@@ -28,9 +28,10 @@ import kotlinx.serialization.json.Json
  * (owner rulings, 2026-11-06). An older block's answer never replaces a newer one's, decided under
  * the file's lock. A count is written again only when it changed or its stored block is
  * [REWRITE_AFTER_BLOCKS] blocks old, and a fee quote only when the stored one is that old, so a
- * value may be a little older than the last answer, never newer. At most [maxKept] counts ([MAX_KEPT] but in tests), the least
- * recently verified dropped first. A file that cannot be read keeps and gives nothing; a damaged
- * one is set aside as every [VersionedJsonFile] is. File work runs on [dispatcher].
+ * value may be a little older than the last answer, never newer. At most [maxKept] counts are
+ * kept ([MAX_KEPT]; fewer in tests), the least recently verified dropped first. A file that cannot
+ * be read keeps and gives nothing; a damaged one is set aside as every [VersionedJsonFile] is. File
+ * work runs on [dispatcher].
  */
 internal class KeptInputsFile(
     path: String,

@@ -18,9 +18,9 @@ import eth.serotine.domain.repository.DappRequest
 import eth.serotine.domain.repository.DappRequestError
 import eth.serotine.domain.repository.DappRequestId
 import eth.serotine.domain.repository.DappSessionId
+import eth.serotine.domain.repository.Outbox
 import eth.serotine.domain.repository.Signing
 import eth.serotine.domain.repository.Simulation
-import eth.serotine.domain.repository.Outbox
 import eth.serotine.domain.usecase.DescribeKeyStore
 import eth.serotine.domain.usecase.ObserveDappMessages
 import eth.serotine.domain.usecase.ProposeDappSafeTx

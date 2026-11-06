@@ -17,6 +17,7 @@ import eth.serotine.domain.repository.DebugScreenSetting
 import eth.serotine.domain.repository.DappRequests
 import eth.serotine.domain.repository.DappSessions
 import eth.serotine.domain.repository.DisplayCurrencySetting
+import eth.serotine.domain.repository.Outbox
 import eth.serotine.domain.usecase.ApproveDappProposal
 import eth.serotine.domain.usecase.DisconnectDapp
 import eth.serotine.domain.usecase.ExtendDappSession
@@ -42,7 +43,6 @@ import eth.serotine.domain.repository.NftContracts
 import eth.serotine.domain.repository.NameResolver
 import eth.serotine.domain.repository.NativeBalances
 import eth.serotine.domain.repository.KeptTransactionInputs
-import eth.serotine.domain.repository.Outbox
 import eth.serotine.domain.repository.SyncPolicySetting
 import eth.serotine.domain.repository.NetworkFreshness
 import eth.serotine.domain.repository.NetworkSettings

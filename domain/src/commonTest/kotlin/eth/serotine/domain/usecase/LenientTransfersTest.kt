@@ -31,6 +31,7 @@ import eth.serotine.domain.repository.OutboxNotifier
 import eth.serotine.domain.repository.QueueConflict
 import eth.serotine.domain.repository.QueueRefusal
 import eth.serotine.domain.repository.QueuedTransaction
+import eth.serotine.domain.repository.ReadUnavailable
 import eth.serotine.domain.repository.SentAction
 import eth.serotine.domain.repository.SentTransfer
 import eth.serotine.domain.repository.SentTransferList
@@ -463,6 +464,28 @@ class LenientTransfersTest {
     }
 
     @Test
+    fun aMarkedEntryIsResolvedWhileTheLightClientSyncsAndCannotBeDiscardedUntilThen() = runTest {
+        val queued = queuedTenth()
+        outbox.put(queued.copy(sending = true))
+        val lock = OutboxLock()
+        assertEquals(QueuedDiscard.BeingSent, DiscardQueued(outbox, lock)(queued.accountId, queued.id), "it may be on the network")
+        assertTrue(outbox.queued.value.single().sending)
+
+        light.status.value = LightClientStatus.CatchingUp(1, 3)
+        follower(FakeBroadcaster(Broadcast.Sent(queued.hash!!)), RecordingNotifier(), lock).round()
+        assertEquals(emptyList(), outbox.queued.value)
+        assertTrue((sent.observe().first() as SentTransferList.Loaded).transfers.single().maybeSent)
+    }
+
+    @Test
+    fun anOutboxThatCannotBeReadHoldsEveryAccountBack() = runTest {
+        outbox.unreadable = true
+        val held = TransferQuoting.Unavailable(ReadUnavailable.UNPROVEN, QuoteFigure.NONCE)
+        assertEquals(held, quotes(alice, bob, TransferAsset.Native, UInt256.of(1), FeeLevel.NORMAL))
+        assertEquals(TransferDrafting.Refused(held), draftTenth())
+    }
+
+    @Test
     fun theHeadroomIsEightyOneSixtyFourthsRoundedUp() {
         assertEquals(UInt256.of(81), UInt256.of(64).withHeadroom())
         assertEquals(UInt256.of(2), UInt256.of(1).withHeadroom())
@@ -548,8 +571,9 @@ class LenientTransfersTest {
 
     private class ListOutbox : Outbox {
         val queued = MutableStateFlow<List<QueuedTransaction>>(emptyList())
+        var unreadable = false
 
-        override fun observe(): Flow<OutboxList> = queued.map { OutboxList.Loaded(it) }
+        override fun observe(): Flow<OutboxList> = queued.map { if (unreadable) OutboxList.Unreadable else OutboxList.Loaded(it) }
 
         override suspend fun put(queued: QueuedTransaction): Boolean {
             this.queued.value = this.queued.value.filterNot { it.accountId == queued.accountId } + queued
@@ -590,6 +614,8 @@ class LenientTransfersTest {
         }
 
         override fun conflict(queued: QueuedTransaction, conflict: QueueConflict) {
+            // Never the bytes of a transaction not sent.
+            assertNull(queued.signed)
             told += "conflict"
         }
     }

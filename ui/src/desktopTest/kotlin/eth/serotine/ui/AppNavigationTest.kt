@@ -93,6 +93,7 @@ import eth.serotine.domain.repository.MetadataReading
 import eth.serotine.domain.repository.NativeBalances
 import eth.serotine.domain.repository.NetworkUpgrades
 import eth.serotine.domain.repository.NewMnemonic
+import eth.serotine.domain.repository.Outbox
 import eth.serotine.domain.repository.ReadUnavailable
 import eth.serotine.domain.repository.ReceiptLog
 import eth.serotine.domain.repository.SafeState
@@ -194,7 +195,6 @@ import eth.serotine.domain.repository.DappRequest
 import eth.serotine.domain.repository.DappRequestError
 import eth.serotine.domain.repository.DappRequestId
 import eth.serotine.domain.repository.DappSessionId
-import eth.serotine.domain.repository.Outbox
 import eth.serotine.ui.dapprequest.DAPP_REQUEST_REFUSE_TAG
 import eth.serotine.domain.usecase.OutboxLock
 
