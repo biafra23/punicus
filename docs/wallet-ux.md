@@ -222,6 +222,16 @@ upgrades*).
      update (docs/embedding-myotis.md, *Network upgrades*).
    - One row per account: blockie (with `t/n` for a Safe), name, short
      address, control badge, native balance and its fiat value.
+   - Under a network's status line, what its accounts have queued in
+     lenient mode (docs/lenient-mode.md, *Where it shows*; owner rulings,
+     2026-11-06): "1 waiting to be sent" (or N), and while its light client
+     catches up, "Keep Serotine open to send it sooner."; "1 needs your
+     signature again" for one the check found in conflict.
+   - Once, when queued signed bytes could not be opened (the outbox's seal
+     key is gone: the key store was reset, or the app restored on another
+     device): "A transaction waiting to be sent was lost …", that nothing
+     was sent and to sign it again from Send, with Dismiss
+     (`Outbox.acknowledgeLost`). Both views.
    - The FAB (2). A long press on a row opens 3; a tap opens 4, or 16 for a
      Safe.
    - With no account yet, it names every way the FAB adds one (watch,
@@ -309,7 +319,33 @@ upgrades*).
      account that may still be on its way (its broadcast found no peer to
      answer, and no block has it): nothing new is quoted from the account
      until it is mined or three hours old, and the step offers its status
-     (9), where it is tried again.
+     (9), where it is tried again. A transaction from the account queued in
+     lenient mode holds a new one back the same way, in either mode (one per
+     account, decision 6): "A transaction from this account is waiting to be
+     sent. Send or discard it first.", with its status (9). Swap, a CoW
+     order's cancellation, a Safe transaction's approval or execution, Create
+     Safe and a dApp's transaction say the same.
+   - **In lenient mode** (Settings → Advanced → *Sign while syncing*, 18;
+     docs/lenient-mode.md; owner rulings, 2026-11-06), while the network's
+     light client catches up:
+     - The asset list also offers a balance last verified, a token's while it
+       was held: "1.25 ETH · last verified at block 8,412,307" (simple mode:
+       "as of 12 min ago"), with no fiat hint beside the amount: a price is
+       never shown last known.
+     - Max on the network's currency leaves room for the most the fee can be
+       (the pinned gas ceiling times the fee cap last verified) and for the
+       account's transactions not mined yet (`DraftTransfer.mostNative`); on
+       a token it is the token's balance. Strict Max is unchanged.
+     - Review quotes strictly first. When that quote says the light client is
+       still syncing, the transfer is drafted on the state last verified
+       instead, and its review is 8's draft. A draft that waits for a value
+       never verified on this device says here what it waits for: the
+       account's balance, its count of transactions, or the network's fees.
+       An ENS name is not resolved for a draft (decision 8): an address or
+       one of the user's accounts is.
+     - A network that is off is not syncing: it runs no light client, its
+       accounts' Send stays greyed out with Turn on (owner ruling,
+       2026-10-22), and nothing is drafted on it.
 8. **Send, review**
    - The amount in token units, exact; the recipient in full, with its
      blockie, the ENS name it was resolved from and its name in the wallet.
@@ -350,6 +386,26 @@ upgrades*).
      for a new one. Nothing is signed twice. One no peer answered may have
      reached one all the same, so it is recorded as maybe sent: leaving the
      screen, or the app, keeps its bytes for Try again on its status (9).
+   - **A draft's review** (lenient mode; docs/lenient-mode.md, *The draft's
+     review*; owner rulings, 2026-11-06). The same screen, with these
+     differences:
+     - On top: "Prepared on data from 12 min ago. It's checked on chain
+       again before it's sent." (the oldest of the figures it is built on).
+     - Each figure says the block it was last verified at: the balances, the
+       nonce (the account's count of mined transactions) and the fee history
+       the fee cap comes from. The most the fee can be is the pinned gas
+       ceiling times that cap.
+     - In place of the verified simulation: "Not checked yet: it runs on
+       chain before it's sent." The balances after say "if nothing changed".
+     - No fiat value, here or in 7's form: a price is never shown last known.
+     - No Refresh, no minute and no deadline: a draft is old by definition,
+       and the minute applies to the check before sending. The biometric
+       prompt has no deadline (`Unlock.WithBiometrics.notAfter` null).
+     - The button is "Sign and queue on ‹network›". Signed, the transaction
+       is queued in the outbox, nothing is broadcast, and its status (9)
+       opens. Signed but not kept (the outbox could not save it), it is said
+       and nothing is queued; another transaction queued meanwhile from the
+       account returns to 7, which says so.
 7H. **Send from another wallet** (issue #255; owner rulings, 2026-11-05).
    For an EOA whose key is not on this device: a watched EOA, or later a
    proxy key of #254 without a live session. Serotine signs nothing: another
@@ -401,6 +457,30 @@ upgrades*).
    known" or a nonce used past the light client's head come back so, and a
    deployment's record is its Safe's only copy. Its three hours and the
    mined count bound it. Done returns to where Send was opened from.
+   - **A queued transaction** (lenient mode; docs/lenient-mode.md, *The
+     outbox*; owner rulings, 2026-11-06). While the id names one in the
+     outbox, the screen shows it: what it sends, then a step before Signed,
+     "Queued: waits for ‹network› to catch up. Keep Serotine open to send it
+     sooner." (decision 7), "Sending…" while its check and broadcast run,
+     then Signed (when, on this device), Broadcast, Included and Finalized,
+     waiting.
+   - Past its hour without a tap (decision 4): "Still send this? You signed
+     it 2 h ago.", with Send now (`ConfirmQueued`), which lets the check send
+     it within the next hour, with no new signature.
+   - A conflict found by the check (*The check before sending*) says its
+     reason in the words its notification uses (`OutboxText.conflictReason`:
+     "Another transaction from this account came first.", "Fees rose since
+     you signed: the most it can cost is now …"), that nothing was sent and
+     its signature was deleted, and offers Sign again and Discard. Sign again
+     discards it and opens Send (7) with the asset, the recipient, the amount
+     and the fee level filled in. One without a conflict offers Edit, which
+     does the same, and Discard.
+   - Discard deletes its signature (`DiscardQueued`) and says "Discarded:
+     its signature was deleted, and nothing was sent." While its check and
+     broadcast run, Discard and Edit are greyed out: "It's being checked and
+     sent." A tap that comes after a peer took it finds it sent, and the
+     screen shows it as sent, never as discarded. Once sent, the same id is
+     the sent transfer's hash, and the screen is as above.
 10. **Watch address**
     - An address or ENS name, and a name for the account.
     - A detection card built from verified code and storage: an EOA; an EOA
@@ -812,6 +892,11 @@ Screens 22 to 24 are the swap screens (docs/swaps.md).
       it is checked so far, or why it is not listed yet. For an EOA, ETH it
       received and transactions sent from it elsewhere are not listed yet
       (issue #85 has the plan for them).
+    - Before every other row, whichever way the rows run, what the account
+      has queued in lenient mode (docs/lenient-mode.md, *Where it shows*;
+      owner rulings, 2026-11-06): "Send 0.1 ETH", "To Savings · 0x5aAe…eAed",
+      when it was signed, and "Waiting to be sent" or "Needs your signature
+      again". A tap opens its status (9).
     - One row per transaction: the blockie of its other side, what it did
       ("Sent 0.25 ETH", "Swapped 100 USDC for at least 4.28845 LINK",
       "Executed: Send 40 USDC", "Deployed a Safe"), whom or what else it
@@ -934,9 +1019,19 @@ Screens 22 to 24 are the swap screens (docs/swaps.md).
     only: *Allow screen recording*, rule 8 of docs/keys-and-signing.md) ·
     Advanced (*Detailed view*, off by default, docs/simple-ui.md; and under
     it, only while it is on, *Debug tab*, a switch in every build: 27;
-    turning it off empties the log) · About. While Detailed view is off,
+    turning it off empties the log; then *Sign while syncing*, below) ·
+    About. While Detailed view is off,
     the screens are simple mode's and the Debug tab is hidden, its switch
-    kept. Tokens opens the list of every token the wallet knows, each with its check (*Tokens* below) and a visible ⋮ menu:
+    kept. *Sign while syncing* (decision 11; docs/lenient-mode.md, *The
+    setting*; owner rulings, 2026-11-06) is lenient mode's switch, one for
+    the app, off by default in every build, in both views: "Prepare and
+    sign transactions before the light client has caught up. They wait to
+    be sent until they check out on chain. If something changed, you're
+    asked to sign again." A switch that cannot be saved stays as it was and
+    says so. While the outbox holds something, it says that turning it off
+    leaves that queued: it is still checked and sent, or discarded by the
+    user (decision 10). A network that is off is not syncing, in either
+    mode: nothing is drafted on it. Tokens opens the list of every token the wallet knows, each with its check (*Tokens* below) and a visible ⋮ menu:
     Copy contract, Hide or Show, and Remove for an added one; Add token
     opens 20.
 19. **Display currency**: USD, EUR, GBP, CHF, JPY, ETH and BTC, limited to the
