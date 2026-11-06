@@ -1,9 +1,11 @@
 package eth.serotine.domain.repository
 
+import eth.serotine.domain.model.AccountId
 import eth.serotine.domain.model.Address
 import eth.serotine.domain.model.DappTransactionRequest
 import eth.serotine.domain.model.Digest
 import eth.serotine.domain.model.EncodedTypedData
+import eth.serotine.domain.model.Network
 import eth.serotine.domain.model.PersonalMessage
 import eth.serotine.domain.model.Signature
 import kotlinx.coroutines.flow.Flow
@@ -33,7 +35,10 @@ sealed interface DappAsk {
      */
     data class SendTransaction(val transaction: DappTransactionRequest) : DappAsk
 
-    /** `wallet_switchEthereumChain` to [chainId]: answered at once, Sepolia alone being a session's chain. */
+    /**
+     * `wallet_switchEthereumChain` to [chainId]: answered at once, with null for a network the session holds
+     * and the unrecognized-chain error for any other.
+     */
     data class SwitchChain(val chainId: Long) : DappAsk
 
     /**
@@ -50,9 +55,9 @@ sealed interface DappAsk {
 data class DappRequest(
     val id: DappRequestId,
     val dapp: DappMetadata,
-    /** The accounts the session gives the dApp: a request naming another is refused. */
-    val sessionAccounts: List<Address>,
-    /** The chain it names, as CAIP-2 (`eip155:11155111`): the adapter keeps only Sepolia's. */
+    /** The accounts the session gives the dApp, each on its network: a request naming another is refused. */
+    val sessionAccounts: List<AccountId>,
+    /** The chain it names, as CAIP-2 (`eip155:100`): the adapter keeps only its session's ([sessionNetworks]). */
     val chain: String,
     val ask: DappAsk,
     /** When the dApp stops waiting for an answer, in unix seconds. */
@@ -63,7 +68,12 @@ data class DappRequest(
      * then on, never another.
      */
     val safeTx: Digest? = null,
-)
+    /** The networks its session holds ([DappSession.networks]): the chains it may name, and switch to. */
+    val sessionNetworks: Set<Network> = sessionAccounts.map { it.network }.toSet(),
+) {
+    /** The network [chain] names, or null for one Serotine has no dApp sessions on. */
+    val network: Network? get() = dappNetworkOf(chain)
+}
 
 /** The error a request is answered with, as EIP-1193 names them. */
 enum class DappRequestError {
@@ -76,7 +86,7 @@ enum class DappRequestError {
     /** 4200: a method this version does not answer. */
     UNSUPPORTED_METHOD,
 
-    /** 4902: a chain the session cannot switch to (Sepolia alone, for now). */
+    /** 4902: a chain the session cannot switch to: one it does not hold, of the other kind of funds above all. */
     UNRECOGNIZED_CHAIN,
 
     /** -32602: its parameters are not the method's. */
@@ -109,9 +119,9 @@ enum class DappAnswer {
 
 /**
  * The requests dApps send over their sessions (docs/walletconnect.md, *Direction 1*), and their answers.
- * Only the closed list of methods reaches this port, on Sepolia alone (owner rulings, 2026-11-03, #22):
- * the adapter answers every other request itself. No key reaches it: a signature comes from the signer
- * port, made over a digest computed in `:domain`. Never throws.
+ * Only the closed list of methods reaches this port, on its session's networks (owner rulings, 2026-11-03,
+ * #22; 2026-11-05, on #22): the adapter answers every other request itself. No key reaches it: a signature
+ * comes from the signer port, made over a digest computed in `:domain`. Never throws.
  */
 interface DappRequests {
 
@@ -124,8 +134,15 @@ interface DappRequests {
     /** Answers [request] with [hash], `0x` and 64 hex digits: the transaction it asked for, sent. */
     suspend fun answerTransaction(request: DappRequestId, hash: String): DappAnswer
 
-    /** Answers [request] with JSON's null: what `wallet_switchEthereumChain` answers when it succeeds. */
+    /** Answers [request] with JSON's null. */
     suspend fun answerNull(request: DappRequestId): DappAnswer
+
+    /**
+     * Answers [request], a `wallet_switchEthereumChain` to [network], as switched: JSON's null, then, where
+     * its session carries it, the `chainChanged` event naming [network]. [network] must be one its session
+     * holds: any other is refused with [DappRequestError.UNRECOGNIZED_CHAIN] instead, never switched to.
+     */
+    suspend fun answerChainSwitch(request: DappRequestId, network: Network): DappAnswer
 
     /** Answers [request] with the error [why]. */
     suspend fun refuse(request: DappRequestId, why: DappRequestError): DappAnswer

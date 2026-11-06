@@ -5,6 +5,7 @@ import eth.serotine.ui.components.Control
 import eth.serotine.ui.components.LightClientItem
 import eth.serotine.ui.components.NetworkLabel
 import eth.serotine.ui.components.verifiedStripSample
+import eth.serotine.ui.ScreenPreview
 import eth.serotine.ui.theme.SerotineTheme
 import org.jetbrains.compose.ui.tooling.preview.Preview
 
@@ -304,30 +305,30 @@ private fun WatchNoNetworkPreview() = WatchPreview(
 )
 
 /** Every preview above, which WatchScreenPreviewsTest renders: a new preview goes in here too. */
-internal val watchScreenPreviews: List<@Composable () -> Unit> = listOf(
-    { WatchEmptyPreview() },
-    { WatchCheckingPreview() },
-    { WatchAccountPreview() },
-    { WatchAccountDarkPreview() },
-    { WatchDelegatedAccountPreview() },
-    { WatchSafePreview() },
-    { WatchNotASafePreview() },
-    { WatchInWalletPreview() },
-    { WatchUnavailablePreview() },
-    { WatchInvalidAddressPreview() },
-    { WatchNameTooLongPreview() },
-    { WatchGnosisNoNamesPreview() },
-    { WatchAddingPreview() },
-    { WatchNotSavedPreview() },
-    { WatchResolvingNamePreview() },
-    { WatchNameResolvedPreview() },
-    { WatchNameOnOneRegistryPreview() },
-    { WatchNameUnverifiedOnOneRegistryPreview() },
-    { WatchNameMovedPreview() },
-    { WatchNameUnavailablePreview() },
-    { WatchNameResolvedNoNamePreview() },
-    { WatchEveryNetworkPreview() },
-    { WatchChooseNetworksPreview() },
-    { WatchSafeOnOneNetworkPreview() },
-    { WatchNoNetworkPreview() },
+internal val watchScreenPreviews: List<ScreenPreview> = listOf(
+    ScreenPreview("empty") { WatchEmptyPreview() },
+    ScreenPreview("checking") { WatchCheckingPreview() },
+    ScreenPreview("account") { WatchAccountPreview() },
+    ScreenPreview("account-dark") { WatchAccountDarkPreview() },
+    ScreenPreview("delegated-account") { WatchDelegatedAccountPreview() },
+    ScreenPreview("safe") { WatchSafePreview() },
+    ScreenPreview("not-a-safe") { WatchNotASafePreview() },
+    ScreenPreview("in-wallet") { WatchInWalletPreview() },
+    ScreenPreview("unavailable") { WatchUnavailablePreview() },
+    ScreenPreview("invalid-address") { WatchInvalidAddressPreview() },
+    ScreenPreview("name-too-long") { WatchNameTooLongPreview() },
+    ScreenPreview("gnosis-no-names") { WatchGnosisNoNamesPreview() },
+    ScreenPreview("adding") { WatchAddingPreview() },
+    ScreenPreview("not-saved") { WatchNotSavedPreview() },
+    ScreenPreview("resolving-name") { WatchResolvingNamePreview() },
+    ScreenPreview("name-resolved") { WatchNameResolvedPreview() },
+    ScreenPreview("name-on-one-registry") { WatchNameOnOneRegistryPreview() },
+    ScreenPreview("name-unverified-on-one-registry") { WatchNameUnverifiedOnOneRegistryPreview() },
+    ScreenPreview("name-moved") { WatchNameMovedPreview() },
+    ScreenPreview("name-unavailable") { WatchNameUnavailablePreview() },
+    ScreenPreview("name-resolved-no-name") { WatchNameResolvedNoNamePreview() },
+    ScreenPreview("every-network") { WatchEveryNetworkPreview() },
+    ScreenPreview("choose-networks") { WatchChooseNetworksPreview() },
+    ScreenPreview("safe-on-one-network") { WatchSafeOnOneNetworkPreview() },
+    ScreenPreview("no-network") { WatchNoNetworkPreview() },
 )

@@ -1,7 +1,22 @@
 package eth.serotine.domain.repository
 
-import eth.serotine.domain.model.Address
+import eth.serotine.domain.model.AccountId
+import eth.serotine.domain.model.Network
 import kotlinx.coroutines.flow.Flow
+
+/** The CAIP-2 id of this network's chain, as WalletConnect names it: `eip155:` and its EIP-155 chain id. */
+val Network.caip2: String get() = "eip155:$chainId"
+
+/**
+ * The network whose chain [chain] names, as CAIP-2 (`eip155:1`), or null for one Serotine has no dApp
+ * sessions on (docs/walletconnect.md, ruling 9 as amended, 2026-11-05). Strict: the chain id in decimal,
+ * with no sign or leading zero.
+ */
+fun dappNetworkOf(chain: String): Network? {
+    val id = chain.removePrefix("eip155:").takeIf { it != chain } ?: return null
+    if (id.isEmpty() || id.length > 18 || id.first() == '0' || !id.all { it in '0'..'9' }) return null
+    return Network.ofChainId(id.toLong())
+}
 
 /**
  * A dApp's description of itself, as it states it when it connects (docs/walletconnect.md, ruling 7):
@@ -18,11 +33,17 @@ data class DappSessionId(val topic: String)
 
 /** Why a proposal can only be rejected (docs/walletconnect.md, *Pairing and the session proposal*). */
 enum class DappRefusal {
-    /** It requires a chain other than Sepolia: dApp sessions are on Sepolia alone for now (ruling 9). */
+    /** It requires a chain Serotine has no dApp sessions on: none but Ethereum, Gnosis Chain and Sepolia. */
     OTHER_CHAIN,
 
-    /** It does not ask for Sepolia at all. */
-    NO_SEPOLIA,
+    /**
+     * It requires real funds and testnet together: a session holds Ethereum and Gnosis Chain, or Sepolia
+     * alone, never both (owner ruling, 2026-11-05, on #22).
+     */
+    MIXED_FUNDS,
+
+    /** It asks for no chain Serotine has dApp sessions on at all. */
+    NO_NETWORK,
 
     /** It requires a method outside the closed list (ruling 6), `eth_sign` among them. */
     METHOD,
@@ -47,19 +68,46 @@ data class DappProposal(
     val refusal: DappRefusal?,
     /** When the dApp stops waiting for an answer, in unix seconds. */
     val expiresAtSeconds: Long,
-)
+) {
+    /** The networks it requires: one kind of funds, or it is refused ([DappRefusal.MIXED_FUNDS]). */
+    val requiredNetworks: Set<Network> get() = requiredChains.mapNotNull(::dappNetworkOf).toSet()
+
+    /**
+     * The networks a session with it may hold, so the networks of the accounts it may be offered: those it
+     * asks for, required or optional, that Serotine serves; of the kind of funds its required ones are, when
+     * it requires any.
+     */
+    val networks: Set<Network>
+        get() {
+            val kind = requiredNetworks.map { it.testnet }.distinct().singleOrNull() ?: return askedNetworks
+            return askedNetworks.filter { it.testnet == kind }.toSet()
+        }
+
+    /** Every network it asks for, required or optional, that Serotine serves, of either kind of funds. */
+    val askedNetworks: Set<Network> get() = (requiredChains + optionalChains).mapNotNull(::dappNetworkOf).toSet()
+}
 
 /** A session with a dApp. */
 data class DappSession(
     val id: DappSessionId,
     val dapp: DappMetadata,
-    /** The Sepolia accounts the dApp sees. */
-    val accounts: List<Address>,
+    /** The accounts the dApp sees, each on its own network. */
+    val accounts: List<AccountId>,
     val methods: List<String>,
     /** When it ends unless extended, in unix seconds. */
     val expiresAtSeconds: Long,
     /** Whether the dApp has confirmed the session. */
     val acknowledged: Boolean,
+    /**
+     * The networks the session holds, of one kind of funds: its requests may name these alone, and its
+     * dApp may switch between them. Its accounts' networks, and those the dApp required.
+     */
+    val networks: Set<Network> = accounts.map { it.network }.toSet(),
+    /**
+     * The networks its dApp required: each keeps an account of the session, or the session ends, as WalletConnect
+     * has a session cover every chain its proposal requires.
+     */
+    val requiredNetworks: Set<Network> = emptySet(),
 )
 
 /** Whether the relay connection is open: dApp messages arrive only while it is. */
@@ -135,8 +183,9 @@ sealed interface DappApproval {
 
 /**
  * dApp sessions over WalletConnect v2 (docs/walletconnect.md, *Direction 1*): pairing from a `wc:`
- * URI, the proposals a dApp makes, the sessions approved, on Sepolia alone and with the closed list of
- * methods (owner rulings, 2026-11-03, #22). What arrives this way is untrusted input: the adapter
+ * URI, the proposals a dApp makes, the sessions approved, with the closed list of methods (owner rulings,
+ * 2026-11-03, #22), each on Ethereum and Gnosis Chain or on Sepolia alone (owner ruling, 2026-11-05, on
+ * #22). What arrives this way is untrusted input: the adapter
  * checks it, and a proposal that asks for more than a session may have comes with its [DappRefusal].
  * Never throws.
  */
@@ -148,8 +197,12 @@ interface DappSessions {
     /** Pairs with the dApp of [uri], a `wc:` URI as the dApp shows it. */
     suspend fun pair(uri: String): DappPairing
 
-    /** Approves [proposal] with the Sepolia [accounts] the dApp is to see. */
-    suspend fun approve(proposal: DappProposalId, accounts: List<Address>): DappApproval
+    /**
+     * Approves [proposal] with the [accounts] the dApp is to see: on networks it asked for, of one kind of
+     * funds, with at least one on each network it requires. The session holds their networks and those the
+     * proposal requires.
+     */
+    suspend fun approve(proposal: DappProposalId, accounts: List<AccountId>): DappApproval
 
     /** Rejects [proposal], telling the dApp. True once saved. */
     suspend fun reject(proposal: DappProposalId): Boolean
@@ -160,6 +213,9 @@ interface DappSessions {
     /** Extends [session] to seven days from now. True once saved. */
     suspend fun extend(session: DappSessionId): Boolean
 
-    /** Gives [session] the Sepolia [accounts] instead, telling the dApp (`accountsChanged`). True once saved. */
-    suspend fun updateAccounts(session: DappSessionId, accounts: List<Address>): Boolean
+    /**
+     * Gives [session] the [accounts] instead, telling the dApp (`accountsChanged`), each on one of the
+     * session's networks. True once saved.
+     */
+    suspend fun updateAccounts(session: DappSessionId, accounts: List<AccountId>): Boolean
 }

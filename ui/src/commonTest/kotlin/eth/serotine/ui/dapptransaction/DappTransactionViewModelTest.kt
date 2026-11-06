@@ -94,7 +94,7 @@ class DappTransactionViewModelTest {
     private fun request(id: Long, transaction: DappTransactionRequest) = DappRequest(
         DappRequestId(DappSessionId("t"), id),
         DappMetadata("Example dApp", "https://app.example.org", ""),
-        listOf(held.address),
+        listOf(held.id),
         "eip155:11155111",
         DappAsk.SendTransaction(transaction),
         now + 300,
@@ -112,7 +112,7 @@ class DappTransactionViewModelTest {
             SendDappTransaction(requests, accounts, networks, signer, broadcaster, sent, history, FakeReceipts(), clock = { now }),
             // A Safe's side, never reached from an account held here.
             ProposeDappSafeTx(requests, accounts, networks, catalog, safes.observeSafe, balances, inputs, safes.queue, clock = { now }),
-            SignDappSafeTx(requests, SignSafeTx(signer, safes.observeSafe, safes.recovery, safes.queue, Network.SEPOLIA)),
+            SignDappSafeTx(requests) { SignSafeTx(signer, safes.observeSafe, safes.recovery, safes.queue, it) },
             RefuseDappRequest(requests, accounts, networks, clock = { now }),
             DescribeKeyStore(FakeKeys()),
             clock = { now },

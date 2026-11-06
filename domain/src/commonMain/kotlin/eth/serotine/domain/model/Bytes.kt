@@ -38,11 +38,23 @@ internal fun keccak256(bytes: ByteArray): ByteArray = Keccak256().digest(bytes)
 internal fun hasValidChecksum(text: String): Boolean {
     val digits = text.trim().let { if (it.startsWith("0x") || it.startsWith("0X")) it.drop(2) else it }
     if (digits == digits.lowercase() || digits == digits.uppercase()) return true
-    val lower = digits.lowercase()
+    val address = Address.parse("0x$digits") ?: return false
+    return checksummed(address).drop(2) == digits
+}
+
+/**
+ * [address] in its EIP-55 form: `0x` and 40 hex digits whose case carries the checksum. What a
+ * payment link (`PaymentLinks`) names an address as, so that a wallet that checks the checksum
+ * accepts it.
+ */
+internal fun checksummed(address: Address): String {
+    val lower = address.hex.removePrefix("0x")
     val hash = keccak256(lower.encodeToByteArray())
-    return digits.indices.all { i ->
-        val nibble = (hash[i / 2].toInt() shr (if (i % 2 == 0) 4 else 0)) and 0x0f
-        val digit = lower[i]
-        digits[i] == if (digit in 'a'..'f' && nibble >= 8) digit.uppercaseChar() else digit
+    return buildString(2 + lower.length) {
+        append("0x")
+        lower.forEachIndexed { i, digit ->
+            val nibble = (hash[i / 2].toInt() shr (if (i % 2 == 0) 4 else 0)) and 0x0f
+            append(if (digit in 'a'..'f' && nibble >= 8) digit.uppercaseChar() else digit)
+        }
     }
 }

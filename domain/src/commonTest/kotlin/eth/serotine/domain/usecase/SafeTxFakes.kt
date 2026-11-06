@@ -55,17 +55,20 @@ import kotlinx.coroutines.flow.map
  * [carol], not in the wallet — at threshold 2 and nonce 4, and the fakes of every port its
  * transactions go through. Every signature is made up ([FakeRecovery]): no key exists anywhere.
  */
-internal class SafeWorld {
+internal class SafeWorld(
+    /** The network the Safe and its owners are on: Sepolia unless a test says otherwise. */
+    val network: Network = Network.SEPOLIA,
+) {
     val safe = Address.of("0x" + "5a".repeat(20))
     val alice = Account(
-        Network.SEPOLIA,
+        network,
         Address.of("0x" + "11".repeat(20)),
         AccountKind.EOA,
         "Alice",
         AccountCustody.InKeyStore,
     )
     val bob = Account(
-        Network.SEPOLIA,
+        network,
         Address.of("0x" + "22".repeat(20)),
         AccountKind.EOA,
         "Bob",
@@ -87,7 +90,7 @@ internal class SafeWorld {
     val accounts = ListAccountRepository(
         alice,
         bob,
-        Account(Network.SEPOLIA, safe, AccountKind.SAFE, "Treasury", AccountCustody.Watched),
+        Account(network, safe, AccountKind.SAFE, "Treasury", AccountCustody.Watched),
     )
     val observeSafe = ObserveSafe(kinds, accounts)
     val recovery = FakeRecovery()
@@ -114,7 +117,7 @@ internal class SafeWorld {
 
     /** A request for this Safe, signed by [first] and [second] (none when null). */
     fun request(tx: SafeTx, first: Address? = null, second: Address? = null): SigningRequest {
-        val unsigned = SigningRequest.of(Network.SEPOLIA, safe, tx)
+        val unsigned = SigningRequest.of(network, safe, tx)
         return unsigned.withSignatures(
             listOfNotNull(first, second).map { SafeSignature.Ecdsa(it, recovery.sign(it, unsigned.hash)) },
         )

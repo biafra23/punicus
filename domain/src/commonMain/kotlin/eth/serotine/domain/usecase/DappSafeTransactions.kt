@@ -108,15 +108,15 @@ class ProposeDappSafeTx(
     private val queue: SafeTxQueue,
     private val clock: () -> Long = ::epochSecondsNow,
 ) {
-    private val network = Network.SEPOLIA
-
     suspend operator fun invoke(id: DappRequestId): DappSafeProposing = cancellingReads {
         val request = requests.observe().first().firstOrNull { it.id == id }
             ?: return@cancellingReads DappSafeProposing.Gone
         val list = (accounts.observeAccounts().first() as? AccountList.Loaded)?.accounts
-        val catalog = tokens.observeTokens(network).first()
+        val catalog = request.network?.let { tokens.observeTokens(it).first() }.orEmpty()
         val review = reviewDappMessage(request, list, networks.observe().first(), clock(), catalog)
             ?: return@cancellingReads DappSafeProposing.Gone
+        // Everything is read and proposed on the request's network: a review without a refusal has one.
+        val network = request.network ?: return@cancellingReads DappSafeProposing.Refused(DappSignRefusal.OTHER_CHAIN)
         val transaction = (review.content as? DappSignContent.Transaction)?.transaction
             ?: return@cancellingReads DappSafeProposing.Gone
         val safe = AccountId(network, transaction.from)
@@ -213,18 +213,22 @@ sealed interface DappSafeSigning {
  * [SignSafeTx] signs one (screen D6). Once the signature is made, and before it is queued, the request
  * is tied to the Safe transaction ([DappRequests.recordSafeTx]): nothing is queued unless that is saved, so
  * a request signed for is that Safe transaction, never another, and is answered from its execution alone.
- * A signature not made (a wrong password, a prompt cancelled) ties nothing.
+ * A signature not made (a wrong password, a prompt cancelled) ties nothing. It is signed on the Safe
+ * transaction's own network, by [signSafeTx]'s signer for it: a dApp's request on Gnosis Chain is a Gnosis
+ * Chain Safe's.
  */
 class SignDappSafeTx(
     private val requests: DappRequests,
-    private val signSafeTx: SignSafeTx,
+    /** The Safe transaction signer of each network: [SignSafeTx] refuses a request of another network. */
+    private val signSafeTx: (Network) -> SignSafeTx,
 ) {
     /** Whether the owner may sign [proposal] now, as [SignSafeTx.check], waiting at most [budget]. */
     suspend fun check(proposal: DappSafeProposal, budget: Duration = SAFE_CHECK_BUDGET): SafeTxSignCheck =
-        signSafeTx.check(proposal.proposal.request, proposal.heldOwners.first(), budget)
+        signerOf(proposal).check(proposal.proposal.request, proposal.heldOwners.first(), budget)
 
     /** Signs [checked] with [unlock], ties [proposal]'s request to it, and queues it. */
     suspend fun sign(proposal: DappSafeProposal, checked: SafeTxSignCheck.Ready, unlock: Unlock): DappSafeSigning {
+        val signSafeTx = signerOf(proposal)
         val signed = when (val made = signSafeTx.signature(checked, unlock)) {
             is SafeTxSignature.Made -> made.request
             is SafeTxSignature.NotMade -> return when (val outcome = made.outcome) {
@@ -238,6 +242,8 @@ class SignDappSafeTx(
         val queued = signSafeTx.queue(checked, signed)
         return DappSafeSigning.Signed(queued.request, queued.saved)
     }
+
+    private fun signerOf(proposal: DappSafeProposal): SignSafeTx = signSafeTx(proposal.proposal.request.network)
 }
 
 /** The Safe transaction [safeTx] of [safe], when it is in the queue. */
@@ -246,15 +252,20 @@ internal suspend fun queued(queue: SafeTxQueue, safe: AccountId, safeTx: Digest)
         ?.firstOrNull { it.network == safe.network && it.safe == safe.address && it.hash == safeTx }
 
 /**
- * The execution sent of the Safe transaction [safeTx], on Sepolia: an `execTransaction` of it in the sent
+ * The execution sent of the Safe transaction [safeTx], on [network]: an `execTransaction` of it in the sent
  * record or the history, with where it stands; of several (one sent again after another was dropped), the
  * one furthest along. What answers the dApp with the hash of the transaction sent, never the `safeTxHash`
  * (docs/walletconnect.md, *Transactions*).
  */
-internal fun executionFor(safeTx: Digest, sent: List<SentTransfer>, past: List<HistoryEntry>): SignedAnswer? {
+internal fun executionFor(
+    safeTx: Digest,
+    network: Network,
+    sent: List<SentTransfer>,
+    past: List<HistoryEntry>,
+): SignedAnswer? {
     fun executes(transfer: SentTransfer): Boolean {
         val request = (transfer.action as? SentAction.SafeExecution)?.request ?: return false
-        return transfer.network == Network.SEPOLIA && request.network == Network.SEPOLIA && request.hash == safeTx
+        return transfer.network == network && request.network == network && request.hash == safeTx
     }
     val hashes =
         (sent.filter(::executes).map { it.hash } + past.filter { executes(it.transfer) }.map { it.transfer.hash })

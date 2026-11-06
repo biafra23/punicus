@@ -2,6 +2,7 @@ package eth.serotine.ui.debug
 
 import androidx.compose.runtime.Composable
 import eth.serotine.domain.model.LogLevel
+import eth.serotine.ui.ScreenPreview
 import eth.serotine.ui.theme.SerotineTheme
 import org.jetbrains.compose.ui.tooling.preview.Preview
 
@@ -84,11 +85,11 @@ private fun DebugFilteredPreview() = DebugPreview(
 private fun DebugNoMatchPreview() = DebugPreview(info.copy(filter = "sendRaw", lines = emptyList()))
 
 /** Every preview above, which DebugScreenPreviewsTest renders: a new preview goes in here too. */
-internal val debugScreenPreviews: List<@Composable () -> Unit> = listOf(
-    { DebugInfoPreview() },
-    { DebugInfoDarkPreview() },
-    { DebugDetailPreview() },
-    { DebugEmptyPreview() },
-    { DebugFilteredPreview() },
-    { DebugNoMatchPreview() },
+internal val debugScreenPreviews: List<ScreenPreview> = listOf(
+    ScreenPreview("info") { DebugInfoPreview() },
+    ScreenPreview("info-dark") { DebugInfoDarkPreview() },
+    ScreenPreview("detail") { DebugDetailPreview() },
+    ScreenPreview("empty") { DebugEmptyPreview() },
+    ScreenPreview("filtered") { DebugFilteredPreview() },
+    ScreenPreview("no-match") { DebugNoMatchPreview() },
 )

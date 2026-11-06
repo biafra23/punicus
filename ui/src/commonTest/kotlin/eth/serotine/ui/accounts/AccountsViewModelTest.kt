@@ -17,6 +17,7 @@ import eth.serotine.domain.repository.AddressKind
 import eth.serotine.domain.repository.AddressKinds
 import eth.serotine.domain.repository.AmountsHiddenSetting
 import eth.serotine.domain.repository.BalanceReading
+import eth.serotine.domain.repository.HandoffAvailability
 import eth.serotine.domain.repository.KindReading
 import eth.serotine.domain.repository.KnownUpgrade
 import eth.serotine.domain.repository.KnownUpgradeStore
@@ -44,6 +45,7 @@ import eth.serotine.domain.usecase.ObserveSafes
 import eth.serotine.domain.usecase.ObserveTokenHoldings
 import eth.serotine.domain.usecase.ObserveUpgradeWarnings
 import eth.serotine.domain.usecase.ObserveUsdPrice
+import eth.serotine.domain.usecase.OfferHandoff
 import eth.serotine.domain.usecase.RefreshNetworkData
 import eth.serotine.domain.usecase.SetNetworkEnabled
 import eth.serotine.domain.usecase.SyncPastStaleAnchor
@@ -55,6 +57,7 @@ import eth.serotine.ui.FakeMetadata
 import eth.serotine.ui.FakeNames
 import eth.serotine.ui.FakeTokenBalances
 import eth.serotine.ui.FakeTokenCatalog
+import eth.serotine.ui.FakeWalletHandoff
 import eth.serotine.ui.MemoryAmountsHidden
 import eth.serotine.ui.MemoryCurrencySetting
 import eth.serotine.ui.MemoryNetworkSettings
@@ -62,9 +65,11 @@ import eth.serotine.ui.MemoryUserTokens
 import eth.serotine.ui.components.AMOUNT_MASK
 import eth.serotine.ui.components.Control
 import eth.serotine.ui.components.Eip55
+import eth.serotine.ui.components.HandoffChoice
 import eth.serotine.ui.components.LightClientHealth
 import eth.serotine.ui.components.LightClientHealth.NOT_VERIFIED
 import eth.serotine.ui.components.LightClientItem
+import eth.serotine.ui.components.NO_WALLET
 import eth.serotine.ui.components.NetworkLabel
 import eth.serotine.ui.components.shortAddress
 import eth.serotine.ui.update.UpgradeBannerItem
@@ -132,7 +137,10 @@ class AccountsViewModelTest {
         totalNote: String? = "Testnet prices · still checking",
     ) = NetworkSection(Network.SEPOLIA.chainId, "Sepolia", testnet = true, on = true, status, accounts, total, totalNote)
 
-    private fun viewModel(hiddenSetting: AmountsHiddenSetting = amountsHidden): AccountsViewModel {
+    private fun viewModel(
+        hiddenSetting: AmountsHiddenSetting = amountsHidden,
+        offerHandoff: OfferHandoff? = null,
+    ): AccountsViewModel {
         val currencies = ObserveDisplayCurrencies(feeds, currency, repository)
         val value = ObserveAccountValue(
             ObserveNativeBalance(balances),
@@ -158,6 +166,7 @@ class AccountsViewModelTest {
             ToggleAmountsHidden(hiddenSetting),
             clock = { now },
             formatTime = { "<$it>" },
+            offerHandoff = offerHandoff,
         )
     }
 
@@ -231,6 +240,35 @@ class AccountsViewModelTest {
             treasuryItem("2.5 ETH", verified = true).copy(value = "Checking price…"),
             (viewModel.uiState.value as AccountsUiState.Ready).accounts.single(),
         )
+    }
+
+    @Test
+    fun aWatchedEoaIsOfferedSendFromAnotherWalletAndAKeyHeldHereOrASafeIsNot() = runTest {
+        Dispatchers.setMain(UnconfinedTestDispatcher(testScheduler))
+        val watched =
+            Account(Network.SEPOLIA, Address.of("0x" + "cd".repeat(20)), AccountKind.EOA, "Cold", AccountCustody.Watched)
+        val held = watched.copy(
+            address = Address.of("0x" + "ef".repeat(20)),
+            label = "Daily",
+            custody = AccountCustody.InKeyStore,
+        )
+        repository.accounts = listOf(watched, held, treasury)
+        val wallets = FakeWalletHandoff()
+        val viewModel = viewModel(offerHandoff = OfferHandoff(wallets))
+        backgroundScope.launch { viewModel.uiState.collect {} }
+        runCurrent()
+
+        val rows = (viewModel.uiState.value as AccountsUiState.Ready).accounts.associateBy { it.label }
+        assertEquals(HandoffChoice(), rows.getValue("Cold").handoff, "offered")
+        assertEquals(null, rows.getValue("Daily").handoff, "Send signs for it")
+        assertEquals(null, rows.getValue("Treasury").handoff, "a link cannot sign a Safe transaction")
+
+        // No wallet app: shown greyed out, with what to install.
+        wallets.availability = HandoffAvailability.NO_WALLET
+        balances.of(watched.address).value = BalanceReading.Verified(Wei.of("1"), 9)
+        runCurrent()
+        val cold = (viewModel.uiState.value as AccountsUiState.Ready).accounts.first { it.label == "Cold" }
+        assertEquals(HandoffChoice(NO_WALLET), cold.handoff)
     }
 
     @Test

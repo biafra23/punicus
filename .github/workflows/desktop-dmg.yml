@@ -48,12 +48,14 @@ jobs:
     # jpackage bundles a single-architecture JRE and can't emit a universal binary, so one
     # .dmg per arch. jpackage stamps the .app with the architecture of the JDK it runs under,
     # NOT the host — so the Intel dmg is cross-built on Apple Silicon by running an x86_64
-    # JDK under Rosetta 2. BOTH jobs therefore run on macos-14 (Apple Silicon):
+    # JDK under Rosetta 2. BOTH jobs therefore run on macos-15 (Apple Silicon):
     #   arm64 → native aarch64 JDK           (dmg runs on M-series Macs)
     #   x64   → x86_64 JDK under Rosetta 2    (dmg runs on Intel Macs)
     # Not the Intel macos-13 runner: GitHub is winding down Intel macOS capacity, so those
     # jobs queue until the 24h cap. An arm64 .dmg will NOT launch on an Intel Mac, so users
-    # download the one matching their Mac.
+    # download the one matching their Mac. macos-15, as the iOS workflow uses: GitHub retired
+    # the macos-14 image, whose jobs are now cancelled before their first step ("The
+    # configuration 'macos-14-arm64-us-default' is not supported", 2026-11-06).
     strategy:
       fail-fast: false
       # PRs — and a dispatch on a branch, which stands in for the PR leg a part
@@ -67,7 +69,7 @@ jobs:
         include: ${{ (github.event_name == 'pull_request' || (github.event_name == 'workflow_dispatch' && !startsWith(github.ref, 'refs/tags/')))
           && fromJSON('[{"arch":"arm64","java-arch":"aarch64"}]')
           || fromJSON('[{"arch":"arm64","java-arch":"aarch64"},{"arch":"x64","java-arch":"x64"}]') }}
-    runs-on: macos-14
+    runs-on: macos-15
     permissions:
       contents: read
     env:
@@ -120,13 +122,14 @@ jobs:
       # Unsigned — Gatekeeper needs a right-click → Open the first time; notarization
       # (Apple Developer ID) is a follow-up. Retry to ride out transient repo-resolution blips.
       - name: Build macOS .dmg (${{ matrix.arch }})
-        # The Reown project IDs (docs/walletconnect.md, *Setting up the project ID*), which :data
-        # compiles into the app: the installers are release builds, so the release ID alone. Scoped
-        # to this step, the one that needs them, so no other step's action can read them.
-        # A pull request from a fork or Dependabot gets no secrets: its build has them empty, and so
-        # WalletConnect switched off, as a local build without them does.
+        # The Reown project ID (docs/walletconnect.md, *Setting up the project ID*), which :data
+        # compiles into the app: the repository's secret or variable WALLETCONNECT_PROJECT_ID, one
+        # ID for debug and release builds for now (owner ruling, 2026-11-05). The installers are release
+        # builds, so they get the release property alone.
+        # Scoped to this step, the one that needs it. Without it, the build has WalletConnect
+        # switched off, as a local build without one does.
         env:
-          ORG_GRADLE_PROJECT_walletConnectProjectIdRelease: ${{ secrets.WALLETCONNECT_PROJECT_ID_RELEASE }}
+          ORG_GRADLE_PROJECT_walletConnectProjectIdRelease: ${{ secrets.WALLETCONNECT_PROJECT_ID || vars.WALLETCONNECT_PROJECT_ID }}
         run: |
           GRADLE_ARGS="-Porg.gradle.java.installations.auto-detect=false -Porg.gradle.java.installations.auto-download=false -Porg.gradle.java.installations.paths=$JAVA_HOME"
           for attempt in 1 2 3; do

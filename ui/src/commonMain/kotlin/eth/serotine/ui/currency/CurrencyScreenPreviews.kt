@@ -1,6 +1,7 @@
 package eth.serotine.ui.currency
 
 import androidx.compose.runtime.Composable
+import eth.serotine.ui.ScreenPreview
 import eth.serotine.ui.theme.SerotineTheme
 import org.jetbrains.compose.ui.tooling.preview.Preview
 
@@ -56,9 +57,9 @@ private fun CurrencyUnreadablePreview() = CurrencyPreview(
 )
 
 /** Every preview above, which CurrencyScreenPreviewsTest renders: a new preview goes in here too. */
-internal val currencyScreenPreviews: List<@Composable () -> Unit> = listOf(
-    { CurrencyChosenPreview() },
-    { CurrencyChosenDarkPreview() },
-    { CurrencySetAsidePreview() },
-    { CurrencyUnreadablePreview() },
+internal val currencyScreenPreviews: List<ScreenPreview> = listOf(
+    ScreenPreview("chosen") { CurrencyChosenPreview() },
+    ScreenPreview("chosen-dark") { CurrencyChosenDarkPreview() },
+    ScreenPreview("set-aside") { CurrencySetAsidePreview() },
+    ScreenPreview("unreadable") { CurrencyUnreadablePreview() },
 )

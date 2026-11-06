@@ -11,6 +11,8 @@ import eth.serotine.domain.model.UInt256
 import eth.serotine.domain.repository.AddressKinds
 import eth.serotine.domain.repository.ApprovalReading
 import eth.serotine.domain.repository.BalanceReading
+import eth.serotine.domain.repository.BlockReading
+import eth.serotine.domain.repository.BlockTransactions
 import eth.serotine.domain.repository.Broadcast
 import eth.serotine.domain.repository.Broadcaster
 import eth.serotine.domain.repository.EnsNftReading
@@ -18,6 +20,7 @@ import eth.serotine.domain.repository.EnsNfts
 import eth.serotine.domain.repository.FeedReading
 import eth.serotine.domain.repository.FeeReading
 import eth.serotine.domain.repository.GasEstimate
+import eth.serotine.domain.repository.HeadReading
 import eth.serotine.domain.repository.CowChain
 import eth.serotine.domain.repository.CowVenueReading
 import eth.serotine.domain.repository.KindReading
@@ -165,6 +168,15 @@ class NetworkRoutedPorts(private val byNetwork: Map<Network, ChainPorts>) {
                 ?: flowOf(TransactionProgress.Unavailable(ReadUnavailable.NO_ENGINE))
     }
 
+    val blockTransactions: BlockTransactions = object : BlockTransactions {
+        override suspend fun head(network: Network): HeadReading =
+            of(network)?.blockTransactions?.head(network) ?: HeadReading.Unavailable(ReadUnavailable.NO_ENGINE)
+
+        override suspend fun transactions(network: Network, number: Long): BlockReading =
+            of(network)?.blockTransactions?.transactions(network, number)
+                ?: BlockReading.Unavailable(ReadUnavailable.NO_ENGINE)
+    }
+
     val names: NameResolver = object : NameResolver {
         override suspend fun resolve(network: Network, name: String): NameResolution =
             of(network)?.names?.resolve(network, name) ?: NameResolution.Unavailable(ReadUnavailable.NO_ENGINE)
@@ -236,6 +248,7 @@ class ChainPorts(
     val transactionInputs: TransactionInputs,
     val broadcaster: Broadcaster,
     val receipts: ReceiptTracker,
+    val blockTransactions: BlockTransactions,
     val names: NameResolver,
     val safeApprovals: SafeApprovals,
     val uniswap: UniswapV3Chain,

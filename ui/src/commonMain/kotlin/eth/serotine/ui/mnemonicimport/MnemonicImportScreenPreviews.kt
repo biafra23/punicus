@@ -9,6 +9,7 @@ import eth.serotine.ui.components.NetworkChoice
 import eth.serotine.ui.components.PasswordStep
 import eth.serotine.ui.components.STEPPED_DOWN_TEXT
 import eth.serotine.ui.components.protectionText
+import eth.serotine.ui.ScreenPreview
 import eth.serotine.ui.theme.SerotineTheme
 import org.jetbrains.compose.ui.tooling.preview.Preview
 
@@ -124,17 +125,17 @@ private fun MnemonicImportImportedSteppedDownPreview() =
 private fun MnemonicImportNoNetworkPreview() = MnemonicImportPreview(typed.copy(networks = networks))
 
 /** Every preview above, which MnemonicImportScreenPreviewsTest renders: a new preview goes in here too. */
-internal val mnemonicImportScreenPreviews: List<@Composable () -> Unit> = listOf(
-    { MnemonicImportCheckingPreview() },
-    { MnemonicImportNewPasswordPreview() },
-    { MnemonicImportNewPasswordDarkPreview() },
-    { MnemonicImportPasswordHintPreview() },
-    { MnemonicImportWrongPasswordPreview() },
-    { MnemonicImportInvalidWordsPreview() },
-    { MnemonicImportNotEnoughMemoryPreview() },
-    { MnemonicImportImportingPreview() },
-    { MnemonicImportKeyStoreUnavailablePreview() },
-    { MnemonicImportImportedPreview() },
-    { MnemonicImportImportedSteppedDownPreview() },
-    { MnemonicImportNoNetworkPreview() },
+internal val mnemonicImportScreenPreviews: List<ScreenPreview> = listOf(
+    ScreenPreview("checking") { MnemonicImportCheckingPreview() },
+    ScreenPreview("new-password") { MnemonicImportNewPasswordPreview() },
+    ScreenPreview("new-password-dark") { MnemonicImportNewPasswordDarkPreview() },
+    ScreenPreview("password-hint") { MnemonicImportPasswordHintPreview() },
+    ScreenPreview("wrong-password") { MnemonicImportWrongPasswordPreview() },
+    ScreenPreview("invalid-words") { MnemonicImportInvalidWordsPreview() },
+    ScreenPreview("not-enough-memory") { MnemonicImportNotEnoughMemoryPreview() },
+    ScreenPreview("importing") { MnemonicImportImportingPreview() },
+    ScreenPreview("key-store-unavailable") { MnemonicImportKeyStoreUnavailablePreview() },
+    ScreenPreview("imported") { MnemonicImportImportedPreview() },
+    ScreenPreview("imported-stepped-down") { MnemonicImportImportedSteppedDownPreview() },
+    ScreenPreview("no-network") { MnemonicImportNoNetworkPreview() },
 )

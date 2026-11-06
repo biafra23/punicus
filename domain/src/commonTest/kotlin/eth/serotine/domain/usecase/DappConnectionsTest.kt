@@ -2,12 +2,15 @@ package eth.serotine.domain.usecase
 
 import eth.serotine.domain.model.Account
 import eth.serotine.domain.model.AccountCustody
+import eth.serotine.domain.model.AccountId
 import eth.serotine.domain.model.AccountKind
 import eth.serotine.domain.model.Address
 import eth.serotine.domain.model.Network
 import eth.serotine.domain.repository.DappApproval
 import eth.serotine.domain.repository.DappConnections
+import eth.serotine.domain.repository.DappMetadata
 import eth.serotine.domain.repository.DappPairing
+import eth.serotine.domain.repository.DappProposal
 import eth.serotine.domain.repository.DappProposalId
 import eth.serotine.domain.repository.DappRelayLink
 import eth.serotine.domain.repository.DappSessionId
@@ -33,9 +36,10 @@ class DappConnectionsTest {
     private val watched = account(Network.SEPOLIA, '2', custody = AccountCustody.Watched)
     private val watchedSafe = account(Network.SEPOLIA, '3', kind = AccountKind.SAFE, custody = AccountCustody.Watched)
     private val mainnet = account(Network.ETHEREUM, '4')
+    private val gnosis = account(Network.GNOSIS, '5')
 
-    private val accounts = ListAccountRepository(held, watched, watchedSafe, mainnet)
-    private val enabled = MutableStateFlow(setOf(Network.ETHEREUM, Network.SEPOLIA))
+    private val accounts = ListAccountRepository(held, watched, watchedSafe, mainnet, gnosis)
+    private val enabled = MutableStateFlow(setOf(Network.ETHEREUM, Network.GNOSIS, Network.SEPOLIA))
     private val networks = object : NetworkSettings {
         override fun observe(): Flow<Set<Network>> = enabled
         override suspend fun setEnabled(network: Network, on: Boolean): Boolean = error("not used")
@@ -43,11 +47,11 @@ class DappConnectionsTest {
 
     private class FakeSessions : DappSessions {
         val connections = MutableStateFlow<DappConnections>(DappConnections.On(DappRelayLink.CONNECTED, emptyList(), emptyList()))
-        val approved = mutableListOf<Pair<DappProposalId, List<Address>>>()
+        val approved = mutableListOf<Pair<DappProposalId, List<AccountId>>>()
         val paired = mutableListOf<String>()
         override fun observe(): Flow<DappConnections> = connections
         override suspend fun pair(uri: String): DappPairing = DappPairing.Paired(false).also { paired += uri }
-        override suspend fun approve(proposal: DappProposalId, accounts: List<Address>): DappApproval {
+        override suspend fun approve(proposal: DappProposalId, accounts: List<AccountId>): DappApproval {
             approved += proposal to accounts
             return DappApproval.Approved(DappSessionId("t"), delivered = true)
         }
@@ -60,9 +64,9 @@ class DappConnectionsTest {
             return true
         }
         override suspend fun extend(session: DappSessionId) = true
-        val updated = mutableListOf<Pair<DappSessionId, List<Address>>>()
+        val updated = mutableListOf<Pair<DappSessionId, List<AccountId>>>()
         val disconnected = mutableListOf<DappSessionId>()
-        override suspend fun updateAccounts(session: DappSessionId, accounts: List<Address>): Boolean {
+        override suspend fun updateAccounts(session: DappSessionId, accounts: List<AccountId>): Boolean {
             updated += session to accounts
             connections.value = (connections.value as DappConnections.On).let { on ->
                 on.copy(sessions = on.sessions.map { if (it.id == session) it.copy(accounts = accounts) else it })
@@ -74,20 +78,53 @@ class DappConnectionsTest {
     private val sessions = FakeSessions()
     private val proposal = DappProposalId("pairing", 1)
 
+    private fun proposal(required: Set<String> = emptySet(), optional: Set<String>) = DappProposal(
+        proposal, DappMetadata("dApp", "https://dapp.test", ""), required, optional, setOf("personal_sign"), null, 0,
+    )
+
+    /** A proposal asking for Ethereum and Sepolia, optionally: either kind of funds, but not Gnosis Chain. */
+    private val asking = proposal(optional = setOf("eip155:1", "eip155:11155111"))
+
+    init {
+        sessions.connections.value = DappConnections.On(DappRelayLink.CONNECTED, listOf(asking), emptyList())
+    }
+
     @Test
-    fun everyAccountIsListedAndOnlySepoliaAccountsThatCanSignAreOffered() = runTest {
+    fun everyAccountIsListedAndThoseThatCanSignOnANetworkThatIsOnAreOffered() = runTest {
         val overview = ObserveDappConnections(sessions, accounts, networks)().first()
         assertEquals(
-            listOf(DappOffer.OFFERED, DappOffer.NO_KEY, DappOffer.OFFERED, DappOffer.NOT_SEPOLIA),
+            listOf(DappOffer.OFFERED, DappOffer.NO_KEY, DappOffer.OFFERED, DappOffer.OFFERED, DappOffer.OFFERED),
             overview.accounts.map { it.offer },
         )
     }
 
     @Test
-    fun withSepoliaOffItsAccountsAreGreyedOutWithTheWayToTurnItOn() = runTest {
+    fun withItsNetworkOffAnAccountIsGreyedOutWithTheWayToTurnItOn() = runTest {
         enabled.value = setOf(Network.ETHEREUM)
         val overview = ObserveDappConnections(sessions, accounts, networks)().first()
-        assertEquals(DappOffer.SEPOLIA_OFF, overview.accounts.first { it.account == held }.offer)
+        assertEquals(DappOffer.NETWORK_OFF, overview.accounts.first { it.account == held }.offer)
+        assertEquals(DappOffer.NETWORK_OFF, overview.accounts.first { it.account == gnosis }.offer)
+        assertEquals(DappOffer.OFFERED, overview.accounts.first { it.account == mainnet }.offer)
+    }
+
+    @Test
+    fun aProposalIsOfferedAccountsOnTheNetworksItAsksForOfOneKindOfFunds() {
+        val on = enabled.value
+        // Not asked for: Gnosis Chain.
+        assertEquals(DappOffer.NOT_ASKED, dappOffer(gnosis, on, asking))
+        assertEquals(DappOffer.OFFERED, dappOffer(mainnet, on, asking))
+        assertEquals(DappOffer.OFFERED, dappOffer(held, on, asking))
+        // Once a Sepolia account is chosen, real funds are the other kind; and the other way round.
+        assertEquals(DappOffer.OTHER_FUNDS, dappOffer(mainnet, on, asking, listOf(held.id)))
+        assertEquals(DappOffer.OTHER_FUNDS, dappOffer(held, on, asking, listOf(mainnet.id)))
+        // What a proposal requires decides the kind before anything is chosen.
+        val requiringMainnet = proposal(required = setOf("eip155:1"), optional = setOf("eip155:100", "eip155:11155111"))
+        assertEquals(setOf(Network.ETHEREUM, Network.GNOSIS), requiringMainnet.networks)
+        assertEquals(DappOffer.OTHER_FUNDS, dappOffer(held, on, requiringMainnet), "asked for, but testnet")
+        assertEquals(DappOffer.OFFERED, dappOffer(gnosis, on, requiringMainnet))
+        // Not asked for comes first; then whether it can be offered at all.
+        assertEquals(DappOffer.NO_KEY, dappOffer(watched, on, asking))
+        assertEquals(DappOffer.NETWORK_OFF, dappOffer(mainnet, setOf(Network.SEPOLIA), asking))
     }
 
     @Test
@@ -102,19 +139,73 @@ class DappConnectionsTest {
     fun anApprovalNamesOfferedAccountsOnly() = runTest {
         val approve = ApproveDappProposal(sessions, accounts, networks)
         assertEquals(DappApproval.InvalidAccounts, approve(proposal, emptyList()))
-        assertEquals(DappApproval.InvalidAccounts, approve(proposal, listOf(watched.address)))
-        assertEquals(DappApproval.InvalidAccounts, approve(proposal, listOf(mainnet.address)))
-        assertEquals(DappApproval.InvalidAccounts, approve(proposal, listOf(held.address, held.address)))
+        assertEquals(DappApproval.InvalidAccounts, approve(proposal, listOf(watched.id)))
+        assertEquals(DappApproval.InvalidAccounts, approve(proposal, listOf(gnosis.id)), "not asked for")
+        assertEquals(DappApproval.InvalidAccounts, approve(proposal, listOf(held.id, mainnet.id)), "testnet and real funds")
+        assertEquals(DappApproval.InvalidAccounts, approve(proposal, listOf(held.id, held.id)))
+        assertEquals(
+            DappApproval.InvalidAccounts,
+            approve(proposal, listOf(AccountId(Network.ETHEREUM, held.address))),
+            "an address is offered on the network of its account alone",
+        )
+        assertEquals(DappApproval.NoSuchProposal, approve(DappProposalId("pairing", 2), listOf(held.id)))
         assertTrue(sessions.approved.isEmpty())
-        assertTrue(approve(proposal, listOf(held.address, watchedSafe.address)) is DappApproval.Approved)
-        assertEquals(listOf(proposal to listOf(held.address, watchedSafe.address)), sessions.approved)
+        assertTrue(approve(proposal, listOf(held.id, watchedSafe.id)) is DappApproval.Approved)
+        assertTrue(approve(proposal, listOf(mainnet.id)) is DappApproval.Approved)
+        assertEquals(listOf(proposal to listOf(held.id, watchedSafe.id), proposal to listOf(mainnet.id)), sessions.approved)
+    }
+
+    @Test
+    fun anAccountAskedForButOfTheOtherKindSaysSoRatherThanNotAsked() {
+        // Sepolia required, Ethereum optional: Ethereum was asked for, but it is real funds.
+        val sepoliaFirst = proposal(required = setOf("eip155:11155111"), optional = setOf("eip155:1"))
+        assertEquals(DappOffer.OTHER_FUNDS, dappOffer(mainnet, enabled.value, sepoliaFirst))
+        assertEquals(DappOffer.NOT_ASKED, dappOffer(gnosis, enabled.value, sepoliaFirst))
+    }
+
+    @Test
+    fun aProposalIsApprovedOnlyWithAnAccountOnEachNetworkItRequires() = runTest {
+        val both = proposal(required = setOf("eip155:1", "eip155:100"), optional = emptySet())
+        sessions.connections.value = DappConnections.On(DappRelayLink.CONNECTED, listOf(both), emptyList())
+        val approve = ApproveDappProposal(sessions, accounts, networks)
+        assertEquals(setOf(Network.GNOSIS), missingRequired(both, listOf(mainnet.id)))
+        assertEquals(DappApproval.InvalidAccounts, approve(proposal, listOf(mainnet.id)), "none on Gnosis Chain")
+        assertTrue(sessions.approved.isEmpty())
+        assertTrue(approve(proposal, listOf(mainnet.id, gnosis.id)) is DappApproval.Approved)
+    }
+
+    @Test
+    fun aSessionLeftWithNoAccountOnANetworkItsDappRequiredEndsRatherThanShrinks() = runTest {
+        val metadata = DappMetadata("dApp", "https://dapp.test", "")
+        sessions.connections.value = DappConnections.On(
+            DappRelayLink.CONNECTED,
+            emptyList(),
+            listOf(
+                eth.serotine.domain.repository.DappSession(
+                    DappSessionId("s"), metadata, listOf(mainnet.id, gnosis.id), listOf("personal_sign"), 0, true,
+                    requiredNetworks = setOf(Network.GNOSIS),
+                ),
+                eth.serotine.domain.repository.DappSession(
+                    DappSessionId("o"), metadata, listOf(mainnet.id, gnosis.id), listOf("personal_sign"), 0, true,
+                    requiredNetworks = setOf(Network.ETHEREUM),
+                ),
+            ),
+        )
+        val following = backgroundScope.launch { FollowDappAccounts(sessions, accounts, networks)() }
+        runCurrent()
+        accounts.remove(gnosis.id)
+        runCurrent()
+        // Required Gnosis Chain lost its account: ended. Required Ethereum kept its own: only updated.
+        assertEquals(listOf(DappSessionId("s")), sessions.disconnected)
+        assertEquals(listOf(DappSessionId("o") to listOf(mainnet.id)), sessions.updated)
+        following.cancel()
     }
 
     @Test
     fun anAccountRemovedFromTheWalletLeavesEverySessionAndASessionLeftWithNoneEnds() = runTest {
         val metadata = eth.serotine.domain.repository.DappMetadata("dApp", "https://dapp.test", "")
         fun session(topic: String, vararg seen: Account) = eth.serotine.domain.repository.DappSession(
-            DappSessionId(topic), metadata, seen.map { it.address }, listOf("personal_sign"), 0, true,
+            DappSessionId(topic), metadata, seen.map { it.id }, listOf("personal_sign"), 0, true,
         )
         sessions.connections.value = DappConnections.On(
             DappRelayLink.CONNECTED,
@@ -126,7 +217,7 @@ class DappConnectionsTest {
         assertTrue(sessions.updated.isEmpty() && sessions.disconnected.isEmpty())
         accounts.remove(held.id)
         runCurrent()
-        assertEquals(listOf(DappSessionId("both") to listOf(watchedSafe.address)), sessions.updated)
+        assertEquals(listOf(DappSessionId("both") to listOf(watchedSafe.id)), sessions.updated)
         assertEquals(listOf(DappSessionId("only")), sessions.disconnected)
         following.cancel()
     }
@@ -139,7 +230,7 @@ class DappConnectionsTest {
             emptyList(),
             listOf(
                 eth.serotine.domain.repository.DappSession(
-                    DappSessionId("s"), metadata, listOf(held.address, watchedSafe.address), listOf("personal_sign"), 0, true,
+                    DappSessionId("s"), metadata, listOf(held.id, watchedSafe.id), listOf("personal_sign"), 0, true,
                 ),
             ),
         )
@@ -147,7 +238,7 @@ class DappConnectionsTest {
         runCurrent()
         accounts.setCustody(held.id, AccountCustody.Watched)
         runCurrent()
-        assertEquals(listOf(DappSessionId("s") to listOf(watchedSafe.address)), sessions.updated)
+        assertEquals(listOf(DappSessionId("s") to listOf(watchedSafe.id)), sessions.updated)
         enabled.value = setOf(Network.ETHEREUM)
         runCurrent()
         assertEquals(listOf(DappSessionId("s")), sessions.disconnected)
@@ -162,7 +253,7 @@ class DappConnectionsTest {
             emptyList(),
             listOf(
                 eth.serotine.domain.repository.DappSession(
-                    DappSessionId("s"), metadata, listOf(held.address), listOf("personal_sign"), 0, true,
+                    DappSessionId("s"), metadata, listOf(held.id), listOf("personal_sign"), 0, true,
                 ),
             ),
         )

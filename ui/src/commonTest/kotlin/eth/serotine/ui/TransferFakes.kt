@@ -9,8 +9,11 @@ import eth.serotine.domain.model.Network
 import eth.serotine.domain.model.Signature
 import eth.serotine.domain.model.SwapVenue
 import eth.serotine.domain.model.UInt256
+import eth.serotine.domain.repository.BlockReading
+import eth.serotine.domain.repository.BlockTransactions
 import eth.serotine.domain.repository.Broadcast
 import eth.serotine.domain.repository.Broadcaster
+import eth.serotine.domain.repository.ChainTransaction
 import eth.serotine.domain.repository.CowApi
 import eth.serotine.domain.repository.CowChain
 import eth.serotine.domain.repository.CowOrderEnd
@@ -26,6 +29,9 @@ import eth.serotine.domain.repository.FeeLevel
 import eth.serotine.domain.repository.FeeQuote
 import eth.serotine.domain.repository.FeeReading
 import eth.serotine.domain.repository.GasEstimate
+import eth.serotine.domain.repository.HandoffAvailability
+import eth.serotine.domain.repository.HandoffOpening
+import eth.serotine.domain.repository.HeadReading
 import eth.serotine.domain.repository.HistoryEntry
 import eth.serotine.domain.repository.HistoryList
 import eth.serotine.domain.repository.HistoryStart
@@ -47,18 +53,18 @@ import eth.serotine.domain.repository.SentOutcome
 import eth.serotine.domain.repository.SentTransfer
 import eth.serotine.domain.repository.SentTransferList
 import eth.serotine.domain.repository.SentTransfers
-import eth.serotine.domain.repository.SwapVenueSetting
-import eth.serotine.domain.repository.VenueChoice
-import eth.serotine.domain.repository.WaitingSwap
-import eth.serotine.domain.repository.WaitingSwaps
-import eth.serotine.domain.repository.prunable
 import eth.serotine.domain.repository.Signer
 import eth.serotine.domain.repository.Signing
 import eth.serotine.domain.repository.Simulation
+import eth.serotine.domain.repository.SwapVenueSetting
 import eth.serotine.domain.repository.TransactionHistory
 import eth.serotine.domain.repository.TransactionInputs
 import eth.serotine.domain.repository.TransactionProgress
 import eth.serotine.domain.repository.Unlock
+import eth.serotine.domain.repository.VenueChoice
+import eth.serotine.domain.repository.WaitingSwap
+import eth.serotine.domain.repository.WaitingSwaps
+import eth.serotine.domain.repository.WalletHandoff
 import eth.serotine.domain.repository.prunable
 import eth.serotine.domain.repository.yieldsTo
 import kotlinx.coroutines.CompletableDeferred
@@ -482,4 +488,39 @@ internal class MemoryAddedNfts : AddedNfts {
         added.value -= account to nft
         return TokenChange.Changed
     }
+}
+
+/**
+ * A [WalletHandoff] a test sets: [availability] is what it answers,
+ * [opening] what opening a link does, and [opened] every link it was asked to open.
+ */
+internal class FakeWalletHandoff(
+    var availability: HandoffAvailability = HandoffAvailability.AVAILABLE,
+    var opening: HandoffOpening = HandoffOpening.OPENED,
+) : WalletHandoff {
+    val opened = mutableListOf<String>()
+
+    override fun availability() = availability
+
+    override suspend fun open(link: String): HandoffOpening {
+        opened += link
+        return opening
+    }
+}
+
+/**
+ * [BlockTransactions] over blocks a test fills: [head] the newest
+ * verified block, [bodies] each block's transactions (none when absent).
+ */
+internal class FakeBlockTransactions(var head: Long = 100) : BlockTransactions {
+    val bodies = mutableMapOf<Long, List<ChainTransaction>>()
+
+    override suspend fun head(network: Network) = HeadReading.At(head)
+
+    override suspend fun transactions(network: Network, number: Long): BlockReading =
+        if (number > head) {
+            BlockReading.NotYet
+        } else {
+            BlockReading.Read(bodies[number].orEmpty())
+        }
 }

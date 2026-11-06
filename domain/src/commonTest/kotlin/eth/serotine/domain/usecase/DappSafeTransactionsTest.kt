@@ -4,6 +4,7 @@ import eth.serotine.domain.model.AccountCustody
 import eth.serotine.domain.model.Address
 import eth.serotine.domain.model.Digest
 import eth.serotine.domain.model.DappTransactionRequest
+import eth.serotine.domain.model.AccountId
 import eth.serotine.domain.model.Network
 import eth.serotine.domain.model.SafeSettingsCalls
 import eth.serotine.domain.model.SignedTransfer
@@ -51,6 +52,7 @@ class DappSafeTransactionsTest {
         override fun observe(): Flow<List<DappRequest>> = waiting
         override suspend fun answerSignature(request: DappRequestId, signature: Signature) = error("not used")
         override suspend fun answerNull(request: DappRequestId) = error("not used")
+        override suspend fun answerChainSwitch(request: DappRequestId, network: Network) = error("not used")
         override suspend fun refuse(request: DappRequestId, why: DappRequestError) = error("not used")
         override suspend fun answerTransaction(request: DappRequestId, hash: String): DappAnswer {
             hashes += request to hash
@@ -71,7 +73,7 @@ class DappSafeTransactionsTest {
     private fun request(transaction: DappTransactionRequest) = DappRequest(
         DappRequestId(DappSessionId("t"), 1),
         DappMetadata("Example dApp", "https://app.example.org", ""),
-        listOf(world.safe),
+        listOf(AccountId(Network.SEPOLIA, world.safe)),
         "eip155:11155111",
         DappAsk.SendTransaction(transaction),
         now + 300,
@@ -91,10 +93,9 @@ class DappSafeTransactionsTest {
         clock = { now },
     )
 
-    private fun sign() = SignDappSafeTx(
-        requests,
-        SignSafeTx(world.signer, world.observeSafe, world.recovery, world.queue, Network.SEPOLIA),
-    )
+    private fun sign() = SignDappSafeTx(requests) { network ->
+        SignSafeTx(world.signer, world.observeSafe, world.recovery, world.queue, network)
+    }
 
     private suspend fun signed(proposal: DappSafeProposal): DappSafeSigning {
         val checked = assertIs<SafeTxSignCheck.Ready>(sign().check(proposal))
@@ -110,6 +111,37 @@ class DappSafeTransactionsTest {
         maxCost = UInt256.ZERO,
         sentAt = now,
     )
+
+    @Test
+    fun aGnosisChainSafesDappTransactionIsProposedAndSignedOnGnosisChain() = runTest {
+        val gnosis = SafeWorld(Network.GNOSIS)
+        val on = object : NetworkSettings {
+            override fun observe(): Flow<Set<Network>> = flowOf(setOf(Network.GNOSIS))
+            override suspend fun setEnabled(network: Network, on: Boolean): Boolean = error("not used")
+        }
+        val asked = DappRequest(
+            DappRequestId(DappSessionId("g"), 1),
+            DappMetadata("Example dApp", "https://app.example.org", ""),
+            listOf(AccountId(Network.GNOSIS, gnosis.safe)),
+            "eip155:100",
+            DappAsk.SendTransaction(payment),
+            now + 300,
+        )
+        requests.waiting.value = listOf(asked)
+        val propose = ProposeDappSafeTx(
+            requests, gnosis.accounts, on, ListCatalog(), gnosis.observeSafe, gnosis.nativeBalances,
+            gnosis.inputs, gnosis.queue, clock = { now },
+        )
+        val proposed = assertIs<DappSafeProposing.Proposed>(propose(asked.id)).proposal
+        assertEquals(Network.GNOSIS, proposed.proposal.request.network)
+        val sign = SignDappSafeTx(requests) { network ->
+            SignSafeTx(gnosis.signer, gnosis.observeSafe, gnosis.recovery, gnosis.queue, network)
+        }
+        val checked = assertIs<SafeTxSignCheck.Ready>(sign.check(proposed))
+        val signed = assertIs<DappSafeSigning.Signed>(sign.sign(proposed, checked, Unlock.WithBiometrics("x")))
+        assertEquals(Network.GNOSIS, signed.request.network)
+        assertEquals(proposed.proposal.request.hash, requests.waiting.value.single().safeTx)
+    }
 
     @Test
     fun aSafesTransactionIsProposedAsASafeTxAtItsNextNonceForAnOwnerHeldHereToSign() = runTest {
@@ -208,7 +240,7 @@ class DappSafeTransactionsTest {
             nonce = 7,
         )
         world.sent.record(older)
-        val answering = backgroundScope.launch { AnswerDappRequestsAtOnce(requests, world.sent, history)() }
+        val answering = backgroundScope.launch { AnswerDappRequestsAtOnce(requests, world.sent, history, networks)() }
         runCurrent()
         assertTrue(requests.hashes.isEmpty())
         assertIs<DappSafeSigning.Signed>(signed(proposed))
@@ -230,7 +262,9 @@ class DappSafeTransactionsTest {
             eth.serotine.domain.model.SafeTx.call(world.recipient, payment.value, ByteArray(0), 4),
         )
         val elsewhere = execution(safeTx).copy(network = Network.ETHEREUM)
-        assertEquals(null, executionFor(safeTx.hash, listOf(elsewhere), emptyList()))
+        assertEquals(null, executionFor(safeTx.hash, Network.SEPOLIA, listOf(elsewhere), emptyList()))
+        // On its own network, it is.
+        assertEquals(elsewhere.hash, executionFor(safeTx.hash, Network.ETHEREUM, listOf(elsewhere), emptyList())?.transfer?.hash)
     }
 
     @Test

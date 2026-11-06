@@ -1,5 +1,8 @@
 package eth.serotine.data.walletconnect
 
+import eth.serotine.domain.model.Network
+import eth.serotine.domain.repository.caip2
+import eth.serotine.domain.repository.dappNetworkOf
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonObject
@@ -9,13 +12,30 @@ import kotlinx.serialization.json.contentOrNull
 /**
  * The parts of WalletConnect's Sign protocol v2 the wallet role uses: its methods, their relay
  * tags and lifetimes, the error codes it answers with, and the rules of docs/walletconnect.md that
- * apply to every session: Sepolia alone (owner ruling, 2026-11-03, #22, ruling 9) and the closed list
- * of methods (ruling 6).
+ * apply to every session: the chains it may hold, Ethereum and Gnosis Chain together or Sepolia alone
+ * (ruling 9 as amended, owner ruling, 2026-11-05, on #22), and the closed list of methods (ruling 6).
  */
 internal object WcProtocol {
 
-    /** The one chain a dApp session may name for now (ruling 9). */
+    /** Sepolia's chain: what a session stored before the chains were kept holds ([WcStoredSession.chains]). */
     const val SEPOLIA = "eip155:11155111"
+
+    /** The chains a dApp session may hold, each a [Network]'s: of one kind of funds per session ([fundsOf]). */
+    val CHAINS: Set<String> = Network.entries.map { it.caip2 }.toSet()
+
+    /** Whether [chain] is a testnet's (true), real funds' (false), or none Serotine serves (null). */
+    fun fundsOf(chain: String): Boolean? = dappNetworkOf(chain)?.testnet
+
+    /**
+     * The CAIP-10 account [account] (`eip155:1:0x…`, the address in lower case) as its chain and address, or
+     * null when it is out of shape or on a chain Serotine does not serve.
+     */
+    fun accountOf(account: String): Pair<String, String>? {
+        val chain = account.substringBeforeLast(':')
+        val address = account.substringAfterLast(':')
+        if (chain !in CHAINS || !WcWallet.isAddress(address) || address != address.lowercase()) return null
+        return chain to address
+    }
 
     /** The methods a dApp may call (ruling 6). `eth_sign` is never among them. */
     val METHODS: Set<String> = setOf(
@@ -119,49 +139,84 @@ internal object WcProtocol {
         INVALID_PARAMS(-32602, "Invalid params."),
     }
 
+    /** Why a proposal's chains make it one to reject. */
+    enum class ChainRefusal {
+        /** A required chain Serotine does not serve. */
+        UNSUPPORTED,
+
+        /** Required chains of both kinds of funds: a session holds one (ruling 9). */
+        MIXED,
+
+        /** No chain Serotine serves, required or optional. */
+        NONE,
+    }
+
     /**
      * What a proposal asks of a session, read from its required and optional namespaces, and why it
-     * cannot be approved, when it cannot ([refusal]). The rules (docs/walletconnect.md, *Pairing and
-     * the session proposal*): a required namespace naming any chain but Sepolia, any namespace but
-     * `eip155`, a method outside the closed list or an event outside [EVENTS] makes the proposal one
-     * to reject; an optional one is approved with what of it is Sepolia and on the lists.
+     * cannot be approved, when it cannot ([refusal], with [chainRefusal] when its chains are why). The
+     * rules (docs/walletconnect.md, *Pairing and the session proposal*): a required namespace naming a chain
+     * Serotine does not serve, chains of both kinds of funds, any namespace but `eip155`, a method outside
+     * the closed list or an event outside [EVENTS], or no chain Serotine serves asked for at all, makes the
+     * proposal one to reject. An optional namespace adds its methods and events where it names one of the
+     * session's chains ([chains]).
      */
     class Ask(
         val requiredChains: Set<String>,
         val optionalChains: Set<String>,
-        /** The methods requested (required and optional) that a session may carry. */
+        /**
+         * The chains a session with it may hold: those it asks for that Serotine serves, of its required
+         * chains' kind of funds when it requires any.
+         */
+        val chains: Set<String>,
+        /** The methods requested (required, and optional where they name one of [chains]) that a session may carry. */
         val methods: Set<String>,
-        /** The events requested that a session may carry. */
+        /** The events requested, the same way, that a session may carry. */
         val events: Set<String>,
         val refusal: Error?,
+        val chainRefusal: ChainRefusal? = null,
     )
 
-    /** Reads [required] and [optional], or null when either is not namespaces at all. */
-    fun ask(required: JsonObject, optional: JsonObject): Ask? {
+    /**
+     * Reads [required] and [optional], or null when either is not namespaces at all. With [sessionChains], the
+     * chains a session is approved with, an optional namespace adds its methods and events only where it names
+     * one of them.
+     */
+    fun ask(required: JsonObject, optional: JsonObject, sessionChains: Set<String>? = null): Ask? {
         val req = namespaces(required) ?: return null
         val opt = namespaces(optional) ?: return null
         val requiredChains = req.flatMap { it.chains }.toSet()
         val optionalChains = opt.flatMap { it.chains }.toSet()
         val requiredMethods = req.flatMap { it.methods }.toSet()
         val requiredEvents = req.flatMap { it.events }.toSet()
-        val refusal = when {
-            req.any { it.key != "eip155" } -> Error.UNSUPPORTED_NAMESPACE_KEY
-            requiredChains.any { it != SEPOLIA } -> Error.UNSUPPORTED_CHAINS
-            requiredMethods.any { it !in METHODS } -> Error.UNSUPPORTED_METHODS
-            requiredEvents.any { it !in EVENTS } -> Error.UNSUPPORTED_EVENTS
-            SEPOLIA !in requiredChains && opt.none { it.key == "eip155" && SEPOLIA in it.chains } ->
-                Error.UNSUPPORTED_CHAINS
+        val requiredFunds = requiredChains.mapNotNull(::fundsOf).toSet()
+        val asked = (requiredChains + opt.filter { it.key == "eip155" }.flatMap { it.chains }).filter { it in CHAINS }
+        val chains = asked.filter { requiredFunds.isEmpty() || fundsOf(it) in requiredFunds }.toSet()
+        val chainRefusal = when {
+            requiredChains.any { it !in CHAINS } -> ChainRefusal.UNSUPPORTED
+            requiredFunds.size > 1 -> ChainRefusal.MIXED
+            chains.isEmpty() -> ChainRefusal.NONE
             else -> null
         }
-        // An optional namespace is approved only where it names Sepolia: what it asks of other chains is not
-        // what a Sepolia session carries.
-        val asked = req + opt.filter { it.key == "eip155" && SEPOLIA in it.chains }
+        val refusal = when {
+            req.any { it.key != "eip155" } -> Error.UNSUPPORTED_NAMESPACE_KEY
+            chainRefusal == ChainRefusal.UNSUPPORTED || chainRefusal == ChainRefusal.MIXED -> Error.UNSUPPORTED_CHAINS
+            requiredMethods.any { it !in METHODS } -> Error.UNSUPPORTED_METHODS
+            requiredEvents.any { it !in EVENTS } -> Error.UNSUPPORTED_EVENTS
+            chainRefusal == ChainRefusal.NONE -> Error.UNSUPPORTED_CHAINS
+            else -> null
+        }
+        // An optional namespace counts only where it names a chain of the session: what it asks of other chains
+        // is not what this session carries.
+        val held = sessionChains ?: chains
+        val adding = req + opt.filter { it.key == "eip155" && it.chains.any { chain -> chain in held } }
         return Ask(
             requiredChains = requiredChains,
             optionalChains = optionalChains,
-            methods = asked.flatMap { it.methods }.filter { it in METHODS }.toSet(),
-            events = asked.flatMap { it.events }.filter { it in EVENTS }.toSet(),
+            chains = chains,
+            methods = adding.flatMap { it.methods }.filter { it in METHODS }.toSet(),
+            events = adding.flatMap { it.events }.filter { it in EVENTS }.toSet(),
             refusal = refusal,
+            chainRefusal = chainRefusal.takeIf { refusal == Error.UNSUPPORTED_CHAINS },
         )
     }
 

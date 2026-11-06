@@ -116,8 +116,10 @@ fails the call.
 (Owner rulings, 2026-11-03, #22; docs/walletconnect.md.)
 
 - **A closed list of methods:** `eth_sendTransaction`, `personal_sign`,
-  `eth_signTypedData_v4`, and `wallet_switchEthereumChain` to Sepolia only.
-  Every other method gets an unsupported-method error.
+  `eth_signTypedData_v4`, and `wallet_switchEthereumChain` to a network the
+  session holds. Every other method gets an unsupported-method error. A
+  switch to a network outside the session, from testnet to real funds above
+  all, gets the unrecognized-chain error (owner ruling, 2026-11-05, on #22).
 - **`eth_sign` is refused in every case.** It signs a raw digest the dApp
   chose, which is what phishing asks for. A digest Serotine signs for a dApp
   is one it computed itself: EIP-191 for `personal_sign`, EIP-712 for typed
@@ -138,6 +140,18 @@ fails the call.
 - **Session secrets are not key material**, since they cannot move funds:
   an app-private file, out of backups and device transfers, never logged,
   and not under the wallet password.
+
+## Send from another wallet signs nothing here
+
+(Owner rulings, 2026-11-05, #255.)
+
+- A watched EOA may hand a transfer to another wallet app as a payment link.
+  Watched still means Serotine signs nothing: the other wallet must hold the
+  key, and the screen says so.
+- Nothing the other wallet does is taken on its word. A transfer counts only
+  when a verified block holds it: from the account, to the recipient, that
+  amount. Another amount, or the same from another address, is said as such
+  and never counted as the account's.
 
 ## Key material
 

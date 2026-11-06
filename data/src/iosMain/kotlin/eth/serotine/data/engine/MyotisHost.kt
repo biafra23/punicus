@@ -12,6 +12,7 @@ import eth.serotine.data.tokens.BuiltInTokens
 import eth.serotine.domain.model.Address
 import eth.serotine.domain.model.Network
 import eth.serotine.domain.repository.AddressKinds
+import eth.serotine.domain.repository.BlockTransactions
 import eth.serotine.domain.repository.Broadcaster
 import eth.serotine.domain.repository.CowChain
 import eth.serotine.domain.repository.LightClient
@@ -168,6 +169,13 @@ class MyotisHost private constructor(
 
     /** A sent transaction's verified receipt and its block's finality. */
     val receipts: ReceiptTracker = routed.receipts
+
+    /**
+     * The transactions of verified blocks (Send from another wallet, #255), per network. The iOS
+     * engine's typed reads have no block with its transactions yet, so every block is unproven
+     * here; iOS does not offer Send from another wallet.
+     */
+    val blockTransactions: BlockTransactions = routed.blockTransactions
 
     /** ENS names, resolved against beacon-finalized state. */
     val names: NameResolver = routed.names
@@ -437,6 +445,7 @@ class MyotisHost private constructor(
             transactionInputs = EngineTransactionInputs(network, chain, Dispatchers.IO),
             broadcaster = EngineBroadcaster(network, chain, Dispatchers.IO),
             receipts = EngineReceipts(network, chain, Dispatchers.IO, POLL_INTERVAL),
+            blockTransactions = EngineBlockTransactions(network, chain, Dispatchers.IO),
             names = EngineNames(network, chain, Dispatchers.IO),
             safeApprovals = VerifiedSafeApprovals(network, chain, Dispatchers.IO),
             uniswap = VerifiedUniswapV3(chain, Dispatchers.IO, network),

@@ -206,7 +206,7 @@ fun SettingsScreen(
                 },
                 supportingContent = {
                     Text(
-                        if (connectionsOff) "Switched off in this build" else "WalletConnect · Sepolia only",
+                        if (connectionsOff) "Switched off in this build" else "WalletConnect · Ethereum, Gnosis Chain or Sepolia",
                         color = if (connectionsOff) Unavailable.contentColor() else Color.Unspecified,
                     )
                 },

@@ -2,6 +2,7 @@ package eth.serotine.ui.dapptransaction
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import eth.serotine.domain.model.AccountId
 import eth.serotine.domain.model.AccountKind
 import eth.serotine.domain.model.DappCallMeaning
 import eth.serotine.domain.model.Network
@@ -81,7 +82,7 @@ data class TransactionExplanation(val title: String, val reason: String)
 
 /**
  * A dApp's transaction (docs/walletconnect.md, screen D6) as display-ready values: who asks (the
- * dApp's claim), the account it is sent from, on Sepolia, the recipient in full, the value, and the
+ * dApp's claim), the account it is sent from, on its network, the recipient in full, the value, and the
  * call: decoded for the calls this app knows, else its data raw and marked not decoded. Then the quote,
  * worked out here from verified state: the fee at most, the balance left at least, and the call run as
  * a verified call at the head; or why there is none. The [warnings], the [refusal] when it can only be
@@ -101,6 +102,13 @@ data class DappTransactionUiState(
     val url: String = "",
     val accountName: String? = null,
     val accountAddress: String = "",
+    /** The network the request is on, with its kind of funds ("On Sepolia, a test network"). */
+    val network: String = "On Sepolia, a test network",
+    /**
+     * The Safe it is sent from, on the request's network, which its queued Safe transaction opens on (the same
+     * address on another chain is another Safe); null for an account's transaction, or a network not served.
+     */
+    val safeAccount: AccountId? = null,
     /** The recipient, EIP-55 checksummed, in full. */
     val to: String = "",
     /** The value, in the network's currency, testnet marked. */
@@ -154,7 +162,7 @@ data class DappTransactionUiState(
 class DappTransactionViewModel(
     /** The request, as its route names it: `topic/id`. */
     requestKey: String,
-    observeDappMessages: ObserveDappMessages,
+    private val observeDappMessages: ObserveDappMessages,
     private val quoteDappTransaction: QuoteDappTransaction,
     private val sendDappTransaction: SendDappTransaction,
     private val proposeDappSafeTx: ProposeDappSafeTx,
@@ -218,7 +226,8 @@ class DappTransactionViewModel(
             }
         base.copy(
             quoting = local.quoting,
-            quote = local.quote?.let(::quoteLines) ?: local.proposal?.let(::proposalLines).orEmpty(),
+            quote = local.quote?.let { quoteLines(it, review.request.network) }
+                ?: local.proposal?.let { proposalLines(it, review.request.network) }.orEmpty(),
             notQuoted = local.notQuoted,
             waits = DappRequestViewModel.waitsLine(review.request.expiresAtSeconds - clock()),
             unlock = local.unlock,
@@ -261,6 +270,7 @@ class DappTransactionViewModel(
                 local.value.fromSafe
             }
             if (fromSafe) return@launch propose(request)
+            val network = requestNetwork()
             val quoting = try {
                 quoteDappTransaction(request)
             } catch (_: Exception) {
@@ -275,7 +285,7 @@ class DappTransactionViewModel(
                         current.copy(
                             quoting = false,
                             quote = null,
-                            notQuoted = callRefusalText(quoting.refusal, Network.SEPOLIA),
+                            notQuoted = callRefusalText(quoting.refusal, network),
                         )
                     is DappTransactionQuoting.GasTooLow -> current.copy(
                         quoting = false,
@@ -421,6 +431,7 @@ class DappTransactionViewModel(
 
     /** The Safe transaction for the request: proposed, or the one queued for it already. */
     private suspend fun propose(request: DappRequestId) {
+        val network = requestNetwork()
         val proposing = try {
             proposeDappSafeTx(request)
         } catch (_: Exception) {
@@ -434,7 +445,7 @@ class DappTransactionViewModel(
                     base.copy(proposal = proposing.proposal, quotedAt = mark, hidden = false)
                 is DappSafeProposing.AlreadyQueued -> base.copy(queued = "0x" + proposing.request.hash.hex)
                 is DappSafeProposing.SafeRefused ->
-                    base.copy(notQuoted = safeTxRefusalText(proposing.refusal, Network.SEPOLIA))
+                    base.copy(notQuoted = safeTxRefusalText(proposing.refusal, network))
                 DappSafeProposing.InsufficientFunds -> base.copy(notQuoted = SAFE_SHORT)
                 is DappSafeProposing.Reverts -> base.copy(
                     notQuoted = "The call reverts when run as a verified call from the Safe" +
@@ -517,7 +528,7 @@ class DappTransactionViewModel(
                         busy = false,
                         explaining = TransactionExplanation(
                             "Cannot be signed",
-                            safeTxRefusalText(signing.refusal, Network.SEPOLIA),
+                            safeTxRefusalText(signing.refusal, proposal.proposal.request.network),
                         ),
                     )
                     DappSafeSigning.NotRecorded ->
@@ -634,8 +645,11 @@ class DappTransactionViewModel(
             url = review.request.dapp.url,
             accountName = review.account?.label,
             accountAddress = Eip55.format(review.address),
+            network = DappRequestViewModel.onLine(review.request.network),
+            safeAccount = review.request.network?.takeIf { review.account?.kind == AccountKind.SAFE }
+                ?.let { AccountId(it, review.address) },
             to = Eip55.format(transaction.to),
-            value = ether(transaction.value),
+            value = ether(transaction.value, review.request.network),
             meaning = meaningLine(transaction.meaning, token),
             meaningFields = meaningFields(transaction.meaning, token),
             dataHex = transaction.dataHex.takeIf { it.isNotEmpty() },
@@ -649,14 +663,18 @@ class DappTransactionViewModel(
         )
     }
 
-    private fun proposalLines(safe: DappSafeProposal): List<SignInField> {
+    /** The network request [id] is on, as the latest review has it: Sepolia, a test network's, if it cannot be read. */
+    private suspend fun requestNetwork(): Network =
+        observeDappMessages().first().find { it.request.id == id }?.request?.network ?: Network.SEPOLIA
+
+    private fun proposalLines(safe: DappSafeProposal, network: Network?): List<SignInField> {
         val proposal = safe.proposal
         val state = proposal.safe.state
         val nonce = proposal.request.nonce.toString() +
             if (proposal.queuedAhead > 0) ", behind ${proposal.queuedAhead} queued" else ""
         return listOfNotNull(
             SignInField("Safe transaction", "Nonce $nonce; ${state.threshold} of ${state.owners.size} owners sign it"),
-            SignInField("Left in the Safe, at least", ether(proposal.balanceAfter)),
+            SignInField("Left in the Safe, at least", ether(proposal.balanceAfter, network)),
             when (val run = proposal.simulation) {
                 is SafeCallSimulation.Ran -> SignInField(
                     "Verified run",
@@ -670,11 +688,11 @@ class DappTransactionViewModel(
         )
     }
 
-    private fun quoteLines(quote: DappTransactionQuote): List<SignInField> {
+    private fun quoteLines(quote: DappTransactionQuote, network: Network?): List<SignInField> {
         val call = quote.call
         return listOfNotNull(
-            SignInField("Fee, at most", ether(call.maxFee)),
-            SignInField("Left in the account, at least", ether(call.nativeAfterAtLeast)),
+            SignInField("Fee, at most", ether(call.maxFee, network)),
+            SignInField("Left in the account, at least", ether(call.nativeAfterAtLeast, network)),
             call.simulationBlock?.let { SignInField("Verified run", "Runs without reverting at block $it") }
                 ?: SignInField("Verified run", "Not run: the light client cannot run calls on this build"),
             SignInField("Gas limit", call.transaction.gasLimit.toString()),
@@ -712,7 +730,15 @@ class DappTransactionViewModel(
         const val APPROVAL_NOTE = "An approval moves nothing itself, but the spender may then take the tokens " +
             "without asking you again."
 
-        fun ether(wei: UInt256): String = "${wei.formatUnits(18)} ${Network.SEPOLIA.nativeSymbol} (testnet)"
+        /**
+         * [wei] in [network]'s native currency, a testnet's marked so (Sepolia's, and one that cannot be named,
+         * shown as Sepolia's would be: no real funds are claimed for it).
+         */
+        fun ether(wei: UInt256, network: Network?): String {
+            val shown = network ?: Network.SEPOLIA
+            val testnet = if (shown.testnet) " (testnet)" else ""
+            return "${wei.formatUnits(18)} ${shown.nativeSymbol}$testnet"
+        }
 
         fun answerLine(answer: DappAnswer): String? = when (answer) {
             DappAnswer.DELIVERED, DappAnswer.NOT_DELIVERED -> null

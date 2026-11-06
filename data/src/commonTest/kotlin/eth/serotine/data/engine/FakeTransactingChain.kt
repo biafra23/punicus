@@ -40,6 +40,15 @@ internal class FakeTransactingChain(val base: FakeChain = FakeChain()) : Transac
 
     override fun receipt(hash: String): String? = answer { receipt }
 
+    /** What `getBlockByNumber` with full transactions answers, by block; unset, no answer. */
+    val bodies = mutableMapOf<Long, String>()
+    val bodiesAsked = mutableListOf<Long>()
+
+    override fun blockWithTransactions(number: Long): String? = answer {
+        bodiesAsked += number
+        bodies[number]
+    }
+
     override fun resolveName(name: String): NameAnswer = answer {
         resolved += name
         this.name

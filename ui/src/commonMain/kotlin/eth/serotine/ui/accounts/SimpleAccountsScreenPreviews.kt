@@ -9,6 +9,7 @@ import eth.serotine.ui.components.LightClientHealth.VERIFIED
 import eth.serotine.ui.components.LightClientItem
 import eth.serotine.ui.components.NetworkLabel
 import eth.serotine.ui.components.StaleAnchorWarning
+import eth.serotine.ui.ScreenPreview
 import eth.serotine.ui.theme.SerotineTheme
 import org.jetbrains.compose.ui.tooling.preview.Preview
 
@@ -258,18 +259,18 @@ private fun SimpleAccountsHiddenDarkPreview() = SimpleAccountsPreview(everyday.w
 private fun SimpleAccountsLoadingPreview() = SimpleAccountsPreview(AccountsUiState.Loading())
 
 /** Every preview above, which SimpleAccountsScreenPreviewsTest renders: a new preview goes in here too. */
-internal val simpleAccountsScreenPreviews: List<@Composable () -> Unit> = listOf(
-    { SimpleAccountsEverydayPreview() },
-    { SimpleAccountsEverydayDarkPreview() },
-    { SimpleAccountsRefreshingPreview() },
-    { SimpleAccountsSyncingPreview() },
-    { SimpleAccountsUnreachablePreview() },
-    { SimpleAccountsLivePreview() },
-    { SimpleAccountsStaleAnchorPreview() },
-    { SimpleAccountsEmptyPreview() },
-    { SimpleAccountsLoadingPreview() },
-    { SimpleAccountsSetAsidePreview() },
-    { SimpleAccountsListUnavailablePreview() },
-    { SimpleAccountsHiddenPreview() },
-    { SimpleAccountsHiddenDarkPreview() },
+internal val simpleAccountsScreenPreviews: List<ScreenPreview> = listOf(
+    ScreenPreview("everyday") { SimpleAccountsEverydayPreview() },
+    ScreenPreview("everyday-dark") { SimpleAccountsEverydayDarkPreview() },
+    ScreenPreview("refreshing") { SimpleAccountsRefreshingPreview() },
+    ScreenPreview("syncing") { SimpleAccountsSyncingPreview() },
+    ScreenPreview("unreachable") { SimpleAccountsUnreachablePreview() },
+    ScreenPreview("live") { SimpleAccountsLivePreview() },
+    ScreenPreview("stale-anchor") { SimpleAccountsStaleAnchorPreview() },
+    ScreenPreview("empty") { SimpleAccountsEmptyPreview() },
+    ScreenPreview("loading") { SimpleAccountsLoadingPreview() },
+    ScreenPreview("set-aside") { SimpleAccountsSetAsidePreview() },
+    ScreenPreview("list-unavailable") { SimpleAccountsListUnavailablePreview() },
+    ScreenPreview("hidden") { SimpleAccountsHiddenPreview() },
+    ScreenPreview("hidden-dark") { SimpleAccountsHiddenDarkPreview() },
 )

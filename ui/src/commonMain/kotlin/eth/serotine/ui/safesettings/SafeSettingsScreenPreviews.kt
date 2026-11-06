@@ -10,6 +10,7 @@ import eth.serotine.ui.components.SafeTxActionItem
 import eth.serotine.ui.components.SendFrom
 import eth.serotine.ui.components.UnlockStep
 import eth.serotine.ui.components.verifiedStripSample
+import eth.serotine.ui.ScreenPreview
 import eth.serotine.ui.theme.SerotineTheme
 import org.jetbrains.compose.ui.tooling.preview.Preview
 
@@ -238,22 +239,22 @@ private fun SafeSettingsUnavailablePreview() = SafeSettingsPreview(
 )
 
 /** Every preview above, which SafeSettingsScreenPreviewsTest renders: a new preview goes in here too. */
-internal val safeSettingsScreenPreviews: List<@Composable () -> Unit> = listOf(
-    { SafeSettingsOverviewPreview() },
-    { SafeSettingsOverviewDarkPreview() },
-    { SafeSettingsModulesAndGuardPreview() },
-    { SafeSettingsWatchOnlyPreview() },
-    { SafeSettingsAddOwnerPreview() },
-    { SafeSettingsAddOwnerProposingPreview() },
-    { SafeSettingsReplaceOwnerPreview() },
-    { SafeSettingsRemoveOwnerRefusedPreview() },
-    { SafeSettingsRemoveGuardPreview() },
-    { SafeSettingsReviewPreview() },
-    { SafeSettingsReviewDarkPreview() },
-    { SafeSettingsReviewQueuedPreview() },
-    { SafeSettingsReviewNotSavedPreview() },
-    { SafeSettingsReviewAskingToDropPreview() },
-    { SafeSettingsReviewCheckingPreview() },
-    { SafeSettingsLoadingPreview() },
-    { SafeSettingsUnavailablePreview() },
+internal val safeSettingsScreenPreviews: List<ScreenPreview> = listOf(
+    ScreenPreview("overview") { SafeSettingsOverviewPreview() },
+    ScreenPreview("overview-dark") { SafeSettingsOverviewDarkPreview() },
+    ScreenPreview("modules-and-guard") { SafeSettingsModulesAndGuardPreview() },
+    ScreenPreview("watch-only") { SafeSettingsWatchOnlyPreview() },
+    ScreenPreview("add-owner") { SafeSettingsAddOwnerPreview() },
+    ScreenPreview("add-owner-proposing") { SafeSettingsAddOwnerProposingPreview() },
+    ScreenPreview("replace-owner") { SafeSettingsReplaceOwnerPreview() },
+    ScreenPreview("remove-owner-refused") { SafeSettingsRemoveOwnerRefusedPreview() },
+    ScreenPreview("remove-guard") { SafeSettingsRemoveGuardPreview() },
+    ScreenPreview("review") { SafeSettingsReviewPreview() },
+    ScreenPreview("review-dark") { SafeSettingsReviewDarkPreview() },
+    ScreenPreview("review-queued") { SafeSettingsReviewQueuedPreview() },
+    ScreenPreview("review-not-saved") { SafeSettingsReviewNotSavedPreview() },
+    ScreenPreview("review-asking-to-drop") { SafeSettingsReviewAskingToDropPreview() },
+    ScreenPreview("review-checking") { SafeSettingsReviewCheckingPreview() },
+    ScreenPreview("loading") { SafeSettingsLoadingPreview() },
+    ScreenPreview("unavailable") { SafeSettingsUnavailablePreview() },
 )

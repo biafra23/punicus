@@ -86,13 +86,13 @@ class DappViewModelsTest {
         sessions.connections.value = DappConnections.On(
             DappRelayLink.CONNECTED,
             listOf(proposal()),
-            listOf(DappSession(DappSessionId("t1"), dapp, listOf(held.address), listOf("personal_sign"), 1_700_000_000 + 6 * 86_400 + 10, true)),
+            listOf(DappSession(DappSessionId("t1"), dapp, listOf(held.id), listOf("personal_sign"), 1_700_000_000 + 6 * 86_400 + 10, true)),
         )
         requests.waiting.value = listOf(
             DappRequest(
                 DappRequestId(DappSessionId("t1"), 9),
                 dapp,
-                listOf(held.address),
+                listOf(held.id),
                 "eip155:11155111",
                 DappAsk.PersonalSign(held.address, PersonalMessage.of("Hello".encodeToByteArray())!!),
                 1_700_000_300,
@@ -111,7 +111,8 @@ class DappViewModelsTest {
         assertEquals("Connected to WalletConnect's relay", state.link)
         assertEquals("${proposalId.pairing}/7", state.proposals.single().key)
         assertEquals(RequestRow("t1/9", "Test dApp", "https://dapp.test", "Asks you to sign a message · Review"), state.requests.single())
-        assertEquals("Sees 1 account · Ends in 6 days", state.sessions.single().line)
+        assertEquals("On Sepolia, a test network · Sees 1 account · Ends in 6 days", state.sessions.single().line)
+        assertEquals("On Ethereum and Gnosis Chain, real funds", ConnectionsViewModel.networksLine(setOf(Network.GNOSIS, Network.ETHEREUM)))
         vm.disconnect("t1")
         runCurrent()
         assertEquals(listOf(DappSessionId("t1")), sessions.disconnected)
@@ -174,7 +175,7 @@ class DappViewModelsTest {
 
         // A greyed-out account says why, and is not chosen.
         vm.toggle(key(watched))
-        assertEquals("Not offered to dApps", vm.uiState.value.explaining?.title)
+        assertEquals("Not offered to this dApp", vm.uiState.value.explaining?.title)
         vm.dismissExplanation()
         // Approve with nothing chosen says what is missing.
         vm.approve()
@@ -185,8 +186,137 @@ class DappViewModelsTest {
         assertFalse(vm.uiState.value.approveUnavailable)
         vm.approve()
         runCurrent()
-        assertEquals(listOf(proposalId to listOf(held.address)), sessions.approved)
+        assertEquals(listOf(proposalId to listOf(held.id)), sessions.approved)
         assertTrue(vm.uiState.value.done)
+    }
+
+    @Test
+    fun aProposalRequiringBothKindsListsThemWithoutSayingAChoiceDecides() = runTest {
+        main()
+        val wallet = FakeAccounts(held, account(Network.ETHEREUM, '1'))
+        val on = MemoryNetworkSettings(setOf(Network.ETHEREUM, Network.SEPOLIA))
+        val mixed = proposal(DappRefusal.MIXED_FUNDS).copy(requiredChains = setOf("eip155:1", "eip155:11155111"))
+        sessions.connections.value = DappConnections.On(DappRelayLink.CONNECTED, listOf(mixed), emptyList())
+        val vm = DappProposalViewModel(
+            "${proposalId.pairing}/7",
+            ObserveDappConnections(sessions, wallet, on),
+            ApproveDappProposal(sessions, wallet, on),
+            RejectDappProposal(sessions),
+        )
+        backgroundScope.launch { vm.uiState.collect {} }
+        runCurrent()
+        assertEquals(listOf("Ethereum, real funds", "Sepolia, a test network"), vm.uiState.value.networks)
+        assertNull(vm.uiState.value.networksNote, "it can only be rejected: no choice decides anything")
+        assertEquals(DappProposalViewModel.refusalLine(DappRefusal.MIXED_FUNDS), vm.uiState.value.refusal)
+    }
+
+    @Test
+    fun theFirstAccountChosenDecidesBetweenRealFundsAndTestnet() = runTest {
+        main()
+        val ethereum = account(Network.ETHEREUM, '1')
+        val gnosis = account(Network.GNOSIS, '3')
+        val wallet = FakeAccounts(held, ethereum, gnosis)
+        val on = MemoryNetworkSettings(setOf(Network.ETHEREUM, Network.GNOSIS, Network.SEPOLIA))
+        val everywhere = proposal().copy(optionalChains = setOf("eip155:1", "eip155:100", "eip155:11155111"))
+        sessions.connections.value = DappConnections.On(DappRelayLink.CONNECTED, listOf(everywhere), emptyList())
+        val vm = DappProposalViewModel(
+            "${proposalId.pairing}/7",
+            ObserveDappConnections(sessions, wallet, on),
+            ApproveDappProposal(sessions, wallet, on),
+            RejectDappProposal(sessions),
+        )
+        backgroundScope.launch { vm.uiState.collect {} }
+        runCurrent()
+        // Nothing chosen: either kind, and the screen says the first account decides.
+        assertEquals(
+            listOf("Ethereum, real funds", "Gnosis Chain, real funds", "Sepolia, a test network"),
+            vm.uiState.value.networks,
+        )
+        assertEquals(DappProposalViewModel.BOTH_KINDS, vm.uiState.value.networksNote)
+        assertEquals("Gnosis Chain", vm.uiState.value.accounts.first { it.key == key(gnosis) }.network)
+
+        // Sepolia chosen: the accounts holding real funds are greyed out, a tap saying why.
+        vm.toggle(key(held))
+        assertEquals(listOf("Sepolia, a test network"), vm.uiState.value.networks)
+        assertNull(vm.uiState.value.networksNote)
+        assertNotNull(vm.uiState.value.accounts.first { it.key == key(ethereum) }.unavailable)
+        vm.toggle(key(ethereum))
+        assertEquals(
+            DappProposalViewModel.offerLine(eth.serotine.domain.usecase.DappOffer.OTHER_FUNDS, Network.ETHEREUM),
+            vm.uiState.value.explaining?.reason,
+        )
+        vm.dismissExplanation()
+
+        // Unchosen, then both real-funds accounts: one connection holding Ethereum and Gnosis Chain.
+        vm.toggle(key(held))
+        vm.toggle(key(ethereum))
+        vm.toggle(key(gnosis))
+        assertEquals(listOf("Ethereum, real funds", "Gnosis Chain, real funds"), vm.uiState.value.networks)
+        assertNotNull(vm.uiState.value.accounts.first { it.key == key(held) }.unavailable)
+        vm.approve()
+        runCurrent()
+        assertEquals(listOf(proposalId to listOf(ethereum.id, gnosis.id)), sessions.approved)
+    }
+
+    @Test
+    fun approveWaitsForAnAccountOnEachNetworkTheDappRequires() = runTest {
+        main()
+        val ethereum = account(Network.ETHEREUM, '1')
+        val gnosis = account(Network.GNOSIS, '3')
+        val wallet = FakeAccounts(ethereum, gnosis)
+        val on = MemoryNetworkSettings(setOf(Network.ETHEREUM, Network.GNOSIS))
+        val requiring = proposal().copy(requiredChains = setOf("eip155:1", "eip155:100"), optionalChains = emptySet())
+        sessions.connections.value = DappConnections.On(DappRelayLink.CONNECTED, listOf(requiring), emptyList())
+        val vm = DappProposalViewModel(
+            "${proposalId.pairing}/7",
+            ObserveDappConnections(sessions, wallet, on),
+            ApproveDappProposal(sessions, wallet, on),
+            RejectDappProposal(sessions),
+        )
+        backgroundScope.launch { vm.uiState.collect {} }
+        runCurrent()
+        vm.toggle(key(ethereum))
+        assertTrue(vm.uiState.value.approveUnavailable, "greyed out until Gnosis Chain has an account")
+        assertEquals(DappProposalViewModel.missingLine(setOf(Network.GNOSIS)), vm.uiState.value.missingRequired)
+        vm.approve()
+        assertEquals(vm.uiState.value.missingRequired, vm.uiState.value.explaining?.reason, "still tappable: it says why")
+        assertTrue(sessions.approved.isEmpty())
+        vm.dismissExplanation()
+        vm.toggle(key(gnosis))
+        assertNull(vm.uiState.value.missingRequired)
+        vm.approve()
+        runCurrent()
+        assertEquals(listOf(proposalId to listOf(ethereum.id, gnosis.id)), sessions.approved)
+    }
+
+    @Test
+    fun aChosenAccountThatIsNoLongerOfferedGreysOutNoOtherAndCanBeUnchosen() = runTest {
+        main()
+        val ethereum = account(Network.ETHEREUM, '1')
+        val wallet = FakeAccounts(held, ethereum)
+        val on = MemoryNetworkSettings(setOf(Network.ETHEREUM, Network.SEPOLIA))
+        val either = proposal().copy(optionalChains = setOf("eip155:1", "eip155:11155111"))
+        sessions.connections.value = DappConnections.On(DappRelayLink.CONNECTED, listOf(either), emptyList())
+        val vm = DappProposalViewModel(
+            "${proposalId.pairing}/7",
+            ObserveDappConnections(sessions, wallet, on),
+            ApproveDappProposal(sessions, wallet, on),
+            RejectDappProposal(sessions),
+        )
+        backgroundScope.launch { vm.uiState.collect {} }
+        runCurrent()
+        vm.toggle(key(held))
+        assertNotNull(vm.uiState.value.accounts.first { it.key == key(ethereum) }.unavailable)
+        // Sepolia turned off: the Sepolia account no longer counts, so Ethereum's is offered again.
+        on.setEnabled(Network.SEPOLIA, false)
+        runCurrent()
+        assertFalse(vm.uiState.value.accounts.first { it.key == key(held) }.chosen)
+        assertNull(vm.uiState.value.accounts.first { it.key == key(ethereum) }.unavailable)
+        // And it can be unchosen, though greyed out: turned on again, it comes back unchosen.
+        vm.toggle(key(held))
+        on.setEnabled(Network.SEPOLIA, true)
+        runCurrent()
+        assertFalse(vm.uiState.value.accounts.first { it.key == key(held) }.chosen)
     }
 
     @Test

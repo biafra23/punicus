@@ -1,6 +1,7 @@
 package eth.serotine.ui.update
 
 import androidx.compose.runtime.Composable
+import eth.serotine.ui.ScreenPreview
 import eth.serotine.ui.theme.SerotineTheme
 import org.jetbrains.compose.ui.tooling.preview.Preview
 
@@ -32,7 +33,7 @@ private fun UpdateRequiredLightPreview() = UpdateRequiredPreview()
 private fun UpdateRequiredDarkPreview() = UpdateRequiredPreview(darkTheme = true)
 
 /** Every preview above, which UpdateRequiredScreenPreviewsTest renders: a new preview goes in here too. */
-internal val updateRequiredScreenPreviews: List<@Composable () -> Unit> = listOf(
-    { UpdateRequiredLightPreview() },
-    { UpdateRequiredDarkPreview() },
+internal val updateRequiredScreenPreviews: List<ScreenPreview> = listOf(
+    ScreenPreview("required") { UpdateRequiredLightPreview() },
+    ScreenPreview("required-dark") { UpdateRequiredDarkPreview() },
 )
