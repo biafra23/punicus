@@ -10,7 +10,7 @@ If the folder grows too much, there are two levers, both the owner's. Deleting t
 
 | Screen | Folder | States |
 |---|---|---|
-| [Account detail](#account-detail) | `account-detail/` | 35 |
+| [Account detail](#account-detail) | `account-detail/` | 42 |
 | [Accounts](#accounts) | `accounts/` | 32 |
 | [Activity detail](#activity-detail) | `activity-detail/` | 10 |
 | [Add on networks (dialog)](#add-on-networks-dialog) | `add-on-networks-dialog/` | 5 |
@@ -40,7 +40,7 @@ If the folder grows too much, there are two levers, both the owner's. Deleting t
 | [Security](#security) | `security/` | 15 |
 | [Send](#send) | `send/` | 23 |
 | [Settings](#settings) | `settings/` | 17 |
-| [Account detail (simple mode)](#simple-account-detail) | `simple-account-detail/` | 10 |
+| [Account detail (simple mode)](#simple-account-detail) | `simple-account-detail/` | 11 |
 | [Home (simple mode)](#simple-accounts) | `simple-accounts/` | 13 |
 | [Activity detail (simple mode)](#simple-activity-detail) | `simple-activity-detail/` | 4 |
 | [Add token (simple mode)](#simple-add-token) | `simple-add-token/` | 2 |
@@ -67,7 +67,7 @@ If the folder grows too much, there are two levers, both the owner's. Deleting t
 <a name="account-detail"></a>
 ## Account detail
 
-`account-detail/`, 35 states: `assets`, `assets-dark`, `checking`, `head-too-old`, `by-name-with-impostor`, `safe-assets`, `safe-owners`, `safe-queue`, `safe-queue-dark`, `safe-queue-empty`, `safe-queue-unverified`, `safe-queue-unreadable`, `safe-reading`, `not-a-safe`, `loading`, `list-unavailable`, `ens-name-moved`, `activity`, `activity-dark`, `waiting-swap`, `waiting-swap-dark`, `activity-empty`, `activity-loading`, `activity-unavailable`, `activity-tokens`, `safe-activity`, `safe-activity-dark`, `narrow`, `safe-queue-reading`, `checking-dark`, `ethereum`, `network-off`, `safe-owners-network-off`, `assets-hidden`, `assets-hidden-dark`
+`account-detail/`, 42 states: `assets`, `assets-dark`, `checking`, `head-too-old`, `by-name-with-impostor`, `safe-assets`, `safe-owners`, `safe-queue`, `safe-queue-dark`, `safe-queue-empty`, `safe-queue-unverified`, `safe-queue-unreadable`, `safe-reading`, `not-a-safe`, `loading`, `list-unavailable`, `ens-name-moved`, `activity`, `activity-dark`, `waiting-swap`, `waiting-swap-dark`, `activity-empty`, `activity-loading`, `activity-unavailable`, `activity-tokens`, `safe-activity`, `safe-activity-dark`, `narrow`, `safe-queue-reading`, `checking-dark`, `ethereum`, `network-off`, `safe-owners-network-off`, `assets-hidden`, `assets-hidden-dark`, `nfts`, `nfts-unlisted-open-dark`, `nfts-checking`, `nfts-none`, `nft-add`, `nft-add-unavailable`, `nft-adding`
 
 <a href="account-detail/assets.png"><img src="account-detail/assets.png" width="206" alt="assets"></a>
 <a href="account-detail/assets-dark.png"><img src="account-detail/assets-dark.png" width="206" alt="assets-dark"></a>
@@ -104,6 +104,13 @@ If the folder grows too much, there are two levers, both the owner's. Deleting t
 <a href="account-detail/safe-owners-network-off.png"><img src="account-detail/safe-owners-network-off.png" width="206" alt="safe-owners-network-off"></a>
 <a href="account-detail/assets-hidden.png"><img src="account-detail/assets-hidden.png" width="206" alt="assets-hidden"></a>
 <a href="account-detail/assets-hidden-dark.png"><img src="account-detail/assets-hidden-dark.png" width="206" alt="assets-hidden-dark"></a>
+<a href="account-detail/nfts.png"><img src="account-detail/nfts.png" width="206" alt="nfts"></a>
+<a href="account-detail/nfts-unlisted-open-dark.png"><img src="account-detail/nfts-unlisted-open-dark.png" width="206" alt="nfts-unlisted-open-dark"></a>
+<a href="account-detail/nfts-checking.png"><img src="account-detail/nfts-checking.png" width="206" alt="nfts-checking"></a>
+<a href="account-detail/nfts-none.png"><img src="account-detail/nfts-none.png" width="206" alt="nfts-none"></a>
+<a href="account-detail/nft-add.png"><img src="account-detail/nft-add.png" width="206" alt="nft-add"></a>
+<a href="account-detail/nft-add-unavailable.png"><img src="account-detail/nft-add-unavailable.png" width="206" alt="nft-add-unavailable"></a>
+<a href="account-detail/nft-adding.png"><img src="account-detail/nft-adding.png" width="206" alt="nft-adding"></a>
 
 <a name="accounts"></a>
 ## Accounts
@@ -674,7 +681,7 @@ If the folder grows too much, there are two levers, both the owner's. Deleting t
 <a name="simple-account-detail"></a>
 ## Account detail (simple mode)
 
-`simple-account-detail/`, 10 states: `assets`, `assets-dark`, `last-verified`, `syncing`, `activity`, `waiting-swap`, `safe`, `network-off`, `hidden`, `hidden-dark`
+`simple-account-detail/`, 11 states: `assets`, `assets-dark`, `last-verified`, `syncing`, `activity`, `waiting-swap`, `safe`, `network-off`, `hidden`, `hidden-dark`, `nfts`
 
 <a href="simple-account-detail/assets.png"><img src="simple-account-detail/assets.png" width="206" alt="assets"></a>
 <a href="simple-account-detail/assets-dark.png"><img src="simple-account-detail/assets-dark.png" width="206" alt="assets-dark"></a>
@@ -686,6 +693,7 @@ If the folder grows too much, there are two levers, both the owner's. Deleting t
 <a href="simple-account-detail/network-off.png"><img src="simple-account-detail/network-off.png" width="206" alt="network-off"></a>
 <a href="simple-account-detail/hidden.png"><img src="simple-account-detail/hidden.png" width="206" alt="hidden"></a>
 <a href="simple-account-detail/hidden-dark.png"><img src="simple-account-detail/hidden-dark.png" width="206" alt="hidden-dark"></a>
+<a href="simple-account-detail/nfts.png"><img src="simple-account-detail/nfts.png" width="206" alt="nfts"></a>
 
 <a name="simple-accounts"></a>
 ## Home (simple mode)
