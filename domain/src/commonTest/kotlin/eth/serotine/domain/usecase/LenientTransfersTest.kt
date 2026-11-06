@@ -121,6 +121,20 @@ class LenientTransfersTest {
     }
 
     @Test
+    fun lenientMaxLeavesRoomForTheSignedFeeAndWhatIsNotMinedYetAndDraftsAsIs() = runTest {
+        val maxFee = 22 * gwei * DraftGas.NATIVE
+        assertEquals(UInt256.of(eth - maxFee), draft.mostNative(alice, FeeLevel.NORMAL))
+        val most = draft.mostNative(alice, FeeLevel.NORMAL)!!
+        assertIs<TransferDrafting.Drafted>(draft(alice, bob, TransferAsset.Native, most, FeeLevel.NORMAL))
+
+        sent.record(sentTransfer(nonce = 7, maxCost = UInt256.of(eth / 2)))
+        assertEquals(UInt256.of(eth / 2 - maxFee), draft.mostNative(alice, FeeLevel.NORMAL))
+
+        kept.fees = null
+        assertNull(draft.mostNative(alice, FeeLevel.NORMAL))
+    }
+
+    @Test
     fun aDraftWaitsForWhatWasNeverVerifiedHere() = runTest {
         kept.nonce = null
         assertEquals(TransferDrafting.Waits(DraftInput.NONCE), draftTenth())

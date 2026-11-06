@@ -262,6 +262,33 @@ class DraftTransfer(
         )
     }
 
+    /**
+     * The most of the network's currency a draft from [from] at [level] can send (lenient Max,
+     * docs/lenient-mode.md, *What a draft is built on*): the balance last verified, less the most
+     * the fee can be at the pinned gas ceiling and the kept fee cap, less what the account's
+     * transactions not mined yet may still take. Zero when that leaves nothing; null when it
+     * cannot be told (no balance, nonce or fee quote verified on this device, or one that does
+     * not fit 256 bits). Strict Max is not this: it is the whole verified balance.
+     */
+    suspend fun mostNative(from: Address, level: FeeLevel): UInt256? {
+        val nonce = kept.minedNonce(network, from) ?: return null
+        val fees = kept.fees(network) ?: return null
+        val balance = when (val reading = nativeBalances.observeBalance(network, from).first()) {
+            is BalanceReading.Verified -> reading.wei.toUInt256OrNull()
+            is BalanceReading.LastKnown -> reading.wei.toUInt256OrNull()
+            BalanceReading.Syncing, is BalanceReading.Unavailable -> null
+        } ?: return null
+        val since = clock() - RECORD_LIFETIME_SECONDS
+        val pending = (sentTransfers.observe().first() as? SentTransferList.Loaded)?.transfers.orEmpty()
+            .filter { it.network == network && it.account == from && it.sentAt >= since && it.nonce >= nonce.count }
+            .filter { !it.maybeSent }
+            .map { it.maxCost }
+            .sumOrNull() ?: return null
+        val maxFee = fees.quote.maxFeePerGasOrNull(level)?.timesOrNull(UInt256.of(DraftGas.NATIVE)) ?: return null
+        val reserved = maxFee.plusOrNull(pending) ?: return null
+        return balance.minusOrNull(reserved) ?: UInt256.ZERO
+    }
+
     /** The id of what [from] has queued on this network, or null; an unreadable outbox holds nothing back here. */
     private suspend fun queuedId(from: Address): String? =
         (outbox.observe().first() as? OutboxList.Loaded)?.queued
