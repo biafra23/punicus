@@ -20,9 +20,9 @@ If the folder grows too much, there are two levers, both the owner's. Deleting t
 | [Create account](#create-account) | `create-account/` | 16 |
 | [Create Safe](#create-safe) | `create-safe/` | 19 |
 | [Display currency](#currency) | `currency/` | 4 |
-| [dApp connection request](#dapp-proposal) | `dapp-proposal/` | 8 |
-| [dApp signing request](#dapp-request) | `dapp-request/` | 18 |
-| [dApp transaction](#dapp-transaction) | `dapp-transaction/` | 18 |
+| [dApp connection request](#dapp-proposal) | `dapp-proposal/` | 14 |
+| [dApp signing request](#dapp-request) | `dapp-request/` | 20 |
+| [dApp transaction](#dapp-transaction) | `dapp-transaction/` | 20 |
 | [Debug](#debug) | `debug/` | 6 |
 | [Add account from the same phrase](#derive-account) | `derive-account/` | 10 |
 | [Send from another wallet](#handoff) | `handoff/` | 18 |
@@ -281,11 +281,17 @@ If the folder grows too much, there are two levers, both the owner's. Deleting t
 <a name="dapp-proposal"></a>
 ## dApp connection request
 
-`dapp-proposal/`, 8 states: `request`, `request-dark`, `none-chosen`, `refused`, `explaining`, `not-saved`, `ended`, `loading`
+`dapp-proposal/`, 14 states: `request`, `request-dark`, `none-chosen`, `either-kind`, `real-funds`, `real-funds-dark`, `missing-required`, `missing-required-dark`, `mixed-funds-refused`, `refused`, `explaining`, `not-saved`, `ended`, `loading`
 
 <a href="dapp-proposal/request.png"><img src="dapp-proposal/request.png" width="206" alt="request"></a>
 <a href="dapp-proposal/request-dark.png"><img src="dapp-proposal/request-dark.png" width="206" alt="request-dark"></a>
 <a href="dapp-proposal/none-chosen.png"><img src="dapp-proposal/none-chosen.png" width="206" alt="none-chosen"></a>
+<a href="dapp-proposal/either-kind.png"><img src="dapp-proposal/either-kind.png" width="206" alt="either-kind"></a>
+<a href="dapp-proposal/real-funds.png"><img src="dapp-proposal/real-funds.png" width="206" alt="real-funds"></a>
+<a href="dapp-proposal/real-funds-dark.png"><img src="dapp-proposal/real-funds-dark.png" width="206" alt="real-funds-dark"></a>
+<a href="dapp-proposal/missing-required.png"><img src="dapp-proposal/missing-required.png" width="206" alt="missing-required"></a>
+<a href="dapp-proposal/missing-required-dark.png"><img src="dapp-proposal/missing-required-dark.png" width="206" alt="missing-required-dark"></a>
+<a href="dapp-proposal/mixed-funds-refused.png"><img src="dapp-proposal/mixed-funds-refused.png" width="206" alt="mixed-funds-refused"></a>
 <a href="dapp-proposal/refused.png"><img src="dapp-proposal/refused.png" width="206" alt="refused"></a>
 <a href="dapp-proposal/explaining.png"><img src="dapp-proposal/explaining.png" width="206" alt="explaining"></a>
 <a href="dapp-proposal/not-saved.png"><img src="dapp-proposal/not-saved.png" width="206" alt="not-saved"></a>
@@ -295,7 +301,7 @@ If the folder grows too much, there are two levers, both the owner's. Deleting t
 <a name="dapp-request"></a>
 ## dApp signing request
 
-`dapp-request/`, 18 states: `sign-in`, `sign-in-dark`, `biometrics`, `other-site`, `message`, `hex`, `refused`, `wrong-password`, `signing`, `explaining`, `ended`, `loading`, `approval`, `approval-dark`, `unlimited`, `swap-order`, `not-decoded`, `other-network`
+`dapp-request/`, 20 states: `sign-in`, `sign-in-dark`, `biometrics`, `other-site`, `message`, `hex`, `refused`, `wrong-password`, `signing`, `explaining`, `ended`, `loading`, `approval`, `approval-dark`, `unlimited`, `swap-order`, `not-decoded`, `other-network`, `real-funds`, `real-funds-dark`
 
 <a href="dapp-request/sign-in.png"><img src="dapp-request/sign-in.png" width="206" alt="sign-in"></a>
 <a href="dapp-request/sign-in-dark.png"><img src="dapp-request/sign-in-dark.png" width="206" alt="sign-in-dark"></a>
@@ -315,11 +321,13 @@ If the folder grows too much, there are two levers, both the owner's. Deleting t
 <a href="dapp-request/swap-order.png"><img src="dapp-request/swap-order.png" width="206" alt="swap-order"></a>
 <a href="dapp-request/not-decoded.png"><img src="dapp-request/not-decoded.png" width="206" alt="not-decoded"></a>
 <a href="dapp-request/other-network.png"><img src="dapp-request/other-network.png" width="206" alt="other-network"></a>
+<a href="dapp-request/real-funds.png"><img src="dapp-request/real-funds.png" width="206" alt="real-funds"></a>
+<a href="dapp-request/real-funds-dark.png"><img src="dapp-request/real-funds-dark.png" width="206" alt="real-funds-dark"></a>
 
 <a name="dapp-transaction"></a>
 ## dApp transaction
 
-`dapp-transaction/`, 18 states: `payment`, `payment-dark`, `token-transfer`, `approval`, `not-decoded`, `quoting`, `not-quoted`, `refused`, `safe`, `safe-dark`, `safe-no-owner`, `safe-signing`, `safe-queued`, `sending`, `not-sent`, `explaining`, `ended`, `loading`
+`dapp-transaction/`, 20 states: `payment`, `payment-dark`, `token-transfer`, `approval`, `not-decoded`, `quoting`, `not-quoted`, `refused`, `safe`, `safe-dark`, `safe-no-owner`, `safe-signing`, `safe-queued`, `sending`, `not-sent`, `explaining`, `ended`, `loading`, `real-funds`, `real-funds-dark`
 
 <a href="dapp-transaction/payment.png"><img src="dapp-transaction/payment.png" width="206" alt="payment"></a>
 <a href="dapp-transaction/payment-dark.png"><img src="dapp-transaction/payment-dark.png" width="206" alt="payment-dark"></a>
@@ -339,6 +347,8 @@ If the folder grows too much, there are two levers, both the owner's. Deleting t
 <a href="dapp-transaction/explaining.png"><img src="dapp-transaction/explaining.png" width="206" alt="explaining"></a>
 <a href="dapp-transaction/ended.png"><img src="dapp-transaction/ended.png" width="206" alt="ended"></a>
 <a href="dapp-transaction/loading.png"><img src="dapp-transaction/loading.png" width="206" alt="loading"></a>
+<a href="dapp-transaction/real-funds.png"><img src="dapp-transaction/real-funds.png" width="206" alt="real-funds"></a>
+<a href="dapp-transaction/real-funds-dark.png"><img src="dapp-transaction/real-funds-dark.png" width="206" alt="real-funds-dark"></a>
 
 <a name="debug"></a>
 ## Debug
