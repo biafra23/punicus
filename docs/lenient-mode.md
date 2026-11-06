@@ -249,6 +249,11 @@ own test of the fee. A peer tests the signed figures, not the fresh ones.
   holds the queued one back, as it holds a strict quote back today. The
   queued one waits until the earlier one is mined or three hours old
   (docs/wallet-ux.md, screen 7). Its hour runs meanwhile (decision 4).
+- **A broadcast the network rejects** is a conflict too. It is not
+  recorded, as in strict mode (`signAndSend`), so it holds no nonce; the
+  user is told the network's words and asked to sign again. One that no
+  peer answered may have been taken all the same: it is recorded as maybe
+  sent, as in strict mode, and its status offers to try it again.
 - **A conflict never fixes itself.** Every field is in the signature, so the
   user is asked to sign again. Sign again opens the review with the fresh
   quote, read fresh as in strict mode now that the light client verifies.
