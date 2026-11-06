@@ -61,7 +61,10 @@ change what it trusts.
 - Every value is verified by the light client or shown as not available.
 - A quote, a review and a signature read fresh state, whatever the screen
   showed before: the rules of docs/wallet-ux.md for Send and Safe
-  transactions, and of docs/swaps.md for swaps, apply unchanged.
+  transactions, and of docs/swaps.md for swaps, apply unchanged. In lenient
+  mode a review and a signature may read the state last verified, labelled,
+  and the check before sending reads fresh state (docs/lenient-mode.md;
+  owner rulings, 2026-11-06).
 - Sepolia keeps every testnet warning and is never added to a total with
   real funds.
 - A network-upgrade warning says that peers report it.
@@ -111,7 +114,8 @@ change what it trusts.
   reading a value gets a fresh proof, at the current head. Only a reader
   that has had one may be held a proof across heads. So a screen shows
   fresh values as it opens, and a quote, a review and a signature always
-  read fresh state, in either view.
+  read fresh state, in either view, except a lenient draft's
+  (docs/lenient-mode.md; owner rulings, 2026-11-06).
 - **On demand.** Each network has a `ProofSchedule`, which its native
   balances, token balances and prices share. In simple mode
   (`FollowInterfaceMode`, run by the hosts), on a network that is not live,
