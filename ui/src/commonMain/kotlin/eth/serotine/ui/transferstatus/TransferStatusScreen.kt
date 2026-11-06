@@ -144,7 +144,7 @@ fun TransferStatusRoute(
  * maybe sent, Try again ([onRetry]), which sends the same signed bytes. [lightClient] is the
  * network's strip, Detailed view's; simple mode ([SimpleTransferStatusScreen]) draws none (null),
  * and offers its steps' blocks behind *Details* ([details]; none: no Details). A transfer queued in
- * lenient mode shows its step before Signed, with Discard ([onDiscard]), Sign again or Edit
+ * lenient mode shows its step after Signed, with Discard ([onDiscard]), Sign again or Edit
  * ([onSignAgain]) and, past its hour, Send now ([onConfirm]), each greyed out while its check and
  * broadcast run, a tap saying so.
  */

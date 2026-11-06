@@ -232,6 +232,11 @@ private fun SendDraftReviewTokenPreview() = SendPreview(tokenDraftReview, lightC
 
 @Preview
 @Composable
+private fun SendDraftReviewSigningPreview() =
+    SendPreview(draftReview.copy(signing = true), lightClient = catchingUpStripSample)
+
+@Preview
+@Composable
 private fun SendDraftReviewNotKeptPreview() = SendPreview(
     draftReview.copy(
         unlock = UnlockStep(
@@ -513,5 +518,6 @@ internal val sendScreenPreviews: List<ScreenPreview> = listOf(
     ScreenPreview("draft-review-dark") { SendDraftReviewDarkPreview() },
     ScreenPreview("draft-review-token") { SendDraftReviewTokenPreview() },
     ScreenPreview("draft-review-not-kept") { SendDraftReviewNotKeptPreview() },
+    ScreenPreview("draft-review-signing") { SendDraftReviewSigningPreview() },
     ScreenPreview("queued") { SendQueuedPreview() },
 )

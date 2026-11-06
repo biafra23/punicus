@@ -556,7 +556,7 @@ private val QUEUED_ROWS = listOf(
         detail = "To Savings · 0xfB69…d359",
         about = "0xfB6916095ca1df60bB79Ce92cE3Ea74c37c5d359",
         time = "Signed Nov 7, 2026, 9:12 AM",
-        status = "Waiting to be sent",
+        status = "Waiting to send",
         state = ActivityState.WAITING,
         opens = ActivityKey("0x" + "9a".repeat(32), queued = true),
     ),

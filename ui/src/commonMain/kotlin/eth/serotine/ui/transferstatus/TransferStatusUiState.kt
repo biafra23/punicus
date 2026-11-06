@@ -46,7 +46,7 @@ sealed interface TransferStatusUiState {
     /**
      * A transfer signed in lenient mode and waiting in the outbox under [id] (docs/lenient-mode.md,
      * *The outbox*; owner rulings, 2026-11-06): what it sends ([sent]), and its [steps], a step
-     * before Signed saying where it stands: queued, waiting for the network to catch up or being
+     * after Signed saying where it stands: queued, waiting for the network to catch up or being
      * checked, "Sending…", past its hour, or in conflict.
      *
      * - [question] past its hour without the user's tap (decision 4): "Still send this? You signed

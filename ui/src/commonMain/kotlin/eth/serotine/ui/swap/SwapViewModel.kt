@@ -221,6 +221,10 @@ class SwapViewModel(
     /** [note] in lenient mode, nothing in strict mode. */
     private fun lenientNote(note: String): String = if (lenient.value) note else ""
 
+    /** [note] in lenient mode for a figure unavailable while syncing ([reason]), nothing otherwise. */
+    private fun lenientNote(note: String, reason: ReadUnavailable): String =
+        if (reason == ReadUnavailable.SYNCING) lenientNote(note) else ""
+
     /** The account this screen is about: its address, on its network. */
     private val from: Address = account.address
 
@@ -1664,7 +1668,8 @@ class SwapViewModel(
             WrapQuoting.NotAToken -> NOT_A_TOKEN
             WrapQuoting.Refused -> "The light client on this device cannot quote this $verb."
             WrapQuoting.Syncing -> "The light client is not synced yet: try again in a moment." + lenientNote(WRAPS_STAY_STRICT)
-            is WrapQuoting.Unavailable -> unavailableText(quoting.reason, quoting.figure)
+            is WrapQuoting.Unavailable -> unavailableText(quoting.reason, quoting.figure) +
+                lenientNote(WRAPS_STAY_STRICT, quoting.reason)
         }
     }
 
@@ -1825,7 +1830,8 @@ class SwapViewModel(
         SwapQuoting.NotAToken -> NOT_A_TOKEN
         SwapQuoting.Refused -> "The light client on this device cannot quote this swap."
         SwapQuoting.Syncing -> "The light client is not synced yet: try again in a moment." + lenientNote(SWAPS_STAY_STRICT)
-        is SwapQuoting.Unavailable -> unavailableText(quoting.reason, quoting.figure)
+        is SwapQuoting.Unavailable -> unavailableText(quoting.reason, quoting.figure) +
+            lenientNote(SWAPS_STAY_STRICT, quoting.reason)
     }
 
     /** [swapRefusal] in simple mode's words, with no block (docs/simple-ui.md); null where it names none. */
@@ -1877,7 +1883,8 @@ class SwapViewModel(
         CowSwapQuoting.NotAToken -> NOT_A_TOKEN
         CowSwapQuoting.Refused -> "The light client on this device cannot quote this swap."
         CowSwapQuoting.Syncing -> "The light client is not synced yet: try again in a moment." + lenientNote(SWAPS_STAY_STRICT)
-        is CowSwapQuoting.Unavailable -> unavailableText(quoting.reason, quoting.figure)
+        is CowSwapQuoting.Unavailable -> unavailableText(quoting.reason, quoting.figure) +
+            lenientNote(SWAPS_STAY_STRICT, quoting.reason)
         is CowSwapQuoting.CowRefused -> when (quoting.why) {
             CowRefusal.NO_LIQUIDITY -> "CoW found no liquidity for this swap"
             CowRefusal.UNSUPPORTED_TOKEN ->
@@ -1914,7 +1921,8 @@ class SwapViewModel(
         ApprovalQuoting.NotAToken -> "${sell.symbol}'s contract does not answer as a token."
         ApprovalQuoting.Refused -> "The light client on this device cannot quote the approval."
         ApprovalQuoting.Syncing -> "The light client is not synced yet: try again in a moment." + lenientNote(SWAPS_STAY_STRICT)
-        is ApprovalQuoting.Unavailable -> unavailableText(quoting.reason, quoting.figure)
+        is ApprovalQuoting.Unavailable -> unavailableText(quoting.reason, quoting.figure) +
+            lenientNote(SWAPS_STAY_STRICT, quoting.reason)
     }
 
     private fun unavailableText(reason: ReadUnavailable, figure: QuoteFigure?) =

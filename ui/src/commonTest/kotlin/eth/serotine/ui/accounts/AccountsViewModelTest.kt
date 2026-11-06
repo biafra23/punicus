@@ -46,6 +46,7 @@ import eth.serotine.domain.usecase.ObserveTokenHoldings
 import eth.serotine.domain.usecase.ObserveUpgradeWarnings
 import eth.serotine.domain.usecase.ObserveUsdPrice
 import eth.serotine.domain.usecase.OfferHandoff
+import eth.serotine.domain.usecase.QUEUED_UNATTENDED_SECONDS
 import eth.serotine.domain.usecase.RefreshNetworkData
 import eth.serotine.domain.usecase.SetNetworkEnabled
 import eth.serotine.domain.usecase.SyncPastStaleAnchor
@@ -1083,14 +1084,14 @@ class AccountsViewModelTest {
         runCurrent()
 
         val ready = assertIs<AccountsUiState.Ready>(viewModel.uiState.value)
-        assertEquals("1 waiting to be sent · Keep Serotine open to send it sooner", ready.sections.single().queued)
-        assertEquals(listOf("Sepolia: 1 waiting to be sent · Keep Serotine open to send it sooner"), ready.queued)
+        assertEquals("1 waiting to send · Keep Serotine open to send it sooner", ready.sections.single().queued)
+        assertEquals(listOf("Sepolia: 1 waiting to send · Keep Serotine open to send it sooner"), ready.queued)
 
         // Its light client verifies: it is checked and sent shortly, with nothing to ask of the user.
         lightClient.status.value = LightClientStatus.Synced(headBlock = 9, headTimestamp = now, finalized = null)
         runCurrent()
         assertEquals(
-            "1 waiting to be sent",
+            "1 waiting to send",
             assertIs<AccountsUiState.Ready>(viewModel.uiState.value).sections.single().queued,
         )
 
@@ -1119,5 +1120,33 @@ class AccountsViewModelTest {
         viewModel.dismissLost()
         runCurrent()
         assertNull(assertIs<AccountsUiState.Ready>(viewModel.uiState.value).lostNotice)
+    }
+
+    @Test
+    fun oneQueuedPastItsHourIsSaidAsWaitingForTheUsersAnswerNotAsWaitingToSend() {
+        val past = queuedFromDaily("0x" + "9a".repeat(32)).copy(signedAt = 1_000)
+        assertEquals(
+            "1 waits for your answer: still send it?",
+            AccountsViewModel.queuedLine(listOf(past), verifies = true, now = 1_000 + QUEUED_UNATTENDED_SECONDS + 1),
+        )
+        // A tap gives it an hour of its own.
+        val tapped = past.copy(confirmedAt = 1_000 + QUEUED_UNATTENDED_SECONDS)
+        assertEquals(
+            "1 waiting to send",
+            AccountsViewModel.queuedLine(listOf(tapped), verifies = true, now = 1_000 + QUEUED_UNATTENDED_SECONDS + 1),
+        )
+    }
+
+    @Test
+    fun anOutboxThatCannotBeReadIsSaidOnHome() = runTest {
+        Dispatchers.setMain(UnconfinedTestDispatcher(testScheduler))
+        repository.accounts = listOf(daily)
+        outbox.list.value = OutboxList.Unreadable
+        val viewModel = viewModel()
+        backgroundScope.launch { viewModel.uiState.collect {} }
+        runCurrent()
+
+        val notice = assertNotNull(assertIs<AccountsUiState.Ready>(viewModel.uiState.value).notice)
+        assertTrue("nothing is sent from this wallet until they can be" in notice, notice)
     }
 }

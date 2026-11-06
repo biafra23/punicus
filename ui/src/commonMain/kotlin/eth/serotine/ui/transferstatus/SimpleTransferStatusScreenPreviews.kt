@@ -140,7 +140,7 @@ private fun SimpleTransferMaybeSentPreview() = SimpleTransferStatusPreview(
     ),
 )
 
-/** A transfer queued in lenient mode: its step before Signed, in simple mode's words. */
+/** A transfer queued in lenient mode: Signed, then its step, in simple mode's words. */
 @Preview
 @Composable
 private fun SimpleTransferQueuedPreview() = SimpleTransferStatusPreview(queuedSample)

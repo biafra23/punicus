@@ -43,6 +43,7 @@ import eth.serotine.ui.components.StaleAnchorWarning
 import eth.serotine.ui.components.agoText
 import eth.serotine.ui.components.asItems
 import eth.serotine.ui.components.epochSecondsNow
+import eth.serotine.ui.outbox.pastItsHour
 import eth.serotine.ui.components.maskAmount
 import eth.serotine.ui.components.notTurnedOn
 import eth.serotine.ui.components.redatedWhile
@@ -173,7 +174,7 @@ class AccountsViewModel(
      * What each network's accounts have queued in lenient mode, by chain id, said under its line
      * (docs/lenient-mode.md, *Where it shows*), and whether queued signed bytes were lost.
      */
-    private data class OutboxLines(val byNetwork: Map<Long, String>, val lost: Boolean)
+    private data class OutboxLines(val byNetwork: Map<Long, String>, val lost: Boolean, val unreadable: Boolean)
 
     private val outboxLines = combine(
         // Nothing queued until the outbox is read: Home never waits for it.
@@ -184,10 +185,14 @@ class AccountsViewModel(
         val loaded = list as? OutboxList.Loaded
         val byNetwork = Network.entries.mapNotNull { network ->
             val queued = loaded?.queued.orEmpty().filter { it.network == network }
-            queuedLine(queued, verifies = synced[network.ordinal], off = network.displayName.takeIf { network !in on })
-                ?.let { network.chainId to it }
+            queuedLine(
+                queued,
+                verifies = synced[network.ordinal],
+                now = clock(),
+                off = network.displayName.takeIf { network !in on },
+            )?.let { network.chainId to it }
         }.toMap()
-        OutboxLines(byNetwork, loaded?.lost == true)
+        OutboxLines(byNetwork, loaded?.lost == true, unreadable = list is OutboxList.Unreadable)
     }.distinctUntilChanged()
 
     val uiState: StateFlow<AccountsUiState> = combine(
@@ -225,6 +230,10 @@ class AccountsViewModel(
                     lines.byNetwork[network.chainId]?.let { "${network.displayName}: $it" }
                 },
                 lostNotice = LOST.takeIf { lines.lost },
+                // Every send is held back while the outbox cannot be read: said here, where it is seen.
+                notice = listOfNotNull(state.notice, OUTBOX_UNREADABLE.takeIf { lines.unreadable })
+                    .joinToString(" ")
+                    .ifEmpty { null },
             )
         }
         // Masked last, on the finished state; nothing is drawn before the choice is read, so a hidden
@@ -525,7 +534,7 @@ class AccountsViewModel(
             totalNote(total, network, currency)
         }
 
-    private companion object {
+    internal companion object {
         /** For how long at most the list says a refresh is being answered, in seconds. */
         const val REFRESH_SHOWN_SECONDS = 15L
 
@@ -539,18 +548,30 @@ class AccountsViewModel(
 
         const val LOST_NOT_DISMISSED = "The notice could not be dismissed: it is shown again next time."
 
+        const val OUTBOX_UNREADABLE = "The transactions waiting to be sent on this device cannot be read right " +
+            "now, so nothing is sent from this wallet until they can be: one of them may already be on its way. " +
+            "Serotine keeps trying."
+
         /**
-         * What a network's [queued] transactions come to, under its line: how many wait to be sent, how
-         * many need a signature again, and, while its light client does not [verifies], that the app
-         * open sends them sooner (decision 7); or, on a network that is [off] (its name), that it is
-         * to be turned on for them to be sent. Null when nothing is queued.
+         * What a network's [queued] transactions come to, under its line: how many wait to send, how
+         * many wait for the user's answer past their hour ([QUEUED_UNATTENDED_SECONDS] from their
+         * signature or from the last tap, at [now], unix seconds: they are never sent by themselves),
+         * how many need a signature again, and, while its light client does not [verifies], that the
+         * app open sends the ones waiting sooner (decision 7); or, on a network that is [off] (its
+         * name), that it is to be turned on for them to be sent. Null when nothing is queued.
          */
-        fun queuedLine(queued: List<QueuedTransaction>, verifies: Boolean, off: String? = null): String? {
+        fun queuedLine(queued: List<QueuedTransaction>, verifies: Boolean, now: Long, off: String? = null): String? {
             val conflicts = queued.count { it.conflict != null }
-            val waiting = queued.size - conflicts
+            val asking = queued.count { it.conflict == null && !it.sending && it.pastItsHour(now) }
+            val waiting = queued.size - conflicts - asking
             val them = if (waiting == 1) "it" else "them"
             return listOfNotNull(
-                "$waiting waiting to be sent".takeIf { waiting > 0 },
+                "$waiting waiting to send".takeIf { waiting > 0 },
+                when (asking) {
+                    0 -> null
+                    1 -> "1 waits for your answer: still send it?"
+                    else -> "$asking wait for your answer: still send them?"
+                },
                 when (conflicts) {
                     0 -> null
                     1 -> "1 needs your signature again"

@@ -224,10 +224,15 @@ upgrades*).
      address, control badge, native balance and its fiat value.
    - Under a network's status line, what its accounts have queued in
      lenient mode (docs/lenient-mode.md, *Where it shows*; owner rulings,
-     2026-11-06): "1 waiting to be sent" (or N), and while its light client
+     2026-11-06): "1 waiting to send" (or N), and while its light client
      catches up, "Keep Serotine open to send it sooner." (on a network that
-     is off, "Ethereum is off: turn it on to send it"); "1 needs your
-     signature again" for one the check found in conflict.
+     is off, "Ethereum is off: turn it on to send it"); "1 waits for your
+     answer: still send it?" for one past its hour, which is never sent by
+     itself (decision 4); "1 needs your signature again" for one the check
+     found in conflict.
+   - While the outbox cannot be read, a notice that nothing is sent from
+     this wallet until it can be (one queued may already be on its way),
+     since every quote and draft is held back meanwhile.
    - Once, when queued signed bytes could not be opened (the outbox's seal
      key is gone: the key store was reset, or the app restored on another
      device): "A transaction waiting to be sent was lost …", that nothing
@@ -901,8 +906,9 @@ Screens 22 to 24 are the swap screens (docs/swaps.md).
     - Before every other row, whichever way the rows run, what the account
       has queued in lenient mode (docs/lenient-mode.md, *Where it shows*;
       owner rulings, 2026-11-06): "Send 0.1 ETH", "To Savings · 0x5aAe…eAed",
-      when it was signed, and "Waiting to be sent" or "Needs your signature
-      again". A tap opens its status (9).
+      when it was signed, and "Waiting to send", "Waiting for your answer"
+      (past its hour) or "Needs your signature again". A tap opens its
+      status (9).
     - One row per transaction: the blockie of its other side, what it did
       ("Sent 0.25 ETH", "Swapped 100 USDC for at least 4.28845 LINK",
       "Executed: Send 40 USDC", "Deployed a Safe"), whom or what else it

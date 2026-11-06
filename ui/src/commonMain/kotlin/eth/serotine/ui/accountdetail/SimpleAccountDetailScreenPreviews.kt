@@ -171,7 +171,7 @@ private fun SimpleAccountActivityQueuedPreview() = SimpleAccountDetailPreview(
                     detail = "To vitalik.eth · 0xd8dA…6045",
                     about = "0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045",
                     time = "Signed Nov 7, 2026, 9:12 AM",
-                    status = "Waiting to be sent",
+                    status = "Waiting to send",
                     state = ActivityState.WAITING,
                     opens = ActivityKey("0x" + "9a".repeat(32), queued = true),
                 ),

@@ -7,6 +7,7 @@ import eth.serotine.domain.repository.QueueConflict
 import eth.serotine.domain.repository.QueueRefusal
 import eth.serotine.domain.repository.QueuedTransaction
 import eth.serotine.domain.repository.SentAction
+import eth.serotine.domain.usecase.QUEUED_UNATTENDED_SECONDS
 import eth.serotine.ui.components.Eip55
 import eth.serotine.ui.components.NATIVE_DECIMALS
 import eth.serotine.ui.components.exactAmount
@@ -87,3 +88,10 @@ private fun symbolOf(asset: TransferAsset, network: Network): String = when (ass
     TransferAsset.Native -> network.nativeSymbol
     is TransferAsset.Erc20Token -> asset.token.symbol
 }
+
+/**
+ * Whether this queued transaction is past its hour at [now] (unix seconds): an hour from its
+ * signature, or from the user's last tap ([QueuedTransaction.confirmedAt]). Past it, it is never sent
+ * by itself: it waits for the user's answer (docs/lenient-mode.md, decision 4).
+ */
+fun QueuedTransaction.pastItsHour(now: Long): Boolean = now - (confirmedAt ?: signedAt) > QUEUED_UNATTENDED_SECONDS

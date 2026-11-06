@@ -262,7 +262,7 @@ private fun SimpleAccountsLoadingPreview() = SimpleAccountsPreview(AccountsUiSta
 private val queued = everyday.copy(
     freshness = "Syncing Ethereum · 2 of 6 periods · updated 40 s ago",
     queued = listOf(
-        "Ethereum: 1 waiting to be sent · Keep Serotine open to send it sooner",
+        "Ethereum: 1 waiting to send · Keep Serotine open to send it sooner",
         "Gnosis Chain: 1 needs your signature again",
     ),
 )

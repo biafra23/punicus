@@ -133,6 +133,17 @@ class TransferStatusViewModel(
     /** The transfer last read as queued under [hash]: what the screen shows while a discard of it runs. */
     private var lastQueued: QueuedTransaction? = null
 
+    /** Whether the outbox can be read, and whether it lost what it held: what an id found nowhere is said as. */
+    private val outboxState: Flow<OutboxState> = observeOutbox()
+        .map { list ->
+            when {
+                list is OutboxList.Unreadable -> OutboxState.UNREADABLE
+                (list as? OutboxList.Loaded)?.lost == true -> OutboxState.LOST
+                else -> OutboxState.READ
+            }
+        }
+        .distinctUntilChanged()
+
     /** The transfer queued under [hash] on [network], null while none is (or the outbox cannot be read). */
     private val queued: Flow<QueuedTransaction?> = observeOutbox()
         .map { list ->
@@ -160,7 +171,8 @@ class TransferStatusViewModel(
             queued,
             waits,
             changes,
-        ) { read, queued, waits, changes -> Inputs(read, queued, waits, changes) }
+            outboxState,
+        ) { read, queued, waits, changes, outbox -> Inputs(read, queued, waits, changes, outbox) }
             // A queued transfer's hour, and its age, are dated anew every second.
             .redatedWhile { it.queued != null }
             .map(::render)
@@ -175,7 +187,16 @@ class TransferStatusViewModel(
     private data class Read(val status: SentTransferStatus, val list: AccountList, val retry: Retry)
 
     /** Everything the screen is drawn from: [read], what is [queued] under the id, and what that [waits] for. */
-    private data class Inputs(val read: Read, val queued: QueuedTransaction?, val waits: Waits, val changes: Changes)
+    private data class Inputs(
+        val read: Read,
+        val queued: QueuedTransaction?,
+        val waits: Waits,
+        val changes: Changes,
+        val outbox: OutboxState,
+    )
+
+    /** What the outbox says of itself. */
+    private enum class OutboxState { READ, UNREADABLE, LOST }
 
     /**
      * Discards the queued transfer: its signature is deleted, and nothing is sent. It waits while
@@ -232,12 +253,14 @@ class TransferStatusViewModel(
                     false // the use case promises not to throw; the backstop
                 }
             }
-            changes.value = changes.value.copy(confirming = false, error = CONFIRM_NOT_SAVED.takeUnless { saved })
+            // Not saved because a conflict deleted its bytes, or it was sent, meanwhile: the screen says that.
+            val stillAsks = queuedNow?.let { it.signed != null && it.conflict == null } == true
+            changes.value = changes.value.copy(confirming = false, error = CONFIRM_NOT_SAVED.takeIf { !saved && stillAsks })
         }
     }
 
     private fun render(inputs: Inputs): TransferStatusUiState {
-        val (read, queued, waits, changes) = inputs
+        val (read, queued, waits, changes, outbox) = inputs
         val transfer = read.status.transfer
         // While its discard runs, the transfer is shown as it was, until the discard's outcome is known.
         val shown = queued ?: lastQueued.takeIf { changes.discarding && transfer == null }
@@ -247,6 +270,16 @@ class TransferStatusViewModel(
         // No longer queued when the discard came: sent meanwhile (its record follows), or discarded already.
         if (changes.gone && transfer == null) {
             return TransferStatusUiState.Discarded(network.displayName, NO_LONGER_QUEUED)
+        }
+        // Neither queued nor recorded: never drawn as handed to the network, which nothing says it was.
+        // The follower records a send before it lets the transfer go from the outbox, so one sent has its record.
+        if (transfer == null) {
+            when {
+                outbox == OutboxState.UNREADABLE ->
+                    return TransferStatusUiState.Discarded(network.displayName, OUTBOX_UNREADABLE)
+                outbox == OutboxState.LOST -> return TransferStatusUiState.Discarded(network.displayName, OUTBOX_LOST)
+                lastQueued != null -> return TransferStatusUiState.Discarded(network.displayName, LEFT_THE_OUTBOX)
+            }
         }
         val sent = render(read.status, read.list, read.retry)
         // A discard that came after a peer took it: it was sent, and is never told as discarded.
@@ -741,6 +774,13 @@ class TransferStatusViewModel(
         const val BEING_SENT = "It's being checked and sent."
         const val DISCARDED = "Discarded: its signature was deleted, and nothing was sent."
         const val SENT_BEFORE_DISCARD = "It was sent before it could be discarded."
+        const val OUTBOX_UNREADABLE = "The transactions waiting to be sent on this device cannot be read right " +
+            "now, so where this one stands is not known. Nothing is sent from this wallet until they can be read; " +
+            "Serotine keeps trying."
+        const val OUTBOX_LOST = "A transaction waiting to be sent was lost: the key that sealed it on this device " +
+            "is gone. Nothing was sent. Sign it again from Send if you still want to send it."
+        const val LEFT_THE_OUTBOX = "It is no longer waiting to be sent from this device, and there is no record " +
+            "of it being sent."
         const val NO_LONGER_QUEUED =
             "It is no longer waiting to be sent from this device: it was sent, or discarded, meanwhile."
         const val BEING_SENT_NOT_DISCARDED =

@@ -148,6 +148,7 @@ class AccountActivityTest {
             ObserveAccountCowOrders(cowOrders),
             ObserveWaitingSwaps(waitingSwaps),
             ObserveOutbox(outbox),
+            now = { 600 },
         ) { "at $it" }
             .of(AccountId(Network.SEPOLIA, address), hidden)
             // Unconfined, so that what a test changes is listed before it reads the value.
@@ -1040,7 +1041,7 @@ class AccountActivityTest {
                     detail = "To 0x5aAe…eAed",
                     about = "0x5aAeb6053F3E94C9b9A09f33669435E7Ef1BeAed",
                     time = "Signed at 500",
-                    status = "Waiting to be sent",
+                    status = "Waiting to send",
                     state = ActivityState.WAITING,
                     opens = ActivityKey(waiting.id, queued = true),
                 ),

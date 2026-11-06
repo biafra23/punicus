@@ -182,7 +182,7 @@ change what it trusts.
   ends with "Test networks aren't counted in the total." The add button,
   and the Wallet | Settings bar. No network sections and no status strip:
   those are Detailed view's. In lenient mode, under the freshness line, what
-  each network has queued ("Ethereum: 1 waiting to be sent · Keep Serotine
+  each network has queued ("Ethereum: 1 waiting to send · Keep Serotine
   open to send it sooner."; "1 needs your signature again"), and once, a
   notice that a queued transaction was lost, with Dismiss, as in Detailed
   view (docs/wallet-ux.md, screen 1; owner rulings, 2026-11-06).
@@ -220,7 +220,7 @@ change what it trusts.
   added it" (or since it was deployed from this device), and "older
   activity is still being checked" while it is. The mockup's day headings
   and amounts' values are not built yet. A transaction queued in lenient
-  mode is listed first, "Waiting to be sent" or "Needs your signature
+  mode is listed first, "Waiting to send" or "Needs your signature
   again", whichever way the rows run (docs/wallet-ux.md, screen 25).
 - **H6 · Receive.** The account's blockie and name, the QR code, the full
   address in groups of four, "Only send assets on Ethereum to this address",

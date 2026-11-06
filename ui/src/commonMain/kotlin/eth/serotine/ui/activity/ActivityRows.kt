@@ -34,6 +34,7 @@ import eth.serotine.ui.components.grouped
 import eth.serotine.ui.components.safeTxActionItem
 import eth.serotine.ui.components.shortAddress
 import eth.serotine.ui.components.shortDigits
+import eth.serotine.ui.outbox.pastItsHour
 
 /**
  * What the account at [address] is told of each transaction and event of its history, in the
@@ -331,16 +332,17 @@ internal class ActivityRows(
      * (docs/lenient-mode.md, *Where it shows*): what it sends, to whom, when it was signed, and
      * whether it waits to be sent or needs a signature again. A tap opens its status, not 26.
      */
-    fun queuedRow(queued: QueuedTransaction, names: Map<Address, String>): ActivityRow {
+    fun queuedRow(queued: QueuedTransaction, names: Map<Address, String>, now: Long): ActivityRow {
         val (title, other) = when (val action = queued.action) {
             is SentAction.Transfer -> "Send ${amount(action.amount, action.asset)}" to action.to
             // Only a transfer is queued today: any other is said as a transaction to its contract.
             else -> "A transaction waiting to be sent" to queued.transaction.to
         }
-        val (status, state) = if (queued.conflict != null) {
-            "Needs your signature again" to ActivityState.FAILED
-        } else {
-            "Waiting to be sent" to ActivityState.WAITING
+        val (status, state) = when {
+            queued.conflict != null -> "Needs your signature again" to ActivityState.FAILED
+            // Past its hour it is never sent by itself: it waits for the user's answer on its status.
+            !queued.sending && queued.pastItsHour(now) -> "Waiting for your answer" to ActivityState.WAITING
+            else -> "Waiting to send" to ActivityState.WAITING
         }
         return ActivityRow(
             key = "queued:${queued.id}",

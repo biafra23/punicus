@@ -707,6 +707,7 @@ class AppGraph(
         SendCowCancellation(signer, broadcaster, sentTransfers),
         RebroadcastTransfer(broadcaster, sentTransfers, receipts),
         network,
+        ObserveSyncPolicy(syncPolicy),
     )
 
     /**

@@ -72,8 +72,8 @@ private val maybeSent = pending.copy(
     ),
 )
 
-// A transfer queued in lenient mode (docs/lenient-mode.md, *The outbox*): its step before Signed, in
-// each state it draws differently; the simple previews draw the same samples.
+// A transfer queued in lenient mode (docs/lenient-mode.md, *The outbox*): Signed, then its step, then
+// Broadcast, in each state it draws differently; the simple previews draw the same samples.
 
 private const val QUEUED_ID = "0x9a3c5e7f1b2d4f6a8c0e2b4d6f8a1c3e5b7d9f0a2c4e6b8d1f3a5c7e9b0d2f4a"
 
@@ -82,8 +82,8 @@ internal val queuedSample = TransferStatusUiState.Queued(
     id = QUEUED_ID,
     sent = sent,
     steps = listOf(
-        StatusStep("Queued", StepState.WAITING, "Waits for Sepolia to catch up. Keep Serotine open to send it sooner."),
         StatusStep("Signed", StepState.DONE, "On this device, Nov 7, 2026, 9:12 AM"),
+        StatusStep("Queued", StepState.WAITING, "Waits for Sepolia to catch up. Keep Serotine open to send it sooner."),
         StatusStep(
             "Broadcast",
             StepState.WAITING,
@@ -105,26 +105,27 @@ internal val queuedSample = TransferStatusUiState.Queued(
 )
 
 internal val queuedSendingSample = queuedSample.copy(
-    steps = listOf(StatusStep("Sending…", StepState.WAITING, "It's being checked and sent.")) +
-        queuedSample.steps.drop(1),
+    steps = queuedSample.steps.take(1) + StatusStep("Sending…", StepState.WAITING, "It's being checked and sent.") +
+        queuedSample.steps.drop(2),
     busy = "It's being checked and sent.",
 )
 
 internal val queuedPastItsHourSample = queuedSample.copy(
-    steps = listOf(StatusStep("Queued", StepState.UNKNOWN, "Not sent by itself after an hour: it waits for you.")) +
-        queuedSample.steps.drop(1),
+    steps = queuedSample.steps.take(1) +
+        StatusStep("Queued", StepState.UNKNOWN, "Not sent by itself after an hour: it waits for you.") +
+        queuedSample.steps.drop(2),
     question = "Still send this? You signed it 2 h ago.",
 )
 
 internal val queuedConflictSample = queuedSample.copy(
     steps = listOf(
+        StatusStep("Signed", StepState.UNKNOWN, "On this device, Nov 7, 2026, 9:12 AM: deleted since"),
         StatusStep(
             "Needs your signature again",
             StepState.FAILED,
             "Fees rose since you signed: the most it can cost is now 0.0031 ETH. Nothing was sent, and its " +
                 "signature was deleted.",
         ),
-        StatusStep("Signed", StepState.UNKNOWN, "On this device, Nov 7, 2026, 9:12 AM: deleted since"),
         StatusStep("Broadcast", StepState.UNKNOWN, "Not sent", simpleLabel = "Sent", simpleDetail = "Not sent"),
     ),
     againLabel = "Sign again",
@@ -157,7 +158,29 @@ private fun TransferStatusQueuedConflictPreview() = TransferStatusPreview(queued
 
 @Preview
 @Composable
+private fun TransferStatusQueuedDiscardingPreview() = TransferStatusPreview(queuedSample.copy(discarding = true))
+
+@Preview
+@Composable
+private fun TransferStatusQueuedNotDiscardedPreview() = TransferStatusPreview(
+    queuedSample.copy(
+        error = "It's being checked and sent, so it was not discarded: it may reach the network. Its status follows.",
+    ),
+)
+
+@Preview
+@Composable
 private fun TransferStatusDiscardedPreview() = TransferStatusPreview(discardedSample)
+
+@Preview
+@Composable
+private fun TransferStatusFoundNowherePreview() = TransferStatusPreview(
+    TransferStatusUiState.Discarded(
+        "Sepolia",
+        "The transactions waiting to be sent on this device cannot be read right now, so where this one stands " +
+            "is not known. Nothing is sent from this wallet until they can be read; Serotine keeps trying.",
+    ),
+)
 
 @Composable
 private fun TransferStatusPreview(
@@ -508,4 +531,7 @@ internal val transferStatusScreenPreviews: List<ScreenPreview> = listOf(
     ScreenPreview("queued-past-its-hour") { TransferStatusQueuedPastItsHourPreview() },
     ScreenPreview("queued-conflict") { TransferStatusQueuedConflictPreview() },
     ScreenPreview("discarded") { TransferStatusDiscardedPreview() },
+    ScreenPreview("queued-discarding") { TransferStatusQueuedDiscardingPreview() },
+    ScreenPreview("queued-not-discarded") { TransferStatusQueuedNotDiscardedPreview() },
+    ScreenPreview("queued-outbox-unreadable") { TransferStatusFoundNowherePreview() },
 )

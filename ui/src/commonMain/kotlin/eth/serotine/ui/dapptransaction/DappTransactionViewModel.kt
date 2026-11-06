@@ -185,6 +185,13 @@ class DappTransactionViewModel(
     private val lenient = observeSyncPolicy().map { it == SyncPolicy.LENIENT }
         .stateIn(viewModelScope, SharingStarted.Eagerly, false)
 
+    /** In lenient mode, that the setting does not reach a dApp's request, after a [refusal] while syncing. */
+    private fun lenientNote(refusal: CallRefusal): String {
+        val syncing = refusal == CallRefusal.Syncing ||
+            (refusal as? CallRefusal.Unavailable)?.reason == ReadUnavailable.SYNCING
+        return if (syncing && lenient.value) DAPP_REQUESTS_STAY_STRICT else ""
+    }
+
     private val id: DappRequestId? = requestKey.split('/').takeIf { it.size == 2 }?.let { (topic, number) ->
         number.toLongOrNull()?.let { DappRequestId(DappSessionId(topic), it) }
     }
@@ -295,8 +302,7 @@ class DappTransactionViewModel(
                         current.copy(
                             quoting = false,
                             quote = null,
-                            notQuoted = callRefusalText(quoting.refusal, network) +
-                                if (quoting.refusal == CallRefusal.Syncing && lenient.value) DAPP_REQUESTS_STAY_STRICT else "",
+                            notQuoted = callRefusalText(quoting.refusal, network) + lenientNote(quoting.refusal),
                         )
                     is DappTransactionQuoting.GasTooLow -> current.copy(
                         quoting = false,
@@ -456,7 +462,10 @@ class DappTransactionViewModel(
                     base.copy(proposal = proposing.proposal, quotedAt = mark, hidden = false)
                 is DappSafeProposing.AlreadyQueued -> base.copy(queued = "0x" + proposing.request.hash.hex)
                 is DappSafeProposing.SafeRefused ->
-                    base.copy(notQuoted = safeTxRefusalText(proposing.refusal, network))
+                    base.copy(
+                        notQuoted = safeTxRefusalText(proposing.refusal, network) +
+                            if (proposing.refusal == SafeTxRefusal.Syncing && lenient.value) DAPP_REQUESTS_STAY_STRICT else "",
+                    )
                 DappSafeProposing.InsufficientFunds -> base.copy(notQuoted = SAFE_SHORT)
                 is DappSafeProposing.Reverts -> base.copy(
                     notQuoted = "The call reverts when run as a verified call from the Safe" +

@@ -9,7 +9,7 @@ import eth.serotine.ui.components.LightClientItem
  * [state], with no light-client strip and each step in simple mode's words, Sent → Confirmed →
  * Final, without a block; Detailed view's words, the blocks among them, are behind *Details*. The
  * hash, what was sent and Try again are as in Detailed view, and so are a queued transfer's step
- * before Signed, Discard, Sign again or Edit, and Send now ([onDiscard], [onSignAgain], [onConfirm]).
+ * after Signed, Discard, Sign again or Edit, and Send now ([onDiscard], [onSignAgain], [onConfirm]).
  * [syncLine] is its network's sync line (docs/simple-ui.md, *The sync line*), drawn while it says something.
  */
 @Composable

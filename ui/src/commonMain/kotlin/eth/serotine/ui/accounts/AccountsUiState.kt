@@ -74,7 +74,7 @@ sealed interface AccountsUiState {
      * *Hiding amounts*): every amount here already reads "••••" beside its unit.
      *
      * Lenient mode's outbox (docs/lenient-mode.md, *Where it shows*): simple mode's [queued], a line
-     * per network with something queued ("Ethereum: 1 waiting to be sent · Keep Serotine open to send
+     * per network with something queued ("Ethereum: 1 waiting to send · Keep Serotine open to send
      * it sooner"), drawn under [freshness] (Detailed view says it in the section,
      * [NetworkSection.queued]); and [lostNotice], said until dismissed, when queued signed bytes
      * could not be opened since they were sealed (the seal key gone), null otherwise.
@@ -144,7 +144,7 @@ sealed interface AccountsUiState {
  * section is drawn in the error colour, with the way to the update. [staleAnchor] warns that its
  * light client refuses to sync from a checkpoint past the weak-subjectivity window, with the way
  * to catch up anyway (owner's request, 2026-10-24): drawn in the error colour too. [queued] is what
- * its accounts have queued in lenient mode, under its status line ("1 waiting to be sent · Keep
+ * its accounts have queued in lenient mode, under its status line ("1 waiting to send · Keep
  * Serotine open to send it sooner"; docs/lenient-mode.md, *Where it shows*), null when nothing is.
  */
 data class NetworkSection(

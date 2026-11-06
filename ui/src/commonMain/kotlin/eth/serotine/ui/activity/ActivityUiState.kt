@@ -16,7 +16,7 @@ sealed interface ActivityUiState {
      * simple mode's words, with no block number (docs/simple-ui.md, H5: "Activity since you added
      * this account"). Above them, the swaps whose next step [waiting] for the user, each with
      * Continue, in the same place whichever way the rows run; and first of all, what the account has
-     * [queued] in lenient mode ("Waiting to be sent", "Needs your signature again";
+     * [queued] in lenient mode ("Waiting to send", "Needs your signature again";
      * docs/lenient-mode.md, *Where it shows*), each opening its status.
      */
     data class Shown(

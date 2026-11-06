@@ -630,6 +630,32 @@ class TransferStatusViewModelTest {
     private val TransferStatusViewModel.queuedState get() = assertIs<TransferStatusUiState.Queued>(uiState.value)
 
     @Test
+    fun aQueuedIdFoundNowhereIsNeverShownAsHandedToTheNetwork() = runTest {
+        // Restored after a restart with the outbox unreadable: where it stands is not known.
+        outbox.list.value = OutboxList.Unreadable
+        val unreadable = viewModel(hash = queuedBytes.hash)
+        runCurrent()
+        val said = assertIs<TransferStatusUiState.Discarded>(unreadable.uiState.value).message
+        assertTrue("cannot be read right now" in said, said)
+
+        // Seen queued on this screen, then gone with no record: never drawn as sent.
+        outbox.list.value = OutboxList.Loaded(listOf(queued()))
+        val seen = viewModel(hash = queuedBytes.hash)
+        runCurrent()
+        assertIs<TransferStatusUiState.Queued>(seen.uiState.value)
+        outbox.list.value = OutboxList.Loaded(emptyList())
+        runCurrent()
+        val left = assertIs<TransferStatusUiState.Discarded>(seen.uiState.value).message
+        assertTrue("no record of it being sent" in left, left)
+
+        // The seal key lost: said as lost, not as sent.
+        outbox.list.value = OutboxList.Loaded(emptyList(), lost = true)
+        val lost = viewModel(hash = queuedBytes.hash)
+        runCurrent()
+        assertTrue("was lost" in assertIs<TransferStatusUiState.Discarded>(lost.uiState.value).message)
+    }
+
+    @Test
     fun aQueuedTransferHasAStepAfterSignedThatWaitsForTheNetwork() = runTest {
         outbox.list.value = OutboxList.Loaded(listOf(queued()))
         val viewModel = viewModel(hash = queuedBytes.hash)

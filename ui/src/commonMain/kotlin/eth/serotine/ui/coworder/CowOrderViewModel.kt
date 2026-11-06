@@ -5,6 +5,7 @@ import androidx.lifecycle.viewModelScope
 import eth.serotine.domain.model.AccountCustody
 import eth.serotine.domain.model.CowOrderUid
 import eth.serotine.domain.model.Network
+import eth.serotine.domain.model.SyncPolicy
 import eth.serotine.domain.model.TransferAsset
 import eth.serotine.domain.model.UInt256
 import eth.serotine.domain.model.WalletPassword
@@ -27,6 +28,7 @@ import eth.serotine.domain.usecase.DescribeKeyStore
 import eth.serotine.domain.usecase.ObserveAccounts
 import eth.serotine.domain.usecase.ObserveCowOrder
 import eth.serotine.domain.usecase.ObserveCowOrderLife
+import eth.serotine.domain.usecase.ObserveSyncPolicy
 import eth.serotine.domain.usecase.QuoteCowCancellation
 import eth.serotine.domain.usecase.RebroadcastTransfer
 import eth.serotine.domain.usecase.SendCowCancellation
@@ -38,6 +40,7 @@ import eth.serotine.ui.components.PROMPT_TIMED_OUT
 import eth.serotine.ui.components.PROMPT_TOO_LATE
 import eth.serotine.ui.components.QUOTE_MAX_AGE
 import eth.serotine.ui.components.STALE_QUOTE
+import eth.serotine.ui.components.SWAPS_STAY_STRICT
 import eth.serotine.ui.components.SendFrom
 import eth.serotine.ui.components.SpenderItem
 import eth.serotine.ui.components.UnlockStep
@@ -110,10 +113,16 @@ class CowOrderViewModel(
     private val sendCowCancellation: SendCowCancellation,
     private val rebroadcastTransfer: RebroadcastTransfer,
     private val network: Network,
+    /** Whether the user chose *Sign while syncing*, which a cancellation does not follow: its refusal says so. */
+    observeSyncPolicy: ObserveSyncPolicy,
     private val timeSource: TimeSource = TimeSource.Monotonic,
     private val clock: () -> Long = ::epochSecondsNow,
     private val formatTime: (Long) -> String = ::formatDateTime,
 ) : ViewModel() {
+
+    /** Whether lenient mode is chosen: a refusal while syncing then says the setting does not reach this. */
+    private val lenient = observeSyncPolicy().map { it == SyncPolicy.LENIENT }
+        .stateIn(viewModelScope, SharingStarted.Eagerly, false)
 
     /**
      * A transaction signed but not broadcast: why ([broadcast]), and the [transfer] a retry sends;
@@ -450,7 +459,8 @@ class CowOrderViewModel(
         is CowCancellationQuoting.Reverts -> "The cancellation reverts, run as a verified call" +
             (quoting.blockNumber?.let { " at block ${grouped(it)}" }.orEmpty()) + ". Nothing was signed."
         CowCancellationQuoting.Refused -> "The light client on this device cannot quote the cancellation."
-        CowCancellationQuoting.Syncing -> "The light client is not synced yet: try again in a moment."
+        CowCancellationQuoting.Syncing -> "The light client is not synced yet: try again in a moment." +
+            if (lenient.value) SWAPS_STAY_STRICT else ""
         is CowCancellationQuoting.Unavailable -> when (quoting.reason) {
             ReadUnavailable.NO_ENGINE -> "There is no light client on this device, so nothing can be cancelled."
             ReadUnavailable.NETWORK_OFF -> "The network's light client is not running, so nothing can be cancelled."

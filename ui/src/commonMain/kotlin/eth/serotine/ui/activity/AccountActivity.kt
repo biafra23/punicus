@@ -29,6 +29,7 @@ import eth.serotine.domain.usecase.ObserveTokenTransfers
 import eth.serotine.domain.usecase.ObserveWaitingSwaps
 import eth.serotine.domain.usecase.SafeChainEvent
 import eth.serotine.domain.usecase.TokenTransferEvent
+import eth.serotine.ui.components.epochSecondsNow
 import eth.serotine.ui.components.grouped
 import eth.serotine.ui.platform.formatDateTime
 import kotlinx.coroutines.flow.Flow
@@ -65,6 +66,8 @@ class AccountActivity(
     private val observeCowOrders: ObserveAccountCowOrders,
     private val observeWaitingSwaps: ObserveWaitingSwaps,
     private val observeOutbox: ObserveOutbox,
+    /** Now, in unix seconds: whether a queued transaction is past its hour, and waits for the user's answer. */
+    private val now: () -> Long = ::epochSecondsNow,
     private val formatTime: (Long) -> String = ::formatDateTime,
 ) {
 
@@ -136,7 +139,7 @@ class AccountActivity(
                 requests = ActivityRows.requestsIn(entries),
             )
             val waiting = sentHere.waiting.map { waitingStep(it, entries, tokens, rows) }
-            val queued = sentHere.queued.map { rows.queuedRow(it, names) }
+            val queued = sentHere.queued.map { rows.queuedRow(it, names, now()) }
             val safeEvents = (safe as? IndexedHistory.Read)?.events.orEmpty()
             val tokenEvents = (transfers as? IndexedHistory.Read)?.events.orEmpty()
             // When each block was produced, as the engine reported it with any event in it: what a
