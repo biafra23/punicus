@@ -614,6 +614,23 @@ class WcWalletTest {
     }
 
     @Test
+    fun aFileOfTheSepoliaOnlyVersionLoadsAndIsWrittenAtTheNewFormat() = runTest {
+        SystemFileSystem.createDirectories(directory)
+        val v1 = """{"version": 1, "state": {"sessions": [{"topic": "t", "symKey": "${"00".repeat(32)}",
+            "pairingTopic": "p", "selfPublicKey": "a", "peerPublicKey": "b",
+            "dapp": {"name": "dApp", "url": "https://dapp.test"}, "accounts": ["$sepoliaAccount"],
+            "methods": ["personal_sign"], "events": [], "expirySeconds": 4000000000, "settleRequestId": 2}]}}"""
+        WcStore.writePrivately(file.toString(), v1.encodeToByteArray())
+        val running = walletConnect()
+        settle()
+        assertEquals(listOf(WcProtocol.SEPOLIA), running.view().sessions.single().chains)
+        // Written again, it says 2: an older build then leaves it untouched rather than set it aside as damaged.
+        settled(running, dapp())
+        val text = SystemFileSystem.source(file).buffered().use { it.readString() }
+        assertTrue(Regex("\"version\"\\s*:\\s*2").containsMatchIn(text), text.take(80))
+    }
+
+    @Test
     fun anIdForgottenFromTheSeenWindowIsStillSeen() {
         var state = WcState()
         repeat(WcProtocol.SEEN_IDS_PER_TOPIC) { state = state.seeing("t", 10_000L + it) }

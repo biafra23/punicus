@@ -55,7 +55,11 @@ two open points, the chains and the order.
    cannot move funds, though whoever holds them can read and inject messages
    on that session. The file is kept out of backups and device transfers like
    the rest of the app's data, is never logged, and is not under the wallet
-   password, so sessions resume without an unlock.
+   password, so sessions resume without an unlock. Its format is 2 since
+   sessions keep their chains (2026-11-05): an older build reads such a file
+   as written by a newer version and leaves it untouched, so its sessions
+   come back once the newer build is installed again. A file at 1 still
+   loads, its sessions Sepolia's.
 9. **Real funds or testnet, never both** (owner ruling, 2026-11-05, on #22).
    A dApp session holds Ethereum (`eip155:1`) and Gnosis Chain
    (`eip155:100`) accounts together, and the dApp may switch between them;

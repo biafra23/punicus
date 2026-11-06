@@ -241,5 +241,11 @@ internal class WcStore(
 
 }
 
-private const val FORMAT_VERSION = 1
+/**
+ * 2 since sessions keep their [WcStoredSession.chains] and [WcStoredSession.currentChain]
+ * (owner ruling, 2026-11-05, on #22). An older build would read those as unknown keys and set the
+ * file aside as damaged, losing every session; at 2 it reads the file as written by a newer version
+ * and leaves it untouched. A file at 1 still loads here: its sessions are Sepolia's.
+ */
+private const val FORMAT_VERSION = 2
 private val JSON = Json
