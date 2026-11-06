@@ -176,13 +176,16 @@ class AccountsViewModel(
     private data class OutboxLines(val byNetwork: Map<Long, String>, val lost: Boolean)
 
     private val outboxLines = combine(
-        observeOutbox(),
+        // Nothing queued until the outbox is read: Home never waits for it.
+        observeOutbox().onStart { emit(OutboxList.Loaded(emptyList())) },
         combine(clientStatuses) { statuses -> statuses.map { it is LightClientStatus.Synced } },
-    ) { list, synced ->
+        observeEnabledNetworks(),
+    ) { list, synced, on ->
         val loaded = list as? OutboxList.Loaded
         val byNetwork = Network.entries.mapNotNull { network ->
             val queued = loaded?.queued.orEmpty().filter { it.network == network }
-            queuedLine(queued, verifies = synced[network.ordinal])?.let { network.chainId to it }
+            queuedLine(queued, verifies = synced[network.ordinal], off = network.displayName.takeIf { network !in on })
+                ?.let { network.chainId to it }
         }.toMap()
         OutboxLines(byNetwork, loaded?.lost == true)
     }.distinctUntilChanged()
@@ -539,11 +542,13 @@ class AccountsViewModel(
         /**
          * What a network's [queued] transactions come to, under its line: how many wait to be sent, how
          * many need a signature again, and, while its light client does not [verifies], that the app
-         * open sends them sooner (decision 7). Null when nothing is queued.
+         * open sends them sooner (decision 7); or, on a network that is [off] (its name), that it is
+         * to be turned on for them to be sent. Null when nothing is queued.
          */
-        fun queuedLine(queued: List<QueuedTransaction>, verifies: Boolean): String? {
+        fun queuedLine(queued: List<QueuedTransaction>, verifies: Boolean, off: String? = null): String? {
             val conflicts = queued.count { it.conflict != null }
             val waiting = queued.size - conflicts
+            val them = if (waiting == 1) "it" else "them"
             return listOfNotNull(
                 "$waiting waiting to be sent".takeIf { waiting > 0 },
                 when (conflicts) {
@@ -551,8 +556,12 @@ class AccountsViewModel(
                     1 -> "1 needs your signature again"
                     else -> "$conflicts need your signature again"
                 },
-                "Keep Serotine open to send ${if (waiting == 1) "it" else "them"} sooner"
-                    .takeIf { waiting > 0 && !verifies },
+                when {
+                    waiting == 0 -> null
+                    off != null -> "$off is off: turn it on to send $them"
+                    !verifies -> "Keep Serotine open to send $them sooner"
+                    else -> null
+                },
             ).takeIf { it.isNotEmpty() }?.joinToString(" · ")
         }
 

@@ -64,6 +64,9 @@ import eth.serotine.domain.repository.OutboxList
 import eth.serotine.domain.repository.FeeLevel
 import eth.serotine.domain.repository.DraftBasis
 import eth.serotine.domain.model.Eip1559Transaction
+import eth.serotine.domain.usecase.ObserveEnabledNetworks
+import eth.serotine.ui.MemoryNetworkSettings
+import eth.serotine.domain.repository.Outbox
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class TransferStatusViewModelTest {
@@ -99,6 +102,9 @@ class TransferStatusViewModelTest {
         override fun observeStatus(network: Network): Flow<LightClientStatus> = clientStatus
     }
 
+    /** The networks on: Sepolia, as in every build. */
+    private val networks = MemoryNetworkSettings()
+
     /** Now, in unix seconds, as a queued transfer's hour is dated. */
     private var wallClock = 1_800_000_600L
 
@@ -113,10 +119,11 @@ class TransferStatusViewModelTest {
             ObserveAccounts(accounts),
             RebroadcastTransfer(broadcaster, sent, receipts) { 1_800_000_500 },
             Network.SEPOLIA,
-            ObserveOutbox(outbox),
+            ObserveOutbox(racing),
             ObserveLightClient(light),
-            DiscardQueued(outbox, lock),
-            ConfirmQueued(outbox, lock, clock = { wallClock }),
+            ObserveEnabledNetworks(networks),
+            DiscardQueued(racing, lock),
+            ConfirmQueued(racing, lock, clock = { wallClock }),
             formatTime = { "at $it" },
             clock = { wallClock },
         )
@@ -757,17 +764,71 @@ class TransferStatusViewModelTest {
     }
 
     @Test
-    fun aDiscardOfOneAPeerHadTakenShowsItSentNeverDiscarded() = runTest {
-        // Recorded as sent, not yet gone from the outbox: the tap came while the follower settled it.
-        sent.transfers.value = listOf(record.copy(signed = queuedBytes))
+    fun anEditThatCameAfterThePeerTookItShowsItSentAndOpensNoSend() = runTest {
         outbox.list.value = OutboxList.Loaded(listOf(queued()))
         val viewModel = viewModel(hash = queuedBytes.hash)
         runCurrent()
+        // The follower held the lock: it sent it, recorded it and let it go before the discard could look.
+        racing.beforeDiscard = {
+            sent.transfers.value = listOf(record.copy(signed = queuedBytes))
+            outbox.list.value = OutboxList.Loaded(emptyList())
+        }
 
-        viewModel.discard()
+        viewModel.signAgain()
         runCurrent()
 
         val shown = assertIs<TransferStatusUiState.Shown>(viewModel.uiState.value)
         assertEquals("It was sent before it could be discarded.", shown.note)
+        assertTrue(outbox.removed.isEmpty(), "nothing of the account's was deleted")
     }
+
+    @Test
+    fun aDiscardWhileItsBroadcastRunsIsRefusedAndNeverToldAsDiscarded() = runTest {
+        outbox.list.value = OutboxList.Loaded(listOf(queued()))
+        val viewModel = viewModel(hash = queuedBytes.hash)
+        runCurrent()
+        // The check passed while the discard waited: its broadcast is under way, and may reach the network.
+        racing.beforeDiscard = { outbox.list.value = OutboxList.Loaded(listOf(queued().copy(sending = true))) }
+
+        viewModel.discard()
+        runCurrent()
+
+        val state = viewModel.queuedState
+        assertEquals("Sending…", state.steps.first().label)
+        assertEquals(
+            "It's being checked and sent, so it was not discarded: it may reach the network. Its status follows.",
+            state.error,
+        )
+        assertEquals(1, outbox.queued.size, "left for the outbox to record as sent, or maybe sent")
+    }
+
+    @Test
+    fun aQueuedTransferOnANetworkThatIsOffSaysHowToGetItSent() = runTest {
+        networks.on.value = emptySet()
+        outbox.list.value = OutboxList.Loaded(listOf(queued()))
+        val viewModel = viewModel(hash = queuedBytes.hash)
+        runCurrent()
+
+        assertEquals(
+            "Sepolia is off, so nothing checks or sends it: turn Sepolia on in Settings to send it.",
+            viewModel.queuedState.steps.first().detail,
+        )
+    }
+
+    /**
+     * The outbox, with a moment a test can use: [beforeDiscard] runs as a discard reads it, under the
+     * outbox's lock, as what the follower did while the discard waited for that lock.
+     */
+    private inner class RacingOutbox : Outbox by outbox {
+        var beforeDiscard: (() -> Unit)? = null
+        private var reads = 0
+
+        override fun observe(): Flow<OutboxList> {
+            // The first read is the screen's own, from the start; a later one is a discard's.
+            if (reads++ > 0) beforeDiscard?.invoke()?.also { beforeDiscard = null }
+            return outbox.observe()
+        }
+    }
+
+    private val racing = RacingOutbox()
 }

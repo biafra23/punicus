@@ -35,6 +35,7 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.onStart
 
 /**
  * What an account's Activity shows, its detail's Activity tab (docs/wallet-ux.md, screen 25;
@@ -91,6 +92,8 @@ class AccountActivity(
         /** What the account has queued in lenient mode; an outbox that cannot be read lists none. */
         private val queued: Flow<List<QueuedTransaction>> = observeOutbox()
             .map { list -> (list as? OutboxList.Loaded)?.queued.orEmpty().filter { it.accountId == account } }
+            // Nothing queued until the outbox is read: the Activity never waits for it.
+            .onStart { emit(emptyList()) }
             .distinctUntilChanged()
 
         val state: Flow<ActivityUiState> = combine(

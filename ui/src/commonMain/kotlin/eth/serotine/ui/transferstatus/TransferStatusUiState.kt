@@ -74,8 +74,10 @@ sealed interface TransferStatusUiState {
     ) : TransferStatusUiState
 
     /**
-     * A queued transfer the user discarded here ([message]: its signature was deleted, and nothing
-     * was sent). [reopen], when it was Sign again or Edit, is what Send opens with in its place.
+     * A queued transfer no longer queued: the user discarded it here ([message]: its signature was
+     * deleted, and nothing was sent), or, when the discard came, it was gone already (sent meanwhile,
+     * which its record shows once read, or discarded). [reopen], only for a transfer this discard
+     * deleted after Sign again or Edit, is what Send opens with in its place.
      */
     data class Discarded(
         override val network: String,

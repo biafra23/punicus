@@ -369,7 +369,8 @@ class SendViewModel(
     fun onMax() {
         val model = model.value ?: return
         val option = model.selected ?: return
-        if (step.value !is Step.Composing) return
+        // Composing, and no review being quoted: Max changes what a quote would be made for.
+        if ((step.value as? Step.Composing)?.quoting != false) return
         if (!model.lenient || option.asset != TransferAsset.Native) {
             val balance = option.balance ?: return
             change { it.copy(amount = balance.formatUnits(option.decimals)) }
@@ -385,8 +386,9 @@ class SendViewModel(
             } catch (e: Exception) {
                 null // the use case promises not to throw; the backstop
             }
-            // Not through change(), which would cancel this very job.
-            if (step.value !is Step.Composing) return@launch
+            // Not through change(), which would cancel this very job; a review asked for meanwhile
+            // cancelled it, and a change of the inputs too.
+            if ((step.value as? Step.Composing)?.quoting != false) return@launch
             when {
                 most == null -> step.value = Step.Composing(error = maxUnknown())
                 most.isZero -> step.value = Step.Composing(error = maxNothingLeft())
@@ -408,6 +410,8 @@ class SendViewModel(
         val model = model.value ?: return
         val request = requestOf(model) ?: return
         val account = (model.sender as? Sender.From)?.account ?: return
+        // Whatever ran before (a lenient Max being worked out) is from before this review.
+        job?.cancel()
         step.value = Step.Composing(quoting = true)
         hiddenWhileQuoting = false
         job = viewModelScope.launch {
@@ -631,6 +635,12 @@ class SendViewModel(
      * dropped, and said.
      */
     private fun queue(draft: Step.Drafting, unlock: Unlock) {
+        // Sign while syncing turned off, or the network, since the draft was made: it follows strict
+        // mode now, and is not signed (decision 10 keeps only what is queued already).
+        if (model.value?.lenient != true) {
+            step.value = Step.Composing(error = NO_LONGER_LENIENT)
+            return
+        }
         // The password leaves the state now: it is in the unlock, which the signer zeroes after use.
         val unlocked = draft.unlock.copy(password = WalletPassword.EMPTY, error = null)
         step.value = draft.copy(signing = true, unlock = unlocked)
@@ -1140,8 +1150,10 @@ class SendViewModel(
         const val QUEUE_FAILED = "Serotine could not finish signing this transfer. Nothing was queued or sent."
         const val NOT_KEPT = "Signed, but the outbox could not keep it, so the signature was dropped: nothing was " +
             "queued or sent. Try again."
-        const val NO_NAME_IN_A_DRAFT = "The light client is still syncing, and a name is resolved only once it has " +
-            "caught up: to prepare this transfer now, enter the address, or pick one of your accounts."
+        const val NO_LONGER_LENIENT = "Sign while syncing, or the network, was turned off since this was " +
+            "prepared, so it was not signed: review it again."
+        const val NO_NAME_IN_A_DRAFT = "The light client is still syncing, and a name is resolved only once it " +
+            "has caught up: to prepare this transfer now, enter the address, or pick one of your accounts."
         const val LIST_UNAVAILABLE =
             "Your account list cannot be read right now, so nothing can be sent. Serotine keeps trying."
         const val NOT_IN_WALLET = "This account is not in your wallet any more."

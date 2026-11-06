@@ -1284,4 +1284,45 @@ class SendViewModelTest {
         assertEquals(FeeLevel.FAST, assertIs<SendUiState.Compose>(viewModel.uiState.value).fee)
         assertTrue(viewModel.compose.canReview)
     }
+
+    @Test
+    fun inLenientModeTooATransactionQueuedHoldsANewDraftBack() = runTest {
+        val first = drafted()
+        first.onPasswordChange("made-up password")
+        first.sign()
+        runCurrent()
+        val id = outbox.queued.single().id
+
+        val viewModel = viewModel()
+        viewModel.onPickAccount(viewModel.compose.accounts.single().address)
+        viewModel.onAmountChange("0.2")
+        viewModel.review()
+        runCurrent()
+
+        val compose = assertIs<SendUiState.Compose>(viewModel.uiState.value)
+        assertEquals(
+            "A transaction from this account is waiting to be sent. Send or discard it first.",
+            compose.form.error,
+        )
+        assertEquals(id, compose.earlier)
+        assertEquals(1, outbox.queued.size, "one per account")
+    }
+
+    @Test
+    fun aDraftUnderReviewIsNotSignedOnceSignWhileSyncingIsTurnedOff() = runTest {
+        val viewModel = drafted()
+        policy.policy.value = SyncPolicy.STRICT
+        runCurrent()
+        viewModel.onPasswordChange("made-up password")
+        viewModel.sign()
+        runCurrent()
+
+        assertEquals(
+            "Sign while syncing, or the network, was turned off since this was prepared, so it was not signed: " +
+                "review it again.",
+            viewModel.compose.error,
+        )
+        assertTrue(signer.asked.isEmpty())
+        assertTrue(outbox.queued.isEmpty())
+    }
 }

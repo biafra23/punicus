@@ -225,7 +225,8 @@ upgrades*).
    - Under a network's status line, what its accounts have queued in
      lenient mode (docs/lenient-mode.md, *Where it shows*; owner rulings,
      2026-11-06): "1 waiting to be sent" (or N), and while its light client
-     catches up, "Keep Serotine open to send it sooner."; "1 needs your
+     catches up, "Keep Serotine open to send it sooner." (on a network that
+     is off, "Ethereum is off: turn it on to send it"); "1 needs your
      signature again" for one the check found in conflict.
    - Once, when queued signed bytes could not be opened (the outbox's seal
      key is gone: the key store was reset, or the app restored on another
@@ -462,7 +463,9 @@ upgrades*).
      outbox, the screen shows it: what it sends, then a step before Signed,
      "Queued: waits for ‹network› to catch up. Keep Serotine open to send it
      sooner." (decision 7), or, once the network's light client verifies,
-     that it is checked on chain and sent once it checks out; "Sending…"
+     that it is checked on chain and sent once it checks out, or, on a
+     network that is off, that nothing checks or sends it until it is
+     turned on (owner ruling, 2026-10-22); "Sending…"
      while its broadcast runs; then Signed (when, on this device) and
      Broadcast, which waits for the check. Its hash, once sent, is the id.
    - Past its hour without a tap (decision 4): "Still send this? You signed
@@ -479,9 +482,11 @@ upgrades*).
    - Discard deletes its signature (`DiscardQueued`) and says "Discarded:
      its signature was deleted, and nothing was sent." While its check and
      broadcast run, Discard and Edit are greyed out: "It's being checked and
-     sent." A tap that comes after a peer took it finds it sent, and the
-     screen shows it as sent, never as discarded. Once sent, the same id is
-     the sent transfer's hash, and the screen is as above.
+     sent." The discard decides under the outbox's lock: one whose broadcast
+     has started is not discarded, and a tap that comes after a peer took it
+     finds it sent, and the screen shows it as sent, never as discarded, and
+     opens no Send. Once sent, the same id is the sent transfer's hash, and
+     the screen is as above.
 10. **Watch address**
     - An address or ENS name, and a name for the account.
     - A detection card built from verified code and storage: an EOA; an EOA

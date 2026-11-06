@@ -285,28 +285,61 @@ class FollowOutbox(
 }
 
 /**
- * Discards what [account] had queued (docs/lenient-mode.md, *The outbox*): its signed bytes are
- * deleted with it. Waits while a check of it runs ([OutboxLock]), so the check never sends what was
- * discarded. False when the outbox could not be saved, and nothing changed.
+ * Discards the transaction [account] has queued under [id] (docs/lenient-mode.md, *The outbox*): its
+ * signed bytes are deleted with it. Waits while a check of it runs ([OutboxLock]), so the check never
+ * sends what was discarded, and decides under that lock what became of it: one marked as sending
+ * (its broadcast ran, or runs, and may have reached the network) is never discarded, nor is another
+ * transaction queued from the account since; what is sent is never told as discarded.
  */
 class DiscardQueued(private val outbox: Outbox, private val lock: OutboxLock) {
-    suspend operator fun invoke(account: AccountId): Boolean = lock.mutex.withLock { outbox.remove(account) }
+    suspend operator fun invoke(account: AccountId, id: String): QueuedDiscard = lock.mutex.withLock {
+        val list = outbox.observe().first() as? OutboxList.Loaded ?: return@withLock QueuedDiscard.NotSaved
+        val entry = list.queued.firstOrNull { it.accountId == account && it.id.equals(id, ignoreCase = true) }
+        when {
+            entry == null -> QueuedDiscard.Gone
+            entry.sending -> QueuedDiscard.BeingSent
+            outbox.remove(account) -> QueuedDiscard.Discarded
+            else -> QueuedDiscard.NotSaved
+        }
+    }
+}
+
+/** The outcome of [DiscardQueued]. */
+sealed interface QueuedDiscard {
+
+    /** Deleted, its signed bytes with it: nothing was sent. */
+    data object Discarded : QueuedDiscard
+
+    /**
+     * Nothing under that id is queued from the account any more: sent meanwhile (its record says
+     * so), discarded already, or replaced by a transaction signed since, which is left as it is.
+     */
+    data object Gone : QueuedDiscard
+
+    /**
+     * Its broadcast ran, or runs: it may have reached the network, so it is not discarded. The
+     * outbox records it as sent, or as maybe sent ([FollowOutbox]).
+     */
+    data object BeingSent : QueuedDiscard
+
+    /** The outbox could not be read or saved, and nothing changed. */
+    data object NotSaved : QueuedDiscard
 }
 
 /**
- * The user's tap on "Still send this?" for what [account] had queued past its hour
- * ([QUEUED_UNATTENDED_SECONDS]): it is sent once its check passes within an hour of the tap; past
- * that, it asks again (decision 4). [clock] is in unix seconds. False when nothing with kept bytes
- * is queued from [account], or it could not be saved.
+ * The user's tap on "Still send this?" for the transaction [account] has queued under [id] past its
+ * hour ([QUEUED_UNATTENDED_SECONDS]): it is sent once its check passes within an hour of the tap;
+ * past that, it asks again (decision 4). [clock] is in unix seconds. False when nothing with kept
+ * bytes is queued from [account] under [id], or it could not be saved.
  */
 class ConfirmQueued(
     private val outbox: Outbox,
     private val lock: OutboxLock,
     private val clock: () -> Long = ::epochSecondsNow,
 ) {
-    suspend operator fun invoke(account: AccountId): Boolean = lock.mutex.withLock {
+    suspend operator fun invoke(account: AccountId, id: String): Boolean = lock.mutex.withLock {
         val entry = (outbox.observe().first() as? OutboxList.Loaded)?.queued
-            ?.firstOrNull { it.accountId == account && it.signed != null }
+            ?.firstOrNull { it.accountId == account && it.id.equals(id, ignoreCase = true) && it.signed != null }
             ?: return@withLock false
         outbox.put(entry.copy(confirmedAt = clock()))
     }

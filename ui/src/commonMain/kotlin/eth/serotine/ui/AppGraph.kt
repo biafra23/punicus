@@ -721,6 +721,7 @@ class AppGraph(
         network,
         ObserveOutbox(outbox),
         ObserveLightClient(lightClient),
+        ObserveEnabledNetworks(networkSettings),
         DiscardQueued(outbox, outboxLock),
         ConfirmQueued(outbox, outboxLock),
     )

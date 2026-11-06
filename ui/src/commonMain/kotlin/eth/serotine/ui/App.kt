@@ -1017,7 +1017,8 @@ private fun NavController.swapAgain(network: Network, again: SwapAgain) {
 
 /**
  * Opens Send filled in with [again], a queued transfer discarded to be signed again, in place of its
- * status: back from it goes where the status was opened from. Identifiers in lower case.
+ * status, and of the Send it was opened from if it was: back from it goes where that was opened from.
+ * Identifiers in lower case.
  */
 private fun NavController.sendAgain(again: SendAgain) {
     if (currentDestination?.route == SEND_ROUTE) return
@@ -1033,6 +1034,9 @@ private fun NavController.sendAgain(again: SendAgain) {
         "$FEE=${again.fee.name.lowercase()}",
     ).joinToString("&")
     popBackStack(TRANSFER_ROUTE, inclusive = true)
+    // The status opened over Send ("Open the transaction waiting to be sent"): that Send goes too, its
+    // refusal about the transfer just discarded.
+    if (currentDestination?.route == SEND_ROUTE) popBackStack()
     navigate("${Destination.SEND}/${from.route}?$query")
 }
 

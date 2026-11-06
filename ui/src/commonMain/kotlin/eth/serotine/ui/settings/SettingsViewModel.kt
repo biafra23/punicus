@@ -89,7 +89,11 @@ class SettingsViewModel(
     private val lenient = combine(
         observeSyncPolicy(),
         signWhileSyncingNotSaved,
-        observeOutbox().map { (it as? OutboxList.Loaded)?.queued?.size ?: 0 }.distinctUntilChanged(),
+        // Nothing queued until the outbox is read: Settings never waits for it.
+        observeOutbox()
+            .map { (it as? OutboxList.Loaded)?.queued?.size ?: 0 }
+            .onStart { emit(0) }
+            .distinctUntilChanged(),
         ::Lenient,
     )
 
