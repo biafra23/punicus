@@ -29,7 +29,9 @@ the contract for keys.
   2026-10-19; docs/wallet-ux.md). While no verified head is fresh enough to
   read at, a balance the light client proved earlier (in this run, or kept
   across a restart) stays on screen: dated, marked as possibly changed since,
-  left out of totals and never acted on.
+  left out of totals and never acted on. The one exception is lenient mode,
+  below: a draft may be built and signed on it, labelled, and is sent only
+  after the check at a fresh head (owner rulings, 2026-11-06).
 - **In simple mode a value may be read a while ago, and says how long**
   (owner's decisions, 2026-10-26; docs/simple-ui.md). On a network without
   block access lists (EIP-7928), simple mode proves a balance, and the price
@@ -37,8 +39,51 @@ the contract for keys.
   head. While the light client verifies, such a balance is shown with its age
   and counts in totals, at the price read with it, for up to an hour. Older,
   it is dimmed and left out of totals, as above.
-  Detailed view reads at every head, as before. A quote, a review and a
-  signature always read fresh state, in either view.
+  Detailed view reads at every head, as before. In strict mode, a quote, a
+  review and a signature always read fresh state, in either view. In lenient
+  mode a review and a signature may read the state last verified, labelled,
+  and the check before sending always reads fresh state (owner rulings,
+  2026-11-06).
+
+## Lenient mode: sign early, never send early
+
+(Owner rulings, 2026-11-06, accepting every proposal of docs/lenient-mode.md,
+which has the detail.)
+
+- **A switch, off by default.** Settings → Advanced → *Sign while syncing*,
+  one for the app, off in every build. Off is strict mode: everything
+  refused while syncing stays refused, as before.
+- **Nothing leaves the device before a check at a fresh verified head:** no
+  broadcast, no CoW order, no Safe QR code or text, no `approveHash`, no
+  execution, no answer to a dApp. Only the signature moves earlier.
+- **A draft is built on what the light client verified last**, each value
+  labelled with its age: the balances, the account's count of mined
+  transactions and the network's fee quote, kept across restarts; for a
+  Safe, its nonce, owners and threshold. A pinned gas ceiling per kind of
+  call stands in for the estimate. A draft has no simulation, no ENS name
+  and no fiat value. With nothing kept, the draft waits.
+- **The check makes the strict quote again, fresh, and compares.** It passes
+  when the quote is made, the nonce is the one signed, the estimate is within
+  the signed gas limit, the signed fee cap covers 1.125² times the next base
+  fee plus the signed tip, and the fresh balance covers the signed
+  transaction's upfront cost and what the account's transactions not mined
+  yet may take. A conflict deletes the signed bytes and asks for a new
+  signature.
+- **The outbox:** one queued transaction per account. It is sent by itself
+  once it checks out, within an hour of its signature; later, only on the
+  user's tap. It runs while the app runs and during Android's grace period,
+  and says when it waits for the app to be opened.
+- **Queued signed bytes are neither public data nor key material:** whoever
+  has them can broadcast them, and they move only what the user signed. They
+  are kept in an app-private file of their own, sealed with a hardware key
+  of their own that needs no authorization (docs/keys-and-signing.md), out
+  of backups and device transfers, never logged and never in a UiState.
+  Where Serotine uses no hardware key store, they are kept in memory only. A
+  lost seal key loses the queued transaction, and says so.
+- **Strict in both modes:** swaps and dApp requests. Wraps and Create Safe
+  stay strict for now. The Safe refusals above apply when drafting.
+- Turning the switch off leaves what is queued queued: it is checked and
+  sent, or discarded by the user.
 
 ## Past the weak-subjectivity window only on the user's word
 
