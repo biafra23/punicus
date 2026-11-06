@@ -118,7 +118,10 @@ has its age, and the review shows it.
 - **Balances.** The native and token balances last verified, which the app
   already keeps across restarts (`LastBalancesFile`). The asset list offers a
   token whose balance was last verified as held, and Max takes that balance,
-  labelled "as of 12 min ago".
+  labelled "as of 12 min ago". For the network's currency, Max leaves room
+  for the most the fee can be with the signed figures (the gas ceiling below
+  times the fee cap) and for the account's transactions not mined yet, so a
+  Max draft can pass the funds check of *The check before sending*.
 - **The nonce.** Not kept today. New: the account's verified count of mined
   transactions, with its block, kept across restarts. The nonce signed is
   the one `CallQuoter` takes today: past that count and past the account's
@@ -155,6 +158,10 @@ differences:
   transfer should go through": "Not checked yet: it runs on chain before
   it's sent."
 - The balance after says "if nothing changed".
+- No fiat values. A price is never shown last known (docs/wallet-ux.md,
+  *Rules every screen follows*), and none is fresh while the light client
+  catches up. The amounts and the fee are in token units, as every signed
+  amount is.
 - The button says "Sign and queue", in place of "Confirm and send".
 - Screen 8's minute rule applies to the check, not to the signature. A
   strict quote is never signed more than a minute old, and the biometric
@@ -218,8 +225,16 @@ plus the comparison.
 | The quote | It is made, not refused: enough of the asset and for the fee, the call does not revert, nothing earlier maybe sent | The refusal, in the words strict mode uses for it |
 | The nonce | The fresh nonce is the one signed | "Another transaction from this account came first." A higher nonce means one used it; a lower one means a gap the signed one would wait behind |
 | The gas | The fresh estimate is within the signed limit | "It needs more gas than it was signed for." |
-| The fee | The signed fee cap covers the next block's verified base fee plus the signed tip | "Fees rose since you signed: the most it can cost is now …" |
+| The fee | The signed fee cap covers the next block's verified base fee, raised by the headroom of decision 12, plus the signed tip | "Fees rose since you signed: the most it can cost is now …" |
+| The funds | The fresh balance of the network's currency, less the most the account's transactions not mined yet can cost, covers the signed transaction's own upfront cost: its value plus its gas limit times its fee cap | "Not enough ETH for the most this can cost." (xDAI on Gnosis Chain) |
 
+- **Why the funds row.** A peer admits a transaction only when the balance
+  covers that upfront cost of the signed bytes. The quote row tests the
+  funds with the fresh estimate and the fresh fee cap, and the draft signed
+  the gas ceiling and the older cap, which can cost more. Without the row a
+  transaction could pass every other row, be told it checked out, and be
+  refused by every peer. A token transfer has the same need in the
+  network's currency: its value is zero, its fee is not.
 - **Not a conflict:** a balance that changed but still covers it, lower
   fees, a newer head. The transaction is sent.
 - **An earlier transaction maybe sent** (no peer answered its broadcast)
@@ -231,8 +246,11 @@ plus the comparison.
   quote, read fresh as in strict mode now that the light client verifies.
   Discard deletes it.
 - **The old signature is deleted when the conflict is found.** It was never
-  broadcast, so no copy of it exists outside the device, and nothing can
-  ever send it.
+  broadcast, so deleting the one copy is what keeps it from being sent. That
+  holds only while the copy never left the device (decision 5). A nonce gap
+  is the case that matters: the signed transaction becomes valid again once
+  the gap fills, and a copy kept elsewhere would then make a payment the
+  user chose not to make.
 
 ## The signed bytes kept
 
@@ -242,16 +260,30 @@ plus the comparison.
   data because they are public once broadcast. Queued bytes are not: whoever
   has them can broadcast them. They are not key material either: they sign
   nothing else, and they move only what the user signed, once.
+- **Not the session secrets' profile.** WalletConnect's session secrets are
+  kept in an app-private file with no seal because they cannot move funds
+  (`.claude/rules/trust.md`, *What a dApp sends is untrusted input*). Queued
+  bytes can, so a place alone is not enough.
 - Proposed (decision 5): kept across restarts in an app-private file of its
-  own, `outbox.json`, out of cloud backup and device-to-device transfer,
-  never logged, never in a UiState, and deleted with the queued
-  transaction. The other choice is memory only: a restart then asks for the
+  own, `outbox.json`, **sealed with a hardware key of its own**, out of
+  cloud backup and device-to-device transfer, never logged, never in a
+  UiState, and deleted with the queued transaction. The key is made as the
+  envelope's hardware factor is (`HardwareSecret`: Android's Keystore, a
+  Mac's Secure Enclave), with no password and no biometric prompt, so the
+  outbox still sends by itself. A copied file is then useless off the
+  device. Code running inside the app can still open it, as it could send
+  the transaction itself. A computer without a hardware key store (Windows,
+  Linux, a Mac without a Secure Enclave) keeps the queued bytes in memory
+  only.
+- The other choices: memory only everywhere, so a restart asks for the
   signature again, which on a phone that stops apps in the background is
-  often.
+  often; or the file with no seal, which is simpler and leaves a copied file
+  sendable.
 
 ## Safe transactions in lenient mode
 
-This is the plan's last part. It needs one more rule changed, below.
+This is the plan's last part. It needs rule change 4 for the Safe's own
+values, below.
 
 - **Drafted on the Safe last verified.** The Safe's nonce, owners and
   threshold, last verified and kept, labelled with their age. Today no
@@ -331,9 +363,12 @@ before its code lands:
    in lenient mode the minute applies to the check.
 4. docs/wallet-ux.md, *Rules every screen follows*: "no other value (an
    address's kind, a Safe's owners, a price) is shown last known".
-   Proposed, for the Safe part only: a Safe's nonce, owners and threshold
-   may be shown last known in a lenient draft, labelled, and are checked
-   before anything is shown to another owner or sent.
+   Proposed: in a lenient draft, labelled, the values the draft is built on
+   may be shown last known, and are checked before anything is sent or shown
+   to another owner. For a send (part 3) these are the account's nonce and
+   the network's fee quote; for a Safe transaction (part 4) also the Safe's
+   nonce, owners and threshold. A price stays never shown last known, so the
+   draft's review has no fiat values (*The draft's review*).
 5. New: a queued transaction's signed bytes are kept as decision 5 says.
 6. The code that states these rules in its KDoc follows them in the part
    that changes them: `LastBalancesFile` ("Shown only, never acted on: a
@@ -350,8 +385,11 @@ Each with the answer this page proposes:
    decision 4. The email outbox works this way.
 4. **How long may a queued transaction wait before it needs the user's
    tap?** An hour from its signature, as simple mode's hour.
-5. **The signed bytes across a restart?** Kept, as *The signed bytes kept*
-   says, rather than memory only.
+5. **The signed bytes across a restart?** Kept, sealed with a hardware key
+   of their own, as *The signed bytes kept* says; in memory only on a
+   computer without a hardware key store. Not the file with no seal: whoever
+   copies it could send what it holds, a transaction the user discarded
+   after a nonce gap among them.
 6. **How many queued transactions per account?** One, for now.
 7. **When does the outbox run?** While the app runs and during Android's
    grace period after it, with a notification for a send and for a
@@ -365,6 +403,14 @@ Each with the answer this page proposes:
     are checked and sent, or are discarded by the user.
 11. **The words.** "Sign while syncing" on the switch, rather than "strict"
     and "lenient", which this page uses for the two behaviours.
+12. **How much fee headroom must the signed cap still leave at the check?**
+    Two blocks' largest rise of the base fee: the signed cap covers 1.125²
+    (about 1.27) times the next base fee, plus the signed tip. Less is a
+    conflict. A strict quote signs twice the base fee, about six blocks'
+    rise. With no headroom, a transaction that only just covers the next
+    block can sit unmined when the base fee rises, and the account's next
+    transaction waits behind it. Strict's full headroom would make the check
+    a conflict whenever the base fee rose at all since signing.
 
 ## Delivery: a multi-PR plan through `feature/lenient-mode`
 
@@ -384,6 +430,7 @@ follows the five steps of docs/architecture.md's checklist.
    the queued step on the status screen, Activity and Home, Sign again and
    Discard, `OutboxNotifier` in the three hosts. The mockups and
    docs/wallet-ux.md's screens come first in this part.
-4. **Safe transactions in lenient mode**, once rule change 4 is decided.
+4. **Safe transactions in lenient mode**, on the rule changes part 1
+   records, rule change 4's Safe values among them.
 
 The final PR, `feature/lenient-mode` → `main`, links every part.
