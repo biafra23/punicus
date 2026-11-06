@@ -23,8 +23,9 @@ import kotlinx.serialization.json.Json
  * [AddedNfts] kept in the file at [path] (a [VersionedJsonFile]; issue #246): per account, the NFTs
  * the user added by contract and token id, in the order added. A damaged file is set aside and the
  * list starts empty, saying so ([AddedNftList.Loaded.setAside]); one that cannot be read is
- * [AddedNftList.Unreadable], and nothing changes until it can be read. An entry on a network this
- * version does not know is passed over, and the file kept aside as it was, so it is never lost.
+ * [AddedNftList.Unreadable], and nothing changes until it can be read. An entry on a network, or of a
+ * standard, this version does not know is passed over, and the file kept aside as it was, so it is
+ * never lost.
  */
 class FileAddedNfts(
     path: String,
@@ -89,13 +90,14 @@ class FileAddedNfts(
         )
 
         /**
-         * Throws on anything out of shape: the whole file is then damaged. Null on a network this version
-         * does not know.
+         * Throws on anything out of shape: the whole file is then damaged. Null on a network or of a
+         * standard this version does not know, which a newer version may write: passed over, and the file
+         * kept aside, so it is never lost.
          */
         fun toEntry(): Pair<AccountId, NftRef>? {
             val network = Network.ofChainId(chain) ?: return null
-            return AccountId(network, Address.of(account)) to
-                NftRef(Address.of(contract), UInt256.of(id), NftStandard.valueOf(standard))
+            val known = NftStandard.entries.find { it.name == standard } ?: return null
+            return AccountId(network, Address.of(account)) to NftRef(Address.of(contract), UInt256.of(id), known)
         }
     }
 

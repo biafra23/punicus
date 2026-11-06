@@ -22,6 +22,7 @@ import kotlinx.io.files.Path
 import kotlinx.io.files.SystemFileSystem
 import kotlinx.io.files.SystemTemporaryDirectory
 import kotlinx.io.readString
+import kotlinx.io.writeString
 
 /** [FileAddedNfts] against a file in the temporary directory (issue #246). */
 @OptIn(ExperimentalCoroutinesApi::class)
@@ -56,6 +57,43 @@ class FileAddedNftsTest {
                 """"contract":"0xa7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7","id":"4021","standard":"ERC721"}]}""",
             SystemFileSystem.source(file).buffered().use { it.readString() },
         )
+    }
+
+    @Test
+    fun aNewerFormatIsUnreadableAndNothingChanges() = runTest {
+        SystemFileSystem.createDirectories(directory)
+        SystemFileSystem.sink(file).buffered().use { it.writeString("""{"version":2,"nfts":[]}""") }
+        val nfts = nfts()
+
+        assertEquals(AddedNftList.Unreadable, nfts.observe(alice).first())
+        assertEquals(TokenChange.NotSaved, nfts.add(alice, punk))
+    }
+
+    @Test
+    fun aDamagedFileIsSetAsideAndTheEmptyListSaysSo() = runTest {
+        SystemFileSystem.createDirectories(directory)
+        SystemFileSystem.sink(file).buffered().use { it.writeString("""{"version":1,"nfts":[{"chain":1}]}""") }
+
+        assertEquals(AddedNftList.Loaded(emptyList(), setAside = true), nfts().observe(alice).first())
+        assertEquals(1, SystemFileSystem.list(directory).count { it.name.startsWith("nfts.json.damaged-") })
+    }
+
+    @Test
+    fun anEntryOnAnUnknownNetworkOrOfAnUnknownStandardIsPassedOverAndKeptAside() = runTest {
+        SystemFileSystem.createDirectories(directory)
+        val account = "0x1111111111111111111111111111111111111111"
+        val contract = "0xa7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7"
+        SystemFileSystem.sink(file).buffered().use {
+            it.writeString(
+                """{"version":1,"nfts":[""" +
+                    """{"chain":11155111,"account":"$account","contract":"$contract","id":"4021","standard":"ERC721"},""" +
+                    """{"chain":999999,"account":"$account","contract":"$contract","id":"1","standard":"ERC721"},""" +
+                    """{"chain":11155111,"account":"$account","contract":"$contract","id":"2","standard":"ERC6551"}]}""",
+            )
+        }
+
+        assertEquals(listOf(punk), (nfts().observe(alice).first() as AddedNftList.Loaded).nfts)
+        assertEquals(1, SystemFileSystem.list(directory).count { it.name.startsWith("nfts.json.damaged-") })
     }
 
     @Test

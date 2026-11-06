@@ -53,6 +53,7 @@ import eth.serotine.ui.activity.ordered
 import eth.serotine.ui.components.AMOUNTS_NOT_SAVED
 import eth.serotine.ui.components.Control
 import eth.serotine.ui.components.DecodingToken
+import eth.serotine.ui.components.AddressInput
 import eth.serotine.ui.components.Eip55
 import eth.serotine.ui.components.LightClientHealth
 import eth.serotine.ui.components.LightClientItem
@@ -475,9 +476,13 @@ class AccountDetailViewModel(
      * proven to hold it; the dialog says why when nothing was added, and closes when it was.
      */
     fun addNft(contract: String, tokenId: String) {
-        val address = Address.parse(contract)
+        // Parsed as typed text is: a mixed-case address must match its EIP-55 checksum (Address's KDoc).
+        val typed = Eip55.parse(contract)
+        val address = (typed as? AddressInput.Valid)?.address
         val id = parseTokenId(tokenId)
         val error = when {
+            typed == AddressInput.ChecksumMismatch ->
+                "The capitals do not match this address's checksum: check it for a typo."
             address == null -> "That is not a contract address: 0x and 40 hexadecimal digits."
             id == null -> "That is not a token id: a whole number, or 0x and hexadecimal digits."
             else -> null

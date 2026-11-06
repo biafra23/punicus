@@ -54,6 +54,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -868,8 +869,9 @@ private fun Nfts(nfts: NftSection, onToggle: () -> Unit, actions: NftActions, mo
  */
 @Composable
 private fun AddNftDialog(form: AddNftForm, actions: NftActions) {
-    var contract by remember { mutableStateOf("") }
-    var tokenId by remember { mutableStateOf("") }
+    // Kept across a rotation, as the dialog is: neither is a secret.
+    var contract by rememberSaveable { mutableStateOf("") }
+    var tokenId by rememberSaveable { mutableStateOf("") }
     AlertDialog(
         onDismissRequest = actions.onCloseAdd,
         title = { Text("Add an NFT") },
