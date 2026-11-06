@@ -41,6 +41,7 @@ fun SimpleAccountDetailScreen(
     onDerive: () -> Unit = {},
     onToggleAmounts: () -> Unit = {},
     onOrderActivity: (ActivityOrder) -> Unit = {},
+    onSendElsewhere: (contract: String?) -> Unit = {},
 ) {
     val ready = state as? AccountDetailUiState.Ready
     AccountDetailScreen(
@@ -69,6 +70,7 @@ fun SimpleAccountDetailScreen(
         onDerive = onDerive,
         onToggleAmounts = onToggleAmounts,
         onOrderActivity = onOrderActivity,
+        onSendElsewhere = onSendElsewhere,
     )
 }
 

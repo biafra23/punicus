@@ -12,6 +12,7 @@ import eth.serotine.data.tokens.BuiltInTokens
 import eth.serotine.domain.model.Address
 import eth.serotine.domain.model.Network
 import eth.serotine.domain.repository.AddressKinds
+import eth.serotine.domain.repository.BlockTransactions
 import eth.serotine.domain.repository.Broadcaster
 import eth.serotine.domain.repository.CowChain
 import eth.serotine.domain.repository.LightClient
@@ -169,6 +170,9 @@ class MyotisHost private constructor(
 
     /** A sent transaction's verified receipt and its block's finality. */
     val receipts: ReceiptTracker = routed.receipts
+
+    /** The transactions of verified blocks (Send from another wallet, #255), per network. */
+    val blockTransactions: BlockTransactions = routed.blockTransactions
 
     /** ENS names, resolved against beacon-finalized state. */
     val names: NameResolver = routed.names
@@ -430,6 +434,7 @@ class MyotisHost private constructor(
             transactionInputs = EngineTransactionInputs(network, chain, Dispatchers.IO),
             broadcaster = EngineBroadcaster(network, chain, Dispatchers.IO),
             receipts = EngineReceipts(network, chain, Dispatchers.IO, POLL_INTERVAL),
+            blockTransactions = EngineBlockTransactions(network, chain, Dispatchers.IO),
             names = EngineNames(network, chain, Dispatchers.IO),
             safeApprovals = VerifiedSafeApprovals(network, chain, Dispatchers.IO),
             uniswap = VerifiedUniswapV3(chain, Dispatchers.IO, network),
@@ -697,6 +702,11 @@ class MyotisHost private constructor(
             override fun blockByNumber(number: Long): String? {
                 val handle = (state as? ChainState.Running)?.handle ?: return null
                 return handle.reads().getBlockByNumber("0x" + number.toString(16), false)
+            }
+
+            override fun blockWithTransactions(number: Long): String? {
+                val handle = (state as? ChainState.Running)?.handle ?: return null
+                return handle.reads().getBlockByNumber("0x" + number.toString(16), true)
             }
 
             // "pending": the verified count plus the sends this node made that are not mined yet,

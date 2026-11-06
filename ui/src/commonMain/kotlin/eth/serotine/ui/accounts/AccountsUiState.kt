@@ -11,6 +11,7 @@ import eth.serotine.domain.usecase.Total
 import eth.serotine.domain.usecase.Valuation
 import eth.serotine.ui.components.Control
 import eth.serotine.ui.components.Eip55
+import eth.serotine.ui.components.HandoffChoice
 import eth.serotine.ui.components.LightClientItem
 import eth.serotine.ui.components.NOT_CHECKED
 import eth.serotine.ui.components.NetworkLabel
@@ -199,6 +200,11 @@ data class AccountItem(
     val networkLine: String = "",
     val ageNote: String? = null,
     val accountTotal: String? = null,
+    /**
+     * Send from another wallet (issue #255), for an EOA whose key is not on this device: greyed out
+     * with its reason where it cannot be done now; null where it does not apply.
+     */
+    val handoff: HandoffChoice? = null,
 ) {
     /** `0x1234…abcd`, for a list row; the full address stays in [address]. */
     val shortAddress: String
@@ -339,6 +345,12 @@ sealed interface AccountAction {
      * for an externally owned account, greyed out while its key is not on this device.
      */
     data class Derive(override val chainId: Long, override val address: String) : AccountAction
+
+    /**
+     * Send from it through another wallet app on this device (issue #255); offered for an EOA whose
+     * key is not here, when [AccountItem.handoff] is available.
+     */
+    data class SendElsewhere(override val chainId: Long, override val address: String) : AccountAction
 }
 
 /**
