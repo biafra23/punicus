@@ -368,6 +368,13 @@ fun AccountDetailScreen(
             (chrome as? AccountChrome.Refresh)?.onRefresh?.invoke()
         }
     }
+    // Add an NFT greyed out while no NFT can be proven held: a tap says why, with Turn on where the
+    // network is off (#55). Its dialog is drawn here, not in the list, so scrolling never disposes it.
+    val nftsShown = nftActions.withOpenAdd {
+        val reason = (state as? AccountDetailUiState.Ready)?.nfts?.addReason
+        if (reason == null) nftActions.onOpenAdd() else unavailable = notice("Add an NFT", reason)
+    }
+    (state as? AccountDetailUiState.Ready)?.nfts?.adding?.let { form -> AddNftDialog(form, nftActions) }
     Scaffold(
         modifier = modifier,
         snackbarHost = { SnackbarHost(snackbar) },
@@ -490,7 +497,7 @@ fun AccountDetailScreen(
                     onSafeSettings = safeSettings,
                     simple = chrome is AccountChrome.Refresh,
                     onToggleUnlistedNfts = onToggleUnlistedNfts,
-                    nftActions = nftActions,
+                    nftActions = nftsShown,
                 )
             }
         }
@@ -804,7 +811,6 @@ private fun Assets(
  */
 @Composable
 private fun Nfts(nfts: NftSection, onToggle: () -> Unit, actions: NftActions, modifier: Modifier) {
-    var why by remember { mutableStateOf(false) }
     Column(
         modifier.padding(top = 16.dp).testTag(ACCOUNT_NFTS_TAG),
         verticalArrangement = Arrangement.spacedBy(4.dp),
@@ -813,10 +819,12 @@ private fun Nfts(nfts: NftSection, onToggle: () -> Unit, actions: NftActions, mo
             Text("NFTs", style = MaterialTheme.typography.titleSmall, modifier = Modifier.weight(1f))
             // Greyed out, never hidden, while it cannot be done; a tap says why (owner ruling, 2026-10-18, #55).
             OutlinedButton(
-                onClick = { if (nfts.addReason != null) why = true else actions.onOpenAdd() },
-                colors = if (nfts.addReason != null) ButtonDefaults.outlinedButtonColors(
-                    contentColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.38f),
-                ) else ButtonDefaults.outlinedButtonColors(),
+                onClick = actions.onOpenAdd,
+                colors = if (nfts.addReason != null) {
+                    ButtonDefaults.outlinedButtonColors(contentColor = Unavailable.contentColor())
+                } else {
+                    ButtonDefaults.outlinedButtonColors()
+                },
                 modifier = Modifier.testTag(ACCOUNT_ADD_NFT_TAG).unavailable(nfts.addReason != null),
             ) { Text("Add an NFT") }
         }
@@ -852,10 +860,6 @@ private fun Nfts(nfts: NftSection, onToggle: () -> Unit, actions: NftActions, mo
         }
         Text(NO_IMAGES, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
     }
-    nfts.addReason?.takeIf { why }?.let { reason ->
-        UnavailableDialog("Add an NFT", reason, onDismiss = { why = false })
-    }
-    nfts.adding?.let { form -> AddNftDialog(form, actions) }
 }
 
 /**
@@ -901,7 +905,8 @@ private fun AddNftDialog(form: AddNftForm, actions: NftActions) {
         confirmButton = {
             TextButton(onClick = { actions.onAdd(contract, tokenId) }, enabled = !form.busy) { Text("Add") }
         },
-        dismissButton = { TextButton(onClick = actions.onCloseAdd, enabled = !form.busy) { Text("Cancel") } },
+        // Cancel works while a proof is made too: it stops waiting for it, and nothing is added.
+        dismissButton = { TextButton(onClick = actions.onCloseAdd) { Text("Cancel") } },
     )
 }
 
@@ -911,7 +916,10 @@ class NftActions(
     val onCloseAdd: () -> Unit = {},
     val onAdd: (contract: String, tokenId: String) -> Unit = { _, _ -> },
     val onRemove: (key: String) -> Unit = {},
-)
+) {
+    /** These actions, with [open] in place of [onOpenAdd]. */
+    fun withOpenAdd(open: () -> Unit) = NftActions(open, onCloseAdd, onAdd, onRemove)
+}
 
 /** Why no NFT shows an image (owner ruling, 2026-11-05, #246: on-chain metadata only). */
 private const val NO_IMAGES = "Images are not shown: nothing is fetched that is not on chain."

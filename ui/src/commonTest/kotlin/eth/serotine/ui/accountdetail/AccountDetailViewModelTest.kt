@@ -288,7 +288,10 @@ class AccountDetailViewModelTest {
         runCurrent()
         assertEquals(null, adding())
         assertEquals(listOf(AccountId(Network.SEPOLIA, daily.address) to held), addedNfts.added.value)
-        assertEquals("NFT added", (viewModel.uiState.value as AccountDetailUiState.Ready).message)
+        assertEquals(
+            "NFT added. It is listed once this account's NFTs are read.",
+            (viewModel.uiState.value as AccountDetailUiState.Ready).message,
+        )
     }
 
     @Test

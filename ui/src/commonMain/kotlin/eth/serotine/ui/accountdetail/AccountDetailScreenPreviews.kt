@@ -771,6 +771,11 @@ private fun AccountDetailNftAddPreview() = AccountDetailPreview(
     ),
 )
 
+/** The *Add an NFT* dialog while the account's holding is proven: its fields and Add wait, Cancel does not. */
+@Preview
+@Composable
+private fun AccountDetailNftAddingPreview() = AccountDetailPreview(daily.copy(nfts = nfts.copy(adding = AddNftForm(busy = true))))
+
 /** *Add an NFT* greyed out while the account's network is off. */
 @Preview
 @Composable
@@ -833,4 +838,5 @@ internal val accountDetailScreenPreviews: List<@Composable () -> Unit> = listOf(
     { AccountDetailNftsNonePreview() },
     { AccountDetailNftAddPreview() },
     { AccountDetailNftAddUnavailablePreview() },
+    { AccountDetailNftAddingPreview() },
 )

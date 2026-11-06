@@ -67,6 +67,9 @@ data class NftCollection(
     val symbol: String?,
 )
 
+/** How the user's list of added NFTs ([AddedNfts]) was read: in full, set aside as damaged, or not at all. */
+enum class AddedListState { READ, SET_ASIDE, UNREADABLE }
+
 /** An account's NFTs (issue #246), or why there are none to show. */
 sealed interface NftHoldings {
 
@@ -93,6 +96,8 @@ sealed interface NftHoldings {
         val checked: LongRange,
         val unproven: Int,
         val notChecked: Int,
+        /** The user's added NFTs as stored: their list read, set aside as damaged, or unreadable. */
+        val addedList: AddedListState = AddedListState.READ,
     ) : NftHoldings {
         /** Whether every block from its start on is checked. */
         val complete: Boolean
@@ -163,11 +168,19 @@ class ObserveNfts(
         /** The built-in collection at [collection], unless it is pinned and its code not proven to be its pin. */
         fun builtIn(collection: Address) = pins.builtIn(KnownNftCollections.find(account.network, collection))
         val addedNfts = added.observe(account)
-            .map { (it as? AddedNftList.Loaded)?.nfts.orEmpty() }
-            .onStart { emit(emptyList()) }
+            .map { list ->
+                when (list) {
+                    is AddedNftList.Loaded ->
+                        list.nfts to if (list.setAside) AddedListState.SET_ASIDE else AddedListState.READ
+                    AddedNftList.Unreadable -> emptyList<NftRef>() to AddedListState.UNREADABLE
+                }
+            }
+            .onStart { emit(emptyList<NftRef>() to AddedListState.READ) }
             .distinctUntilChanged()
         emitAll(
-            combine(reader.observe(), addedNfts, ::Pair).transformLatest { (history, addedList) ->
+            combine(reader.observe(), addedNfts, ::Pair).transformLatest { (history, stored) ->
+                val (addedRefs, addedState) = stored
+                val addedList = addedRefs.toSet()
                 when (history) {
                     IndexedHistory.NotFollowed -> emit(NftHoldings.NotFollowed)
                     is IndexedHistory.Checking -> emit(NftHoldings.Checking(history.start))
@@ -212,8 +225,12 @@ class ObserveNfts(
                         val checking = ordered.take(MAX_CHECKED)
                         val head = history.checked.last
                         val reproveAfter = REPROVE_AFTER_SECONDS / account.network.secondsPerSlot
+                        // Marked added only where no log brought it: one the history finds is not the user's
+                        // to take off.
+                        val ownOnly = addedList - moves.flatMap { it.received }.toSet()
                         fun shown() =
-                            holdings(history, checking, ordered.size, proofs, names, ensNames, ::builtIn, addedList)
+                            holdings(history, checking, ordered.size, proofs, names, ensNames, ::builtIn, ownOnly)
+                                .copy(addedList = addedState)
                         emit(shown())
                         for (nft in checking) {
                             val move = last.getValue(nft)
@@ -308,7 +325,7 @@ class ObserveNfts(
         names: Map<Address, NftCollectionReading.Read>,
         ensNames: Map<NftRef, EnsNftReading.Named>,
         builtIn: (Address) -> KnownNftCollection?,
-        addedList: List<NftRef>,
+        addedList: Set<NftRef>,
     ): NftHoldings.Read {
         val held = checking.mapNotNull { nft ->
             val holding = proofs[nft]?.holding as? NftHolding.Held ?: return@mapNotNull null
