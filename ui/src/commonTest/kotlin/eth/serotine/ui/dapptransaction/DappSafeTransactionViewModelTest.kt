@@ -91,7 +91,7 @@ class DappSafeTransactionViewModelTest {
                 requests, world.accounts, networks, world.catalog, world.observeSafe, world.balances, world.inputs,
                 world.queue, clock = { now },
             ),
-            SignDappSafeTx(requests, SignSafeTx(world.signer, world.observeSafe, world.recovery, world.queue, Network.SEPOLIA)),
+            SignDappSafeTx(requests) { SignSafeTx(world.signer, world.observeSafe, world.recovery, world.queue, it) },
             RefuseDappRequest(requests, world.accounts, networks, clock = { now }),
             DescribeKeyStore(FakeKeys()),
             clock = { now },
@@ -101,6 +101,59 @@ class DappSafeTransactionViewModelTest {
         backgroundScope.launch { vm.uiState.collect {} }
         runCurrent()
         return vm
+    }
+
+    @Test
+    fun aGnosisChainSafesTransactionIsSignedThereAndOpensAsTheGnosisChainSafes() = runTest {
+        val gnosis = SafeWorld(Network.GNOSIS).also {
+            it.balances.of(it.safe).value = BalanceReading.Verified(Wei.of("1000000000000000000"), 100)
+        }
+        val on = MemoryNetworkSettings(setOf(Network.GNOSIS))
+        val asked = request(1).copy(
+            sessionAccounts = listOf(eth.serotine.domain.model.AccountId(Network.GNOSIS, gnosis.safe)),
+            sessionNetworks = setOf(Network.GNOSIS, Network.ETHEREUM),
+            chain = "eip155:100",
+            ask = DappAsk.SendTransaction(
+                DappTransactionRequest(gnosis.safe, gnosis.recipient, UInt256.of("500000000000000000"), ByteArray(0), null),
+            ),
+        )
+        requests.waiting.value = listOf(asked)
+        Dispatchers.setMain(UnconfinedTestDispatcher(testScheduler))
+        val history = MemoryTransactionHistory()
+        val vm = DappTransactionViewModel(
+            "t/1",
+            ObserveDappMessages(requests, gnosis.accounts, on, gnosis.catalog, clock = { now }),
+            QuoteDappTransaction(
+                requests, gnosis.accounts, on, gnosis.catalog, gnosis.balances, gnosis.inputs, gnosis.sent, history,
+                clock = { now },
+            ),
+            SendDappTransaction(
+                requests, gnosis.accounts, on, gnosis.signer, gnosis.broadcaster, gnosis.sent, history,
+                gnosis.receipts, clock = { now },
+            ),
+            ProposeDappSafeTx(
+                requests, gnosis.accounts, on, gnosis.catalog, gnosis.observeSafe, gnosis.balances, gnosis.inputs,
+                gnosis.queue, clock = { now },
+            ),
+            SignDappSafeTx(requests) { SignSafeTx(gnosis.signer, gnosis.observeSafe, gnosis.recovery, gnosis.queue, it) },
+            RefuseDappRequest(requests, gnosis.accounts, on, clock = { now }),
+            DescribeKeyStore(FakeKeys()),
+            clock = { now },
+            timeSource = clock,
+            ticks = kotlinx.coroutines.flow.flowOf(Unit),
+        )
+        backgroundScope.launch { vm.uiState.collect {} }
+        runCurrent()
+        assertEquals("On Gnosis Chain, real funds", vm.uiState.value.network)
+        assertEquals("0.5 XDAI", vm.uiState.value.quote[1].value)
+        vm.onPasswordChange("made-up test password")
+        vm.send()
+        runCurrent()
+        val queued = gnosis.queue.requests.value.single()
+        assertEquals(Network.GNOSIS, queued.network)
+        // It opens as the Gnosis Chain Safe's transaction, never the same address's on Sepolia.
+        assertEquals(eth.serotine.domain.model.AccountId(Network.GNOSIS, gnosis.safe), vm.uiState.value.safeAccount)
+        assertEquals("0x" + queued.hash.hex, vm.uiState.value.queued)
     }
 
     @Test

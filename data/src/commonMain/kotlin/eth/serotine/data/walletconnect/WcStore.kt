@@ -70,6 +70,8 @@ internal class WcStoredSession(
      * alone. A session stored before chains were kept was a Sepolia session, and reads as one.
      */
     val chains: List<String> = listOf(WcProtocol.SEPOLIA),
+    /** The chain the dApp last switched to ([WcWallet.respondChainSwitch]); null before any switch: its first chain. */
+    val currentChain: String? = null,
 ) {
     override fun toString(): String = "WcStoredSession(topic=$topic, symKey=redacted)"
 
@@ -77,10 +79,14 @@ internal class WcStoredSession(
         accounts: List<String> = this.accounts,
         expirySeconds: Long = this.expirySeconds,
         acknowledged: Boolean = this.acknowledged,
+        currentChain: String? = this.currentChain,
     ) = WcStoredSession(
         topic, symKey, pairingTopic, selfPublicKey, peerPublicKey, dapp, accounts, methods, events,
-        expirySeconds, acknowledged, settleRequestId, requiredNamespaces, optionalNamespaces, chains,
+        expirySeconds, acknowledged, settleRequestId, requiredNamespaces, optionalNamespaces, chains, currentChain,
     )
+
+    /** The chain the dApp is on now, as far as this wallet told it: the one last switched to, else the first. */
+    val chainNow: String get() = currentChain?.takeIf { it in chains } ?: chains.first()
 }
 
 /**

@@ -206,9 +206,10 @@ internal object WcRequests {
         setOf("from", "to", "value", "data", "input", "gas", "gasLimit", "chainId", "type", "accessList")
 
     /**
-     * The largest gas limit a dApp may ask for, on every network: 2^24, EIP-7825's cap on a transaction's gas
-     * (Ethereum and Sepolia, since Fusaka), and above Gnosis Chain's block gas limit too. A larger one could
-     * never be included.
+     * The largest gas limit a dApp may ask for, on every network: 2^24 (16,777,216), EIP-7825's per-transaction
+     * cap on Ethereum and Sepolia since Fusaka, where a larger one is invalid. It is below the block gas limit of
+     * every network served (Gnosis Chain's, about 17,000,000, is the lowest), so a transaction within it fits a
+     * block on each.
      */
     private const val MAX_GAS = 16_777_216L
 

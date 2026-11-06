@@ -112,7 +112,7 @@ class DappTransactionViewModelTest {
             SendDappTransaction(requests, accounts, networks, signer, broadcaster, sent, history, FakeReceipts(), clock = { now }),
             // A Safe's side, never reached from an account held here.
             ProposeDappSafeTx(requests, accounts, networks, catalog, safes.observeSafe, balances, inputs, safes.queue, clock = { now }),
-            SignDappSafeTx(requests, SignSafeTx(signer, safes.observeSafe, safes.recovery, safes.queue, Network.SEPOLIA)),
+            SignDappSafeTx(requests) { SignSafeTx(signer, safes.observeSafe, safes.recovery, safes.queue, it) },
             RefuseDappRequest(requests, accounts, networks, clock = { now }),
             DescribeKeyStore(FakeKeys()),
             clock = { now },

@@ -39,6 +39,7 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LifecycleEventEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import eth.serotine.domain.model.AccountId
 import eth.serotine.ui.components.Blockie
 import eth.serotine.ui.components.NotSentFields
 import eth.serotine.ui.components.Unavailable
@@ -57,21 +58,26 @@ const val DAPP_TRANSACTION_OPEN_SAFE_TX_TAG = "dapp-transaction-open-safe-tx"
 /**
  * Binds [DappTransactionScreen] to its ViewModel; an answer, or a request no longer waiting, ends it
  * through [onDone]. The password goes whenever the screen is not shown, and the quote is made again.
- * A Safe's transaction once queued opens through [onOpenSafeTx], with the Safe's address and its hash.
+ * A Safe's transaction once queued opens through [onOpenSafeTx], with the Safe on the request's network and
+ * its hash.
  */
 @Composable
 fun DappTransactionRoute(
     viewModel: DappTransactionViewModel,
     onBack: () -> Unit,
     onDone: () -> Unit,
-    onOpenSafeTx: (safe: String, hash: String) -> Unit,
+    onOpenSafeTx: (safe: AccountId, hash: String) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
     LifecycleEventEffect(Lifecycle.Event.ON_STOP) { viewModel.onHidden() }
     LifecycleEventEffect(Lifecycle.Event.ON_START) { viewModel.onShown() }
     val done by rememberUpdatedState(onDone)
-    val open by rememberUpdatedState(onOpenSafeTx)
+    val openSafeTx by rememberUpdatedState(onOpenSafeTx)
+    // The Safe on the request's own network: the same address on another chain is another Safe.
+    fun open(hash: String) {
+        state.safeAccount?.let { openSafeTx(it, hash) }
+    }
     LaunchedEffect(state.done, state.gone) {
         if (state.done || state.gone) done()
     }
@@ -80,7 +86,7 @@ fun DappTransactionRoute(
         val queued = state.queued
         if (state.openQueued && queued != null) {
             viewModel.onQueuedOpened()
-            open(state.accountAddress, queued)
+            open(queued)
         }
     }
     DappTransactionScreen(
@@ -92,7 +98,7 @@ fun DappTransactionRoute(
         onRequote = { viewModel.requote() },
         onRefuse = viewModel::refuse,
         onDismissExplanation = viewModel::dismissExplanation,
-        onOpenQueued = { state.queued?.let { open(state.accountAddress, it) } },
+        onOpenQueued = { state.queued?.let { open(it) } },
         onBack = onBack,
         modifier = modifier,
     )

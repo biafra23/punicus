@@ -2,6 +2,7 @@ package eth.serotine.ui.dapptransaction
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import eth.serotine.domain.model.AccountId
 import eth.serotine.domain.model.AccountKind
 import eth.serotine.domain.model.DappCallMeaning
 import eth.serotine.domain.model.Network
@@ -103,6 +104,11 @@ data class DappTransactionUiState(
     val accountAddress: String = "",
     /** The network the request is on, with its kind of funds ("On Sepolia, a test network"). */
     val network: String = "On Sepolia, a test network",
+    /**
+     * The Safe it is sent from, on the request's network, which its queued Safe transaction opens on (the same
+     * address on another chain is another Safe); null for an account's transaction, or a network not served.
+     */
+    val safeAccount: AccountId? = null,
     /** The recipient, EIP-55 checksummed, in full. */
     val to: String = "",
     /** The value, in the network's currency, testnet marked. */
@@ -640,6 +646,8 @@ class DappTransactionViewModel(
             accountName = review.account?.label,
             accountAddress = Eip55.format(review.address),
             network = DappRequestViewModel.onLine(review.request.network),
+            safeAccount = review.request.network?.takeIf { review.account?.kind == AccountKind.SAFE }
+                ?.let { AccountId(it, review.address) },
             to = Eip55.format(transaction.to),
             value = ether(transaction.value, review.request.network),
             meaning = meaningLine(transaction.meaning, token),

@@ -792,7 +792,7 @@ class AppGraph(
             transactionInputs,
             safeTxQueue,
         ),
-        SignDappSafeTx(dappRequests, signSafeTx(Network.SEPOLIA)),
+        SignDappSafeTx(dappRequests, ::signSafeTx),
         RefuseDappRequest(dappRequests, accounts, networkSettings),
         DescribeKeyStore(keys),
     )

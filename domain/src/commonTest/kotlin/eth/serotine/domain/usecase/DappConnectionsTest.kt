@@ -120,7 +120,7 @@ class DappConnectionsTest {
         // What a proposal requires decides the kind before anything is chosen.
         val requiringMainnet = proposal(required = setOf("eip155:1"), optional = setOf("eip155:100", "eip155:11155111"))
         assertEquals(setOf(Network.ETHEREUM, Network.GNOSIS), requiringMainnet.networks)
-        assertEquals(DappOffer.NOT_ASKED, dappOffer(held, on, requiringMainnet))
+        assertEquals(DappOffer.OTHER_FUNDS, dappOffer(held, on, requiringMainnet), "asked for, but testnet")
         assertEquals(DappOffer.OFFERED, dappOffer(gnosis, on, requiringMainnet))
         // Not asked for comes first; then whether it can be offered at all.
         assertEquals(DappOffer.NO_KEY, dappOffer(watched, on, asking))
@@ -153,6 +153,52 @@ class DappConnectionsTest {
         assertTrue(approve(proposal, listOf(held.id, watchedSafe.id)) is DappApproval.Approved)
         assertTrue(approve(proposal, listOf(mainnet.id)) is DappApproval.Approved)
         assertEquals(listOf(proposal to listOf(held.id, watchedSafe.id), proposal to listOf(mainnet.id)), sessions.approved)
+    }
+
+    @Test
+    fun anAccountAskedForButOfTheOtherKindSaysSoRatherThanNotAsked() {
+        // Sepolia required, Ethereum optional: Ethereum was asked for, but it is real funds.
+        val sepoliaFirst = proposal(required = setOf("eip155:11155111"), optional = setOf("eip155:1"))
+        assertEquals(DappOffer.OTHER_FUNDS, dappOffer(mainnet, enabled.value, sepoliaFirst))
+        assertEquals(DappOffer.NOT_ASKED, dappOffer(gnosis, enabled.value, sepoliaFirst))
+    }
+
+    @Test
+    fun aProposalIsApprovedOnlyWithAnAccountOnEachNetworkItRequires() = runTest {
+        val both = proposal(required = setOf("eip155:1", "eip155:100"), optional = emptySet())
+        sessions.connections.value = DappConnections.On(DappRelayLink.CONNECTED, listOf(both), emptyList())
+        val approve = ApproveDappProposal(sessions, accounts, networks)
+        assertEquals(setOf(Network.GNOSIS), missingRequired(both, listOf(mainnet.id)))
+        assertEquals(DappApproval.InvalidAccounts, approve(proposal, listOf(mainnet.id)), "none on Gnosis Chain")
+        assertTrue(sessions.approved.isEmpty())
+        assertTrue(approve(proposal, listOf(mainnet.id, gnosis.id)) is DappApproval.Approved)
+    }
+
+    @Test
+    fun aSessionLeftWithNoAccountOnANetworkItsDappRequiredEndsRatherThanShrinks() = runTest {
+        val metadata = DappMetadata("dApp", "https://dapp.test", "")
+        sessions.connections.value = DappConnections.On(
+            DappRelayLink.CONNECTED,
+            emptyList(),
+            listOf(
+                eth.serotine.domain.repository.DappSession(
+                    DappSessionId("s"), metadata, listOf(mainnet.id, gnosis.id), listOf("personal_sign"), 0, true,
+                    requiredNetworks = setOf(Network.GNOSIS),
+                ),
+                eth.serotine.domain.repository.DappSession(
+                    DappSessionId("o"), metadata, listOf(mainnet.id, gnosis.id), listOf("personal_sign"), 0, true,
+                    requiredNetworks = setOf(Network.ETHEREUM),
+                ),
+            ),
+        )
+        val following = backgroundScope.launch { FollowDappAccounts(sessions, accounts, networks)() }
+        runCurrent()
+        accounts.remove(gnosis.id)
+        runCurrent()
+        // Required Gnosis Chain lost its account: ended. Required Ethereum kept its own: only updated.
+        assertEquals(listOf(DappSessionId("s")), sessions.disconnected)
+        assertEquals(listOf(DappSessionId("o") to listOf(mainnet.id)), sessions.updated)
+        following.cancel()
     }
 
     @Test

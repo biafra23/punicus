@@ -526,13 +526,7 @@ private fun Destinations(
                         onDone = { navController.popBackStack(DAPP_TRANSACTION_ROUTE, inclusive = true) },
                         // A Safe's transaction, signed and queued: its screen takes this one's place.
                         onOpenSafeTx = { safe, hash ->
-                            Address.parse(safe)?.let { address ->
-                                navController.openSafeTx(
-                                    AccountId(Network.SEPOLIA, address),
-                                    hash,
-                                    replacing = DAPP_TRANSACTION_ROUTE,
-                                )
-                            }
+                            navController.openSafeTx(safe, hash, replacing = DAPP_TRANSACTION_ROUTE)
                         },
                     )
                 } else {

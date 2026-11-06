@@ -79,10 +79,12 @@ data class DappProposal(
      */
     val networks: Set<Network>
         get() {
-            val asked = (requiredChains + optionalChains).mapNotNull(::dappNetworkOf).toSet()
-            val kind = requiredNetworks.map { it.testnet }.distinct().singleOrNull() ?: return asked
-            return asked.filter { it.testnet == kind }.toSet()
+            val kind = requiredNetworks.map { it.testnet }.distinct().singleOrNull() ?: return askedNetworks
+            return askedNetworks.filter { it.testnet == kind }.toSet()
         }
+
+    /** Every network it asks for, required or optional, that Serotine serves, of either kind of funds. */
+    val askedNetworks: Set<Network> get() = (requiredChains + optionalChains).mapNotNull(::dappNetworkOf).toSet()
 }
 
 /** A session with a dApp. */
@@ -101,6 +103,11 @@ data class DappSession(
      * dApp may switch between them. Its accounts' networks, and those the dApp required.
      */
     val networks: Set<Network> = accounts.map { it.network }.toSet(),
+    /**
+     * The networks its dApp required: each keeps an account of the session, or the session ends, as WalletConnect
+     * has a session cover every chain its proposal requires.
+     */
+    val requiredNetworks: Set<Network> = emptySet(),
 )
 
 /** Whether the relay connection is open: dApp messages arrive only while it is. */
@@ -192,7 +199,8 @@ interface DappSessions {
 
     /**
      * Approves [proposal] with the [accounts] the dApp is to see: on networks it asked for, of one kind of
-     * funds. The session holds their networks and those the proposal requires.
+     * funds, with at least one on each network it requires. The session holds their networks and those the
+     * proposal requires.
      */
     suspend fun approve(proposal: DappProposalId, accounts: List<AccountId>): DappApproval
 

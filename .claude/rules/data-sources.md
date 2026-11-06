@@ -259,8 +259,9 @@ docs/walletconnect.md is the contract.)
   EIP-681 payment link. That wallet signs and broadcasts it, through its own
   provider, which the review says learns the transfer and the IP address.
   Serotine contacts no service.
-- Every network that is on. It is not a dApp session, so the Sepolia-only
-  ruling for dApp sessions does not bind it.
+- Every network that is on. It is not a dApp session, so the ruling on dApp
+  sessions' networks (real funds or testnet, never both; owner ruling,
+  2026-11-05, on #22) does not bind it.
 - Only `ethereum:` and `metamask://` links, never MetaMask's `https://` form,
   which falls back to its website.
 - Nothing comes back through the link. What the transfer became is read from

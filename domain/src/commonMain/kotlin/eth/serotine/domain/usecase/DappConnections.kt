@@ -58,8 +58,9 @@ data class DappAccountChoice(val account: Account, val offer: DappOffer) {
 /** Why [account] may not be offered to [proposal]'s dApp beside [chosen], for what it asks; null otherwise. */
 private fun proposalOffer(account: Account, proposal: DappProposal, chosen: Collection<AccountId>): DappOffer? {
     val kinds = (proposal.requiredNetworks + chosen.map { it.network }).map { it.testnet }.toSet()
+    // Asked for at all first, of either kind: one asked for but of the other kind is said as that.
     return when {
-        account.network !in proposal.networks -> DappOffer.NOT_ASKED
+        account.network !in proposal.askedNetworks -> DappOffer.NOT_ASKED
         kinds.any { it != account.network.testnet } -> DappOffer.OTHER_FUNDS
         else -> null
     }
@@ -134,11 +135,18 @@ class ApproveDappProposal(
         val valid = chosen.isNotEmpty() && chosen.toSet().size == chosen.size && chosen.all { id ->
             val account = wallet[id] ?: return@all false
             dappOffer(account, enabled, asked, chosen - id) == DappOffer.OFFERED
-        }
+        } && missingRequired(asked, chosen).isEmpty()
         if (!valid) return DappApproval.InvalidAccounts
         return sessions.approve(proposal, chosen)
     }
 }
+
+/**
+ * The networks [proposal] requires that [chosen] has no account on: WalletConnect has a session cover every chain
+ * its proposal requires, so it cannot be approved until each has one (screen D3 greys Approve out until then).
+ */
+fun missingRequired(proposal: DappProposal, chosen: Collection<AccountId>): Set<Network> =
+    proposal.requiredNetworks - chosen.map { it.network }.toSet()
 
 /** Rejects a proposal (screen D3). */
 class RejectDappProposal(private val sessions: DappSessions) {
@@ -153,10 +161,11 @@ class DisconnectDapp(private val sessions: DappSessions) {
 /**
  * Keeps each session's accounts to those a dApp may still be offered ([dappOffer]), while it runs: one
  * removed from the wallet, whose key was removed, or whose network was turned off is taken out of
- * every session that sees it, the dApp told (`accountsChanged`), and a session left with none is
- * ended. A network counts as turned off only once the setting has answered it as on while this runs: a
- * setting that cannot be read is answered with the build's defaults ([NetworkSettings.observe]), and a
- * release build's default has Sepolia off, so a network off from the start ends no session on that word.
+ * every session that sees it, the dApp told (`accountsChanged`), and a session left with none, or with none on
+ * a network its dApp required ([DappSession.requiredNetworks]), is ended. A network counts as turned off only
+ * once the setting has answered it as on while this runs: a setting that cannot be read is answered with
+ * the build's defaults ([NetworkSettings.observe]), and a release build's default has Sepolia off, so a
+ * network off from the start ends no session on that word.
  * A defaults answer of "on" counts as one (a debug build's Sepolia, say), so a later read of "off" ends
  * the sessions then, which is the stored setting. Its requests are refused all the same. The host runs it
  * beside the relay connection.
@@ -186,9 +195,12 @@ class FollowDappAccounts(
                     .toSet()
                 for (session in on.sessions) {
                     val kept = session.accounts.filter { it in held }
+                    // A network the dApp required left with no account: the session would no longer be one it
+                    // agreed to, so it ends rather than shrinks.
+                    val uncovered = session.requiredNetworks - kept.map { it.network }.toSet()
                     when {
                         kept.size == session.accounts.size -> Unit
-                        kept.isEmpty() -> sessions.disconnect(session.id)
+                        kept.isEmpty() || uncovered.isNotEmpty() -> sessions.disconnect(session.id)
                         else -> sessions.updateAccounts(session.id, kept)
                     }
                 }

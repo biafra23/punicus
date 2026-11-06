@@ -84,6 +84,20 @@ private fun DappProposalRealFundsPreview() = DappProposalPreview(realFunds)
 @Composable
 private fun DappProposalRealFundsDarkPreview() = DappProposalPreview(realFunds, darkTheme = true)
 
+// The dApp requires Ethereum and Gnosis Chain: an Ethereum account chosen, Approve waits for one on Gnosis Chain.
+private val missingRequired = realFunds.copy(
+    accounts = realFunds.accounts.map { if (it.network == Network.GNOSIS.displayName) it.copy(chosen = false) else it },
+    missingRequired = DappProposalViewModel.missingLine(setOf(Network.GNOSIS)),
+)
+
+@Preview
+@Composable
+private fun DappProposalMissingRequiredPreview() = DappProposalPreview(missingRequired)
+
+@Preview
+@Composable
+private fun DappProposalMissingRequiredDarkPreview() = DappProposalPreview(missingRequired, darkTheme = true)
+
 @Preview
 @Composable
 private fun DappProposalMixedFundsRefusedPreview() = DappProposalPreview(
@@ -145,6 +159,8 @@ internal val dappProposalScreenPreviews: List<ScreenPreview> = listOf(
     ScreenPreview("either-kind") { DappProposalEitherKindPreview() },
     ScreenPreview("real-funds") { DappProposalRealFundsPreview() },
     ScreenPreview("real-funds-dark") { DappProposalRealFundsDarkPreview() },
+    ScreenPreview("missing-required") { DappProposalMissingRequiredPreview() },
+    ScreenPreview("missing-required-dark") { DappProposalMissingRequiredDarkPreview() },
     ScreenPreview("mixed-funds-refused") { DappProposalMixedFundsRefusedPreview() },
     ScreenPreview("refused") { DappProposalRefusedPreview() },
     ScreenPreview("explaining") { DappProposalExplainingPreview() },

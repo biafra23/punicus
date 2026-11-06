@@ -141,6 +141,10 @@ everything on the chain side: the verified `call`, `estimateGasDetailed`,
 - The session's chains are its required chains and the chains of the
   accounts the user chooses, of those the dApp asked for. An optional
   namespace adds its methods and events only where it names one of them.
+- Each chain the dApp requires needs a chosen account, as WalletConnect's
+  namespaces conform only then. Until each has one, Approve is greyed out
+  and still tappable, and the screen says which network still needs an
+  account (owner ruling, 2026-10-18, #55).
 - A pairing has at most 5 proposals waiting, as a session has at most 20
   requests. One more is answered with -32005, so no peer holding a
   pairing's key can grow the stored state without bound.
@@ -300,9 +304,10 @@ everything on the chain side: the verified `call`, `estimateGasDetailed`,
     never raised.
   - `chainId` must be the request's chain's, `type` `0x2` (EIP-1559, which
     every transaction here is), and an `accessList` empty.
-  - `gas` is at most 2^24 (16,777,216): EIP-7825's cap on a transaction's
-    gas, on Ethereum and Sepolia since Fusaka, and above Gnosis Chain's
-    block gas limit too.
+  - `gas` is at most 2^24 (16,777,216) on every network: EIP-7825's
+    per-transaction cap, on Ethereum and Sepolia since Fusaka. It is below
+    the block gas limit of every network served; Gnosis Chain's, about
+    17,000,000, is the lowest.
   - Refused: `nonce` (the account's next one is the wallet's, behind its own
     transactions not mined yet), `gasPrice`, `maxFeePerGas` and
     `maxPriorityFeePerGas` (the fees are the wallet's, from the verified fee
@@ -400,10 +405,17 @@ everything on the chain side: the verified `call`, `estimateGasDetailed`,
 - Sessions are listed in Connections, each with its dApp's stated name, its
   accounts and its expiry, and each can be disconnected.
 - Expiry, extension, ping and delete follow the protocol. When the user
-  changes which accounts a session sees, the dApp gets `accountsChanged`.
+  changes which accounts a session sees, the dApp gets `accountsChanged`:
+  one event per chain of the session that has an account, naming its
+  addresses there, the chain the dApp is on now last. That is the chain it
+  last switched to, else the session's first. The dApp's provider takes each
+  event's accounts as its own, whatever chain the event names, so the last
+  one is what it shows: a chain with no account is never told an empty list.
 - An account removed from the wallet, whose key was removed, or whose
-  network was turned off leaves every session that sees it, and a session
-  left with none ends. A network counts as turned off only once the setting
+  network was turned off leaves every session that sees it. A session left
+  with none ends, and so does one left with no account on a chain its dApp
+  required: it ends rather than shrinks to a session the dApp did not agree
+  to. A network counts as turned off only once the setting
   has answered it as on while the app runs, a default included. A network
   setting that cannot be read is answered with the build's defaults, and a
   release build's has Sepolia off, so that alone ends no session. Its

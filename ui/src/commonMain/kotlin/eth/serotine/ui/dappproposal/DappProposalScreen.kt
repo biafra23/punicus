@@ -176,6 +176,17 @@ fun DappProposalScreen(
                 )
             }
             state.notice?.let { Text(it, Modifier.padding(16.dp), color = MaterialTheme.colorScheme.error) }
+            // What Approve waits for, said beside it as a tap on it would.
+            if (state.refusal == null && state.accounts.any { it.chosen }) {
+                state.missingRequired?.let {
+                    Text(
+                        it,
+                        Modifier.padding(horizontal = 16.dp, vertical = 4.dp),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+            }
             Row(Modifier.padding(16.dp).fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 OutlinedButton(onClick = onReject, enabled = !state.busy, modifier = Modifier.weight(1f)) {
                     Text("Reject")

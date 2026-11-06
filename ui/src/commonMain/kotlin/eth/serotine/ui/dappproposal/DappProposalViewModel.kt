@@ -12,6 +12,7 @@ import eth.serotine.domain.repository.DappRefusal
 import eth.serotine.domain.usecase.ApproveDappProposal
 import eth.serotine.domain.usecase.DappOffer
 import eth.serotine.domain.usecase.ObserveDappConnections
+import eth.serotine.domain.usecase.missingRequired
 import eth.serotine.domain.usecase.RejectDappProposal
 import eth.serotine.ui.components.shortAddress
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -51,9 +52,14 @@ data class DappProposalUiState(
     /** The reason a greyed-out item gives on a tap, while it is shown. */
     val explaining: Explanation? = null,
     val done: Boolean = false,
+    /**
+     * Why Approve waits for more accounts: the networks the dApp requires that no chosen account is on, said
+     * ("This dApp requires an account on Gnosis Chain…"); null when each has one.
+     */
+    val missingRequired: String? = null,
 ) {
     /** Approve is greyed out, still tappable, while it cannot be done (owner ruling, 2026-10-18, #55). */
-    val approveUnavailable: Boolean get() = refusal != null || accounts.none { it.chosen }
+    val approveUnavailable: Boolean get() = refusal != null || accounts.none { it.chosen } || missingRequired != null
 }
 
 /** One account on its [network], [chosen] or not; [unavailable] is why this dApp may not be offered it, or null. */
@@ -101,8 +107,11 @@ class DappProposalViewModel(
             } else {
                 DappProposalUiState(loading = false, gone = true, done = local.done)
             }
-        // What is chosen and still offered on its own: each account is judged beside the others chosen.
-        val ticked = overview.accounts.filter { keyOf(it.account.id) in local.chosen }.map { it.account.id }
+        // What is chosen and still offered on its own: each account is judged beside the others chosen. One no
+        // longer offered (its network turned off, say) counts for nothing, so it greys out no other.
+        val ticked = overview.accounts
+            .filter { keyOf(it.account.id) in local.chosen && it.offerTo(proposal) == DappOffer.OFFERED }
+            .map { it.account.id }
         val options = overview.accounts.map { choice ->
             val offer =
                 if (proposal.refusal != null) choice.offer else choice.offerTo(proposal, ticked - choice.account.id)
@@ -130,6 +139,9 @@ class DappProposalViewModel(
             asks = proposal.methods.sortedBy { METHOD_ORDER.indexOf(it) }.map(::methodLine),
             refusal = proposal.refusal?.let(::refusalLine),
             accounts = options,
+            missingRequired = missingLine(
+                missingRequired(proposal, overview.accounts.map { it.account.id }.filter { keyOf(it) in chosenKeys }),
+            ),
             busy = local.busy,
             notice = local.notice ?: if (overview.accountsUnreadable) ACCOUNTS_UNREADABLE else null,
             explaining = local.explaining,
@@ -140,6 +152,11 @@ class DappProposalViewModel(
     /** Chooses or unchooses the account [key]; one a dApp may not be offered says why instead. */
     fun toggle(key: String) {
         val option = uiState.value.accounts.find { it.key == key } ?: return
+        // One chosen before it became unavailable can always be unchosen.
+        if (key in local.value.chosen) {
+            local.update { it.copy(chosen = it.chosen - key, notice = null) }
+            return
+        }
         if (option.unavailable != null) {
             local.update { it.copy(explaining = Explanation("Not offered to this dApp", option.unavailable)) }
             return
@@ -160,6 +177,10 @@ class DappProposalViewModel(
         val chosen = state.accounts.filter { it.chosen }.mapNotNull { idOf(it.key) }
         if (chosen.isEmpty()) {
             local.update { it.copy(explaining = Explanation("Choose an account", CHOOSE_ACCOUNT)) }
+            return
+        }
+        state.missingRequired?.let { reason ->
+            local.update { it.copy(explaining = Explanation("Choose an account", reason)) }
             return
         }
         local.update { it.copy(busy = true, notice = null) }
@@ -200,6 +221,17 @@ class DappProposalViewModel(
         /** [network] by name, with its kind of funds: Sepolia keeps its testnet warning everywhere. */
         fun networkLine(network: Network): String =
             if (network.testnet) "${network.displayName}, a test network" else "${network.displayName}, real funds"
+
+        /** What Approve waits for when [missing], the networks required with no chosen account, is not empty. */
+        fun missingLine(missing: Set<Network>): String? {
+            val names = Network.entries.filter { it in missing }.map { it.displayName }
+            if (names.isEmpty()) return null
+            val listed = when (names.size) {
+                1 -> names.single()
+                else -> names.dropLast(1).joinToString(", ") + " and " + names.last()
+            }
+            return "This dApp requires an account on $listed. Choose one there to approve."
+        }
 
         const val BOTH_KINDS = "A connection holds real funds or a test network, never both: the first account " +
             "you choose decides which."

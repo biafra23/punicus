@@ -237,6 +237,7 @@ class WalletConnectDapps internal constructor(
         expiresAtSeconds = view.expirySeconds,
         acknowledged = view.acknowledged,
         networks = networksOf(view.chains),
+        requiredNetworks = networksOf(view.requiredChains.toList()),
     )
 
     companion object {

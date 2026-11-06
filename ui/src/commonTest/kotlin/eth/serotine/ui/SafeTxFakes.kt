@@ -134,17 +134,20 @@ internal class FakeCodec : SigningRequestCodec {
  * owner; and the fakes of every port its transactions go through. Every signature is made up
  * ([FakeRecovery]): no key exists anywhere.
  */
-internal class SafeWorld {
+internal class SafeWorld(
+    /** The network the Safe and its owners are on: Sepolia unless a test says otherwise. */
+    val network: Network = Network.SEPOLIA,
+) {
     val safe = Address.of("0x" + "5a".repeat(20))
     val alice = Account(
-        Network.SEPOLIA,
+        network,
         Address.of("0x" + "11".repeat(20)),
         AccountKind.EOA,
         "Alice",
         AccountCustody.InKeyStore,
     )
     val bob = Account(
-        Network.SEPOLIA,
+        network,
         Address.of("0x" + "22".repeat(20)),
         AccountKind.EOA,
         "Bob",
@@ -152,13 +155,13 @@ internal class SafeWorld {
     )
     val carol = Address.of("0x" + "33".repeat(20))
     val dave = Account(
-        Network.SEPOLIA,
+        network,
         Address.of("0x" + "44".repeat(20)),
         AccountKind.EOA,
         "Dave",
         AccountCustody.InKeyStore,
     )
-    val treasury = Account(Network.SEPOLIA, safe, AccountKind.SAFE, "Treasury", AccountCustody.Watched)
+    val treasury = Account(network, safe, AccountKind.SAFE, "Treasury", AccountCustody.Watched)
 
     /** EIP-55's own example: 0xdbF03B407c01E7cD3CBea99509d93f8DDDC8C6FB. */
     val recipient = Address.of("0xdbf03b407c01e7cd3cbea99509d93f8dddc8c6fb")
@@ -278,7 +281,7 @@ internal class SafeWorld {
 
     /** A request for this Safe, signed by [first] and [second] (none when null). */
     fun request(tx: SafeTx, first: Address? = null, second: Address? = null): SigningRequest {
-        val unsigned = SigningRequest.of(Network.SEPOLIA, safe, tx)
+        val unsigned = SigningRequest.of(network, safe, tx)
         return unsigned.withSignatures(
             listOfNotNull(first, second).map { SafeSignature.Ecdsa(it, recovery.sign(it, unsigned.hash)) },
         )

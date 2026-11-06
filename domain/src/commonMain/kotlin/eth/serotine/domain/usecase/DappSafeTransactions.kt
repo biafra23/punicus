@@ -213,18 +213,22 @@ sealed interface DappSafeSigning {
  * [SignSafeTx] signs one (screen D6). Once the signature is made, and before it is queued, the request
  * is tied to the Safe transaction ([DappRequests.recordSafeTx]): nothing is queued unless that is saved, so
  * a request signed for is that Safe transaction, never another, and is answered from its execution alone.
- * A signature not made (a wrong password, a prompt cancelled) ties nothing.
+ * A signature not made (a wrong password, a prompt cancelled) ties nothing. It is signed on the Safe
+ * transaction's own network, by [signSafeTx]'s signer for it: a dApp's request on Gnosis Chain is a Gnosis
+ * Chain Safe's.
  */
 class SignDappSafeTx(
     private val requests: DappRequests,
-    private val signSafeTx: SignSafeTx,
+    /** The Safe transaction signer of each network: [SignSafeTx] refuses a request of another network. */
+    private val signSafeTx: (Network) -> SignSafeTx,
 ) {
     /** Whether the owner may sign [proposal] now, as [SignSafeTx.check], waiting at most [budget]. */
     suspend fun check(proposal: DappSafeProposal, budget: Duration = SAFE_CHECK_BUDGET): SafeTxSignCheck =
-        signSafeTx.check(proposal.proposal.request, proposal.heldOwners.first(), budget)
+        signerOf(proposal).check(proposal.proposal.request, proposal.heldOwners.first(), budget)
 
     /** Signs [checked] with [unlock], ties [proposal]'s request to it, and queues it. */
     suspend fun sign(proposal: DappSafeProposal, checked: SafeTxSignCheck.Ready, unlock: Unlock): DappSafeSigning {
+        val signSafeTx = signerOf(proposal)
         val signed = when (val made = signSafeTx.signature(checked, unlock)) {
             is SafeTxSignature.Made -> made.request
             is SafeTxSignature.NotMade -> return when (val outcome = made.outcome) {
@@ -238,6 +242,8 @@ class SignDappSafeTx(
         val queued = signSafeTx.queue(checked, signed)
         return DappSafeSigning.Signed(queued.request, queued.saved)
     }
+
+    private fun signerOf(proposal: DappSafeProposal): SignSafeTx = signSafeTx(proposal.proposal.request.network)
 }
 
 /** The Safe transaction [safeTx] of [safe], when it is in the queue. */

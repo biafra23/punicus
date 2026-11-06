@@ -93,10 +93,9 @@ class DappSafeTransactionsTest {
         clock = { now },
     )
 
-    private fun sign() = SignDappSafeTx(
-        requests,
-        SignSafeTx(world.signer, world.observeSafe, world.recovery, world.queue, Network.SEPOLIA),
-    )
+    private fun sign() = SignDappSafeTx(requests) { network ->
+        SignSafeTx(world.signer, world.observeSafe, world.recovery, world.queue, network)
+    }
 
     private suspend fun signed(proposal: DappSafeProposal): DappSafeSigning {
         val checked = assertIs<SafeTxSignCheck.Ready>(sign().check(proposal))
@@ -112,6 +111,37 @@ class DappSafeTransactionsTest {
         maxCost = UInt256.ZERO,
         sentAt = now,
     )
+
+    @Test
+    fun aGnosisChainSafesDappTransactionIsProposedAndSignedOnGnosisChain() = runTest {
+        val gnosis = SafeWorld(Network.GNOSIS)
+        val on = object : NetworkSettings {
+            override fun observe(): Flow<Set<Network>> = flowOf(setOf(Network.GNOSIS))
+            override suspend fun setEnabled(network: Network, on: Boolean): Boolean = error("not used")
+        }
+        val asked = DappRequest(
+            DappRequestId(DappSessionId("g"), 1),
+            DappMetadata("Example dApp", "https://app.example.org", ""),
+            listOf(AccountId(Network.GNOSIS, gnosis.safe)),
+            "eip155:100",
+            DappAsk.SendTransaction(payment),
+            now + 300,
+        )
+        requests.waiting.value = listOf(asked)
+        val propose = ProposeDappSafeTx(
+            requests, gnosis.accounts, on, ListCatalog(), gnosis.observeSafe, gnosis.nativeBalances,
+            gnosis.inputs, gnosis.queue, clock = { now },
+        )
+        val proposed = assertIs<DappSafeProposing.Proposed>(propose(asked.id)).proposal
+        assertEquals(Network.GNOSIS, proposed.proposal.request.network)
+        val sign = SignDappSafeTx(requests) { network ->
+            SignSafeTx(gnosis.signer, gnosis.observeSafe, gnosis.recovery, gnosis.queue, network)
+        }
+        val checked = assertIs<SafeTxSignCheck.Ready>(sign.check(proposed))
+        val signed = assertIs<DappSafeSigning.Signed>(sign.sign(proposed, checked, Unlock.WithBiometrics("x")))
+        assertEquals(Network.GNOSIS, signed.request.network)
+        assertEquals(proposed.proposal.request.hash, requests.waiting.value.single().safeTx)
+    }
 
     @Test
     fun aSafesTransactionIsProposedAsASafeTxAtItsNextNonceForAnOwnerHeldHereToSign() = runTest {

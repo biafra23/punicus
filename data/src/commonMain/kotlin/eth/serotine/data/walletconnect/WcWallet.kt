@@ -63,6 +63,8 @@ internal data class WcSessionView(
     val acknowledged: Boolean,
     /** The CAIP-2 chains it holds, of one kind of funds. */
     val chains: List<String> = listOf(WcProtocol.SEPOLIA),
+    /** The chains its dApp required: each must keep an account. */
+    val requiredChains: Set<String> = emptySet(),
 )
 
 /** A dApp's request waiting for its answer. Its [params] are the dApp's, untrusted, for the use case to decode. */
@@ -297,8 +299,8 @@ internal class WcWallet(
         data class Refused(val why: WcProtocol.Error) : Approval
 
         /**
-         * No account, one out of shape or twice, on a chain the proposal did not ask for, or accounts of both
-         * kinds of funds, or of another kind than the chains it requires.
+         * No account, one out of shape or twice, on a chain the proposal did not ask for, accounts of both kinds of
+         * funds, or of another kind than the chains it requires, or none on a chain it requires.
          */
         data object InvalidAccounts : Approval
         data object NotSaved : Approval
@@ -330,7 +332,9 @@ internal class WcWallet(
                 // Each account on a chain it asked for, all of one kind of funds with what it requires (ruling 9).
                 val accountChains = parsed.map { it.first }.toSet()
                 val funds = (accountChains + asked.requiredChains).map(WcProtocol::fundsOf).toSet()
-                if (!asked.chains.containsAll(accountChains) || funds.size != 1) {
+                // And an account on each chain it requires, as WalletConnect's namespaces conform only then.
+                val covered = asked.requiredChains.all { it in accountChains }
+                if (!asked.chains.containsAll(accountChains) || funds.size != 1 || !covered) {
                     return@change Approval.InvalidAccounts to null
                 }
                 val chains = WcProtocol.CHAINS.filter { it in asked.requiredChains || it in accountChains }
@@ -471,7 +475,9 @@ internal class WcWallet(
      * session does not hold is answered with the unrecognized-chain error instead (EIP-3326), never switched to.
      */
     suspend fun respondChainSwitch(topic: String, requestId: Long, chain: String): Answer =
-        answer(topic, requestId, event = { session ->
+        answer(topic, requestId, switched = { session ->
+            if (chain in session.chains) session.copy(currentChain = chain) else session
+        }, event = { session ->
             val chainId = dappNetworkOf(chain)?.chainId
             if (chain !in session.chains || chainId == null || "chainChanged" !in session.events) {
                 null
@@ -495,10 +501,14 @@ internal class WcWallet(
     private suspend fun answer(topic: String, requestId: Long, payload: () -> ByteArray): Answer =
         answer(topic, requestId, event = { null }) { payload() }
 
-    /** Answers with [payload], then the session event [event] gives, if any, in the same save. */
+    /**
+     * Answers with [payload], then the session event [event] gives, if any, the session as [switched] leaves it,
+     * all in the same save.
+     */
     private suspend fun answer(
         topic: String,
         requestId: Long,
+        switched: (WcStoredSession) -> WcStoredSession = { it },
         event: (WcStoredSession) -> JsonObject?,
         payload: (WcStoredSession) -> ByteArray,
     ): Answer {
@@ -530,7 +540,13 @@ internal class WcWallet(
                     WcProtocol.SESSION_EVENT.requestTag,
                 )
             }
-            Answer.DELIVERED to kept.queuing(listOfNotNull(message, notice), now, keys)
+            val changed = switched(session)
+            val after = if (changed === session) {
+                kept
+            } else {
+                kept.copy(sessions = kept.sessions.map { if (it.topic == topic) changed else it })
+            }
+            Answer.DELIVERED to after.queuing(listOfNotNull(message, notice), now, keys)
         }
         // Nothing goes out for a change that was not saved: the request would still be shown, and answerable again.
         if (outcome == Answer.NOT_SAVED || keys.isEmpty()) return outcome
@@ -599,7 +615,9 @@ internal class WcWallet(
     /**
      * Gives session [topic] the [accounts] instead, CAIP-10 (`eip155:1:0x…`, the address in lower case), each
      * on one of the session's chains: a session update, then, where the session carries it, an
-     * `accountsChanged` event for each of its chains, naming the accounts it has there. True once saved: they
+     * `accountsChanged` event for each of its chains that has an account, naming its accounts there, the chain
+     * the dApp is on now last. A dApp's provider takes each event's accounts as its own, whatever chain it
+     * names, so the last one is what it shows: never an empty list, and the chain it is on. True once saved: they
      * are in the outbox then, sent now when the relay takes them, else on the next connection. False for an
      * account out of shape, twice, or on a chain the session does not hold.
      */
@@ -611,6 +629,11 @@ internal class WcWallet(
         val saved = store.change(false) { state ->
             val session = state.sessions.find { it.topic == topic } ?: return@change false to null
             if (!session.chains.containsAll(parsed.map { it.first })) return@change false to null
+            // Every chain its dApp required keeps an account: else the session no longer conforms, and is ended
+            // instead (FollowDappAccounts), never updated.
+            val required = WcProtocol.ask(session.requiredNamespaces, session.optionalNamespaces)
+                ?.requiredChains.orEmpty()
+            if (!parsed.map { it.first }.containsAll(required)) return@change false to null
             val key = checkNotNull(WcEncoding.hexOrNull(session.symKey, WC_KEY_BYTES))
             val update = buildJsonObject {
                 put("namespaces", namespaces(accounts, session.chains, session.methods, session.events))
@@ -622,7 +645,9 @@ internal class WcWallet(
                 WcProtocol.SESSION_UPDATE.requestTag,
             )
             if ("accountsChanged" in session.events) {
-                for (chain in session.chains) {
+                val held = session.chains.filter { chain -> parsed.any { it.first == chain } }
+                val now = session.chainNow
+                for (chain in held.filter { it != now } + held.filter { it == now }) {
                     val event = buildJsonObject {
                         putJsonObject("event") {
                             put("name", "accountsChanged")
@@ -883,6 +908,7 @@ internal class WcWallet(
             sessions = state.sessions.map {
                 WcSessionView(
                     it.topic, it.dapp, it.accounts, it.methods, it.events, it.expirySeconds, it.acknowledged, it.chains,
+                    WcProtocol.ask(it.requiredNamespaces, it.optionalNamespaces)?.requiredChains.orEmpty(),
                 )
             },
             requests = state.requests.mapNotNull { request ->

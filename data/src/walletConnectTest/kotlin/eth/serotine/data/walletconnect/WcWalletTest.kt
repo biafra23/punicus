@@ -21,6 +21,7 @@ import kotlinx.io.files.SystemTemporaryDirectory
 import kotlinx.io.readString
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.addJsonObject
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.int
 import kotlinx.serialization.json.jsonObject
@@ -507,7 +508,14 @@ class WcWalletTest {
             1,
             JsonObject(emptyMap()),
             buildJsonObject {
-                put("eip155", namespace(listOf("eip155:1", "eip155:100", WcProtocol.SEPOLIA), listOf("personal_sign"), listOf("accountsChanged")))
+                put(
+                    "eip155",
+                    namespace(
+                        listOf("eip155:1", "eip155:100", WcProtocol.SEPOLIA),
+                        listOf("personal_sign", "wallet_switchEthereumChain"),
+                        listOf("accountsChanged", "chainChanged"),
+                    ),
+                )
             },
         )
         settle()
@@ -531,13 +539,68 @@ class WcWalletTest {
         assertFalse(running.wallet.updateAccounts(approval.topic, listOf(sepoliaAccount)))
         assertTrue(running.wallet.updateAccounts(approval.topic, listOf(gnosis)))
         settle()
-        val events = dapp.received.getValue(approval.topic).filter { it["method"]?.jsonPrimitive?.content == "wc_sessionEvent" }
+        fun accountEvents() = dapp.received.getValue(approval.topic)
+            .filter { it["method"]?.jsonPrimitive?.content == "wc_sessionEvent" }
             .map { it.getValue("params").jsonObject }
-        assertEquals(listOf("eip155:1", "eip155:100"), events.map { it.getValue("chainId").jsonPrimitive.content })
+            .filter { it.getValue("event").jsonObject.getValue("name").jsonPrimitive.content == "accountsChanged" }
+        val events = accountEvents()
+        // A chain left with no account is not told an empty list: a dApp would take it as its accounts.
+        assertEquals(listOf("eip155:100"), events.map { it.getValue("chainId").jsonPrimitive.content })
+        assertEquals(listOf(listOf(account)), events.map { it.getValue("event").jsonObject["data"].strings() })
+
+        // Both chains with accounts: the chain the dApp is on now goes last, so its accounts are what it shows.
+        // Before any switch that is the session's first chain, Ethereum.
+        assertTrue(running.wallet.updateAccounts(approval.topic, listOf(ethereum, gnosis)))
+        settle()
         assertEquals(
-            listOf(emptyList(), listOf(account)),
-            events.map { it.getValue("event").jsonObject["data"].strings() },
+            listOf("eip155:100", "eip155:1"),
+            accountEvents().drop(1).map { it.getValue("chainId").jsonPrimitive.content },
         )
+        // Switched to Gnosis Chain, it goes last.
+        dapp.sendOnSession(
+            request(
+                60,
+                "wc_sessionRequest",
+                buildJsonObject {
+                    putJsonObject("request") {
+                        put("method", "wallet_switchEthereumChain")
+                        putJsonArray("params") { addJsonObject { put("chainId", "0x64") } }
+                    }
+                    put("chainId", "eip155:1")
+                },
+            ),
+        )
+        settle()
+        assertEquals(WcWallet.Answer.DELIVERED, running.wallet.respondChainSwitch(approval.topic, 60, "eip155:100"))
+        assertTrue(running.wallet.updateAccounts(approval.topic, listOf(ethereum, gnosis)))
+        settle()
+        assertEquals(
+            listOf("eip155:1", "eip155:100"),
+            accountEvents().drop(3).map { it.getValue("chainId").jsonPrimitive.content },
+        )
+    }
+
+    @Test
+    fun eachChainTheDappRequiresMustHaveAnAccountAndKeepOne() = runTest {
+        val running = walletConnect()
+        val dapp = dapp()
+        dapp.subscribePairing()
+        assertIs<WcWallet.Pairing.Paired>(running.wallet.pair(dapp.uri()))
+        dapp.propose(
+            1,
+            buildJsonObject { put("eip155", namespace(listOf("eip155:1", "eip155:100"), listOf("personal_sign"), emptyList())) },
+            JsonObject(emptyMap()),
+        )
+        settle()
+        val ethereum = "eip155:1:$account"
+        val gnosis = "eip155:100:$account"
+        // WalletConnect's namespaces conform only with an account on each required chain.
+        assertEquals(WcWallet.Approval.InvalidAccounts, running.wallet.approve(dapp.pairingTopic, 1, listOf(ethereum)))
+        val approval = assertIs<WcWallet.Approval.Approved>(running.wallet.approve(dapp.pairingTopic, 1, listOf(ethereum, gnosis)))
+        assertEquals(setOf("eip155:1", "eip155:100"), running.view().sessions.single().requiredChains)
+        // Nor may an update leave a required chain without one: the session is ended instead.
+        assertFalse(running.wallet.updateAccounts(approval.topic, listOf(ethereum)))
+        assertEquals(listOf(ethereum, gnosis), running.view().sessions.single().accounts)
     }
 
     @Test
