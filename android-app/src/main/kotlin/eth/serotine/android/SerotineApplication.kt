@@ -45,6 +45,7 @@ import eth.serotine.data.settings.FileInterfaceMode
 import eth.serotine.data.settings.FileSwapVenue
 import eth.serotine.data.swaps.FileWaitingSwaps
 import eth.serotine.data.tokens.BuiltInTokenCatalog
+import eth.serotine.data.nfts.FileAddedNfts
 import eth.serotine.data.tokens.FileUserTokens
 import eth.serotine.data.transfers.FileSentTransfers
 import eth.serotine.data.transfers.FileTransactionHistory
@@ -398,6 +399,8 @@ class SerotineApplication : Application() {
             logIndex = node.logIndex,
             nfts = node.nfts,
             ensNfts = node.ensNfts,
+            // The NFTs added by contract and id, beside tokens.json (issue #246).
+            addedNfts = FileAddedNfts(filesDir.resolve("nfts.json").path),
             // The Safe transactions waiting for their owners, with the signatures collected (public
             // data, no key in them), beside the account list in the app's private files.
             safeTxQueue = FileSafeTxQueue(filesDir.resolve("safe-tx-queue.json").path),

@@ -11,6 +11,8 @@ import eth.serotine.domain.model.NftStandard
 import eth.serotine.domain.model.TokenTransfer
 import eth.serotine.domain.model.TokenTransfers
 import eth.serotine.domain.model.UInt256
+import eth.serotine.domain.repository.AddedNftList
+import eth.serotine.domain.repository.AddedNfts
 import eth.serotine.domain.repository.EnsNftReading
 import eth.serotine.domain.repository.EnsNfts
 import eth.serotine.domain.repository.HistoryStarts
@@ -28,10 +30,13 @@ import kotlin.time.Duration
 import kotlin.time.Duration.Companion.seconds
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.emitAll
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flow
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.onStart
 import kotlinx.coroutines.flow.transformLatest
 import kotlinx.coroutines.withTimeoutOrNull
 
@@ -46,6 +51,8 @@ data class HeldNft(
     val collection: NftCollection,
     val blockNumber: Long?,
     val ens: EnsNftReading.Named? = null,
+    /** Whether the user added it by contract and id ([AddedNfts]), which they may take off again. */
+    val added: Boolean = false,
 )
 
 /**
@@ -121,6 +128,8 @@ class ObserveNfts(
     private val ens: EnsNfts,
     /** The verified receipts a .eth registrar token's label is looked for in. */
     private val receipts: ReceiptTracker,
+    /** The NFTs the user added by contract and id: checked as the ones found are, after the built-in ones. */
+    private val added: AddedNfts,
 ) {
 
     @OptIn(ExperimentalCoroutinesApi::class)
@@ -153,8 +162,12 @@ class ObserveNfts(
         val pins = Pins()
         /** The built-in collection at [collection], unless it is pinned and its code not proven to be its pin. */
         fun builtIn(collection: Address) = pins.builtIn(KnownNftCollections.find(account.network, collection))
+        val addedNfts = added.observe(account)
+            .map { (it as? AddedNftList.Loaded)?.nfts.orEmpty() }
+            .onStart { emit(emptyList()) }
+            .distinctUntilChanged()
         emitAll(
-            reader.observe().transformLatest { history ->
+            combine(reader.observe(), addedNfts, ::Pair).transformLatest { (history, addedList) ->
                 when (history) {
                     IndexedHistory.NotFollowed -> emit(NftHoldings.NotFollowed)
                     is IndexedHistory.Checking -> emit(NftHoldings.Checking(history.start))
@@ -170,10 +183,17 @@ class ObserveNfts(
                             move.nfts.forEach { last[it] = move }
                             move.received.forEach { lastIn[it] = move }
                         }
+                        // An added NFT not moved since is checked as if it had just been received, by a move
+                        // of its own that the hourly proof keys on.
+                        for (nft in addedList) {
+                            if (nft !in last) last[nft] = NftMove(listOf(nft), listOf(nft), history.start, ADDED, -1)
+                        }
                         // An ERC-721 whose last move took it away is gone: only a log naming the account
-                        // brings it back. An ERC-1155 may have left in part, and is checked.
-                        val received = moves.flatMap { it.received }.toSet().filterNot { nft ->
-                            nft.standard == NftStandard.ERC721 && nft !in last.getValue(nft).received
+                        // brings it back. An ERC-1155 may have left in part, and is checked. An added one
+                        // is checked whatever its last move: the user asked for it.
+                        val received = (moves.flatMap { it.received } + addedList).toSet().filterNot { nft ->
+                            nft.standard == NftStandard.ERC721 && nft !in last.getValue(nft).received &&
+                                nft !in addedList
                         }
                         // The built-in collections' first, so that no flood of airdrops pushes them out
                         // of the NFTs checked; within each part, the most recently moved first. A pinned
@@ -184,13 +204,16 @@ class ObserveNfts(
                                 KnownNftCollections.find(account.network, it.collection)
                                     .let { known -> known == null || pins.mismatched(known) }
                             }
+                                // The user's own next, before what anyone could have sent.
+                                .thenBy { it !in addedList }
                                 .thenByDescending { last.getValue(it).blockNumber }
                                 .thenByDescending { last.getValue(it).logIndex },
                         )
                         val checking = ordered.take(MAX_CHECKED)
                         val head = history.checked.last
                         val reproveAfter = REPROVE_AFTER_SECONDS / account.network.secondsPerSlot
-                        fun shown() = holdings(history, checking, ordered.size, proofs, names, ensNames, ::builtIn)
+                        fun shown() =
+                            holdings(history, checking, ordered.size, proofs, names, ensNames, ::builtIn, addedList)
                         emit(shown())
                         for (nft in checking) {
                             val move = last.getValue(nft)
@@ -285,13 +308,15 @@ class ObserveNfts(
         names: Map<Address, NftCollectionReading.Read>,
         ensNames: Map<NftRef, EnsNftReading.Named>,
         builtIn: (Address) -> KnownNftCollection?,
+        addedList: List<NftRef>,
     ): NftHoldings.Read {
         val held = checking.mapNotNull { nft ->
             val holding = proofs[nft]?.holding as? NftHolding.Held ?: return@mapNotNull null
             val known = builtIn(nft.collection)
             val said = names[nft.collection]
             val collection = NftCollection(nft.collection, known, said?.name, said?.symbol)
-            HeldNft(nft, holding.amount, collection, holding.blockNumber, ensNames[nft].takeIf { known != null })
+            val ens = ensNames[nft].takeIf { known != null }
+            HeldNft(nft, holding.amount, collection, holding.blockNumber, ens, added = nft in addedList)
         }
         // Stable: the built-in collections' first, each part in the order checked, the newest first.
         val nfts = held.filter { it.collection.known != null } + held.filter { it.collection.known == null }
@@ -353,6 +378,9 @@ class ObserveNfts(
          * to read, is missed. So each NFT is proven again within the hour regardless.
          */
         const val REPROVE_AFTER_SECONDS: Long = 3_600
+
+        /** The transaction an added NFT's own move names: none, as no log brought it. */
+        private const val ADDED = "added"
 
         /**
          * How long a .eth registrar token's receipt is waited for at one reading: less than a slot, so a

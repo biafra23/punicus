@@ -748,6 +748,41 @@ private fun AccountDetailNftsCheckingPreview() = AccountDetailPreview(
     daily.copy(nfts = NftSection(empty = "Checking NFTs…", note = "Received since block 8,100,000")),
 )
 
+/**
+ * An NFT the user added by contract and id, with Remove, and the *Add an NFT* dialog after a try that
+ * added nothing.
+ */
+@Preview
+@Composable
+private fun AccountDetailNftAddPreview() = AccountDetailPreview(
+    daily.copy(
+        nfts = nfts.copy(
+            unlistedOpen = true,
+            unlisted = nfts.unlisted + NftRow(
+                "Sepolia Punks",
+                "#4021",
+                null,
+                "0x5b5B5b5b5B5b5b5b5b5b5B5b5b5B5b5b5b5b5b5b",
+                "block 8,412,306",
+                addedKey = "0x5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b:4021:ERC721",
+            ),
+            adding = AddNftForm(error = "Nothing verified says this account holds token 7 of that contract."),
+        ),
+    ),
+)
+
+/** *Add an NFT* greyed out while the account's network is off. */
+@Preview
+@Composable
+private fun AccountDetailNftAddUnavailablePreview() = AccountDetailPreview(
+    daily.copy(
+        networkOn = false,
+        nfts = nfts.copy(
+            addReason = "Sepolia is off in this wallet, so nothing on it is checked and no NFT can be proven held.",
+        ),
+    ),
+)
+
 /** None found since the account's history starts. */
 @Preview
 @Composable
@@ -796,4 +831,6 @@ internal val accountDetailScreenPreviews: List<@Composable () -> Unit> = listOf(
     { AccountDetailNftsUnlistedOpenDarkPreview() },
     { AccountDetailNftsCheckingPreview() },
     { AccountDetailNftsNonePreview() },
+    { AccountDetailNftAddPreview() },
+    { AccountDetailNftAddUnavailablePreview() },
 )

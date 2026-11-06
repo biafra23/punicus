@@ -32,6 +32,9 @@ import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.ListItem
+import androidx.compose.material3.TextButton
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
@@ -129,6 +132,11 @@ const val ACCOUNT_ASSET_TAG = "account-asset"
 const val ACCOUNT_NFTS_TAG = "account-nfts"
 const val ACCOUNT_NFT_TAG = "account-nft"
 
+/** The NFTs section's *Add an NFT* button, and its dialog's two fields. */
+const val ACCOUNT_ADD_NFT_TAG = "account-add-nft"
+const val ADD_NFT_CONTRACT_TAG = "add-nft-contract"
+const val ADD_NFT_ID_TAG = "add-nft-id"
+
 /** Test tag of the Swap button, for UI tests. */
 const val ACCOUNT_SWAP_TAG = "account-swap"
 
@@ -208,6 +216,12 @@ fun AccountDetailRoute(
             onToggleAmounts = viewModel::toggleAmounts,
             onOrderActivity = viewModel::orderActivity,
             onToggleUnlistedNfts = viewModel::toggleUnlistedNfts,
+            nftActions = NftActions(
+                onOpenAdd = viewModel::openAddNft,
+                onCloseAdd = viewModel::closeAddNft,
+                onAdd = viewModel::addNft,
+                onRemove = viewModel::removeNft,
+            ),
         )
         // The strip is collected only where it is drawn: shared while subscribed, it stays idle otherwise.
         InterfaceMode.DETAILED -> AccountDetailScreen(
@@ -237,6 +251,12 @@ fun AccountDetailRoute(
             onToggleAmounts = viewModel::toggleAmounts,
             onOrderActivity = viewModel::orderActivity,
             onToggleUnlistedNfts = viewModel::toggleUnlistedNfts,
+            nftActions = NftActions(
+                onOpenAdd = viewModel::openAddNft,
+                onCloseAdd = viewModel::closeAddNft,
+                onAdd = viewModel::addNft,
+                onRemove = viewModel::removeNft,
+            ),
         )
     }
 }
@@ -293,6 +313,7 @@ fun AccountDetailScreen(
     onToggleAmounts: () -> Unit = {},
     onOrderActivity: (ActivityOrder) -> Unit = {},
     onToggleUnlistedNfts: () -> Unit = {},
+    nftActions: NftActions = NftActions(),
 ) {
     val snackbar = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
@@ -469,6 +490,7 @@ fun AccountDetailScreen(
                     onSafeSettings = safeSettings,
                     simple = chrome is AccountChrome.Refresh,
                     onToggleUnlistedNfts = onToggleUnlistedNfts,
+                    nftActions = nftActions,
                 )
             }
         }
@@ -507,6 +529,7 @@ private fun Details(
     /** Simple mode's chrome: the network on the blockie, the freshness line and the "can't check" banner. */
     simple: Boolean,
     onToggleUnlistedNfts: () -> Unit,
+    nftActions: NftActions,
 ) {
     // Each item ends with the space before the next, but an Activity's rows, which follow one another.
     val spaced = Modifier.padding(bottom = 16.dp)
@@ -611,7 +634,7 @@ private fun Details(
         when {
             state.showsAssets -> {
                 item { Assets(state, onSend, onSwap, onCopyContract, onHideToken) }
-                state.nfts?.let { nfts -> item { Nfts(nfts, onToggleUnlistedNfts, spaced) } }
+                state.nfts?.let { nfts -> item { Nfts(nfts, onToggleUnlistedNfts, nftActions, spaced) } }
             }
             state.segment == DetailSegment.ACTIVITY -> activityItems(
                 state.activity,
@@ -780,16 +803,27 @@ private fun Assets(
  * not on chain.
  */
 @Composable
-private fun Nfts(nfts: NftSection, onToggle: () -> Unit, modifier: Modifier) {
+private fun Nfts(nfts: NftSection, onToggle: () -> Unit, actions: NftActions, modifier: Modifier) {
+    var why by remember { mutableStateOf(false) }
     Column(
         modifier.padding(top = 16.dp).testTag(ACCOUNT_NFTS_TAG),
         verticalArrangement = Arrangement.spacedBy(4.dp),
     ) {
-        Text("NFTs", style = MaterialTheme.typography.titleSmall)
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text("NFTs", style = MaterialTheme.typography.titleSmall, modifier = Modifier.weight(1f))
+            // Greyed out, never hidden, while it cannot be done; a tap says why (owner ruling, 2026-10-18, #55).
+            OutlinedButton(
+                onClick = { if (nfts.addReason != null) why = true else actions.onOpenAdd() },
+                colors = if (nfts.addReason != null) ButtonDefaults.outlinedButtonColors(
+                    contentColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.38f),
+                ) else ButtonDefaults.outlinedButtonColors(),
+                modifier = Modifier.testTag(ACCOUNT_ADD_NFT_TAG).unavailable(nfts.addReason != null),
+            ) { Text("Add an NFT") }
+        }
         nfts.empty?.let {
             Text(it, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
-        nfts.shown.forEach { NftItem(it, unconfirmed = false) }
+        nfts.shown.forEach { NftItem(it, unconfirmed = false, actions.onRemove) }
         if (nfts.unlisted.isNotEmpty()) {
             val count = nfts.unlisted.distinctBy { it.contract }.size
             ListItem(
@@ -811,14 +845,73 @@ private fun Nfts(nfts: NftSection, onToggle: () -> Unit, modifier: Modifier) {
                 },
                 trailingContent = { Text(if (nfts.unlistedOpen) "Hide" else "Show") },
             )
-            if (nfts.unlistedOpen) nfts.unlisted.forEach { NftItem(it, unconfirmed = true) }
+            if (nfts.unlistedOpen) nfts.unlisted.forEach { NftItem(it, unconfirmed = true, actions.onRemove) }
         }
         nfts.note?.let {
             Text(it, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
         Text(NO_IMAGES, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
     }
+    nfts.addReason?.takeIf { why }?.let { reason ->
+        UnavailableDialog("Add an NFT", reason, onDismiss = { why = false })
+    }
+    nfts.adding?.let { form -> AddNftDialog(form, actions) }
 }
+
+/**
+ * The *Add an NFT* dialog (owner ruling, 2026-11-05, #246: older NFTs are added by contract and id): the
+ * contract and the token id, added once the account is proven to hold it; [form] says why when nothing was.
+ */
+@Composable
+private fun AddNftDialog(form: AddNftForm, actions: NftActions) {
+    var contract by remember { mutableStateOf("") }
+    var tokenId by remember { mutableStateOf("") }
+    AlertDialog(
+        onDismissRequest = actions.onCloseAdd,
+        title = { Text("Add an NFT") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text(
+                    "For an NFT received before this wallet began following the account. It is added only " +
+                        "once the light client proves the account holds it.",
+                    style = MaterialTheme.typography.bodySmall,
+                )
+                OutlinedTextField(
+                    value = contract,
+                    onValueChange = { contract = it },
+                    label = { Text("Contract address") },
+                    singleLine = true,
+                    enabled = !form.busy,
+                    modifier = Modifier.fillMaxWidth().testTag(ADD_NFT_CONTRACT_TAG),
+                )
+                OutlinedTextField(
+                    value = tokenId,
+                    onValueChange = { tokenId = it },
+                    label = { Text("Token id") },
+                    singleLine = true,
+                    enabled = !form.busy,
+                    modifier = Modifier.fillMaxWidth().testTag(ADD_NFT_ID_TAG),
+                )
+                if (form.busy) Text("Proving the account holds it…", style = MaterialTheme.typography.bodySmall)
+                form.error?.let {
+                    Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = { actions.onAdd(contract, tokenId) }, enabled = !form.busy) { Text("Add") }
+        },
+        dismissButton = { TextButton(onClick = actions.onCloseAdd, enabled = !form.busy) { Text("Cancel") } },
+    )
+}
+
+/** What the NFTs section asks: open, close and submit *Add an NFT*, and remove an added NFT by its key. */
+class NftActions(
+    val onOpenAdd: () -> Unit = {},
+    val onCloseAdd: () -> Unit = {},
+    val onAdd: (contract: String, tokenId: String) -> Unit = { _, _ -> },
+    val onRemove: (key: String) -> Unit = {},
+)
 
 /** Why no NFT shows an image (owner ruling, 2026-11-05, #246: on-chain metadata only). */
 private const val NO_IMAGES = "Images are not shown: nothing is fetched that is not on chain."
@@ -826,7 +919,7 @@ private const val NO_IMAGES = "Images are not shown: nothing is fetched that is 
 
 /** One NFT: its collection, its id and an amount above one; [unconfirmed] for an unlisted collection's. */
 @Composable
-private fun NftItem(row: NftRow, unconfirmed: Boolean) {
+private fun NftItem(row: NftRow, unconfirmed: Boolean, onRemove: (String) -> Unit) {
     ListItem(
         modifier = Modifier.testTag(ACCOUNT_NFT_TAG),
         headlineContent = { Text(row.title, maxLines = 1, overflow = TextOverflow.Ellipsis) },
@@ -842,8 +935,15 @@ private fun NftItem(row: NftRow, unconfirmed: Boolean) {
                 row.detail?.let { Text(it, style = MaterialTheme.typography.labelSmall) }
             }
         },
-        trailingContent = row.amount?.let { amount ->
-            @Composable { Text(amount, style = MaterialTheme.typography.bodyLarge) }
+        trailingContent = if (row.amount != null || row.addedKey != null) {
+            @Composable {
+                Column(horizontalAlignment = Alignment.End) {
+                    row.amount?.let { Text(it, style = MaterialTheme.typography.bodyLarge) }
+                    row.addedKey?.let { key -> TextButton(onClick = { onRemove(key) }) { Text("Remove") } }
+                }
+            }
+        } else {
+            null
         },
     )
 }

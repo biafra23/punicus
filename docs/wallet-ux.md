@@ -1162,8 +1162,15 @@ they are helpful." The rulings (owner rulings, 2026-11-05, #246; the
   client with calls nor push the user's ENS names out.
 - **Where its coverage starts.** The index covers the account from its
   history's start. The list says so ("NFTs received since block n"), and
-  offers *Add an NFT*: a contract and a token id, kept once the account is
-  proven to hold it.
+  offers *Add an NFT*: a contract and a token id (a whole number, or `0x`
+  and hex), kept once the account is proven to hold it (`AddNft`: ERC-721's
+  `ownerOf` first, then ERC-1155's `balanceOf`; one standard not answered is
+  never taken for "not held"). The added NFTs are the user's list, kept in
+  `nfts.json` beside `tokens.json` (`FileAddedNfts`); each is checked as the
+  ones found are, after the built-in collections' and before what anyone
+  could have sent, and listed only while it is held. An added row has
+  Remove. *Add an NFT* is greyed out while the account's network is off, a
+  tap saying why (owner ruling, 2026-10-18, #55).
 - **On chain only.** A row shows the collection's name (its `name()`, the
   contract's claim, or the built-in name) and the token id; an ERC-1155
   amount above one shows as "×n", masked while amounts are hidden. The

@@ -35,6 +35,12 @@ import kotlinx.coroutines.test.runTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertIs
+import eth.serotine.domain.model.AccountId
+import eth.serotine.domain.repository.AddedNftList
+import eth.serotine.domain.repository.AddedNfts
+import eth.serotine.domain.repository.TokenChange
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.map
 
 /** [ObserveNfts] over a fake log index and fake NFT contracts (issue #246). */
 @OptIn(ExperimentalCoroutinesApi::class)
@@ -47,6 +53,7 @@ class ObserveNftsTest {
     private val wrapper = known(KnownNftKind.ENS_NAME_WRAPPER)
     private val ens = FakeEnsNfts()
     private val receipts = FakeReceipts()
+    private val added = MemoryAddedNfts()
     private val index = RecordingLogIndex()
     private val starts = MemoryHistoryStarts(alice to HistoryStart.Fixed(9_000))
     private val contracts = FakeNftContracts()
@@ -54,7 +61,7 @@ class ObserveNftsTest {
     private fun known(kind: KnownNftKind) = KnownNftCollections.of(Network.SEPOLIA).single { it.kind == kind }.address
 
     private fun TestScope.collectInto(seen: MutableList<NftHoldings>) = backgroundScope.launch {
-        ObserveNfts(index, starts, contracts, ens, receipts)(alice.onSepolia).collect { seen += it }
+        ObserveNfts(index, starts, contracts, ens, receipts, added)(alice.onSepolia).collect { seen += it }
     }
 
     private fun topic(address: Address) = "0x" + "00".repeat(12) + address.hex.removePrefix("0x")
@@ -266,6 +273,27 @@ class ObserveNftsTest {
     }
 
     @Test
+    fun anAddedNftIsCheckedThoughNoLogBroughtItAndShownAsAdded() = runTest {
+        val old = nft(art, 9, NftStandard.ERC721)
+        logs = emptyList()
+        added.added.value = listOf(alice.onSepolia to old)
+        contracts.held += old
+        covered(9_200)
+        val seen = mutableListOf<NftHoldings>()
+        collectInto(seen)
+        runCurrent()
+
+        val held = assertIs<NftHoldings.Read>(seen.last()).nfts.single()
+        assertEquals(old, held.nft)
+        assertEquals(true, held.added)
+
+        contracts.held -= old
+        covered(9_600) // an hour on: proven again, and gone
+        runCurrent()
+        assertEquals(emptyList(), assertIs<NftHoldings.Read>(seen.last()).nfts)
+    }
+
+    @Test
     fun aProofWithNoAnswerIsCountedAndAskedAgain() = runTest {
         logs = listOf(erc721(bob, alice, 5, 9_100))
         contracts.unavailable = true
@@ -336,5 +364,25 @@ private class FakeNftContracts : NftContracts {
     override suspend fun collection(network: Network, contract: Address): NftCollectionReading {
         collectionCalls += contract
         return names[contract] ?: NftCollectionReading.Read(null, null, 9_200)
+    }
+}
+
+/** [AddedNfts] in memory. */
+private class MemoryAddedNfts : AddedNfts {
+    val added = MutableStateFlow<List<Pair<AccountId, NftRef>>>(emptyList())
+
+    override fun observe(account: AccountId): Flow<AddedNftList> =
+        added.map { all -> AddedNftList.Loaded(all.filter { it.first == account }.map { it.second }) }
+
+    override suspend fun add(account: AccountId, nft: NftRef): TokenChange {
+        if (account to nft in added.value) return TokenChange.AlreadyPresent
+        added.value += account to nft
+        return TokenChange.Changed
+    }
+
+    override suspend fun remove(account: AccountId, nft: NftRef): TokenChange {
+        if (account to nft !in added.value) return TokenChange.NotFound
+        added.value -= account to nft
+        return TokenChange.Changed
     }
 }
