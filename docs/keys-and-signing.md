@@ -580,6 +580,47 @@ its KDoc and returns it as a result the UI shows as state.
     at the next start, the offer to restore the accounts of leftover keys
     with the wallet password, and later a "start over" reset.
 
+## The outbox's seal key (lenient mode)
+
+(Owner rulings, 2026-11-06, on #258, accepting docs/lenient-mode.md,
+decision 5.)
+
+In lenient mode a transaction may be signed before the light client has
+caught up, and waits in the outbox until a check at a fresh head sends it.
+Its signed bytes are not key material: they sign nothing else, and they move
+only what the user signed, once. They are not public data either, since
+nothing has broadcast them, and whoever has them can. So they are sealed.
+
+- **What it seals.** `outbox.json`, the outbox's file, and nothing else. It
+  never touches an envelope, and no envelope's key touches it.
+- **A hardware key of its own** (rule 4's spirit: each use its own key).
+  Android: a Keystore key that `KeyInfo` reports as hardware-backed (rule
+  5). iOS and a Mac with a Secure Enclave: an enclave key, made as the
+  envelope's hardware factor is (`HardwareSecret`). The outbox makes its own
+  key wherever the hardware is there, whether or not the wallet's envelopes
+  use it.
+- **No authorization.** The key needs no password and no biometric prompt,
+  so the outbox sends by itself once the check passes. It closes the copied
+  file only: code running inside the app can still open it, and on a Mac so
+  can any program of the same user (*A Mac with a Secure Enclave*).
+- **No hardware key, no file.** Where there is no hardware key to seal
+  with, the queued bytes stay in memory only, and a restart asks for the
+  signature again: an Android device whose Keystore is software only (an
+  emulator, some devices), Windows and Linux (a TPM present or not), a Mac
+  without a Secure Enclave, the iOS simulator. A software key would be in
+  the same copy of the device's storage as the file, so it would seal
+  nothing.
+- **Kept out of backups and transfers where the platform allows**, as the
+  envelopes are (rule 8). Android's exclusions cover the whole app's data.
+  iOS marks the file excluded from backup. A Mac keeps it beside the key
+  directory, excluded from Time Machine; another backup tool may still take
+  a copy, and that copy opens on no other Mac.
+- **A lost key is said, not guessed around.** When the file is there and
+  its key is not (the key store reset, or a copy restored on another
+  device), the queued transaction is said as lost, the file is deleted, and
+  the user is asked to sign again. A new key is made only for the next
+  queued transaction.
+
 ## A Safe owned by a hardware P-256 key
 
 Safe has supported secp256r1 owners since Safe 1.3.0 through its passkey

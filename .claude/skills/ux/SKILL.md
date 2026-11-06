@@ -38,7 +38,9 @@ most designs touch:
   from another source. A value the user acts on names the block it was
   verified at; in simple mode, its age. The one exception is a balance proved
   earlier: shown dimmed and dated, out of totals, never acted on (owner's
-  request, 2026-10-19). In simple mode, a balance read a while ago on a
+  request, 2026-10-19), except by a lenient draft, labelled, which is sent
+  only after a check at a fresh head (owner rulings, 2026-11-06;
+  docs/lenient-mode.md). In simple mode, a balance read a while ago on a
   network without block access lists shows its age and counts in totals
   for up to an hour while the light client verifies (`.claude/rules/trust.md`).
 - **The light client's state is in sight wherever it decides something**

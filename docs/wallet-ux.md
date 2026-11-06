@@ -69,6 +69,12 @@ the text wins.
   as syncing. While the trust anchor is stale, a proof fails or the engine
   refuses, the row says that and shows no amount from before, and no other
   value (an address's kind, a Safe's owners, a price) is shown last known.
+  The one exception is lenient mode (docs/lenient-mode.md; owner rulings,
+  2026-11-06): a draft is built and signed on the balances last verified and
+  on the other values it needs (the account's nonce, the network's fee
+  quote; a Safe's nonce, owners and threshold), each labelled with its age,
+  never a price. It is sent, or shown to another owner, only after the
+  check at a fresh head.
 - **In simple mode a balance may be read a while ago** (owner's decisions,
   2026-10-26). On a network without block access lists (EIP-7928; Ethereum
   and Gnosis Chain today), simple mode proves balances when a screen opens
@@ -78,7 +84,9 @@ the text wins.
   (the rule above). A network with them (Sepolia) updates live. Nothing
   acts on an aged balance: a quote, a review and a signature read fresh
   state, and Send proves the balance it offers (Max included) when it
-  opens.
+  opens. The one exception is a lenient draft, labelled, which is sent only
+  after the check at a fresh head (docs/lenient-mode.md; owner rulings,
+  2026-11-06).
 - **Amounts are token units.** An amount is entered, reviewed and signed in
   the token's own units. Fiat values are display-only (owner ruling,
   2026-10-16, *Prices* below): a hint next to an amount, a total, a sort key,
@@ -321,7 +329,10 @@ upgrades*).
      no check between the tap and the prompt stretches it; with less than 15
      seconds left at the tap, the quote is made again first, and said so):
      one not answered in time is dismissed, nothing is signed, and the quote
-     is made again and said.
+     is made again and said. In lenient mode a draft's review is signed on
+     the state last verified with no deadline, and the minute applies to the
+     check before sending instead (docs/lenient-mode.md; owner rulings,
+     2026-11-06).
      A name is resolved again with every quote (one
      that moved, or that cannot be verified again, is said, not signed), and
      back to 7 drops it.

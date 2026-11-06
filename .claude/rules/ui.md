@@ -81,6 +81,10 @@ The trust and data-source rules decide this. The short form:
   Never a guess, never a value from another source.
 - The one exception is a balance proved earlier: shown dimmed, dated, marked
   as possibly changed since, left out of totals, and never acted on. In
+  lenient mode a draft may be signed on it and on the other values it is
+  built on, each labelled with its age, with no fiat value; it is sent only
+  after the check at a fresh head (owner rulings, 2026-11-06;
+  `.claude/rules/trust.md`, *Lenient mode*). In
   simple mode a balance read a while ago on a network without block access
   lists shows its age and counts in totals for up to an hour
   (`.claude/rules/trust.md`).

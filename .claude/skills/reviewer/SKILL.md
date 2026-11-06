@@ -43,7 +43,9 @@ diff at step 2 of the Workflow.
    docs/embedding-myotis.md allows; a parameter accepted and silently
    ignored.
 3. **Trust** (`.claude/rules/trust.md`). Flag: a chain value shown that the
-   light client did not prove, other than the one labelled older balance; a
+   light client did not prove, other than the one labelled older balance
+   and a lenient draft's labelled values (`.claude/rules/trust.md`,
+   *Lenient mode*); a lenient transaction sent before its check; a
    Safe transaction that sets a fallback handler or enables a module and is
    signed, approved or executed; an upgrade warning that does not say peers
    report it; private key material in a UiState, a log line, a `toString()`
