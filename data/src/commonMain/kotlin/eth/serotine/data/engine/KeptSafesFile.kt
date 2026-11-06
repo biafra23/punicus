@@ -52,7 +52,9 @@ internal class KeptSafesFile(
         formatVersion = FORMAT_VERSION,
         empty = emptyMap(),
         decode = { _, text -> JSON.decodeFromString(StoredSafes.serializer(), text).safes.associateBy { it.id } },
-        encode = { kept -> JSON.encodeToString(StoredSafes.serializer(), StoredSafes(FORMAT_VERSION, kept.values.toList())) },
+        encode = { kept ->
+            JSON.encodeToString(StoredSafes.serializer(), StoredSafes(FORMAT_VERSION, kept.values.toList()))
+        },
     )
 
     override fun observe(safe: AccountId): Flow<KeptSafe?> {

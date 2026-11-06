@@ -376,7 +376,11 @@ private fun ReviewContent(
  * value. Then the owner who signs and the unlock, which signs and holds it.
  */
 @Composable
-private fun DraftReviewContent(state: SafeProposeUiState.DraftReview, actions: SafeProposeActions, details: List<String>) {
+private fun DraftReviewContent(
+    state: SafeProposeUiState.DraftReview,
+    actions: SafeProposeActions,
+    details: List<String>,
+) {
     Column(
         Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp),

@@ -26,8 +26,8 @@ import kotlinx.io.readByteArray
 /**
  * The [Outbox] kept in the file at [path], sealed with [seal] (docs/keys-and-signing.md, *The
  * outbox's seal key*): an app-private file of its own, written whole and durably, never logged,
- * what is queued and what is held in it together. An empty outbox has no file. The host keeps it out of backups and device transfers, as it keeps
- * the envelopes.
+ * what is queued and what is held in it together. An empty outbox has no file. The host keeps it
+ * out of backups and device transfers, as it keeps the envelopes.
  *
  * A file that will never open here is deleted and said once as lost ([OutboxList.Loaded.lost], a
  * marker beside it, `<path>.lost`, which holds nothing, written before the file is deleted, until
@@ -207,7 +207,8 @@ class MemoryOutbox : Outbox {
 
     override suspend fun hold(held: HeldSafeSignature): Boolean = lock.withLock {
         val current = state.value
-        state.value = current.copy(held = current.held.filterNot { it.safe == held.safe && it.nonce == held.nonce } + held)
+        val others = current.held.filterNot { it.safe == held.safe && it.nonce == held.nonce }
+        state.value = current.copy(held = others + held)
         true
     }
 

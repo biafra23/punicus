@@ -19,7 +19,8 @@ import eth.serotine.ui.outbox.OutboxNotificationText
  * [OutboxNotifier] on Android (docs/lenient-mode.md, *The outbox*): a notification on the "Queued
  * transactions" channel, one per queued transaction or held Safe signature (its send, check or
  * conflict replaces the one before), which opens the app. It says the transfer in token units and its
- * recipient, or the Safe transaction and its Safe, never the signed bytes nor a signature. Without the notification permission (Android 13 and later), it is dropped: the
+ * recipient, or the Safe transaction and its Safe, never the signed bytes nor a signature. Without
+ * the notification permission (Android 13 and later), it is dropped: the
  * app's own screens still say it.
  */
 class AndroidOutboxNotifier(private val context: Context) : OutboxNotifier {

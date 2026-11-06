@@ -55,7 +55,8 @@ data class OutboxNotificationText(val title: String, val text: String) {
             OutboxNotificationText(
                 title = when {
                     conflict == HeldConflict.NotAnOwner -> "A Safe signature was discarded"
-                    held.proposed && conflict is HeldConflict.NonceUsed -> "A Safe transaction needs your signature again"
+                    held.proposed && (conflict is HeldConflict.NonceUsed || conflict == HeldConflict.NonceTaken) ->
+                        "A Safe transaction needs your signature again"
                     else -> "A Safe signature did not check out"
                 },
                 text = "${heldConflictReason(conflict, held)} Your signature of " +
@@ -90,6 +91,9 @@ data class OutboxNotificationText(val title: String, val text: String) {
 fun heldConflictReason(conflict: HeldConflict, held: HeldSafeSignature): String = when (conflict) {
     is HeldConflict.NonceUsed ->
         "Another Safe transaction used nonce ${held.nonce}: the Safe is at nonce ${conflict.safeNonce} now."
+    HeldConflict.NonceTaken ->
+        "Another transaction at nonce ${held.nonce} was put in this Safe's queue meanwhile: only one of the two " +
+            "could ever run."
     HeldConflict.NotAnOwner -> "${Eip55.format(held.owner)} is no longer an owner of this Safe, so it cannot sign it."
     is HeldConflict.Refused -> when (conflict.reason) {
         HeldRefusal.NOT_A_SAFE -> "The address no longer holds a Safe this app recognises."

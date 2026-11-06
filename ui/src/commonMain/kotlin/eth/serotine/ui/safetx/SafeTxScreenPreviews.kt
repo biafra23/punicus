@@ -155,6 +155,9 @@ internal val keptOwnersSample = OwnersItem.Shown(
 
 /** A Safe transaction's overview in lenient mode, for this file's previews and simple mode's. */
 internal val lenientOverviewSample = overview.copy(
+    // No verified threshold badge, and the nonce's place said as last verified.
+    safe = SafeHeader("Treasury", TREASURY),
+    nonce = "Safe nonce 12 · next to run, as last verified",
     owners = keptOwnersSample,
     canShare = false,
     draftNote = "Sepolia is catching up. Sign, Approve on chain and Execute are prepared on the Safe as last " +
@@ -166,6 +169,8 @@ internal val lenientOverviewSample = overview.copy(
 )
 
 private val lenientSigning = signing.copy(
+    safe = SafeHeader("Treasury", TREASURY),
+    nonce = "Safe nonce 12 · next to run, as last verified",
     preparedOn = "Signed on the Safe as last verified 12 min ago: its owners and nonce. The signature is held on " +
         "this device until it checks out on chain, and only then shown to anyone.",
     signLabel = "Sign and hold",
@@ -181,7 +186,11 @@ internal val heldSample = SafeTxUiState.Held(
     preparedOn = "Signed on data from 12 min ago. It's checked on chain before it's shown to anyone.",
     steps = listOf(
         HeldStep("Signed", HeldStepState.DONE, "As Daily on this device, 6 Nov 2026, 14:02"),
-        HeldStep("Held", HeldStepState.WAITING, "Waits for Sepolia to catch up. Keep Serotine open to check it sooner."),
+        HeldStep(
+            "Held",
+            HeldStepState.WAITING,
+            "Waits for Sepolia to catch up. Keep Serotine open to check it sooner.",
+        ),
         HeldStep("In the queue, to share", HeldStepState.WAITING, "Once it checks out on chain"),
     ),
     shareNote = "Its QR code and text are offered once it checks out on chain: until then it is shown to no one, " +
@@ -210,9 +219,9 @@ private val heldConflict = heldSample.copy(
 /** An approval drafted in lenient mode, for this file's previews and simple mode's. */
 internal val draftApprovalSample = SafeTxUiState.DraftReview(
     network = "Sepolia",
-    safe = safe,
+    safe = SafeHeader("Treasury", TREASURY),
     action = usdcTransfer,
-    nonce = "Safe nonce 12 · next to run",
+    nonce = "Safe nonce 12 · next to run, as last verified",
     kind = ReviewKind.APPROVAL,
     accounts = listOf(SignerChoice("Daily", DAILY)),
     account = DAILY,
@@ -667,7 +676,8 @@ private fun SafeTxDraftExecutionPreview() = SafeTxPreview(
 
 @Preview
 @Composable
-private fun SafeTxDraftDarkPreview() = SafeTxPreview(draftApprovalSample, darkTheme = true, lightClient = catchingUpStripSample)
+private fun SafeTxDraftDarkPreview() =
+    SafeTxPreview(draftApprovalSample, darkTheme = true, lightClient = catchingUpStripSample)
 
 /** Every preview above, which SafeTxScreenPreviewsTest renders: a new preview goes in here too. */
 internal val safeTxScreenPreviews: List<ScreenPreview> = listOf(

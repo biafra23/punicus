@@ -17,6 +17,7 @@ import eth.serotine.domain.model.TransferAsset
 import eth.serotine.domain.model.UInt256
 import eth.serotine.domain.model.UniswapV3Deployment
 import eth.serotine.domain.model.Wei
+import eth.serotine.domain.repository.Outbox
 import eth.serotine.domain.repository.AddressKind
 import eth.serotine.domain.repository.AddressKinds
 import eth.serotine.domain.repository.BalanceReading
@@ -58,6 +59,7 @@ class SafeTxSigningTest {
         world.inputs,
         world.queue,
         Network.SEPOLIA,
+        Outbox.None,
     )
 
     @Test

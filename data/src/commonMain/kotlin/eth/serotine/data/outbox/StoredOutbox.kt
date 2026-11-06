@@ -362,6 +362,7 @@ internal class StoredSafeBasis(
 internal class StoredHeldConflict(val kind: String, val safeNonce: Long? = null, val refusal: String? = null) {
     fun toConflict(): HeldConflict = when (kind) {
         NONCE_USED -> HeldConflict.NonceUsed(requireNotNull(safeNonce))
+        NONCE_TAKEN -> HeldConflict.NonceTaken
         NOT_AN_OWNER -> HeldConflict.NotAnOwner
         REFUSED -> HeldConflict.Refused(HeldRefusal.entries.first { it.code == refusal })
         else -> throw IllegalArgumentException("an unknown conflict")
@@ -369,11 +370,13 @@ internal class StoredHeldConflict(val kind: String, val safeNonce: Long? = null,
 
     companion object {
         private const val NONCE_USED = "nonce-used"
+        private const val NONCE_TAKEN = "nonce-taken"
         private const val NOT_AN_OWNER = "not-an-owner"
         private const val REFUSED = "refused"
 
         fun of(conflict: HeldConflict): StoredHeldConflict = when (conflict) {
             is HeldConflict.NonceUsed -> StoredHeldConflict(NONCE_USED, safeNonce = conflict.safeNonce)
+            HeldConflict.NonceTaken -> StoredHeldConflict(NONCE_TAKEN)
             HeldConflict.NotAnOwner -> StoredHeldConflict(NOT_AN_OWNER)
             is HeldConflict.Refused -> StoredHeldConflict(REFUSED, refusal = conflict.reason.code)
         }

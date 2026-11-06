@@ -162,7 +162,8 @@ class DraftSafeTx(
         val held = when (val list = outbox.observe().first()) {
             // It may hold a signature at the nonce this one would take.
             OutboxList.Unreadable -> return refused(SafeTxProposing.Refused(UNPROVEN))
-            is OutboxList.Loaded -> list.held.filter { it.safe == id && it.signature != null }
+            // Conflicted ones too: one waits at its nonce to be dismissed, and a hold there would wait.
+            is OutboxList.Loaded -> heldOf(list, id)
         }
         val (before, balanceBlock, balanceAsOf) = when (val read = lastVerifiedBalance(safe, token?.address)) {
             is KnownBalance.Read -> Triple(read.amount, read.block, read.asOf)
@@ -173,8 +174,7 @@ class DraftSafeTx(
         if (before < amount) return insufficient(token != null)
         val safeNonce = keptSafe.state.nonce
         // What is queued here, and what is held, from the kept nonce on: both run before this one.
-        val pending = pendingOf(queue.observe(id).first(), safeNonce, network) +
-            held.filter { it.nonce >= safeNonce }.map { it.request }
+        val pending = pendingOf(queue.observe(id).first(), safeNonce, network) + held.filter { it.nonce >= safeNonce }
         val nonce = nextNonce(pending, safeNonce)
         val ahead = pending.filter { it.nonce < nonce }
         val queuedAmount = ahead.queuedMoves(token?.address) ?: return insufficient(token != null)
@@ -369,7 +369,7 @@ class HoldSafeSignature(
     private suspend fun busy(request: SigningRequest): HeldSignCheck? = when (val list = outbox.observe().first()) {
         OutboxList.Unreadable -> HeldSignCheck.Refused(SafeTxRefusal.Unavailable(ReadUnavailable.UNPROVEN))
         is OutboxList.Loaded -> list.held
-            .firstOrNull { it.network == request.network && it.request.safe == request.safe && it.nonce == request.nonce }
+            .firstOrNull { it.safe == AccountId(request.network, request.safe) && it.nonce == request.nonce }
             ?.let { HeldSignCheck.NonceBusy(it.hash) }
     }
 }
@@ -380,7 +380,7 @@ sealed interface HeldCheck {
     /** It stands at a fresh verified head, against the Safe's [state]: it may be saved to the Safe's queue. */
     data class Passes(val state: SafeState) : HeldCheck
 
-    /** It cannot be checked now (the light client, the Safe not verifiable this time): it is held, and checked later. */
+    /** It cannot be checked now (the light client, the Safe not verifiable this time): held, and checked later. */
     data object Waits : HeldCheck
 
     /** It no longer stands, for [conflict]: its signature is to be deleted, never shown. */
@@ -529,7 +529,8 @@ internal class CallDrafter(
             .filter { it.network == network && it.account == from && it.sentAt >= since && it.nonce >= nonce.count }
         records.firstOrNull { it.maybeSent }?.let { return CallDrafting.Refused(CallRefusal.EarlierMaybeSent(it.hash)) }
         val unmined = records.filter { !it.maybeSent }
-        val (before, balanceBlock, balanceAsOf) = when (val reading = nativeBalances.observeBalance(network, from).first()) {
+        val reading = nativeBalances.observeBalance(network, from).first()
+        val (before, balanceBlock, balanceAsOf) = when (reading) {
             is BalanceReading.Verified -> Triple(reading.wei.toUInt256OrNull(), reading.blockNumber, reading.provenAt)
             is BalanceReading.LastKnown -> Triple(reading.wei.toUInt256OrNull(), reading.blockNumber, reading.asOf)
             BalanceReading.Syncing -> return CallDrafting.Waits(DraftInput.BALANCE)
@@ -649,7 +650,8 @@ sealed interface SafeCallDrafting {
  * [DraftGas.SAFE_EXECUTION]) for the estimate. Every Safe check is made against the kept Safe: the
  * transaction's own refusals and a swap or its approval ([undraftable]), a Safe before 1.3.0, a nonce
  * passed (an execution's must be the kept nonce), the owner (for an approval), the threshold it
- * would leave, and an approval or execution of it sent and not mined. An execution counts its
+ * would leave, and an approval or execution of it sent and not mined (an execution queued here too,
+ * from any account). An execution counts its
  * confirmations from the request's signatures valid against the kept owners and the executor's own;
  * approvals on chain cannot be read while the light client catches up, so a request short of its
  * threshold without them waits ([SafeCallDrafting.ShortOfSignatures]). Never simulated: the check
@@ -661,7 +663,7 @@ class DraftSafeCall(
     private val recovery: SignatureRecovery,
     nativeBalances: NativeBalances,
     private val sentTransfers: SentTransfers,
-    outbox: Outbox,
+    private val outbox: Outbox,
     private val network: Network,
     private val clock: () -> Long = ::epochSecondsNow,
 ) {
@@ -681,11 +683,13 @@ class DraftSafeCall(
             return refused(SafeTxRefusal.AlreadySigned(owner))
         }
         val data = SafeCalls.approveHash(request.hash)
-        return when (val drafted = drafter.draft(owner, request.safe, UInt256.ZERO, data, level, DraftGas.SAFE_APPROVAL, safe)) {
+        val drafted = drafter.draft(owner, request.safe, UInt256.ZERO, data, level, DraftGas.SAFE_APPROVAL, safe)
+        return when (drafted) {
             is CallDrafting.Drafted -> if (drafted.unmined.any { it.approves(request) }) {
                 refused(SafeTxRefusal.AlreadySent)
             } else {
-                SafeCallDrafting.Drafted(SafeCallDraft(SafeCallKind.APPROVAL, request, safe, emptyList(), drafted.draft))
+                val draft = SafeCallDraft(SafeCallKind.APPROVAL, request, safe, emptyList(), drafted.draft)
+                SafeCallDrafting.Drafted(draft)
             }
             else -> drafted.asSafeCallDrafting()
         }
@@ -700,6 +704,10 @@ class DraftSafeCall(
         val state = safe.state
         if (request.nonce > state.nonce) return refused(SafeTxRefusal.NotNext(state.nonce))
         sentAndUnmined(request)?.let { return refused(it) }
+        // Queued already from any account here: only one execution of it can ever run.
+        val queuedHere = (outbox.observe().first() as? OutboxList.Loaded)?.queued.orEmpty()
+            .any { it.network == network && (it.action as? SentAction.SafeExecution)?.request?.hash == request.hash }
+        if (queuedHere) return refused(SafeTxRefusal.AlreadySent)
         val signed = recovery.valid(request, state.owners)
         // The executor's own confirmation, when it is a kept owner that has not signed.
         val own = executor in state.owners && signed.none { it.owner == executor }
@@ -709,9 +717,8 @@ class DraftSafeCall(
         }
         val signatures = confirmed.take(state.threshold)
         val data = SafeCalls.execTransaction(request.tx, signatures)
-        return when (
-            val drafted = drafter.draft(executor, request.safe, UInt256.ZERO, data, level, DraftGas.SAFE_EXECUTION, safe)
-        ) {
+        val drafted = drafter.draft(executor, request.safe, UInt256.ZERO, data, level, DraftGas.SAFE_EXECUTION, safe)
+        return when (drafted) {
             is CallDrafting.Drafted -> SafeCallDrafting.Drafted(
                 SafeCallDraft(SafeCallKind.EXECUTION, request, safe, signatures, drafted.draft),
             )

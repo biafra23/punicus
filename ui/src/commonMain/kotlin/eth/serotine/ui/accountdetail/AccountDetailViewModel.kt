@@ -272,7 +272,9 @@ class AccountDetailViewModel(
                 observeSafeTxQueue(address),
                 observeKnownTokens(network),
                 // A queue is never kept from showing by an outbox that cannot be read: it lists none held then.
-                observeOutbox().map { list -> (list as? OutboxList.Loaded)?.held.orEmpty().filter { it.safe == account } },
+                observeOutbox().map { list ->
+                    (list as? OutboxList.Loaded)?.held.orEmpty().filter { it.safe == account }
+                },
             ) { reading, tokens, held ->
                 QueueView.Read(reading, tokens.forDecoding(), held)
             }.onStart<QueueView> { emit(QueueView.Checking) }

@@ -17,6 +17,8 @@ import eth.serotine.domain.model.TransferAsset
 import eth.serotine.domain.model.UInt256
 import eth.serotine.domain.repository.BalanceReading
 import eth.serotine.domain.repository.NativeBalances
+import eth.serotine.domain.repository.Outbox
+import eth.serotine.domain.repository.OutboxList
 import eth.serotine.domain.repository.ReadUnavailable
 import eth.serotine.domain.repository.SafeState
 import eth.serotine.domain.repository.SafeTxQueue
@@ -622,6 +624,11 @@ sealed interface SafeTxSigning {
  * An engine that will not run a call from a contract's address leaves it not simulated, and the
  * proposal says so. No state override is used.
  *
+ * The signatures held in lenient mode until their check ([Outbox]; docs/lenient-mode.md, *Safe
+ * transactions in lenient mode*) take their nonces and their moves as the queued ones do: a held
+ * proposal is in no queue until it checks out, and a proposal made meanwhile never takes its nonce
+ * (one per Safe and nonce). An outbox that cannot be read holds none, as an unreadable queue does.
+ *
  * Nothing is saved: signing it ([SignSafeTx]) queues it. On [network] only.
  */
 class ProposeSafeTx(
@@ -631,6 +638,7 @@ class ProposeSafeTx(
     private val inputs: TransactionInputs,
     private val queue: SafeTxQueue,
     private val network: Network,
+    private val outbox: Outbox,
 ) {
     /**
      * Proposes [amount] of [asset] from [safe] to [to]. [safeChecked] is called once the Safe is
@@ -662,6 +670,7 @@ class ProposeSafeTx(
             safeChecked()
             val balance = async { safeBalanceOf(network, nativeBalances, tokenBalances, safe, token?.address) }
             val queued = async { queue.observe(AccountId(network, safe)).first() }
+            val held = async { heldOf(outbox.observe().first(), AccountId(network, safe)) }
 
             val (before, balanceBlock) = when (val read = balance.await()) {
                 is SafeBalanceRead.Read -> read.amount to read.blockNumber
@@ -670,7 +679,8 @@ class ProposeSafeTx(
             }
             if (before < amount) return@cancellingReads insufficient(token != null)
             val safeNonce = reading.state.nonce
-            val pending = pendingOf(queued.await(), safeNonce, network)
+            val pending = pendingOf(queued.await(), safeNonce, network) +
+                held.await().filter { it.nonce >= safeNonce }
             val nonce = nextNonce(pending, safeNonce)
             val ahead = pending.filter { it.nonce < nonce }
             val queuedAmount = ahead.queuedMoves(token?.address) ?: return@cancellingReads insufficient(token != null)
@@ -715,6 +725,14 @@ class ProposeSafeTx(
 internal fun pendingOf(queued: SafeTxQueueList, safeNonce: Long, network: Network): List<SigningRequest> =
     (queued as? SafeTxQueueList.Loaded)?.requests.orEmpty()
         .filter { it.network == network && it.nonce >= safeNonce }
+
+/**
+ * The requests of the signatures [list] holds for the Safe [safe] in lenient mode, each without its
+ * signature, conflicted ones too (one waits to be dismissed at its nonce): what takes a nonce and
+ * moves funds before a new proposal. None from an outbox that cannot be read.
+ */
+internal fun heldOf(list: OutboxList, safe: AccountId): List<SigningRequest> =
+    (list as? OutboxList.Loaded)?.held.orEmpty().filter { it.safe == safe }.map { it.request }
 
 /**
  * A Safe's next nonce: its own, or the first after the requests [pending] from it without a gap.

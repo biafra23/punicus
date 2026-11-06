@@ -972,7 +972,8 @@ class SafeTxViewModel(
             val biometrics = biometricsOffered()
             if (step.value != drafting) return@launch
             when (next) {
-                is Drafted.Made -> step.value = Step.DraftReviewing(kind, next.draft, UnlockStep(biometrics = biometrics))
+                is Drafted.Made ->
+                    step.value = Step.DraftReviewing(kind, next.draft, UnlockStep(biometrics = biometrics))
                 is Drafted.Refused -> {
                     view.update { it.copy(message = next.message, simple = null) }
                     step.value = Step.Overview
@@ -1045,9 +1046,10 @@ class SafeTxViewModel(
      * stays. A signature the outbox could not keep is dropped, and said.
      */
     private fun queue(draft: Step.DraftReviewing, unlock: Unlock) {
-        // Sign while syncing turned off, or the network, since the draft was made: not signed.
-        if (!lenient.value) {
-            view.update { it.copy(message = NO_LONGER_LENIENT, simple = null) }
+        // Sign while syncing turned off, or the network, since the draft was made, or the light client
+        // caught up: not signed, the strict path signs from here.
+        stillLenient()?.let { message ->
+            view.update { it.copy(message = message, simple = null) }
             step.value = Step.Overview
             return
         }
@@ -1075,11 +1077,23 @@ class SafeTxViewModel(
                         ),
                     )
                     is TransferQueuing.AccountBusy -> latest.copy(signing = false, error = QUEUED_FIRST)
-                    TransferQueuing.NotSaved -> latest.copy(signing = false, unlock = latest.unlock.copy(error = NOT_KEPT))
+                    TransferQueuing.NotSaved ->
+                        latest.copy(signing = false, unlock = latest.unlock.copy(error = NOT_KEPT))
                     null -> latest.copy(signing = false, unlock = latest.unlock.copy(error = QUEUE_FAILED))
                 }
             }
         }
+    }
+
+    /**
+     * Why a lenient step may no longer sign, or null when it may: *Sign while syncing* or the network
+     * turned off since, or the owners verified now (the light client caught up), when the strict path
+     * signs instead.
+     */
+    private fun stillLenient(): String? = when {
+        !lenient.value -> NO_LONGER_LENIENT
+        now?.owners is SafeTxOwnersReading.Read -> CAUGHT_UP
+        else -> null
     }
 
     private fun quoteForReview(kind: ReviewKind, account: Address, level: FeeLevel) {
@@ -1264,8 +1278,8 @@ class SafeTxViewModel(
     private fun holdHash(signing: Step.Signing, unlock: Unlock) {
         val context = now ?: lastContext ?: return
         val request = context.request
-        if (!lenient.value) {
-            view.update { it.copy(message = NO_LONGER_LENIENT, simple = null) }
+        stillLenient()?.let { message ->
+            view.update { it.copy(message = message, simple = null) }
             step.value = Step.Overview
             return
         }
@@ -1518,10 +1532,15 @@ class SafeTxViewModel(
         val header = SafeHeader(
             label = shown.labels[safe],
             address = Eip55.format(safe),
-            threshold = read?.let { "${it.threshold}/${it.owners.size}" }
-                ?: kept?.let { "${it.threshold}/${it.owners.size}" },
+            // Verified only: a badge has no room to say a threshold is as last verified, which the owners say.
+            threshold = read?.let { "${it.threshold}/${it.owners.size}" },
         )
-        val nonce = nonceText(request.nonce, read?.safeNonce ?: shown.found.safeNonce ?: kept?.safeNonce)
+        val verifiedNonce = read?.safeNonce ?: shown.found.safeNonce
+        val nonce = if (verifiedNonce == null && kept != null) {
+            nonceText(request.nonce, kept.safeNonce) + ", as last verified"
+        } else {
+            nonceText(request.nonce, verifiedNonce)
+        }
         val hashText = "0x" + request.hash.hex
         val options = shown.options
         return when (step) {
@@ -1659,11 +1678,12 @@ class SafeTxViewModel(
 
     /**
      * What Send for a Safe opens with to propose [held] again: only a transfer this device proposed,
-     * whose nonce another transaction used (a new nonce makes a new hash, so its owner signs anew), of
-     * the network's currency or of a token among [tokens].
+     * whose nonce another transaction used or took in the queue (a new nonce makes a new hash, so its
+     * owner signs anew), of the network's currency or of a token among [tokens].
      */
     private fun proposeAgainOf(held: HeldSafeSignature, tokens: List<DecodingToken> = heldTokens): SafeProposeAgain? {
-        if (!held.proposed || held.conflict !is HeldConflict.NonceUsed) return null
+        val conflict = held.conflict
+        if (!held.proposed || conflict !is HeldConflict.NonceUsed && conflict != HeldConflict.NonceTaken) return null
         val action = SafeTxAction.of(held.request.safe, held.request.tx)
         val asset: Address?
         val to: Address
@@ -1732,7 +1752,11 @@ class SafeTxViewModel(
      * executes it (queued), at the Safe's nonce then. Approvals on chain cannot be read now, so they
      * count for nothing here; the check before sending reads them.
      */
-    private fun lenientOptions(tx: DecodedSafeTx, read: SafeTxOwnersReading.LastVerified, held: List<Account>): Options {
+    private fun lenientOptions(
+        tx: DecodedSafeTx,
+        read: SafeTxOwnersReading.LastVerified,
+        held: List<Account>,
+    ): Options {
         if (tx.refusal != null || read.refusal != null) return Options(emptyList(), emptyList(), emptyList(), null)
         val unconfirmed = read.owners.filter { it.held && it.confirmation != OwnerConfirmation.Signed }.map { it.owner }
         val short = read.signatures < read.threshold
@@ -2029,6 +2053,8 @@ class SafeTxViewModel(
             "per nonce. Discard it, or wait for its check, to sign this one."
         const val NO_LONGER_LENIENT = "Sign while syncing, or the network, was turned off since this was " +
             "prepared, so it was not signed."
+        const val CAUGHT_UP = "The light client has caught up since this was prepared, so it was not signed: it is " +
+            "checked on chain now, and signed from here."
         const val QUEUE_FAILED = "Serotine could not finish signing this transaction. Nothing was queued or sent."
         const val NOT_KEPT = "Signed, but the outbox could not keep it, so the signature was dropped: nothing was " +
             "queued or sent. Try again."

@@ -671,7 +671,9 @@ upgrades*).
       the first after those queued from it without a gap (one queued far
       ahead, as an imported request can be, moves nothing; how far ahead of
       the Safe's nonce a request may be signed is not bounded, the owner's
-      open question, issue #59). The Safe's balance less what the
+      open question, issue #59). A signature held here in lenient mode (17)
+      takes its nonce and what it moves as a queued one does, so a proposal
+      never lands at the nonce of one held. The Safe's balance less what the
       transactions queued before it move must cover it, and the Safe's call
       is run as a verified call from the Safe; the review says when the
       engine would not run it ("Not simulated"). The review shows the Safe
@@ -901,9 +903,13 @@ upgrades*).
         nonce), where its QR code and text are offered, and a notification
         says so. A nonce used meanwhile deletes the signature ("Needs your
         signature again"): a proposal offers Propose again, which discards it
-        and opens Send from the Safe filled in, at the Safe's next nonce. A
+        and opens Send from the Safe filled in, at the Safe's next nonce. So
+        does a proposal that finds another transaction at its nonce in the
+        queue, put there meanwhile: only one of the two could ever run. A
         signer no longer an owner deletes it too ("Discarded"); Dismiss
-        clears it. Each is told in a notification.
+        clears it. Each is told in a notification. One found in the queue
+        already, its release from the outbox not saved before, is only
+        released.
       - Approve on chain and Execute are drafted on what was verified last
         (`DraftSafeCall`): the account's count of mined transactions, the
         network's fee quote and the account's balance last verified, and a

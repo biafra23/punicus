@@ -28,6 +28,7 @@ import eth.serotine.domain.repository.LightClientStatus
 import eth.serotine.domain.repository.QueueConflict
 import eth.serotine.domain.repository.QueueRefusal
 import eth.serotine.domain.repository.QueuedTransaction
+import eth.serotine.domain.repository.ReadUnavailable
 import eth.serotine.domain.repository.SafeDraftBasis
 import eth.serotine.domain.repository.SentAction
 import eth.serotine.domain.repository.SentTransferList
@@ -41,7 +42,10 @@ import kotlin.test.assertIs
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
+import kotlinx.coroutines.async
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 
 /**
@@ -154,7 +158,15 @@ class LenientSafeTxsTest {
 
     @Test
     fun aProposalIsDraftedOnTheSafeLastVerifiedWithItsAgesAndNoSimulation() = runTest {
-        val strict = ProposeSafeTx(world.observeSafe, world.nativeBalances, world.tokenBalances, world.inputs, world.queue, network)
+        val strict = ProposeSafeTx(
+            world.observeSafe,
+            world.nativeBalances,
+            world.tokenBalances,
+            world.inputs,
+            world.queue,
+            network,
+            outbox,
+        )
         assertEquals(
             SafeTxProposing.Refused(SafeTxRefusal.Syncing),
             strict(world.safe, world.recipient, TransferAsset.Native, UInt256.of(1)),
@@ -302,7 +314,102 @@ class LenientSafeTxsTest {
     }
 
     @Test
-    fun aDiscardWaitsForTheCheckAndDeletesTheSignature() = runTest {
+    fun aStrictProposalNeverTakesTheNonceOfASignatureHeldHere() = runTest {
+        heldProposal()
+        caughtUp()
+        val strict = ProposeSafeTx(
+            world.observeSafe,
+            world.nativeBalances,
+            world.tokenBalances,
+            world.inputs,
+            world.queue,
+            network,
+            outbox,
+        )
+        val proposal = assertIs<SafeTxProposing.Proposed>(
+            strict(world.safe, world.recipient, TransferAsset.Native, UInt256.of(100_000_000_000_000_000)),
+        ).proposal
+        assertEquals(5, proposal.request.nonce, "behind the held one")
+        assertEquals(UInt256.of(100_000_000_000_000_000), proposal.queuedAmount)
+    }
+
+    @Test
+    fun aProposalWhoseNonceAnotherTransactionTookInTheQueueIsProposedAgain() = runTest {
+        val held = heldProposal()
+        // Put in the queue meanwhile at the same nonce: an import, a strict proposal of another device's.
+        world.queue.save(world.request(usdcTransfer(4), world.carol))
+        caughtUp()
+
+        follower().round()
+
+        assertEquals(HeldConflict.NonceTaken, outbox.held.value.single().conflict)
+        assertNull(outbox.held.value.single().signature)
+        assertTrue(world.queue.requests.value.none { it.hash == held.hash }, "never saved beside the other")
+    }
+
+    @Test
+    fun aSignatureSavedByARoundWhoseReleaseFailedIsOnlyReleased() = runTest {
+        val held = heldProposal()
+        caughtUp()
+        outbox.failSaves = true
+        follower().round()
+        assertEquals(listOf(held), outbox.held.value, "saved to the queue, but not released")
+        assertEquals(listOf(world.alice.address), world.queue.requests.value.single().signers)
+
+        // The Safe's nonce moved on since: still released, never told as deleted.
+        world.state = world.state.copy(nonce = 5)
+        outbox.failSaves = false
+        follower().round()
+
+        assertTrue(outbox.held.value.isEmpty())
+        assertEquals(listOf("checked ${held.hash.hex}"), notifier.told)
+    }
+
+    @Test
+    fun aDiscardWaitsWhileACheckRunsAndNeverCutsItInHalf() = runTest {
+        val held = heldProposal()
+        light.status.value = LightClientStatus.Synced(100, 1_800_000_090, null)
+        // The Safe cannot be verified this time: the check waits for the next reading, holding the lock.
+        world.kind.value = KindReading.Unavailable(ReadUnavailable.UNPROVEN)
+        val round = launch { follower().round() }
+        runCurrent()
+        val discard = async { DiscardHeld(outbox, lock)(held.safe, held.hash) }
+        runCurrent()
+        assertFalse(discard.isCompleted, "it waits for the check under way")
+
+        caughtUp()
+        runCurrent()
+        round.join()
+
+        assertEquals(HeldDiscard.Gone, discard.await(), "checked first: in the queue now, not discarded")
+        assertEquals(listOf(world.alice.address), world.queue.requests.value.single().signers)
+    }
+
+    @Test
+    fun anExecutionWhoseSignedCallDataIsNotItsRequestsIsAConflict() = runTest {
+        val request = world.request(usdcTransfer(4), world.bob.address)
+        val draft = assertIs<SafeCallDrafting.Drafted>(draftCall.execution(request, world.alice.address, FeeLevel.NORMAL)).draft
+        val queued = assertIs<TransferQueuing.Queued>(queueCall(draft, unlock)).queued
+        caughtUp()
+        // Another transfer at the same nonce: its call data, which carries no nonce, differs in the recipient.
+        val elsewhere = SafeTx.call(usdc.address, UInt256.ZERO, Erc20.transferData(world.stranger, UInt256.of(1_500_000)), 4)
+        val other = queued.copy(action = SentAction.SafeExecution(world.request(elsewhere, world.bob.address)))
+        assertEquals(QueuedCheck.Conflicts(QueueConflict.Refused(QueueRefusal.ENGINE_REFUSED)), checkQueued(other))
+    }
+
+    @Test
+    fun oneExecutionOfASafeTransactionIsQueuedFromAnyAccountHere() = runTest {
+        val request = world.request(usdcTransfer(4), world.bob.address, world.carol)
+        val draft = assertIs<SafeCallDrafting.Drafted>(draftCall.execution(request, world.alice.address, FeeLevel.NORMAL)).draft
+        assertIs<TransferQueuing.Queued>(queueCall(draft, unlock))
+        assertEquals(
+            SafeCallDrafting.Refused(SafeTxRefusal.AlreadySent),
+            draftCall.execution(request, world.stranger, FeeLevel.NORMAL),
+        )
+    }
+
+    @Test
+    fun aDiscardDeletesTheSignatureAndNothingIsSavedOfIt() = runTest {
         val held = heldProposal()
         assertEquals(HeldDiscard.Discarded, DiscardHeld(outbox, lock)(held.safe, held.hash))
         assertTrue(outbox.held.value.isEmpty())

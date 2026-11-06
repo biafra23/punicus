@@ -747,7 +747,12 @@ class SafeProposeViewModel(
      * that is none); or the form saying why it is not: a refusal in strict mode's words, or what it
      * waits for. A name is not resolved for a draft (decision 8).
      */
-    private suspend fun drafted(request: Request, owner: Address?, safeAccount: Account, accounts: List<Account>): Step {
+    private suspend fun drafted(
+        request: Request,
+        owner: Address?,
+        safeAccount: Account,
+        accounts: List<Account>,
+    ): Step {
         if (request.to.name != null) return Step.Composing(error = NO_NAME_IN_A_DRAFT)
         val drafting = try {
             draftSafeTx(safe, request.to.address, request.option.asset, request.amount)
@@ -833,7 +838,8 @@ class SafeProposeViewModel(
                     is SafeSignatureHolding.Refused ->
                         latest.copy(signing = false, error = safeTxRefusalText(holding.refusal, network))
                     is SafeSignatureHolding.NonceBusy -> latest.copy(signing = false, error = NONCE_BUSY)
-                    SafeSignatureHolding.NotSaved -> latest.copy(signing = false, unlock = latest.unlock.copy(error = NOT_HELD))
+                    SafeSignatureHolding.NotSaved ->
+                        latest.copy(signing = false, unlock = latest.unlock.copy(error = NOT_HELD))
                     null -> latest.copy(signing = false, unlock = latest.unlock.copy(error = SIGN_FAILED))
                 }
             }
@@ -1053,7 +1059,8 @@ class SafeProposeViewModel(
             asset = option.choice(),
             recipient = recipientItem(step.request.to, accounts, option),
             preparedOn = "Prepared on data from $oldest. It's checked on chain before it's shown to anyone.",
-            nonce = "Safe nonce ${request.nonce}, after the Safe's nonce last verified at block ${grouped(kept.blockNumber)}",
+            nonce = "Safe nonce ${request.nonce}, after the Safe's nonce last verified at block " +
+                grouped(kept.blockNumber),
             nonceAge = "Safe nonce ${request.nonce}, counted ${age(kept.asOf)}",
             threshold = "${kept.state.threshold} of $owners owners must sign, as last verified at block " +
                 grouped(kept.blockNumber),

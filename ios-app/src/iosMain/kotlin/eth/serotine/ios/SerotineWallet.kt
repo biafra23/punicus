@@ -457,7 +457,7 @@ class SerotineWallet {
                                     outbox,
                                 )
                             },
-                            // A Safe's approval on chain or its execution, queued while syncing: its strict quote again.
+                            // A Safe's approval or execution, queued while syncing: its strict quote again.
                             { network ->
                                 QuoteSafeApproval(
                                     ObserveSafe(node.addressKinds, accounts),

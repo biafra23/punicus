@@ -850,7 +850,11 @@ private fun PreparedOnLine(text: String) {
         color = MaterialTheme.colorScheme.tertiaryContainer,
         contentColor = MaterialTheme.colorScheme.onTertiaryContainer,
     ) {
-        Text(text, Modifier.padding(12.dp).testTag(SAFE_TX_PREPARED_ON_TAG), style = MaterialTheme.typography.bodyMedium)
+        Text(
+            text,
+            Modifier.padding(12.dp).testTag(SAFE_TX_PREPARED_ON_TAG),
+            style = MaterialTheme.typography.bodyMedium,
+        )
     }
 }
 

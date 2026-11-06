@@ -179,7 +179,9 @@ class ReadKeptSafeTxOwners(
     private val network: Network,
 ) {
     suspend operator fun invoke(request: SigningRequest): SafeTxOwnersReading {
-        if (request.network != network) return SafeTxOwnersReading.Refused(SafeTxRefusal.WrongChain(request.network.chainId))
+        if (request.network != network) {
+            return SafeTxOwnersReading.Refused(SafeTxRefusal.WrongChain(request.network.chainId))
+        }
         val safe = kept.observe(AccountId(request.network, request.safe)).first()
             ?: return SafeTxOwnersReading.Refused(SafeTxRefusal.Syncing)
         val state = safe.state

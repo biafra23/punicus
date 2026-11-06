@@ -250,6 +250,13 @@ sealed interface HeldConflict {
      */
     data class NonceUsed(val safeNonce: Long) : HeldConflict
 
+    /**
+     * A transfer this device proposed found another transaction at its nonce in the Safe's queue, put
+     * there meanwhile (a proposal made strictly, an import): two at one nonce, of which only one can
+     * ever run, so it is proposed again, at the next nonce, and signed anew.
+     */
+    data object NonceTaken : HeldConflict
+
     /** The signer is no longer an owner of the Safe: it cannot sign it at all, so it is discarded. */
     data object NotAnOwner : HeldConflict
 

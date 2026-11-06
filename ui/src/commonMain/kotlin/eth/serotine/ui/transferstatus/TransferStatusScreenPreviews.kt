@@ -132,7 +132,10 @@ internal val queuedConflictSample = queuedSample.copy(
     againNote = "Sign again discards it and opens Send with it filled in, to be reviewed and signed anew.",
 )
 
-/** A Safe transaction's approval on chain, queued in lenient mode (docs/lenient-mode.md, *Safe transactions in lenient mode*). */
+/**
+ * A Safe transaction's approval on chain, queued in lenient mode (docs/lenient-mode.md, *Safe
+ * transactions in lenient mode*).
+ */
 internal val queuedSafeApprovalSample = queuedSample.copy(
     sent = null,
     safeTx = SafeTxSummary(

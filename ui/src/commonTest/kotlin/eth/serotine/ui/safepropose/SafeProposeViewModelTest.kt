@@ -129,6 +129,7 @@ class SafeProposeViewModelTest {
                 world.inputs,
                 world.queue,
                 Network.SEPOLIA,
+                world.outbox,
             ),
             SignSafeTx(world.signer, world.observeSafe, world.recovery, world.queue, Network.SEPOLIA),
             EncodeSigningRequest(world.codec),

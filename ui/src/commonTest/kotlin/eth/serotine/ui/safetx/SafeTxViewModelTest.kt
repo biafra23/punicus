@@ -1410,6 +1410,27 @@ class SafeTxViewModelTest {
     }
 
     @Test
+    fun aDraftIsNotSignedOnceTheLightClientHasCaughtUp() = runTest {
+        lenientWhileSyncing()
+        val viewModel = viewModel(queued(world.request(world.ether(4))))
+        viewModel.startApproval()
+        runCurrent()
+        assertIs<SafeTxUiState.DraftReview>(viewModel.uiState.value)
+
+        // Caught up: the Safe verifies, and the owners are read again from it.
+        world.head.value = LightClientStatus.Synced(headBlock = 100, headTimestamp = HEAD_TIME, finalized = null)
+        world.state = world.state
+        runCurrent()
+        viewModel.onPasswordChange("made-up test password")
+        viewModel.sign()
+        runCurrent()
+
+        assertTrue(viewModel.overview.message!!.startsWith("The light client has caught up since this was prepared"))
+        assertEquals(emptyList(), world.outbox.queued, "nothing queued: the strict path signs from here")
+        assertEquals(emptyList(), world.signer.passwords)
+    }
+
+    @Test
     fun anExecutionShortOfSignaturesHereSaysApprovalsOnChainWaitForTheLightClient() = runTest {
         lenientWhileSyncing()
         val viewModel = viewModel(queued(world.request(world.ether(4))))
