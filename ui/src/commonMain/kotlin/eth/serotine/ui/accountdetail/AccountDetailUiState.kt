@@ -288,7 +288,9 @@ data class AssetRow(
  * [unlisted], under a row that is collapsed until the user opens it ([unlistedOpen]); [empty], what
  * the section says while it lists none ("No NFTs found", "Checking NFTs…"), or null; and [note], what
  * it covers and what it does not ("Received since block 9,000 · 2 not checked yet"), which simple mode
- * says without a block ([simpleNote]).
+ * says without a block ([simpleNote]). *Add an NFT* (by contract and token id, for one received before
+ * the history starts) is greyed out while [addReason] says why it cannot be done, and [adding] is its
+ * dialog while open.
  */
 data class NftSection(
     val shown: List<NftRow> = emptyList(),
@@ -297,7 +299,15 @@ data class NftSection(
     val empty: String? = null,
     val note: String? = null,
     val simpleNote: String? = null,
+    val addReason: String? = null,
+    val adding: AddNftForm? = null,
 )
+
+/**
+ * The *Add an NFT* dialog: [busy] while the account's holding is proven, and [error], why the last try
+ * added nothing ("This account does not hold token 4021 of that contract."), or null.
+ */
+data class AddNftForm(val busy: Boolean = false, val error: String? = null)
 
 /**
  * One NFT: its collection's [title] (a built-in collection's name, or what an unlisted contract says it
@@ -316,4 +326,6 @@ data class NftRow(
     val contract: String,
     val provenAt: String? = null,
     val detail: String? = null,
+    /** The NFT's key ("contract:id:standard") when the user added it, which Remove takes; null otherwise. */
+    val addedKey: String? = null,
 )

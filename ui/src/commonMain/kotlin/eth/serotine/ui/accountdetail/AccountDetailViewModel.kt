@@ -28,7 +28,10 @@ import eth.serotine.domain.usecase.ObserveEnsNames
 import eth.serotine.domain.usecase.ObserveKnownTokens
 import eth.serotine.domain.usecase.ObserveLightClient
 import eth.serotine.domain.usecase.ObserveNetworkLive
+import eth.serotine.domain.usecase.AddNft
+import eth.serotine.domain.usecase.NftAddition
 import eth.serotine.domain.usecase.NftHoldings
+import eth.serotine.domain.usecase.RemoveAddedNft
 import eth.serotine.domain.usecase.ObserveNfts
 import eth.serotine.domain.usecase.ObserveSafe
 import eth.serotine.domain.usecase.ObserveSafeTxQueue
@@ -50,6 +53,7 @@ import eth.serotine.ui.activity.ordered
 import eth.serotine.ui.components.AMOUNTS_NOT_SAVED
 import eth.serotine.ui.components.Control
 import eth.serotine.ui.components.DecodingToken
+import eth.serotine.ui.components.AddressInput
 import eth.serotine.ui.components.Eip55
 import eth.serotine.ui.components.LightClientHealth
 import eth.serotine.ui.components.LightClientItem
@@ -75,6 +79,7 @@ import eth.serotine.ui.components.valuationText
 import eth.serotine.ui.platform.formatDateTime
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -138,6 +143,10 @@ class AccountDetailViewModel(
     private val toggleAmountsHidden: ToggleAmountsHidden,
     /** The account's NFTs, below its assets (docs/wallet-ux.md, *NFTs*, issue #246). */
     observeNfts: ObserveNfts,
+    /** Adds an NFT by contract and token id, once the account is proven to hold it. */
+    private val proveAndAddNft: AddNft,
+    /** Takes an added NFT off the account's list. */
+    private val removeAddedNft: RemoveAddedNft,
     /** How a row dates a balance last verified (unix seconds). */
     private val formatTime: (Long) -> String = ::formatDateTime,
     /** Now, in unix seconds: what simple mode's ages are dated against. */
@@ -275,6 +284,9 @@ class AccountDetailViewModel(
     /** Whether the unlisted collections' NFTs are shown: collapsed until the user opens them (owner ruling, #246). */
     private val unlistedNftsOpen = MutableStateFlow(false)
 
+    /** The *Add an NFT* dialog while open. */
+    private val addingNft = MutableStateFlow<AddNftForm?>(null)
+
     /**
      * The account's NFTs, read while its Assets tab is shown and for 5 s after, as its Activity is:
      * back within that, they are there at once and not proven again.
@@ -293,8 +305,20 @@ class AccountDetailViewModel(
             .flatMapLatest { shown -> if (shown) sharedNfts else flowOf(null) },
         unlistedNftsOpen,
         networkOn,
-    ) { holdings, open, on ->
+        addingNft,
+    ) { holdings, open, on, adding ->
         holdings?.let { nftSection(it, open, network.displayName.takeUnless { on }, formatTime, clock()) }
+            ?.let { section ->
+                section.copy(
+                    addReason = if (on) {
+                        section.addReason
+                    } else {
+                        "${network.displayName} is off in this wallet, so nothing on it is checked and no NFT can " +
+                            "be proven held. Turned on, NFTs can be added again."
+                    },
+                    adding = adding,
+                )
+            }
     }
 
     /** What the queue segment is drawn from. */
@@ -429,6 +453,71 @@ class AccountDetailViewModel(
                     "$symbol could not be hidden: the token settings cannot be saved right now."
             }
             view.update { it.copy(message = said) }
+        }
+    }
+
+    /** Opens the *Add an NFT* dialog. */
+    fun openAddNft() {
+        addingNft.value = AddNftForm()
+    }
+
+    /** The proof of an NFT being added, while one is made: Cancel stops waiting for it. */
+    private var addingJob: Job? = null
+
+    /** Closes the *Add an NFT* dialog; a proof still being made is given up, and nothing is added. */
+    fun closeAddNft() {
+        addingJob?.cancel()
+        addingJob = null
+        addingNft.value = null
+    }
+
+    /**
+     * Adds the token [tokenId] (decimal, or `0x` hex) of the contract at [contract], once the account is
+     * proven to hold it; the dialog says why when nothing was added, and closes when it was.
+     */
+    fun addNft(contract: String, tokenId: String) {
+        // Parsed as typed text is: a mixed-case address must match its EIP-55 checksum (Address's KDoc).
+        val typed = Eip55.parse(contract)
+        val address = (typed as? AddressInput.Valid)?.address
+        val id = parseTokenId(tokenId)
+        val error = when {
+            typed == AddressInput.ChecksumMismatch ->
+                "The capitals do not match this address's checksum: check it for a typo."
+            address == null -> "That is not a contract address: 0x and 40 hexadecimal digits."
+            id == null -> "That is not a token id: a whole number, or 0x and hexadecimal digits."
+            else -> null
+        }
+        if (error != null || address == null || id == null) {
+            addingNft.value = AddNftForm(error = error)
+            return
+        }
+        addingNft.value = AddNftForm(busy = true)
+        addingJob?.cancel()
+        addingJob = viewModelScope.launch {
+            val outcome = proveAndAddNft(account, address, id)
+            addingNft.value = when (outcome) {
+                is NftAddition.Added -> null
+                NftAddition.AlreadyAdded -> AddNftForm(error = "That NFT is added to this account already.")
+                NftAddition.NotHeld -> AddNftForm(
+                    error = "Nothing verified says this account holds token ${id.toDecimal()} of that contract.",
+                )
+                is NftAddition.Unavailable -> AddNftForm(
+                    error = "Whether this account holds it cannot be proven right now. Try again in a moment.",
+                )
+                NftAddition.NotSaved -> AddNftForm(error = "The NFT could not be saved. Nothing was added.")
+            }
+            if (outcome is NftAddition.Added) {
+                view.update { it.copy(message = "NFT added. It is listed once this account's NFTs are read.") }
+            }
+        }
+    }
+
+    /** Takes the added NFT [key] names ([NftRow.addedKey]) off the account's list. */
+    fun removeNft(key: String) {
+        val nft = nftOfKey(key) ?: return
+        viewModelScope.launch {
+            val removed = removeAddedNft(account, nft) == TokenChange.Changed
+            view.update { it.copy(message = if (removed) "NFT removed" else "The NFT could not be removed.") }
         }
     }
 

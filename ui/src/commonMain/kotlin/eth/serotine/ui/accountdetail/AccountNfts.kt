@@ -1,6 +1,10 @@
 package eth.serotine.ui.accountdetail
 
+import eth.serotine.domain.model.Address
+import eth.serotine.domain.model.NftRef
+import eth.serotine.domain.model.NftStandard
 import eth.serotine.domain.model.UInt256
+import eth.serotine.domain.usecase.AddedListState
 import eth.serotine.domain.usecase.HeldNft
 import eth.serotine.domain.usecase.NftHoldings
 import eth.serotine.ui.components.Eip55
@@ -25,16 +29,22 @@ internal fun nftSection(
     val toRow = { held: HeldNft -> row(held, formatTime, now) }
     val before = off?.let { "$it is off: proven before, may have changed since" }
     return when (holdings) {
-        NftHoldings.NotFollowed -> NftSection(unlistedOpen = unlistedOpen, empty = NOT_FOLLOWED)
+        NftHoldings.NotFollowed -> NftSection(unlistedOpen = unlistedOpen, empty = NOT_FOLLOWED, addReason = NOT_SYNCED)
         is NftHoldings.Checking -> NftSection(
             unlistedOpen = unlistedOpen,
             empty = CHECKING,
             note = "Received since block ${grouped(holdings.start)}",
             simpleNote = SINCE_FOLLOWED,
         )
-        NftHoldings.Unavailable -> NftSection(unlistedOpen = unlistedOpen, empty = UNAVAILABLE)
+        NftHoldings.Unavailable -> NftSection(unlistedOpen = unlistedOpen, empty = UNAVAILABLE, addReason = UNREADABLE)
         is NftHoldings.Read -> {
-            val (known, unlisted) = holdings.nfts.partition { it.collection.known != null }
+            // The user's own are shown openly too: they chose them, no one sent them unasked.
+            val (known, unlisted) = holdings.nfts.partition { it.collection.known != null || it.added }
+            val addedNote = when (holdings.addedList) {
+                AddedListState.READ -> null
+                AddedListState.SET_ASIDE -> "the NFTs you added were damaged and set aside: add them again"
+                AddedListState.UNREADABLE -> "the NFTs you added cannot be read right now"
+            }
             val unproven = "${holdings.unproven} not proven held yet".takeIf { holdings.unproven > 0 }
             val notChecked = "${holdings.notChecked} more not checked".takeIf { holdings.notChecked > 0 }
             val older = "still checking blocks ${grouped(holdings.start)} to ${grouped(holdings.checked.first - 1)}"
@@ -57,6 +67,7 @@ internal fun nftSection(
                     older.takeUnless { holdings.complete },
                     unproven,
                     notChecked,
+                    addedNote,
                 ).joinToString(" · "),
                 simpleNote = listOfNotNull(
                     before,
@@ -64,6 +75,7 @@ internal fun nftSection(
                     "still checking older blocks".takeUnless { holdings.complete },
                     unproven,
                     notChecked,
+                    addedNote,
                 ).joinToString(" · "),
             )
         }
@@ -85,6 +97,7 @@ private fun row(held: HeldNft, formatTime: (Long) -> String, now: Long): NftRow 
         amount = ("×" + shortDigits(held.amount)).takeIf { held.amount > UInt256.ONE },
         contract = Eip55.format(collection.address),
         provenAt = held.blockNumber?.let { "block ${grouped(it)}" },
+        addedKey = held.takeIf { it.added }?.nft?.let(::nftKey),
         detail = ens?.let {
             listOfNotNull(
                 "Wrapped".takeIf { _ -> it.wrapped },
@@ -92,6 +105,34 @@ private fun row(held: HeldNft, formatTime: (Long) -> String, now: Long): NftRow 
             ).joinToString(" · ").replaceFirstChar { c -> c.uppercase() }.ifEmpty { null }
         },
     )
+}
+
+/** [nft]'s key as a row carries it: "contract:id:standard", which [nftOfKey] reads back. */
+internal fun nftKey(nft: NftRef): String = "${nft.collection.hex}:${nft.tokenId.toDecimal()}:${nft.standard.name}"
+
+/** The NFT [key] names ([nftKey]), or null when it is no such key. */
+internal fun nftOfKey(key: String): NftRef? {
+    val (contract, id, standard) = key.split(':').takeIf { it.size == 3 } ?: return null
+    return NftRef(
+        Address.parse(contract) ?: return null,
+        UInt256.parse(id) ?: return null,
+        NftStandard.entries.find { it.name == standard } ?: return null,
+    )
+}
+
+/**
+ * A token id as the user types or pastes it: a whole number (leading zeros allowed), or `0x` (or `0X`)
+ * and up to 64 hexadecimal digits; else null.
+ */
+internal fun parseTokenId(text: String): UInt256? {
+    val trimmed = text.trim()
+    if (!trimmed.startsWith("0x", ignoreCase = true)) {
+        if (trimmed.isEmpty() || trimmed.any { it !in '0'..'9' }) return null
+        return UInt256.parse(trimmed.trimStart('0').ifEmpty { "0" })
+    }
+    val hex = trimmed.drop(2).lowercase()
+    if (hex.isEmpty() || hex.length > 64 || hex.any { it !in '0'..'9' && it !in 'a'..'f' }) return null
+    return UInt256.fromBigEndian(hex.padStart(64, '0').chunked(2).map { it.toInt(16).toByte() }.toByteArray())
 }
 
 /** A hash (`0x` and 64 hex digits) by its first six and last four digits: "27a0e0…0f90". */
@@ -108,3 +149,6 @@ private const val CHECKING = "Checking NFTs…"
 private const val UNAVAILABLE = "NFTs cannot be read right now."
 private const val NOT_FOLLOWED = "NFTs are found once the light client is synced."
 private const val SINCE_FOLLOWED = "Received since this wallet began following this account"
+private const val NOT_SYNCED =
+    "The light client is not synced yet, so no NFT can be proven held. Once it is, NFTs can be added."
+private const val UNREADABLE = "NFTs cannot be read right now, so none can be proven held. Try again in a moment."

@@ -78,6 +78,9 @@ import eth.serotine.domain.repository.EnsNftReading
 import eth.serotine.domain.repository.EnsNfts
 import eth.serotine.domain.repository.ReceiptLog
 import kotlinx.coroutines.flow.flowOf
+import eth.serotine.domain.repository.AddedNftList
+import eth.serotine.domain.repository.AddedNfts
+import eth.serotine.domain.repository.TokenChange
 
 /** One gwei, in wei. */
 internal const val GWEI = 1_000_000_000L
@@ -458,5 +461,25 @@ internal class FakeReceiptsNever : ReceiptTracker {
     override fun observe(network: Network, hash: String): Flow<TransactionProgress> = flow {
         emit(TransactionProgress.Pending)
         awaitCancellation()
+    }
+}
+
+/** [AddedNfts] in memory, as the port's contract says one behaves. */
+internal class MemoryAddedNfts : AddedNfts {
+    val added = MutableStateFlow<List<Pair<AccountId, NftRef>>>(emptyList())
+
+    override fun observe(account: AccountId): Flow<AddedNftList> =
+        added.map { all -> AddedNftList.Loaded(all.filter { it.first == account }.map { it.second }) }
+
+    override suspend fun add(account: AccountId, nft: NftRef): TokenChange {
+        if (account to nft in added.value) return TokenChange.AlreadyPresent
+        added.value += account to nft
+        return TokenChange.Changed
+    }
+
+    override suspend fun remove(account: AccountId, nft: NftRef): TokenChange {
+        if (account to nft !in added.value) return TokenChange.NotFound
+        added.value -= account to nft
+        return TokenChange.Changed
     }
 }

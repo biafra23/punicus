@@ -8,6 +8,8 @@ import eth.serotine.domain.model.Address
 import eth.serotine.domain.model.DisplayCurrency
 import eth.serotine.domain.model.Erc20
 import eth.serotine.domain.model.Network
+import eth.serotine.domain.model.NftStandard
+import eth.serotine.domain.model.NftRef
 import eth.serotine.domain.model.NetworkUpgrade
 import eth.serotine.domain.model.PinnedFallbackHandlers
 import eth.serotine.domain.model.PriceId
@@ -62,7 +64,9 @@ import eth.serotine.domain.usecase.RefreshNetworkData
 import eth.serotine.domain.usecase.SetNetworkEnabled
 import eth.serotine.domain.usecase.SetTokenHidden
 import eth.serotine.domain.usecase.ToggleAmountsHidden
+import eth.serotine.domain.usecase.AddNft
 import eth.serotine.domain.usecase.ObserveNfts
+import eth.serotine.domain.usecase.RemoveAddedNft
 import eth.serotine.ui.FakeAccounts
 import eth.serotine.ui.FakeBalances
 import eth.serotine.ui.FakeFeeds
@@ -70,6 +74,7 @@ import eth.serotine.ui.FakeFreshness
 import eth.serotine.ui.FakeLogIndex
 import eth.serotine.ui.FakeEnsNfts
 import eth.serotine.ui.FakeNftContracts
+import eth.serotine.ui.MemoryAddedNfts
 import eth.serotine.ui.FakeReceiptsNever
 import eth.serotine.ui.FakeMetadata
 import eth.serotine.ui.FakeNames
@@ -134,6 +139,7 @@ class AccountDetailViewModelTest {
     private val logIndex = FakeLogIndex()
     private val historyStarts = MemoryHistoryStarts()
     private val nftContracts = FakeNftContracts()
+    private val addedNfts = MemoryAddedNfts()
 
     /** The log index the NFTs are found in: apart from the Activity's, which is read only on its tab. */
     private val nftLogIndex = FakeLogIndex()
@@ -196,7 +202,9 @@ class AccountDetailViewModelTest {
         DropWaitingSwap(waitingSwaps),
         ObserveAmountsHidden(amountsHidden),
         ToggleAmountsHidden(amountsHidden),
-        ObserveNfts(nftLogIndex, historyStarts, nftContracts, FakeEnsNfts(), FakeReceiptsNever()),
+        ObserveNfts(nftLogIndex, historyStarts, nftContracts, FakeEnsNfts(), FakeReceiptsNever(), addedNfts),
+        AddNft(nftContracts, addedNfts),
+        RemoveAddedNft(addedNfts),
         formatTime = { "<$it>" },
         clock = { NOW },
     )
@@ -247,6 +255,43 @@ class AccountDetailViewModelTest {
         viewModel.toggleUnlistedNfts()
         runCurrent()
         assertEquals(false, (viewModel.uiState.value as AccountDetailUiState.Ready).nfts?.unlistedOpen)
+    }
+
+    @Test
+    fun anNftIsAddedOnlyOnceTheAccountIsProvenToHoldIt() = runTest {
+        Dispatchers.setMain(UnconfinedTestDispatcher(testScheduler))
+        val viewModel = viewModel()
+        backgroundScope.launch { viewModel.uiState.collect {} }
+        runCurrent()
+        fun adding() = (viewModel.uiState.value as AccountDetailUiState.Ready).nfts?.adding
+        val contract = "0x" + "a7".repeat(20)
+
+        viewModel.openAddNft()
+        runCurrent()
+        assertEquals(AddNftForm(), adding())
+
+        viewModel.addNft("0x1234", "7")
+        runCurrent()
+        assertEquals("That is not a contract address: 0x and 40 hexadecimal digits.", adding()?.error)
+
+        viewModel.addNft(contract, "7")
+        runCurrent()
+        assertEquals(
+            "Nothing verified says this account holds token 7 of that contract.",
+            adding()?.error,
+        )
+        assertEquals(emptyList(), addedNfts.added.value)
+
+        val held = NftRef(Address.of(contract), UInt256.of(7), NftStandard.ERC721)
+        nftContracts.held[held] = UInt256.ONE
+        viewModel.addNft(contract, "7")
+        runCurrent()
+        assertEquals(null, adding())
+        assertEquals(listOf(AccountId(Network.SEPOLIA, daily.address) to held), addedNfts.added.value)
+        assertEquals(
+            "NFT added. It is listed once this account's NFTs are read.",
+            (viewModel.uiState.value as AccountDetailUiState.Ready).message,
+        )
     }
 
     @Test
@@ -376,7 +421,11 @@ class AccountDetailViewModelTest {
                 pendingAssets = 3,
                 tokensNote = "Checking 3 tokens",
                 pricesNote = "Prices: Chainlink feeds, read through the light client, testnet prices",
-                nfts = NftSection(empty = "NFTs are found once the light client is synced."),
+                nfts = NftSection(
+                    empty = "NFTs are found once the light client is synced.",
+                    addReason = "The light client is not synced yet, so no NFT can be proven held. Once it is, NFTs " +
+                        "can be added.",
+                ),
             ),
             viewModel.uiState.value,
         )
@@ -1018,7 +1067,9 @@ class AccountDetailViewModelTest {
             DropWaitingSwap(waitingSwaps),
             ObserveAmountsHidden(amountsHidden),
             ToggleAmountsHidden(amountsHidden),
-            ObserveNfts(nftLogIndex, historyStarts, nftContracts, FakeEnsNfts(), FakeReceiptsNever()),
+            ObserveNfts(nftLogIndex, historyStarts, nftContracts, FakeEnsNfts(), FakeReceiptsNever(), addedNfts),
+        AddNft(nftContracts, addedNfts),
+        RemoveAddedNft(addedNfts),
         )
         backgroundScope.launch { viewModel.uiState.collect {} }
         runCurrent()

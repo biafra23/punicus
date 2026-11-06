@@ -8,6 +8,7 @@ import eth.serotine.domain.model.NftRef
 import eth.serotine.domain.model.NftStandard
 import eth.serotine.domain.model.UInt256
 import eth.serotine.domain.repository.EnsNftReading
+import eth.serotine.domain.usecase.AddedListState
 import eth.serotine.domain.usecase.HeldNft
 import eth.serotine.domain.usecase.NftCollection
 import eth.serotine.domain.usecase.NftHoldings
@@ -142,14 +143,63 @@ class AccountNftsTest {
             now = 1_800_000_000,
         ).shown.single()
 
-        val named = section(EnsNftReading.Named("alice.eth", "0x" + "ab".repeat(32), 1_900_000_000, wrapped = true, 9_500))
+        val labelHash = "0x" + "ab".repeat(32)
+        val named = section(EnsNftReading.Named("alice.eth", labelHash, 1_900_000_000, wrapped = true, 9_500))
         assertEquals("alice.eth", named.title)
         assertEquals("ENS", named.tokenId)
         assertEquals("Wrapped · expires <1900000000>", named.detail)
 
-        val unnamed = section(EnsNftReading.Named(null, "0x27a0e0" + "11".repeat(27) + "0f90", 1_700_000_000, false, 9_500))
+        val hash = "0x27a0e0" + "11".repeat(27) + "0f90"
+        val unnamed = section(EnsNftReading.Named(null, hash, 1_700_000_000, false, 9_500))
         assertEquals("[27a0e0…0f90].eth", unnamed.title)
         assertEquals("Expired <1700000000>", unnamed.detail)
+    }
+
+    @Test
+    fun aTokenIdIsAWholeNumberOrHexAndAKeyReadsBack() {
+        assertEquals(UInt256.of(4021), parseTokenId(" 4021 "))
+        assertEquals(UInt256.of(255), parseTokenId("0xFF"))
+        assertEquals(UInt256.of(31), parseTokenId("0X1f"))
+        assertEquals(UInt256.of(7), parseTokenId("007"))
+        assertEquals(UInt256.ZERO, parseTokenId("000"))
+        assertEquals(null, parseTokenId("0x"))
+        assertEquals(null, parseTokenId("0xzz"))
+        assertEquals(null, parseTokenId("-1"))
+        assertEquals(null, parseTokenId("0x" + "1".repeat(65)))
+        val nft = NftRef(art, UInt256.of(7), NftStandard.ERC1155)
+        assertEquals(nft, nftOfKey(nftKey(nft)))
+        assertEquals(null, nftOfKey("not a key"))
+    }
+
+    @Test
+    fun theUsersOwnAreShownOpenlyAndALostListIsSaid() {
+        val added = held(NftCollection(art, null, "Art", "ART"), UInt256.of(9)).copy(added = true)
+        val section = nftSection(
+            NftHoldings.Read(
+                listOf(added),
+                start = 9_000,
+                checked = 9_000L..9_600L,
+                unproven = 0,
+                notChecked = 0,
+                addedList = AddedListState.SET_ASIDE,
+            ),
+            unlistedOpen = false,
+        )
+        assertEquals(listOf("Art"), section.shown.map { it.title })
+        assertEquals(emptyList(), section.unlisted)
+        assertEquals(nftKey(added.nft), section.shown.single().addedKey)
+        assertEquals(
+            "Received since block 9,000 · the NFTs you added were damaged and set aside: add them again",
+            section.note,
+        )
+    }
+
+    @Test
+    fun addingIsGreyedOutWhileNothingCanBeProven() {
+        assertEquals(
+            "The light client is not synced yet, so no NFT can be proven held. Once it is, NFTs can be added.",
+            nftSection(NftHoldings.NotFollowed, unlistedOpen = false).addReason,
+        )
     }
 
     @Test

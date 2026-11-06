@@ -42,6 +42,7 @@ fun SimpleAccountDetailScreen(
     onToggleAmounts: () -> Unit = {},
     onOrderActivity: (ActivityOrder) -> Unit = {},
     onToggleUnlistedNfts: () -> Unit = {},
+    nftActions: NftActions = NftActions(),
 ) {
     val ready = state as? AccountDetailUiState.Ready
     AccountDetailScreen(
@@ -71,6 +72,7 @@ fun SimpleAccountDetailScreen(
         onToggleAmounts = onToggleAmounts,
         onOrderActivity = onOrderActivity,
         onToggleUnlistedNfts = onToggleUnlistedNfts,
+        nftActions = nftActions,
     )
 }
 
