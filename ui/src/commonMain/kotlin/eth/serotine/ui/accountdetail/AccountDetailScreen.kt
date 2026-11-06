@@ -794,7 +794,11 @@ private fun Nfts(nfts: NftSection, onToggle: () -> Unit, modifier: Modifier) {
             val count = nfts.unlisted.distinctBy { it.contract }.size
             ListItem(
                 modifier = Modifier.clickable(
-                    onClickLabel = if (nfts.unlistedOpen) "Collapse unlisted collections" else "Show them",
+                    onClickLabel = if (nfts.unlistedOpen) {
+                        "Collapse unlisted collections"
+                    } else {
+                        "Show unlisted collections"
+                    },
                     onClick = onToggle,
                 ),
                 headlineContent = { Text("Unlisted collections ($count)") },
