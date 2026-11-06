@@ -9,6 +9,7 @@ import eth.serotine.ui.components.RecipientItem
 import eth.serotine.ui.components.SendFrom
 import eth.serotine.ui.components.TransferForm
 import eth.serotine.ui.components.verifiedStripSample
+import eth.serotine.ui.ScreenPreview
 import eth.serotine.ui.theme.SerotineTheme
 import org.jetbrains.compose.ui.tooling.preview.Preview
 
@@ -236,23 +237,23 @@ private fun HandoffLoadingPreview() = HandoffPreview(HandoffUiState.Loading("Sep
 private fun HandoffCannotPreview() = HandoffPreview(HandoffUiState.Cannot("Sepolia", NO_WALLET))
 
 /** Every preview above, which HandoffScreenPreviewsTest renders: a new preview goes in here too. */
-internal val handoffScreenPreviews: List<@Composable () -> Unit> = listOf(
-    { HandoffComposePreview() },
-    { HandoffComposeDarkPreview() },
-    { HandoffComposeOverBalancePreview() },
-    { HandoffReviewPreview() },
-    { HandoffReviewDarkPreview() },
-    { HandoffReviewMetaMaskLimitPreview() },
-    { HandoffReviewOpeningPreview() },
-    { HandoffReviewNoWalletPreview() },
-    { HandoffWaitingPreview() },
-    { HandoffWaitingDarkPreview() },
-    { HandoffWaitingSyncingPreview() },
-    { HandoffSentPreview() },
-    { HandoffFailedPreview() },
-    { HandoffOtherSenderPreview() },
-    { HandoffOtherAmountPreview() },
-    { HandoffNotSeenPreview() },
-    { HandoffLoadingPreview() },
-    { HandoffCannotPreview() },
+internal val handoffScreenPreviews: List<ScreenPreview> = listOf(
+    ScreenPreview("compose") { HandoffComposePreview() },
+    ScreenPreview("compose-dark") { HandoffComposeDarkPreview() },
+    ScreenPreview("compose-over-balance") { HandoffComposeOverBalancePreview() },
+    ScreenPreview("review") { HandoffReviewPreview() },
+    ScreenPreview("review-dark") { HandoffReviewDarkPreview() },
+    ScreenPreview("review-metamask-limit") { HandoffReviewMetaMaskLimitPreview() },
+    ScreenPreview("review-opening") { HandoffReviewOpeningPreview() },
+    ScreenPreview("review-no-wallet") { HandoffReviewNoWalletPreview() },
+    ScreenPreview("waiting") { HandoffWaitingPreview() },
+    ScreenPreview("waiting-dark") { HandoffWaitingDarkPreview() },
+    ScreenPreview("waiting-syncing") { HandoffWaitingSyncingPreview() },
+    ScreenPreview("sent") { HandoffSentPreview() },
+    ScreenPreview("failed") { HandoffFailedPreview() },
+    ScreenPreview("other-sender") { HandoffOtherSenderPreview() },
+    ScreenPreview("other-amount") { HandoffOtherAmountPreview() },
+    ScreenPreview("not-seen") { HandoffNotSeenPreview() },
+    ScreenPreview("loading") { HandoffLoadingPreview() },
+    ScreenPreview("cannot") { HandoffCannotPreview() },
 )
