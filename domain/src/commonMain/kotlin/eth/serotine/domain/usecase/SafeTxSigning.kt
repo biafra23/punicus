@@ -42,6 +42,7 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.firstOrNull
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
 
@@ -953,7 +954,20 @@ sealed interface SafeTxQueueReading {
 /**
  * Takes the transaction whose hash is [hash] out of this device's queue: a proposal given up.
  * Only here: a signature already shared stays valid elsewhere until the Safe's nonce passes it.
+ * A signature of it held in lenient mode ([Outbox]) goes with it, both under [lock], so a check
+ * running meanwhile never saves it back into the queue: it waits, and what it saved is removed.
  */
-class RemoveQueuedSafeTx(private val queue: SafeTxQueue) {
-    suspend operator fun invoke(hash: Digest): Boolean = queue.remove(hash)
+class RemoveQueuedSafeTx(
+    private val queue: SafeTxQueue,
+    private val outbox: Outbox,
+    private val lock: OutboxLock,
+) {
+    suspend operator fun invoke(hash: Digest): Boolean = lock.mutex.withLock {
+        if (!queue.remove(hash)) return@withLock false
+        // A held one that cannot be released now is released by its check, which finds its request gone.
+        (outbox.observe().first() as? OutboxList.Loaded)?.held
+            ?.filter { it.hash == hash }
+            ?.forEach { outbox.release(it.safe, hash) }
+        true
+    }
 }

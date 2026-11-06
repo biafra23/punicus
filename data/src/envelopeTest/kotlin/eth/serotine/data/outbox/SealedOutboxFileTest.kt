@@ -6,8 +6,8 @@ import eth.serotine.domain.model.Eip1559Transaction
 import eth.serotine.domain.model.Network
 import eth.serotine.domain.model.SafeTx
 import eth.serotine.domain.model.Signature
-import eth.serotine.domain.model.SigningRequest
 import eth.serotine.domain.model.SignedTransfer
+import eth.serotine.domain.model.SigningRequest
 import eth.serotine.domain.model.TransferAsset
 import eth.serotine.domain.model.UInt256
 import eth.serotine.domain.repository.DraftBasis
@@ -25,10 +25,14 @@ import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertIs
 import kotlin.test.assertTrue
+import kotlin.time.Duration.Companion.seconds
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.TestScope
+import kotlinx.coroutines.test.advanceTimeBy
+import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import kotlinx.io.buffered
 import kotlinx.io.files.Path
@@ -239,5 +243,82 @@ class SealedOutboxFileTest {
         val none = ChosenOutbox(file.toString(), null, StandardTestDispatcher(testScheduler))
         assertTrue(none.put(queued()))
         assertFalse(SystemFileSystem.exists(file))
+    }
+
+    @Test
+    fun aKeyThatNeverOpensTheFileHereIsSaidAsLostAndANewOneIsMade() = runTest {
+        outbox().put(queued())
+        var copied = true
+        var forgotten = 0
+        val chosen = ChosenOutbox(
+            file.toString(),
+            // A Mac's enclave state copied from another Mac: never opens here, until it is forgotten.
+            { if (copied) throw OutboxKeyGone("copied from another Mac") else FakeHardware(provisioned = { false }) },
+            StandardTestDispatcher(testScheduler),
+            forgetKey = { forgotten++; copied = false },
+        )
+
+        val read = assertIs<OutboxList.Loaded>(chosen.observe().first())
+        assertEquals(emptyList(), read.queued)
+        assertTrue(read.lost, "said as lost, never unreadable for good")
+        assertFalse(SystemFileSystem.exists(file))
+        assertEquals(1, forgotten)
+
+        // A new key seals what is queued next, and the loss is said until acknowledged.
+        assertTrue(chosen.put(queued(account = bob)))
+        assertTrue(chosen.acknowledgeLost())
+        assertFalse((chosen.observe().first() as OutboxList.Loaded).lost)
+    }
+
+    @Test
+    fun aLossFoundWhereNoHardwareIsLeftIsSaidInMemory() = runTest {
+        outbox().put(queued())
+        var stateThere = true
+        val chosen = ChosenOutbox(
+            file.toString(),
+            // No enclave usable on this Mac: its state is gone for good, and nothing seals here after it.
+            { if (stateThere) throw OutboxKeyGone("no Secure Enclave opens it") else error("no Secure Enclave") },
+            StandardTestDispatcher(testScheduler),
+            forgetKey = { stateThere = false },
+        )
+
+        assertTrue((chosen.observe().first() as OutboxList.Loaded).lost)
+        assertFalse(SystemFileSystem.exists(file))
+        assertTrue(chosen.put(queued(account = bob)), "in memory only")
+        assertFalse(SystemFileSystem.exists(file))
+        assertTrue(chosen.acknowledgeLost())
+        assertFalse((chosen.observe().first() as OutboxList.Loaded).lost)
+        assertFalse(SystemFileSystem.exists(Path("$file.lost")), "acknowledged for good")
+    }
+
+    @Test
+    fun anUnreadableOutboxIsSaidToItsObserverOnceItOpens() = runTest {
+        outbox().put(queued())
+        var asks = 0
+        val chosen = ChosenOutbox(
+            file.toString(),
+            // Busy, then a key store that would not say whether its key exists, then one that answers.
+            {
+                when (++asks) {
+                    1 -> error("the key store is busy")
+                    2 -> FakeHardware(provisioned = { error("the key store will not say") })
+                    else -> FakeHardware()
+                }
+            },
+            StandardTestDispatcher(testScheduler),
+        )
+        val seen = mutableListOf<OutboxList>()
+        val watching = backgroundScope.launch { chosen.observe().collect { seen += it } }
+
+        runCurrent()
+        assertEquals(listOf<OutboxList>(OutboxList.Unreadable), seen)
+        advanceTimeBy(UNREADABLE_RETRY + 1.seconds)
+        runCurrent()
+        assertEquals(OutboxList.Unreadable, seen.last(), "nothing concluded from a key store that will not say")
+        advanceTimeBy(UNREADABLE_RETRY + 1.seconds)
+        runCurrent()
+        assertEquals(1, (seen.last() as OutboxList.Loaded).queued.size)
+        assertTrue(SystemFileSystem.exists(file))
+        watching.cancel()
     }
 }

@@ -10,6 +10,7 @@ import eth.serotine.domain.repository.OutboxList
 import eth.serotine.domain.repository.QueuedTransaction
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineDispatcher
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -187,10 +188,15 @@ internal class SealedOutboxFile(
 /**
  * The [Outbox] where there is no hardware key to seal with (docs/keys-and-signing.md, *The
  * outbox's seal key*): in memory only, for the life of the process, so a restart asks for the
- * signature again, a held Safe signature's too. Nothing is written anywhere.
+ * signature again, a held Safe signature's too. Nothing is written anywhere. A sealed outbox lost
+ * before it ([lostMarker], the sealed file's marker, there) is said as lost until it is acknowledged,
+ * which deletes the marker, on [dispatcher].
  */
-class MemoryOutbox : Outbox {
-    private val state = MutableStateFlow<OutboxList.Loaded>(OutboxList.Loaded(emptyList()))
+class MemoryOutbox(
+    private val lostMarker: String? = null,
+    private val dispatcher: CoroutineDispatcher? = null,
+) : Outbox {
+    private val state = MutableStateFlow(OutboxList.Loaded(emptyList(), lost = lostMarker?.let(::markerThere) == true))
     private val lock = Mutex()
 
     override fun observe(): Flow<OutboxList> = state
@@ -217,5 +223,27 @@ class MemoryOutbox : Outbox {
         true
     }
 
-    override suspend fun acknowledgeLost(): Boolean = true
+    override suspend fun acknowledgeLost(): Boolean = lock.withLock {
+        val marker = lostMarker
+        if (marker != null && state.value.lost) {
+            val deleted = withContext(NonCancellable + (dispatcher ?: Dispatchers.Default)) {
+                try {
+                    SystemFileSystem.delete(Path(marker), mustExist = false)
+                    true
+                } catch (e: Exception) {
+                    false
+                }
+            }
+            if (!deleted) return@withLock false
+        }
+        state.value = state.value.copy(lost = false)
+        true
+    }
+}
+
+/** Whether the lost marker at [path] is there; not when it cannot be told. */
+private fun markerThere(path: String): Boolean = try {
+    SystemFileSystem.exists(Path(path))
+} catch (e: Exception) {
+    false
 }

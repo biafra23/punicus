@@ -8,7 +8,9 @@ places *The rules it changes* names; where this page and the rules under
 `.claude/` disagree, the rules win and this page is fixed. docs/wallet-ux.md
 and docs/simple-ui.md take over the screens as each part lands.
 
-This page has no mockups yet. They come with the screens' part (*Delivery*).
+The screens' part (*Delivery*, part 4) drew no mockups: the previews of
+every new state, which CI renders into `docs/screenshots/`, stand in for
+them.
 
 ## The request
 
@@ -141,8 +143,11 @@ has its age, and the review shows it.
 - **The gas limit.** An estimate needs fresh state, so a draft signs a
   pinned ceiling for its kind of call: one for the network's currency, one
   for a token's `transfer`. They are high enough for a Safe or another
-  contract as recipient. The PR that codes them pins the values, each
-  measured on its network. Gas not used is not paid. The ceiling shows only
+  contract as recipient. The PR that codes them pins the values. As built,
+  each is derived from the EVM's gas schedule with room, the same on every
+  network, not measured on one (`DraftGas`): a call that needs more fails
+  the check, whose fresh estimate must fit, and is signed again. Gas not
+  used is not paid. The ceiling shows only
   in the most the fee can be.
 - **No simulation.** A verified call needs a fresh head. The review says the
   transfer runs on chain before it is sent.

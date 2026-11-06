@@ -884,8 +884,8 @@ class SafeTxViewModel(
     }
 
     /**
-     * Takes the transaction out of this device's queue, and discards a signature of it held here; the
-     * screen then leaves.
+     * Takes the transaction out of this device's queue, a signature of it held here with it
+     * ([RemoveQueuedSafeTx]); the screen then leaves.
      */
     fun remove() {
         if (step.value != Step.Overview || job?.isActive == true) return
@@ -899,16 +899,6 @@ class SafeTxViewModel(
             }
             if (step.value != Step.Overview) return@launch
             if (removed) {
-                // A signature of it held here goes with it, never saved back into the queue once checked.
-                held.value?.let { signature ->
-                    withContext(NonCancellable) {
-                        try {
-                            discardHeld(signature.safe, signature.hash)
-                        } catch (e: Exception) {
-                            HeldDiscard.NotSaved // the use case promises not to throw; its check releases it
-                        }
-                    }
-                }
                 step.value = Step.Removed
             } else {
                 view.update { it.copy(message = "This device's queue cannot be saved right now: nothing was removed.") }

@@ -666,4 +666,23 @@ class LenientSafeTxsTest {
         assertEquals(emptyList(), world.queue.requests.value, "the removal stands")
         assertEquals(emptyList(), notifier.told, "nothing says it is in the queue")
     }
+
+    @Test
+    fun removingARequestWaitsForItsCheckAndTakesItsHeldCoSignatureWithIt() = runTest {
+        val request = world.request(usdcTransfer(4), world.bob.address)
+        world.queue.save(request)
+        val ready = assertIs<HeldSignCheck.Ready>(hold.check(request, world.alice.address))
+        assertIs<SafeSignatureHolding.Held>(hold.sign(ready, unlock))
+
+        // A check of it runs: the removal waits for it, so the check never saves it back afterwards.
+        lock.mutex.lock()
+        val removal = async { RemoveQueuedSafeTx(world.queue, outbox, lock)(request.hash) }
+        runCurrent()
+        assertEquals(1, world.queue.requests.value.size, "waits for the check")
+        lock.mutex.unlock()
+
+        assertTrue(removal.await())
+        assertEquals(emptyList(), world.queue.requests.value)
+        assertEquals(emptyList(), outbox.held.value)
+    }
 }

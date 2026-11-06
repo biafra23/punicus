@@ -485,9 +485,11 @@ upgrades*).
      and the fee level filled in. One without a conflict offers Edit, which
      does the same, and Discard.
    - Discard deletes its signature (`DiscardQueued`) and says "Discarded:
-     its signature was deleted, and nothing was sent." While its check and
-     broadcast run, Discard and Edit are greyed out: "It's being checked and
-     sent." The discard decides under the outbox's lock: one whose broadcast
+     its signature was deleted, and nothing was sent." While it is being
+     sent, Discard and Edit are greyed out: "It's being checked and sent." A
+     tap while its check runs waits for the check, on the outbox's lock (the
+     greying during the check itself is not built; docs/lenient-mode.md, *The
+     outbox*). The discard decides under the outbox's lock: one whose broadcast
      has started is not discarded, and a tap that comes after a peer took it
      finds it sent, and the screen shows it as sent, never as discarded, and
      opens no Send. Once sent, the same id is the sent transfer's hash, and

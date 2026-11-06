@@ -170,7 +170,7 @@ class SafeTxViewModelTest {
             ),
             ExecuteSafeTx(world.signer, world.broadcaster, world.sent, now),
             RebroadcastTransfer(world.broadcaster, world.sent, world.receipts, now),
-            RemoveQueuedSafeTx(world.queue),
+            RemoveQueuedSafeTx(world.queue, world.outbox, world.outboxLock),
             WarmFeeHistory(world.inputs),
             CheckSafeSwap(world.uniswap, world.lightClient, Network.SEPOLIA),
             ObserveSyncPolicy(world.policy),

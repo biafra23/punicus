@@ -511,7 +511,7 @@ class AppGraph(
         ),
         ExecuteSafeTx(signer, broadcaster, sentTransfers),
         RebroadcastTransfer(broadcaster, sentTransfers, receipts),
-        RemoveQueuedSafeTx(safeTxQueue),
+        RemoveQueuedSafeTx(safeTxQueue, outbox, outboxLock),
         WarmFeeHistory(transactionInputs),
         CheckSafeSwap(uniswap, lightClient, safe.network),
         ObserveSyncPolicy(syncPolicy),
