@@ -13,7 +13,8 @@ once the decisions below are made.
 
 ## The request
 
-The owner's words (2026-11-06):
+The owner's words (2026-11-06), lightly edited: abbreviations written out
+and typos fixed.
 
 > Strict and lenient mode. Switch in Settings.
 >
@@ -97,7 +98,8 @@ Strict mode keeps all of this, unchanged.
 | Send from an account whose key is here, the network's currency or a token | Review refused while syncing | Reviewed on the state last verified, signed, and queued (*The outbox*) |
 | A Safe transaction: proposing one, co-signing one | Refused while syncing | Signed and held until checked; the QR code and text wait for the check (*Safe transactions*) |
 | A Safe transaction: approving on chain, executing | Refused while syncing | Queued like a send |
-| Swap on Uniswap or CoW, wrap | Refused while syncing | Unchanged: strict in both modes (*What stays strict*) |
+| Swap on Uniswap or CoW | Refused while syncing | Unchanged: strict in both modes (*What stays strict*) |
+| Wrap and unwrap | Refused while syncing | Unchanged, for now (*What stays strict*) |
 | A dApp's request over WalletConnect | Refused while syncing | Unchanged: strict in both modes |
 | Create Safe | Refused while syncing | Unchanged, for now |
 | Send from another wallet | Signs nothing here | Unchanged |
@@ -175,6 +177,12 @@ differences:
 - **What the user can do with it:** Discard (its signature is deleted;
   nothing was sent), and Edit (discard, and open the form filled with its
   inputs).
+- **Discard and Edit wait while the check runs.** A check and its broadcast
+  are one step that a Discard cannot cut in half, as a strict send's
+  broadcast and record are today (`SendTransfer`). While they run, Discard
+  and Edit are greyed out: "It's being checked and sent." A tap that comes
+  after a peer took the transaction finds it sent, and says so. It is never
+  told as discarded.
 - **Sent by itself once it checks out** (decision 3). When the network's
   light client verifies at a fresh head, the outbox runs the check below. A
   transaction that passes is broadcast as a strict send is, and recorded in
@@ -186,8 +194,13 @@ differences:
   and sends it when it passes, with no new signature; Discard deletes it.
   Why: a payment the user wanted an hour ago may be one they no longer want,
   and the wallet cannot tell.
-- **While the app runs** (decision 7): in the foreground, and on Android
-  while its process lives in the background. The hosts run it as they run
+- **While the app runs** (decision 7). The check needs a verified head, and
+  the light client's networking sleeps while the app is in the background
+  (`LightClientStatus.Sleeping`). On Android it is kept on for a grace period
+  after the last screen leaves (`GracePeriodJob`), and the outbox runs during
+  it too. After that a queued transaction waits until the app is back in the
+  foreground. The status step and Home say so: "Waits for Ethereum to catch
+  up. Keep Serotine open to send it sooner." The hosts run it as they run
   `FollowSafeDeployments`: a use case `FollowOutbox`, never from `App` or
   `AppGraph`. A send and a conflict are each told in a notification, through
   a new port `OutboxNotifier`, implemented in the hosts as `UpgradeNotifier`
@@ -261,12 +274,17 @@ This is the plan's last part. It needs one more rule changed, below.
   `SafeTx` hash, so the owner signs again. A signer that is no longer an
   owner cannot sign it at all, so the request is discarded and the user
   told.
+- **A held signature is not a queued transaction.** It does not take the
+  owner account's place in the outbox, since it spends no nonce of that
+  account: the owner may send from it meanwhile. One held signature per
+  Safe and `SafeTx` nonce, so a second proposal for the same nonce waits
+  for the first to be checked or discarded.
 - **Approving on chain and executing** are transactions from an account
   whose key is here, and go through the outbox like a send.
 
 ## What stays strict, and why
 
-- **Swaps and wraps, on Uniswap and on CoW.** A minimum from an old quote is
+- **Swaps, on Uniswap and on CoW.** A minimum from an old quote is
   either too high (the swap reverts) or too low (the difference is there for
   anyone to take). So the check would have to treat any move beyond the
   tolerance as a conflict, and nearly every swap would be signed twice. On
@@ -275,6 +293,10 @@ This is the plan's last part. It needs one more rule changed, below.
   cannot show. While syncing, the swap's review is greyed out: "A swap's
   price needs a fresh check, so it waits for the light client, also with
   Sign while syncing on."
+- **Wraps and unwraps**, for now. They have no price and no minimum: a
+  wrap is a 1:1 deposit into the pinned wrapped-currency contract. So they
+  could be queued like a send, with the same check. They are left out only
+  to keep the first version small, and could join Send's part.
 - **A dApp's requests.** A dApp waits for the transaction's hash, and a
   request that cannot be met before it expires gets an error (`.claude/rules/trust.md`,
   *What a dApp sends is untrusted input*). A queued answer comes after the
@@ -313,6 +335,10 @@ before its code lands:
    may be shown last known in a lenient draft, labelled, and are checked
    before anything is shown to another owner or sent.
 5. New: a queued transaction's signed bytes are kept as decision 5 says.
+6. The code that states these rules in its KDoc follows them in the part
+   that changes them: `LastBalancesFile` ("Shown only, never acted on: a
+   quote and a signature read a fresh proof"), `CallQuoter` and the quote
+   use cases that refuse a balance last verified as syncing.
 
 ## Decisions for the owner
 
@@ -327,9 +353,10 @@ Each with the answer this page proposes:
 5. **The signed bytes across a restart?** Kept, as *The signed bytes kept*
    says, rather than memory only.
 6. **How many queued transactions per account?** One, for now.
-7. **When does the outbox run?** While the app runs, with a notification
-   for a send and for a conflict. Waking the app for it in the background
-   (Android's alarm, as the widget refresh does) can follow.
+7. **When does the outbox run?** While the app runs and during Android's
+   grace period after it, with a notification for a send and for a
+   conflict. Waking the light client for it in the background, with a job
+   as the widget's refresh does (`RateRefreshJob`), can follow.
 8. **ENS names in a draft?** Not until the light client can resolve them.
    An address or one of the user's own accounts instead.
 9. **What stays strict?** Swaps, wraps, dApp requests and Create Safe, as
