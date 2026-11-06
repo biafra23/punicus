@@ -421,7 +421,11 @@ class AccountDetailViewModelTest {
                 pendingAssets = 3,
                 tokensNote = "Checking 3 tokens",
                 pricesNote = "Prices: Chainlink feeds, read through the light client, testnet prices",
-                nfts = NftSection(empty = "NFTs are found once the light client is synced."),
+                nfts = NftSection(
+                    empty = "NFTs are found once the light client is synced.",
+                    addReason = "The light client is not synced yet, so no NFT can be proven held. Once it is, NFTs " +
+                        "can be added.",
+                ),
             ),
             viewModel.uiState.value,
         )
