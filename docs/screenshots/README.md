@@ -25,8 +25,9 @@ If the folder grows too much, there are two levers, both the owner's. Deleting t
 | [dApp transaction](#dapp-transaction) | `dapp-transaction/` | 18 |
 | [Debug](#debug) | `debug/` | 6 |
 | [Add account from the same phrase](#derive-account) | `derive-account/` | 10 |
+| [Send from another wallet](#handoff) | `handoff/` | 18 |
 | [Import recovery phrase](#mnemonic-import) | `mnemonic-import/` | 12 |
-| [Connect a dApp](#pair-dapp) | `pair-dapp/` | 6 |
+| [Connect a dApp](#pair-dapp) | `pair-dapp/` | 11 |
 | [Receive](#receive) | `receive/` | 7 |
 | [Remove account (dialog)](#remove-account-dialog) | `remove-account-dialog/` | 7 |
 | [Rename account (dialog)](#rename-account-dialog) | `rename-account-dialog/` | 6 |
@@ -367,6 +368,30 @@ If the folder grows too much, there are two levers, both the owner's. Deleting t
 <a href="derive-account/unavailable.png"><img src="derive-account/unavailable.png" width="206" alt="unavailable"></a>
 <a href="derive-account/loading.png"><img src="derive-account/loading.png" width="206" alt="loading"></a>
 
+<a name="handoff"></a>
+## Send from another wallet
+
+`handoff/`, 18 states: `compose`, `compose-dark`, `compose-over-balance`, `review`, `review-dark`, `review-metamask-limit`, `review-opening`, `review-no-wallet`, `waiting`, `waiting-dark`, `waiting-syncing`, `sent`, `failed`, `other-sender`, `other-amount`, `not-seen`, `loading`, `cannot`
+
+<a href="handoff/compose.png"><img src="handoff/compose.png" width="206" alt="compose"></a>
+<a href="handoff/compose-dark.png"><img src="handoff/compose-dark.png" width="206" alt="compose-dark"></a>
+<a href="handoff/compose-over-balance.png"><img src="handoff/compose-over-balance.png" width="206" alt="compose-over-balance"></a>
+<a href="handoff/review.png"><img src="handoff/review.png" width="206" alt="review"></a>
+<a href="handoff/review-dark.png"><img src="handoff/review-dark.png" width="206" alt="review-dark"></a>
+<a href="handoff/review-metamask-limit.png"><img src="handoff/review-metamask-limit.png" width="206" alt="review-metamask-limit"></a>
+<a href="handoff/review-opening.png"><img src="handoff/review-opening.png" width="206" alt="review-opening"></a>
+<a href="handoff/review-no-wallet.png"><img src="handoff/review-no-wallet.png" width="206" alt="review-no-wallet"></a>
+<a href="handoff/waiting.png"><img src="handoff/waiting.png" width="206" alt="waiting"></a>
+<a href="handoff/waiting-dark.png"><img src="handoff/waiting-dark.png" width="206" alt="waiting-dark"></a>
+<a href="handoff/waiting-syncing.png"><img src="handoff/waiting-syncing.png" width="206" alt="waiting-syncing"></a>
+<a href="handoff/sent.png"><img src="handoff/sent.png" width="206" alt="sent"></a>
+<a href="handoff/failed.png"><img src="handoff/failed.png" width="206" alt="failed"></a>
+<a href="handoff/other-sender.png"><img src="handoff/other-sender.png" width="206" alt="other-sender"></a>
+<a href="handoff/other-amount.png"><img src="handoff/other-amount.png" width="206" alt="other-amount"></a>
+<a href="handoff/not-seen.png"><img src="handoff/not-seen.png" width="206" alt="not-seen"></a>
+<a href="handoff/loading.png"><img src="handoff/loading.png" width="206" alt="loading"></a>
+<a href="handoff/cannot.png"><img src="handoff/cannot.png" width="206" alt="cannot"></a>
+
 <a name="mnemonic-import"></a>
 ## Import recovery phrase
 
@@ -388,7 +413,7 @@ If the folder grows too much, there are two levers, both the owner's. Deleting t
 <a name="pair-dapp"></a>
 ## Connect a dApp
 
-`pair-dapp/`, 6 states: `empty`, `pasted`, `pasted-dark`, `busy`, `expired`, `unreadable`
+`pair-dapp/`, 11 states: `empty`, `pasted`, `pasted-dark`, `busy`, `expired`, `unreadable`, `with-scan`, `with-scan-dark`, `camera-refused`, `scanned-not-a-link`, `scanner-frame`
 
 <a href="pair-dapp/empty.png"><img src="pair-dapp/empty.png" width="206" alt="empty"></a>
 <a href="pair-dapp/pasted.png"><img src="pair-dapp/pasted.png" width="206" alt="pasted"></a>
@@ -396,6 +421,11 @@ If the folder grows too much, there are two levers, both the owner's. Deleting t
 <a href="pair-dapp/busy.png"><img src="pair-dapp/busy.png" width="206" alt="busy"></a>
 <a href="pair-dapp/expired.png"><img src="pair-dapp/expired.png" width="206" alt="expired"></a>
 <a href="pair-dapp/unreadable.png"><img src="pair-dapp/unreadable.png" width="206" alt="unreadable"></a>
+<a href="pair-dapp/with-scan.png"><img src="pair-dapp/with-scan.png" width="206" alt="with-scan"></a>
+<a href="pair-dapp/with-scan-dark.png"><img src="pair-dapp/with-scan-dark.png" width="206" alt="with-scan-dark"></a>
+<a href="pair-dapp/camera-refused.png"><img src="pair-dapp/camera-refused.png" width="206" alt="camera-refused"></a>
+<a href="pair-dapp/scanned-not-a-link.png"><img src="pair-dapp/scanned-not-a-link.png" width="206" alt="scanned-not-a-link"></a>
+<a href="pair-dapp/scanner-frame.png"><img src="pair-dapp/scanner-frame.png" width="206" alt="scanner-frame"></a>
 
 <a name="receive"></a>
 ## Receive
