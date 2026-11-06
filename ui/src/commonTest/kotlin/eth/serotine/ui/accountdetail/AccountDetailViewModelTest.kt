@@ -84,6 +84,7 @@ import eth.serotine.ui.FakeTokenCatalog
 import eth.serotine.ui.FakeUpgradeReports
 import eth.serotine.ui.MemoryAmountsHidden
 import eth.serotine.ui.MemoryCowOrders
+import eth.serotine.ui.MemoryOutbox
 import eth.serotine.ui.MemoryCurrencySetting
 import eth.serotine.ui.MemoryHistoryStarts
 import eth.serotine.ui.MemoryNetworkSettings
@@ -121,6 +122,7 @@ import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.test.setMain
+import eth.serotine.domain.usecase.ObserveOutbox
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class AccountDetailViewModelTest {
@@ -232,6 +234,7 @@ class AccountDetailViewModelTest {
         ObserveSentToAddresses(history),
         ObserveAccountCowOrders(cowOrders),
         ObserveWaitingSwaps(waitingSwaps),
+        ObserveOutbox(MemoryOutbox()),
     ) { "at $it" }
 
     @AfterTest

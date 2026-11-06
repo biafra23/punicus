@@ -270,9 +270,9 @@ change what it trusts.
   long it takes.
   A queued transaction (lenient mode; docs/wallet-ux.md, screen 9) has a
   step before Signed, "Queued: waits for Ethereum to catch up. Keep
-  Serotine open to send it sooner.", then Signed → Sent → Confirmed → Final,
-  waiting; "Still send this? You signed it 2 h ago." with Send now past its
-  hour; a conflict in plain words with Sign again and Discard; Edit and
+  Serotine open to send it sooner.", then Signed and Sent, which waits for
+  the check; "Still send this? You signed it 2 h ago." with Send now past
+  its hour; a conflict in plain words with Sign again and Discard; Edit and
   Discard otherwise. As in Detailed view, with no block.
 
 ### Swap

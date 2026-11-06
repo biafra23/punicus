@@ -13,6 +13,7 @@ import eth.serotine.domain.model.UInt256
 import eth.serotine.domain.repository.CowOrderEnd
 import eth.serotine.domain.repository.CowOrderRecord
 import eth.serotine.domain.repository.HistoryEntry
+import eth.serotine.domain.repository.QueuedTransaction
 import eth.serotine.domain.repository.SentAction
 import eth.serotine.domain.repository.SentOutcome
 import eth.serotine.domain.usecase.BuiltInCheck
@@ -322,6 +323,34 @@ internal class ActivityRows(
             status = status,
             state = state,
             simpleStatus = simpleStatusOf(entry),
+        )
+    }
+
+    /**
+     * A transfer queued in lenient mode ([queued]) as a row, listed before every other one
+     * (docs/lenient-mode.md, *Where it shows*): what it sends, to whom, when it was signed, and
+     * whether it waits to be sent or needs a signature again. A tap opens its status, not 26.
+     */
+    fun queuedRow(queued: QueuedTransaction, names: Map<Address, String>): ActivityRow {
+        val (title, other) = when (val action = queued.action) {
+            is SentAction.Transfer -> "Send ${amount(action.amount, action.asset)}" to action.to
+            // Only a transfer is queued today: any other is said as a transaction to its contract.
+            else -> "A transaction waiting to be sent" to queued.transaction.to
+        }
+        val (status, state) = if (queued.conflict != null) {
+            "Needs your signature again" to ActivityState.FAILED
+        } else {
+            "Waiting to be sent" to ActivityState.WAITING
+        }
+        return ActivityRow(
+            key = "queued:${queued.id}",
+            opens = ActivityKey(queued.id, queued = true),
+            title = title,
+            detail = "To ${named(other, names)}",
+            about = Eip55.format(other),
+            time = "Signed ${formatTime(queued.signedAt)}",
+            status = status,
+            state = state,
         )
     }
 

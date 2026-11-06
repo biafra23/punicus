@@ -162,4 +162,32 @@ class SimpleAccountsScreenTest {
         rule.onNodeWithTag(ACCOUNTS_NOTICE_TAG).assertIsDisplayed()
         rule.onNodeWithText("No accounts yet").assertIsDisplayed()
     }
+
+    @Test
+    fun whatANetworkHasQueuedIsSaidAndALostOneUntilDismissed() {
+        var dismissed = 0
+        rule.setContent {
+            SerotineTheme {
+                SimpleAccountsScreen(
+                    state = ready(main).copy(
+                        queued = listOf("Ethereum: 1 waiting to be sent · Keep Serotine open to send it sooner"),
+                        lostNotice = "A transaction waiting to be sent was lost.",
+                    ),
+                    onWatchAddress = {},
+                    onImportPhrase = {},
+                    onCreateAccount = {},
+                    onCreateSafe = {},
+                    onAccountAction = {},
+                    onRefresh = {},
+                    onDismissLost = { dismissed++ },
+                )
+            }
+        }
+
+        rule.onNodeWithTag(ACCOUNTS_QUEUED_TAG)
+            .assertTextEquals("Ethereum: 1 waiting to be sent · Keep Serotine open to send it sooner")
+        rule.onNodeWithText("A transaction waiting to be sent was lost.").assertIsDisplayed()
+        rule.onNodeWithText("Dismiss").performClick()
+        assertEquals(1, dismissed)
+    }
 }

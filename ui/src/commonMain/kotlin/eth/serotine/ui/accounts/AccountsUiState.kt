@@ -72,6 +72,12 @@ sealed interface AccountsUiState {
      *
      * [amountsHidden] while the user hides amounts with the eye at the top left (docs/wallet-ux.md,
      * *Hiding amounts*): every amount here already reads "••••" beside its unit.
+     *
+     * Lenient mode's outbox (docs/lenient-mode.md, *Where it shows*): simple mode's [queued], a line
+     * per network with something queued ("Ethereum: 1 waiting to be sent · Keep Serotine open to send
+     * it sooner"), drawn under [freshness] (Detailed view says it in the section,
+     * [NetworkSection.queued]); and [lostNotice], said until dismissed, when queued signed bytes
+     * could not be opened since they were sealed (the seal key gone), null otherwise.
      */
     data class Ready(
         val sections: List<NetworkSection>,
@@ -86,6 +92,8 @@ sealed interface AccountsUiState {
         val refreshing: Boolean = false,
         val simpleTotalNote: String? = null,
         val amountsHidden: Boolean = false,
+        val queued: List<String> = emptyList(),
+        val lostNotice: String? = null,
     ) : AccountsUiState {
         init {
             require(accounts.distinctBy { it.chainId to it.address }.size == accounts.size) {
@@ -135,7 +143,9 @@ sealed interface AccountsUiState {
  * network while others still can (docs/networks.md, *Upgrades and the update screen*): the
  * section is drawn in the error colour, with the way to the update. [staleAnchor] warns that its
  * light client refuses to sync from a checkpoint past the weak-subjectivity window, with the way
- * to catch up anyway (owner's request, 2026-10-24): drawn in the error colour too.
+ * to catch up anyway (owner's request, 2026-10-24): drawn in the error colour too. [queued] is what
+ * its accounts have queued in lenient mode, under its status line ("1 waiting to be sent · Keep
+ * Serotine open to send it sooner"; docs/lenient-mode.md, *Where it shows*), null when nothing is.
  */
 data class NetworkSection(
     val chainId: Long,
@@ -148,6 +158,7 @@ data class NetworkSection(
     val totalNote: String? = null,
     val blocked: String? = null,
     val staleAnchor: StaleAnchorWarning? = null,
+    val queued: String? = null,
 )
 
 /**

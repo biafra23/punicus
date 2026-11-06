@@ -33,8 +33,9 @@ sealed interface BalanceReading {
      * for a fresh head or for a peer serving proofs), and [wei] is the balance it last
      * verified, at block [blockNumber], whose verified head was produced at [asOf] (unix
      * seconds; null when unknown). It may have changed since: shown as such (owner's request,
-     * 2026-10-19), and never a balance to act on — a quote or a signature treats it as
-     * [Syncing].
+     * 2026-10-19), and never a balance a quote or a signature acts on: they treat it as
+     * [Syncing]. Only a lenient draft is built on it, labelled with its age, and sent only after
+     * the check at a fresh head (owner rulings, 2026-11-06; docs/lenient-mode.md).
      */
     data class LastKnown(val wei: Wei, val blockNumber: Long, val asOf: Long?) : BalanceReading
 

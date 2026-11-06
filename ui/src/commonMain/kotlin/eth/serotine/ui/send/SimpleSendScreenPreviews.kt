@@ -167,6 +167,76 @@ private fun SimpleSendSyncingPreview() = SimpleSendPreview(
     ),
 )
 
+/** Ethereum catching up, as the sync line says it while a lenient draft is made. */
+private val catchingUp = LightClientItem(
+    "Verifying sync committees · 2 of 6 periods",
+    2f / 6,
+    true,
+    LightClientHealth.NOT_VERIFIED,
+    simpleText = "Syncing Ethereum · 2 of 6 periods",
+)
+
+private val etherLastVerified = ether.copy(age = "as of 12 min ago", lastKnown = true)
+private val usdcLastVerified = usdc.copy(age = "as of 12 min ago", lastKnown = true)
+
+/** Lenient mode while Ethereum catches up: the balances last verified offered, each with its age, no value. */
+@Preview
+@Composable
+private fun SimpleSendLenientPreview() = SimpleSendPreview(
+    composed.copy(
+        form = composed.form.copy(
+            assets = listOf(etherLastVerified, usdcLastVerified),
+            asset = usdcLastVerified,
+            to = FRIEND,
+            recipient = RecipientItem(FRIEND),
+            amountHint = null,
+        ),
+    ),
+    syncLine = catchingUp,
+)
+
+private val draftReview = SendUiState.DraftReview(
+    network = "Ethereum",
+    from = SendFrom("Main", MAIN),
+    amount = "250 USDC",
+    asset = usdcLastVerified,
+    recipient = RecipientItem(FRIEND),
+    preparedOn = "Prepared on data from 12 min ago. It's checked on chain again before it's sent.",
+    maxFee = "0.00082 ETH",
+    feeDetail = "Normal fee: 100,000 gas, the most this transfer is signed for, × at most 8.2 gwei, from the fee " +
+        "history last verified up to block 23,614,070. Only the gas used, at what the block charges, is paid.",
+    feeAge = "Fees as of 13 min ago",
+    nonce = "Nonce 41, after this account's count of mined transactions last verified at block 23,614,071",
+    nonceAge = "Nonce 41, counted as of 13 min ago",
+    balances = listOf(
+        BalanceChange(
+            "USDC balance",
+            "1,250 USDC",
+            "1,000 USDC, if nothing changed",
+            "last verified at block 23,614,077",
+            age = "as of 12 min ago",
+        ),
+        BalanceChange(
+            "ETH balance, which pays the fee",
+            "3.2041 ETH",
+            "at least 3.20328 ETH, if nothing changed",
+            "last verified at block 23,614,077",
+            short = "ETH balance",
+            age = "as of 12 min ago",
+        ),
+    ),
+    unlock = UnlockStep(biometrics = true),
+)
+
+/** A lenient draft's review: prepared on data from before, each figure's age, not checked yet, Sign and queue. */
+@Preview
+@Composable
+private fun SimpleSendDraftReviewPreview() = SimpleSendPreview(draftReview, syncLine = catchingUp)
+
+@Preview
+@Composable
+private fun SimpleSendDraftReviewDarkPreview() = SimpleSendPreview(draftReview, darkTheme = true, syncLine = catchingUp)
+
 /** Every preview above, which SimpleSendScreenPreviewsTest renders: a new preview goes in here too. */
 internal val simpleSendScreenPreviews: List<ScreenPreview> = listOf(
     ScreenPreview("compose") { SimpleSendComposePreview() },
@@ -174,4 +244,7 @@ internal val simpleSendScreenPreviews: List<ScreenPreview> = listOf(
     ScreenPreview("review") { SimpleSendReviewPreview() },
     ScreenPreview("review-dark") { SimpleSendReviewDarkPreview() },
     ScreenPreview("compose-refused") { SimpleSendComposeRefusedPreview() },
+    ScreenPreview("compose-lenient-last-verified") { SimpleSendLenientPreview() },
+    ScreenPreview("draft-review") { SimpleSendDraftReviewPreview() },
+    ScreenPreview("draft-review-dark") { SimpleSendDraftReviewDarkPreview() },
 )

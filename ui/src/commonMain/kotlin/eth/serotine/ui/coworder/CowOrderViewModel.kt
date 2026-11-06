@@ -52,6 +52,8 @@ import eth.serotine.ui.components.notSentItem
 import eth.serotine.ui.components.notSignedText
 import eth.serotine.ui.components.promptDeadline
 import eth.serotine.ui.components.verifiedAt
+import eth.serotine.ui.outbox.OPEN_QUEUED
+import eth.serotine.ui.outbox.QUEUED_FIRST
 import eth.serotine.ui.platform.formatDateTime
 import kotlin.time.Duration.Companion.seconds
 import kotlin.time.TimeMark
@@ -421,7 +423,11 @@ class CowOrderViewModel(
             )
             is CowCancellationQuoting.EarlierMaybeSent -> Step.Viewing(
                 error = refusal(quoting),
-                earlier = EarlierTransaction(quoting.hash, note = null, label = "Open the earlier transaction"),
+                earlier = EarlierTransaction(
+                    quoting.hash,
+                    note = null,
+                    label = if (quoting.queued) OPEN_QUEUED else "Open the earlier transaction",
+                ),
             )
             is CowCancellationQuoting.Reverts -> Step.Viewing(
                 error = refusal(quoting),
@@ -454,9 +460,13 @@ class CowOrderViewModel(
                 "${figureText(quoting.figure, "of the cancellation")} could not be verified this time: try again."
             ReadUnavailable.REFUSED -> "The light client on this device cannot quote the cancellation."
         }
-        is CowCancellationQuoting.EarlierMaybeSent -> "An earlier transaction from this account may still be on " +
-            "its way: no peer answered when it was broadcast. Try it again from its status rather than sign a " +
-            "new one."
+        // Queued in lenient mode: one per account, sent or discarded first (docs/lenient-mode.md, *The outbox*).
+        is CowCancellationQuoting.EarlierMaybeSent -> if (quoting.queued) {
+            QUEUED_FIRST
+        } else {
+            "An earlier transaction from this account may still be on its way: no peer answered when it was " +
+                "broadcast. Try it again from its status rather than sign a new one."
+        }
     }
 
     private fun render(model: Model?, step: Step): CowOrderUiState {

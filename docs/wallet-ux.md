@@ -461,9 +461,10 @@ upgrades*).
      outbox*; owner rulings, 2026-11-06). While the id names one in the
      outbox, the screen shows it: what it sends, then a step before Signed,
      "Queued: waits for ‹network› to catch up. Keep Serotine open to send it
-     sooner." (decision 7), "Sending…" while its check and broadcast run,
-     then Signed (when, on this device), Broadcast, Included and Finalized,
-     waiting.
+     sooner." (decision 7), or, once the network's light client verifies,
+     that it is checked on chain and sent once it checks out; "Sending…"
+     while its broadcast runs; then Signed (when, on this device) and
+     Broadcast, which waits for the check. Its hash, once sent, is the id.
    - Past its hour without a tap (decision 4): "Still send this? You signed
      it 2 h ago.", with Send now (`ConfirmQueued`), which lets the check send
      it within the next hour, with no new signature.

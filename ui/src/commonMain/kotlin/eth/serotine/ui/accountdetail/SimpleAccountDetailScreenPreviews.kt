@@ -155,6 +155,31 @@ private fun SimpleAccountSyncingPreview() = SimpleAccountDetailPreview(
     ),
 )
 
+/** Lenient mode: a transfer queued, first in the Activity, in words. */
+@Preview
+@Composable
+private fun SimpleAccountActivityQueuedPreview() = SimpleAccountDetailPreview(
+    main.copy(
+        segment = DetailSegment.ACTIVITY,
+        activity = ActivityUiState.Shown(
+            rows = emptyList(),
+            coverage = "Activity since you added it.",
+            queued = listOf(
+                ActivityRow(
+                    key = "queued:0x" + "9a".repeat(32),
+                    title = "Send 250 USDC",
+                    detail = "To vitalik.eth · 0xd8dA…6045",
+                    about = "0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045",
+                    time = "Signed Nov 7, 2026, 9:12 AM",
+                    status = "Waiting to be sent",
+                    state = ActivityState.WAITING,
+                    opens = ActivityKey("0x" + "9a".repeat(32), queued = true),
+                ),
+            ),
+        ),
+    ),
+)
+
 /** H5: the Activity, a time where one is known and how each ended in words, no block. */
 @Preview
 @Composable
@@ -308,4 +333,5 @@ internal val simpleAccountDetailScreenPreviews: List<ScreenPreview> = listOf(
     ScreenPreview("hidden") { SimpleAccountHiddenPreview() },
     ScreenPreview("hidden-dark") { SimpleAccountHiddenDarkPreview() },
     ScreenPreview("nfts") { SimpleAccountNftsPreview() },
+    ScreenPreview("activity-queued") { SimpleAccountActivityQueuedPreview() },
 )

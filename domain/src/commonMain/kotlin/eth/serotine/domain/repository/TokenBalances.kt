@@ -32,7 +32,8 @@ sealed interface TokenBalanceReading {
      * it last verified, from a call against the state of block [blockNumber] (null when the
      * engine did not say), at a verified head produced at [asOf] (unix seconds; null when
      * unknown). It may have changed since, as [BalanceReading.LastKnown] says, and is never a
-     * balance to act on.
+     * balance a quote or a signature acts on, but for a lenient draft, labelled, sent only after
+     * the check at a fresh head (owner rulings, 2026-11-06).
      */
     data class LastKnown(val units: TokenUnits, val blockNumber: Long?, val asOf: Long?) : TokenBalanceReading
 

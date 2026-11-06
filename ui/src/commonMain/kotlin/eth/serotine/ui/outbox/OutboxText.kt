@@ -65,6 +65,19 @@ fun conflictReason(conflict: QueueConflict, queued: QueuedTransaction): String {
     }
 }
 
+/**
+ * Why nothing new is quoted from an account that has a transaction queued, in either mode
+ * (docs/lenient-mode.md, *The outbox*, decision 6: one per account): the words every screen that
+ * quotes says it in, with a way to its status.
+ */
+const val QUEUED_FIRST = "A transaction from this account is waiting to be sent. Send or discard it first."
+
+/** [QUEUED_FIRST] where the screen has no button to its status: where the user finds it. */
+const val QUEUED_FIRST_SEE_ACTIVITY = "$QUEUED_FIRST Its status is first in the account's Activity."
+
+/** The button that opens the status of what the account has queued. */
+const val OPEN_QUEUED = "Open the transaction waiting to be sent"
+
 private fun amountOf(amount: UInt256, asset: TransferAsset, network: Network): String = when (asset) {
     TransferAsset.Native -> exactAmount(amount, NATIVE_DECIMALS, network.nativeSymbol)
     is TransferAsset.Erc20Token -> exactAmount(amount, asset.token.decimals, asset.token.symbol)

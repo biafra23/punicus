@@ -9,14 +9,18 @@ import eth.serotine.domain.model.Network
 import eth.serotine.domain.repository.AccountList
 import eth.serotine.domain.repository.BalanceReading
 import eth.serotine.domain.repository.LightClientStatus
+import eth.serotine.domain.repository.OutboxList
+import eth.serotine.domain.repository.QueuedTransaction
 import eth.serotine.domain.repository.TokenBalanceReading
 import eth.serotine.domain.usecase.AccountValue
+import eth.serotine.domain.usecase.AcknowledgeLostOutbox
 import eth.serotine.domain.usecase.EnsNameCheck
 import eth.serotine.domain.usecase.ObserveAmountsHidden
 import eth.serotine.domain.usecase.ObserveEnabledNetworks
 import eth.serotine.domain.usecase.ObserveEnsNames
 import eth.serotine.domain.usecase.ObserveLightClient
 import eth.serotine.domain.usecase.ObserveNetworkLive
+import eth.serotine.domain.usecase.ObserveOutbox
 import eth.serotine.domain.usecase.ObservePortfolio
 import eth.serotine.domain.usecase.OfferHandoff
 import eth.serotine.domain.usecase.ObserveSafes
@@ -71,7 +75,8 @@ import kotlinx.coroutines.launch
  * account is navigation, which the screen's route turns into the destination of the screen or
  * dialog that does it, except turning a network on again ([turnOnNetwork]) and letting a light
  * client parked on a stale checkpoint catch up anyway ([syncPastStaleAnchor]; owner's request,
- * 2026-10-24), which its section warns of ([NetworkSection.staleAnchor]).
+ * 2026-10-24), which its section warns of ([NetworkSection.staleAnchor]). What lenient mode's
+ * outbox holds is said under each network's line, and queued bytes lost once, until [dismissLost].
  */
 class AccountsViewModel(
     observePortfolio: ObservePortfolio,
@@ -90,6 +95,13 @@ class AccountsViewModel(
     observeAmountsHidden: ObserveAmountsHidden,
     /** Hides amounts or shows them again: what a tap on the eye asks. */
     private val toggleAmountsHidden: ToggleAmountsHidden,
+    /**
+     * What lenient mode's outbox holds (docs/lenient-mode.md, *Where it shows*): each network's
+     * queued transactions under its line, and the notice of queued bytes lost, said once.
+     */
+    observeOutbox: ObserveOutbox,
+    /** Lets the lost notice go once the user dismissed it. */
+    private val acknowledgeLostOutbox: AcknowledgeLostOutbox,
     /** Now, in unix seconds: what the sections date their head blocks against. */
     private val clock: () -> Long = ::epochSecondsNow,
     /** How the banner dates an upgrade, and a row a balance last verified (unix seconds). */
@@ -157,6 +169,24 @@ class AccountsViewModel(
     /** What the screen says once, until it has: a network that could not be turned on. */
     private val message = MutableStateFlow<String?>(null)
 
+    /**
+     * What each network's accounts have queued in lenient mode, by chain id, said under its line
+     * (docs/lenient-mode.md, *Where it shows*), and whether queued signed bytes were lost.
+     */
+    private data class OutboxLines(val byNetwork: Map<Long, String>, val lost: Boolean)
+
+    private val outboxLines = combine(
+        observeOutbox(),
+        combine(clientStatuses) { statuses -> statuses.map { it is LightClientStatus.Synced } },
+    ) { list, synced ->
+        val loaded = list as? OutboxList.Loaded
+        val byNetwork = Network.entries.mapNotNull { network ->
+            val queued = loaded?.queued.orEmpty().filter { it.network == network }
+            queuedLine(queued, verifies = synced[network.ordinal])?.let { network.chainId to it }
+        }.toMap()
+        OutboxLines(byNetwork, loaded?.lost == true)
+    }.distinctUntilChanged()
+
     val uiState: StateFlow<AccountsUiState> = combine(
         observePortfolio(),
         combine(observeSafes(), ensNames, ::Pair),
@@ -182,6 +212,17 @@ class AccountsViewModel(
                     }
                 }
             }
+        }
+        // What the outbox holds, under each network's line in either view; the lost notice until dismissed.
+        .combine(outboxLines) { state, lines ->
+            if (state !is AccountsUiState.Ready) return@combine state
+            state.copy(
+                sections = state.sections.map { it.copy(queued = lines.byNetwork[it.chainId]) },
+                queued = Network.entries.mapNotNull { network ->
+                    lines.byNetwork[network.chainId]?.let { "${network.displayName}: $it" }
+                },
+                lostNotice = LOST.takeIf { lines.lost },
+            )
         }
         // Masked last, on the finished state; nothing is drawn before the choice is read, so a hidden
         // amount never shows for a moment at the start.
@@ -355,6 +396,11 @@ class AccountsViewModel(
         message.value = null
     }
 
+    /** The user dismissed [AccountsUiState.Ready.lostNotice]: it is said once. One that could not be saved says so. */
+    fun dismissLost() {
+        viewModelScope.launch { if (!acknowledgeLostOutbox()) message.value = LOST_NOT_DISMISSED }
+    }
+
     private fun stateOf(
         portfolio: Portfolio,
         safes: Map<AccountId, SafeReading>,
@@ -479,6 +525,36 @@ class AccountsViewModel(
     private companion object {
         /** For how long at most the list says a refresh is being answered, in seconds. */
         const val REFRESH_SHOWN_SECONDS = 15L
+
+        /**
+         * What Home says once queued signed bytes could not be opened (docs/lenient-mode.md, *The
+         * signed bytes kept*).
+         */
+        const val LOST = "A transaction waiting to be sent was lost: the key that sealed it on this device is gone " +
+            "(the key store was reset, or the app was restored on another device). Nothing was sent. Sign it again " +
+            "from Send if you still want to send it."
+
+        const val LOST_NOT_DISMISSED = "The notice could not be dismissed: it is shown again next time."
+
+        /**
+         * What a network's [queued] transactions come to, under its line: how many wait to be sent, how
+         * many need a signature again, and, while its light client does not [verifies], that the app
+         * open sends them sooner (decision 7). Null when nothing is queued.
+         */
+        fun queuedLine(queued: List<QueuedTransaction>, verifies: Boolean): String? {
+            val conflicts = queued.count { it.conflict != null }
+            val waiting = queued.size - conflicts
+            return listOfNotNull(
+                "$waiting waiting to be sent".takeIf { waiting > 0 },
+                when (conflicts) {
+                    0 -> null
+                    1 -> "1 needs your signature again"
+                    else -> "$conflicts need your signature again"
+                },
+                "Keep Serotine open to send ${if (waiting == 1) "it" else "them"} sooner"
+                    .takeIf { waiting > 0 && !verifies },
+            ).takeIf { it.isNotEmpty() }?.joinToString(" · ")
+        }
 
         /** How long a network's shared status outlives its last subscriber: across a configuration change. */
         const val SHARE_TIMEOUT_MS = 5_000L

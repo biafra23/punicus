@@ -99,6 +99,19 @@ import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.test.setMain
+import eth.serotine.ui.MemoryOutbox
+import eth.serotine.domain.usecase.AcknowledgeLostOutbox
+import eth.serotine.domain.usecase.ObserveOutbox
+import eth.serotine.domain.repository.SentAction
+import eth.serotine.domain.repository.QueuedTransaction
+import eth.serotine.domain.repository.QueueConflict
+import eth.serotine.domain.repository.OutboxList
+import eth.serotine.domain.repository.FeeLevel
+import eth.serotine.domain.repository.DraftBasis
+import eth.serotine.domain.model.UInt256
+import eth.serotine.domain.model.TransferAsset
+import eth.serotine.domain.model.SignedTransfer
+import eth.serotine.domain.model.Eip1559Transaction
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class AccountsViewModelTest {
@@ -164,6 +177,8 @@ class AccountsViewModelTest {
             ObserveNetworkLive(freshness),
             ObserveAmountsHidden(hiddenSetting),
             ToggleAmountsHidden(hiddenSetting),
+            ObserveOutbox(outbox),
+            AcknowledgeLostOutbox(outbox),
             clock = { now },
             formatTime = { "<$it>" },
             offerHandoff = offerHandoff,
@@ -171,6 +186,9 @@ class AccountsViewModelTest {
     }
 
     private val freshness = FakeFreshness()
+
+    /** Lenient mode's outbox, empty unless a test queues something. */
+    private val outbox = MemoryOutbox()
 
     private val amountsHidden = MemoryAmountsHidden()
 
@@ -1029,5 +1047,77 @@ class AccountsViewModelTest {
         assertTrue(ready.unreachable.isEmpty(), "only the user's word lets it catch up: no retry is promised")
         assertNotNull(ready.sections.single().staleAnchor)
     }
-}
 
+    // Lenient mode's outbox (docs/lenient-mode.md, *Where it shows*; owner rulings, 2026-11-06).
+
+    /** A transfer queued from Daily, in conflict when [conflict] says so. */
+    private fun queuedFromDaily(id: String, conflict: QueueConflict? = null) = QueuedTransaction(
+        network = Network.SEPOLIA,
+        account = daily.address,
+        id = id,
+        action = SentAction.Transfer(treasury.address, TransferAsset.Native, UInt256.of(1)),
+        level = FeeLevel.NORMAL,
+        transaction = Eip1559Transaction(
+            chainId = Network.SEPOLIA.chainId,
+            nonce = 1,
+            maxPriorityFeePerGas = UInt256.of(1),
+            maxFeePerGas = UInt256.of(2),
+            gasLimit = 50_000,
+            to = treasury.address,
+            value = UInt256.of(1),
+        ),
+        signed = SignedTransfer(byteArrayOf(2, 1)).takeIf { conflict == null },
+        maxCost = UInt256.of(100_001),
+        signedAt = now - 60,
+        builtOn = DraftBasis(1, null, null, null, 1, null, 1, null),
+        conflict = conflict,
+    )
+
+    @Test
+    fun whatANetworkHasQueuedIsSaidUnderItsLineInBothViews() = runTest {
+        Dispatchers.setMain(UnconfinedTestDispatcher(testScheduler))
+        repository.accounts = listOf(daily)
+        outbox.list.value = OutboxList.Loaded(listOf(queuedFromDaily("0x" + "9a".repeat(32))))
+        val viewModel = viewModel()
+        backgroundScope.launch { viewModel.uiState.collect {} }
+        runCurrent()
+
+        val ready = assertIs<AccountsUiState.Ready>(viewModel.uiState.value)
+        assertEquals("1 waiting to be sent · Keep Serotine open to send it sooner", ready.sections.single().queued)
+        assertEquals(listOf("Sepolia: 1 waiting to be sent · Keep Serotine open to send it sooner"), ready.queued)
+
+        // Its light client verifies: it is checked and sent shortly, with nothing to ask of the user.
+        lightClient.status.value = LightClientStatus.Synced(headBlock = 9, headTimestamp = now, finalized = null)
+        runCurrent()
+        assertEquals(
+            "1 waiting to be sent",
+            assertIs<AccountsUiState.Ready>(viewModel.uiState.value).sections.single().queued,
+        )
+
+        outbox.list.value = OutboxList.Loaded(
+            listOf(queuedFromDaily("0x" + "9b".repeat(32), QueueConflict.InsufficientFunds)),
+        )
+        runCurrent()
+        assertEquals(
+            "1 needs your signature again",
+            assertIs<AccountsUiState.Ready>(viewModel.uiState.value).sections.single().queued,
+        )
+    }
+
+    @Test
+    fun queuedBytesLostAreSaidOnceUntilDismissed() = runTest {
+        Dispatchers.setMain(UnconfinedTestDispatcher(testScheduler))
+        repository.accounts = listOf(daily)
+        outbox.list.value = OutboxList.Loaded(emptyList(), lost = true)
+        val viewModel = viewModel()
+        backgroundScope.launch { viewModel.uiState.collect {} }
+        runCurrent()
+
+        val notice = assertNotNull(assertIs<AccountsUiState.Ready>(viewModel.uiState.value).lostNotice)
+        assertTrue(notice.startsWith("A transaction waiting to be sent was lost"), notice)
+
+        viewModel.dismissLost()
+        runCurrent()
+        assertNull(assertIs<AccountsUiState.Ready>(viewModel.uiState.value).lostNotice)
+    }
+}

@@ -17,8 +17,10 @@ import kotlinx.coroutines.flow.update
  * its head, so a screen can say how old it is, and it never stands for longer than
  * [MAX_HELD_SECONDS], the hour the owner allowed (owner's decisions, 2026-10-26). It is held only
  * for a subscriber that has had a proof made for it ([ProvenReads]): a new one (a screen opening,
- * the one-shot read of a quote, a review or a signature) gets a fresh proof, as every quote,
- * review and signature reads fresh state (`.claude/rules/trust.md`). Unlike a proof
+ * the one-shot read of a quote, a review or a signature) gets a fresh proof, as in strict mode every
+ * quote, review and signature reads fresh state, and in lenient mode the check before sending does
+ * (`.claude/rules/trust.md`; owner rulings, 2026-11-06). A lenient draft reads the same way, and is
+ * built on the proof last kept only while no head can be read at. Unlike a proof
  * [AddressActivity.unchangedSince] vouches for, a held one is not checked against a reorganisation
  * of its block: on a network without block access lists, for up to that hour, a value shown may
  * rest on a block a reorg has since replaced, as it may have changed for any other reason.

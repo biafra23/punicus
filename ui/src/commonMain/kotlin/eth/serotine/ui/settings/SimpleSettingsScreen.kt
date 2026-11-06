@@ -6,8 +6,8 @@ import androidx.compose.ui.Modifier
 /**
  * The Settings tab in simple mode (docs/simple-ui.md, T1): [SettingsScreen] as it is, each
  * network's row saying how it stands without a block number ([NetworkRow.simpleLine]: "Up to date",
- * "Test network · live", "Can't check right now"). The rest, Detailed view's switch among it, is
- * the same in both views.
+ * "Test network · live", "Can't check right now"). The rest, Detailed view's switch and *Sign
+ * while syncing* among it, is the same in both views.
  */
 @Composable
 fun SimpleSettingsScreen(
@@ -25,6 +25,7 @@ fun SimpleSettingsScreen(
     onDetailedViewChange: (Boolean) -> Unit = {},
     onConnections: () -> Unit = {},
     connectionsOff: Boolean = false,
+    onSignWhileSyncingChange: (Boolean) -> Unit = {},
 ) = SettingsScreen(
     state.copy(networks = state.networks.map { it.copy(line = it.simpleLine) }),
     onCurrency,
@@ -40,4 +41,5 @@ fun SimpleSettingsScreen(
     onDetailedViewChange,
     onConnections,
     connectionsOff,
+    onSignWhileSyncingChange,
 )

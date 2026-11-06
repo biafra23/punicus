@@ -9,6 +9,7 @@ import eth.serotine.domain.model.AccountKind
 import eth.serotine.domain.model.Address
 import eth.serotine.domain.model.DisplayCurrency
 import eth.serotine.domain.model.Network
+import eth.serotine.domain.model.SyncPolicy
 import eth.serotine.domain.model.TransferAsset
 import eth.serotine.domain.model.UInt256
 import eth.serotine.domain.model.WalletPassword
@@ -21,13 +22,21 @@ import eth.serotine.domain.repository.Signing
 import eth.serotine.domain.repository.Unlock
 import eth.serotine.domain.usecase.AccountValue
 import eth.serotine.domain.usecase.DescribeKeyStore
+import eth.serotine.domain.usecase.DraftInput
+import eth.serotine.domain.usecase.DraftTransfer
 import eth.serotine.domain.usecase.ObserveAccountValue
 import eth.serotine.domain.usecase.ObserveAccounts
+import eth.serotine.domain.usecase.ObserveEnabledNetworks
+import eth.serotine.domain.usecase.ObserveSyncPolicy
+import eth.serotine.domain.usecase.QueueTransfer
 import eth.serotine.domain.usecase.QuoteTransfer
 import eth.serotine.domain.usecase.RebroadcastTransfer
 import eth.serotine.domain.usecase.RecipientLookup
 import eth.serotine.domain.usecase.ResolveRecipient
 import eth.serotine.domain.usecase.SendTransfer
+import eth.serotine.domain.usecase.TransferDraft
+import eth.serotine.domain.usecase.TransferDrafting
+import eth.serotine.domain.usecase.TransferQueuing
 import eth.serotine.domain.usecase.TransferQuote
 import eth.serotine.domain.usecase.TransferQuoting
 import eth.serotine.domain.usecase.TransferSending
@@ -48,6 +57,7 @@ import eth.serotine.ui.components.TransferForm
 import eth.serotine.ui.components.UnlockStep
 import eth.serotine.ui.components.ZERO_ADDRESS
 import eth.serotine.ui.components.addressFieldLabel
+import eth.serotine.ui.components.agoText
 import eth.serotine.ui.components.amountHint
 import eth.serotine.ui.components.assetOptions
 import eth.serotine.ui.components.biometricsOn
@@ -57,6 +67,7 @@ import eth.serotine.ui.components.exactAmount
 import eth.serotine.ui.components.feeDetail
 import eth.serotine.ui.components.figureText
 import eth.serotine.ui.components.grouped
+import eth.serotine.ui.components.levelName
 import eth.serotine.ui.components.notSentItem
 import eth.serotine.ui.components.notSignedText
 import eth.serotine.ui.components.promptDeadline
@@ -70,6 +81,8 @@ import eth.serotine.ui.components.resolveAgain
 import eth.serotine.ui.components.retryLookupWaits
 import eth.serotine.ui.components.typedAmount
 import eth.serotine.ui.components.verifiedAt
+import eth.serotine.ui.outbox.OPEN_QUEUED
+import eth.serotine.ui.outbox.QUEUED_FIRST
 import kotlin.time.TimeMark
 import kotlin.time.TimeSource
 import kotlinx.coroutines.CancellationException
@@ -80,6 +93,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
@@ -105,6 +119,16 @@ import kotlinx.coroutines.withContext
  * The compose step dates each balance against [now] (unix seconds), anew every second: simple mode
  * shows how long ago it was proved in place of its block (docs/simple-ui.md).
  *
+ * In lenient mode (*Sign while syncing*, [ObserveSyncPolicy]; docs/lenient-mode.md, owner rulings,
+ * 2026-11-06), on a network that is on ([ObserveEnabledNetworks]; one that is off is not syncing):
+ * the compose step offers a balance last verified too, labelled, with no fiat value; Max on the
+ * network's currency leaves room for the most the fee can be ([DraftTransfer.mostNative]); and a
+ * review the strict quote refuses as still syncing is drafted on the state last verified instead
+ * ([DraftTransfer]), reviewed with each figure's age, and signed with no deadline into the outbox
+ * ([QueueTransfer]), never broadcast from here: the outbox's check at a fresh head sends it. Strict
+ * mode is as above, unchanged. [fill], when given, is what the compose step opens with: a queued
+ * transfer signed again.
+ *
  * One of the ViewModels the [WalletPassword] passes through (CLAUDE.md, *Trust*): it holds it in
  * the review's state while the field is shown, hands it to the signer in an [Unlock], and never
  * logs, saves or caches it; it is dropped once used, when the screen is not shown ([onHidden])
@@ -121,6 +145,15 @@ class SendViewModel(
     private val sendTransfer: SendTransfer,
     private val rebroadcastTransfer: RebroadcastTransfer,
     private val warmFeeHistory: WarmFeeHistory,
+    /** Whether the user turned on *Sign while syncing* (lenient mode); strict by default. */
+    observeSyncPolicy: ObserveSyncPolicy,
+    /** Which networks are on: a network that is off is not syncing, and nothing is drafted on it. */
+    observeEnabledNetworks: ObserveEnabledNetworks,
+    /** A lenient draft of the transfer, on the state last verified, and lenient Max. */
+    private val draftTransfer: DraftTransfer,
+    /** Signs a reviewed draft and queues it in the outbox. */
+    private val queueTransfer: QueueTransfer,
+    fill: SendFill? = null,
     private val timeSource: TimeSource = TimeSource.Monotonic,
     private val now: () -> Long = ::epochSecondsNow,
 ) : ViewModel() {
@@ -156,7 +189,10 @@ class SendViewModel(
         data class Cannot(val message: String) : Sender
     }
 
-    /** Everything the compose step is derived from. */
+    /**
+     * Everything the compose step is derived from; [lenient] while *Sign while syncing* is on and
+     * the network is on: a balance last verified is offered, and a review may be a draft.
+     */
     private class Model(
         val sender: Sender,
         val accounts: List<Account>,
@@ -166,6 +202,7 @@ class SendViewModel(
         val tokensRead: Boolean,
         val inputs: Inputs,
         val lookup: RecipientState,
+        val lenient: Boolean,
     )
 
     /** A transfer the compose step can have quoted, exactly as it has it. */
@@ -194,7 +231,8 @@ class SendViewModel(
         /**
          * Composing; [quoting] while a review is quoted, [error] why the last one was not, and
          * [earlier] the hash of an earlier transaction that may still be on its way, which held it
-         * back: its status is where it is tried again.
+         * back: its status is where it is tried again; [queued] when it is the id of what the
+         * account has queued instead, whose status says where it stands.
          */
         data class Composing(
             val quoting: Boolean = false,
@@ -202,6 +240,7 @@ class SendViewModel(
             val earlier: String? = null,
             /** [error] in simple mode's words, null where it is the same: no block named. */
             val simpleError: String? = null,
+            val queued: Boolean = false,
         ) : Step
 
         /**
@@ -226,14 +265,39 @@ class SendViewModel(
                 get() = !refreshing && !signing && notSent == null
         }
 
+        /**
+         * Lenient mode: [draft] of [request], drafted on the state last verified, under review;
+         * [sender] and [accounts] as when it was drafted, as for [Reviewing]. Never quoted again
+         * while shown: a draft is old by definition, and the check before sending reads fresh state.
+         */
+        data class Drafting(
+            val request: Request,
+            val draft: TransferDraft,
+            val unlock: UnlockStep,
+            val sender: SendFrom,
+            val accounts: List<Account>,
+            val signing: Boolean = false,
+        ) : Step
+
         data class Sent(val hash: String) : Step
+
+        /** Signed and queued under [id]: nothing was broadcast. */
+        data class Queued(val id: String) : Step
     }
 
     // The checksum once, not on every balance reading.
     private val display = Eip55.format(from)
 
-    private val inputs = MutableStateFlow(Inputs(asset))
+    private val inputs = MutableStateFlow(
+        fill?.let { Inputs(asset, to = it.to, amount = it.amount, fee = it.fee) } ?: Inputs(asset),
+    )
     private val step = MutableStateFlow<Step>(Step.Composing())
+
+    /** Whether a review may be a lenient draft: *Sign while syncing* on, and the network on. */
+    private val lenient: Flow<Boolean> =
+        combine(observeSyncPolicy(), observeEnabledNetworks()) { policy, on ->
+            policy == SyncPolicy.LENIENT && network in on
+        }.distinctUntilChanged()
 
     /** The quote, signature or broadcast in flight. */
     private var job: Job? = null
@@ -249,8 +313,14 @@ class SendViewModel(
         recipientStates(inputs.map { it.to.trim() to it.lookupAttempt }, ::lookUp)
 
     private val model: StateFlow<Model?> =
-        combine(observeAccounts(), observeAccountValue(account), inputs, lookup) { list, value, inputs, lookup ->
-            modelOf(list, value, inputs, lookup)
+        combine(
+            observeAccounts(),
+            observeAccountValue(account),
+            inputs,
+            lookup,
+            lenient,
+        ) { list, value, inputs, lookup, lenient ->
+            modelOf(list, value, inputs, lookup, lenient)
         }.stateIn(
             viewModelScope,
             // As on the account screens: back after the timeout, no old balance stands as current.
@@ -259,9 +329,10 @@ class SendViewModel(
         )
 
     val uiState: StateFlow<SendUiState> = combine(model, step) { model, step -> model to step }
-        // A balance's age, which simple mode shows, is dated anew every second on the compose step.
+        // A balance's age, which simple mode shows, is dated anew every second on the compose step;
+        // a draft's figures likewise on its review.
         .redatedWhile { (model, step) ->
-            step is Step.Composing && model?.options.orEmpty().any { it.provenAt != null }
+            step is Step.Drafting || step is Step.Composing && model?.options.orEmpty().any { it.provenAt != null }
         }
         .map { (model, step) -> render(model, step) }
         .stateIn(
@@ -290,12 +361,41 @@ class SendViewModel(
 
     /**
      * Fills in the chosen asset's whole verified balance. For the network's currency that leaves
-     * nothing for the fee, which the quote then says.
+     * nothing for the fee, which the quote then says. In lenient mode, the network's currency is
+     * filled in less the most the fee can be and what the account's transactions not mined yet may
+     * still take ([DraftTransfer.mostNative]): a draft has no quote to say the fee does not fit. A
+     * token's is its balance, verified or last verified.
      */
     fun onMax() {
-        val option = model.value?.selected ?: return
-        val balance = option.balance ?: return
-        change { it.copy(amount = balance.formatUnits(option.decimals)) }
+        val model = model.value ?: return
+        val option = model.selected ?: return
+        if (step.value !is Step.Composing) return
+        if (!model.lenient || option.asset != TransferAsset.Native) {
+            val balance = option.balance ?: return
+            change { it.copy(amount = balance.formatUnits(option.decimals)) }
+            return
+        }
+        val level = model.inputs.fee
+        job?.cancel()
+        job = viewModelScope.launch {
+            val most = try {
+                draftTransfer.mostNative(from, level)
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                null // the use case promises not to throw; the backstop
+            }
+            // Not through change(), which would cancel this very job.
+            if (step.value !is Step.Composing) return@launch
+            when {
+                most == null -> step.value = Step.Composing(error = maxUnknown())
+                most.isZero -> step.value = Step.Composing(error = maxNothingLeft())
+                else -> {
+                    inputs.update { it.copy(amount = most.formatUnits(NATIVE_DECIMALS)) }
+                    step.value = Step.Composing()
+                }
+            }
+        }
     }
 
     /** Chooses the fee [level]. */
@@ -325,8 +425,12 @@ class SendViewModel(
      * them, never a new quote, may send them again.
      */
     fun edit() {
-        val current = step.value as? Step.Reviewing ?: return
-        if (current.signing || current.notSent?.canRetry == true) return
+        when (val current = step.value) {
+            is Step.Reviewing -> if (current.signing || current.notSent?.canRetry == true) return
+            // A draft's: not while it is signed and queued, which leaving would only hide.
+            is Step.Drafting -> if (current.signing) return
+            else -> return
+        }
         job?.cancel()
         step.value = Step.Composing()
     }
@@ -366,23 +470,44 @@ class SendViewModel(
 
     /** The password field now reads [text]. */
     fun onPasswordChange(text: String) = step.update { current ->
-        if (current is Step.Reviewing && !current.signing && current.notSent == null) {
-            current.copy(unlock = current.unlock.copy(password = WalletPassword(text), error = null))
-        } else {
-            current
+        when {
+            current is Step.Reviewing && !current.signing && current.notSent == null ->
+                current.copy(unlock = current.unlock.copy(password = WalletPassword(text), error = null))
+            current is Step.Drafting && !current.signing ->
+                current.copy(unlock = current.unlock.copy(password = WalletPassword(text), error = null))
+            else -> current
         }
     }
 
-    /** Signs the reviewed transfer with the typed wallet password, and broadcasts it. */
+    /**
+     * Signs the reviewed transfer with the typed wallet password, and broadcasts it; a lenient draft
+     * is signed and queued instead, never broadcast from here.
+     */
     fun sign() {
+        (step.value as? Step.Drafting)?.let { draft ->
+            val password = draft.unlock.password
+            if (draft.signing || password.text.isEmpty()) return
+            return queue(draft, Unlock.WithPassword(password))
+        }
         val current = step.value as? Step.Reviewing ?: return
         val password = current.unlock.password
         if (!current.idle || password.text.isEmpty() || requoted(current)) return
         sign(current, Unlock.WithPassword(password))
     }
 
-    /** Signs the reviewed transfer with a fingerprint or face, and broadcasts it. */
+    /**
+     * Signs the reviewed transfer with a fingerprint or face, and broadcasts it; a lenient draft is
+     * signed and queued instead, with no deadline on the prompt: a draft is old by definition, and
+     * the minute applies to the check before sending (docs/lenient-mode.md, *The draft's review*).
+     */
     fun signWithBiometrics() {
+        (step.value as? Step.Drafting)?.let { draft ->
+            if (draft.signing || !draft.unlock.biometrics) return
+            val amount = exactAmount(draft.draft.amount, draft.request.option.decimals, draft.request.option.symbol)
+            // The recipient in full: the prompt is the last thing read before the key signs.
+            val reason = "Sign and queue $amount to ${Eip55.format(draft.draft.to)}"
+            return queue(draft, Unlock.WithBiometrics(reason, notAfter = null))
+        }
         val current = step.value as? Step.Reviewing ?: return
         if (!current.idle || !current.unlock.biometrics || requoted(current)) return
         // The prompt gets what is left of the quote's age: past it, nothing is signed, and it is made again.
@@ -437,10 +562,12 @@ class SendViewModel(
         shown = false
         if ((step.value as? Step.Composing)?.quoting == true) hiddenWhileQuoting = true
         step.update { current ->
-            if (current is Step.Reviewing) {
-                current.copy(unlock = current.unlock.copy(password = WalletPassword.EMPTY), hidden = true)
-            } else {
-                current
+            when (current) {
+                is Step.Reviewing ->
+                    current.copy(unlock = current.unlock.copy(password = WalletPassword.EMPTY), hidden = true)
+                // A draft is not quoted again when shown: only the password goes.
+                is Step.Drafting -> current.copy(unlock = current.unlock.copy(password = WalletPassword.EMPTY))
+                else -> current
             }
         }
     }
@@ -498,9 +625,53 @@ class SendViewModel(
     }
 
     /**
+     * Signs [draft] and queues it ([QueueTransfer]): nothing is broadcast. Once queued, the status
+     * of its id follows it; another transaction queued from the account meanwhile returns to the
+     * compose step, which says so, with its status. A signature the outbox could not keep is
+     * dropped, and said.
+     */
+    private fun queue(draft: Step.Drafting, unlock: Unlock) {
+        // The password leaves the state now: it is in the unlock, which the signer zeroes after use.
+        val unlocked = draft.unlock.copy(password = WalletPassword.EMPTY, error = null)
+        step.value = draft.copy(signing = true, unlock = unlocked)
+        job = viewModelScope.launch {
+            // To its end even when the screen is left meanwhile: a signature is kept or dropped, never half.
+            val queuing = withContext(NonCancellable) {
+                try {
+                    queueTransfer(draft.draft, unlock)
+                } catch (e: Exception) {
+                    null // the use case promises not to throw; the backstop
+                }
+            }
+            step.update { latest ->
+                if (latest !is Step.Drafting) return@update latest
+                when (queuing) {
+                    is TransferQueuing.Queued -> Step.Queued(queuing.queued.id)
+                    is TransferQueuing.NotSigned -> latest.copy(
+                        signing = false,
+                        unlock = latest.unlock.copy(
+                            error = notSignedText(queuing.signing, QUEUE_FAILED),
+                            biometrics = latest.unlock.biometrics && biometricsStillOffered(queuing.signing),
+                        ),
+                    )
+                    is TransferQueuing.AccountBusy -> Step.Composing(
+                        error = QUEUED_FIRST,
+                        earlier = queuing.queued,
+                        queued = true,
+                    )
+                    TransferQueuing.NotSaved ->
+                        latest.copy(signing = false, unlock = latest.unlock.copy(error = NOT_KEPT))
+                    null -> latest.copy(signing = false, unlock = latest.unlock.copy(error = QUEUE_FAILED))
+                }
+            }
+        }
+    }
+
+    /**
      * The review of [request], quoted now, with [unlock] (a new one when null), or the compose
      * step saying why there is none. A name is resolved again first: what is signed is the
-     * address the name has now, and one that moved is said, not signed.
+     * address the name has now, and one that moved is said, not signed. In lenient mode, a quote
+     * refused as still syncing is drafted instead ([drafted]).
      */
     private suspend fun quoted(request: Request, unlock: UnlockStep?, sender: SendFrom, accounts: List<Account>): Step {
         val to = when (val again = resolveAgain(request.to, ::lookUp)) {
@@ -520,11 +691,8 @@ class SendViewModel(
             TransferQuoting.Unavailable(ReadUnavailable.UNPROVEN) // the use case promises not to throw; the backstop
         }
         if (quoting !is TransferQuoting.Quoted) {
-            return Step.Composing(
-                error = refusal(quoting, request.option),
-                earlier = (quoting as? TransferQuoting.EarlierMaybeSent)?.hash,
-                simpleError = (quoting as? TransferQuoting.Reverts)?.let { simpleReverts(request.option) },
-            )
+            if (quoting.syncing && model.value?.lenient == true) return drafted(request.copy(to = to), sender, accounts)
+            return refused(quoting, request.option)
         }
         return Step.Reviewing(
             request.copy(to = to),
@@ -535,6 +703,74 @@ class SendViewModel(
             accounts,
         )
     }
+
+    /**
+     * The compose step saying why [quoting] is no quote; an earlier transaction's status offered
+     * where one held it back.
+     */
+    private fun refused(quoting: TransferQuoting, option: AssetOption): Step.Composing = Step.Composing(
+        error = refusal(quoting, option),
+        earlier = (quoting as? TransferQuoting.EarlierMaybeSent)?.hash,
+        simpleError = (quoting as? TransferQuoting.Reverts)?.let { simpleReverts(option) },
+        queued = (quoting as? TransferQuoting.EarlierMaybeSent)?.queued == true,
+    )
+
+    /** Whether this strict refusal only waits for the light client to catch up: what a lenient draft stands in for. */
+    private val TransferQuoting.syncing: Boolean
+        get() = this == TransferQuoting.Syncing ||
+            (this is TransferQuoting.Unavailable && reason == ReadUnavailable.SYNCING)
+
+    /**
+     * [request] drafted on the state the light client verified last (docs/lenient-mode.md, *What a
+     * draft is built on*), for the draft's review; or the compose step saying why it is not: a
+     * refusal in strict mode's words, what it waits for, or what the account has queued. A name is
+     * not resolved for a draft (decision 8): one typed waits for the light client, as in strict mode.
+     */
+    private suspend fun drafted(request: Request, sender: SendFrom, accounts: List<Account>): Step {
+        if (request.to.name != null) return Step.Composing(error = NO_NAME_IN_A_DRAFT)
+        val option = request.option
+        val drafting = try {
+            draftTransfer(from, request.to.address, option.asset, request.amount, request.inputs.fee)
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            // The use case promises not to throw; the backstop.
+            TransferDrafting.Refused(TransferQuoting.Unavailable(ReadUnavailable.UNPROVEN))
+        }
+        return when (drafting) {
+            is TransferDrafting.Drafted -> Step.Drafting(
+                request,
+                drafting.draft,
+                UnlockStep(biometrics = biometricsOffered()),
+                sender,
+                accounts,
+            )
+            is TransferDrafting.Refused -> refused(drafting.quoting, option)
+            is TransferDrafting.Waits -> Step.Composing(error = waitsText(drafting.missing))
+            is TransferDrafting.AccountBusy ->
+                Step.Composing(error = QUEUED_FIRST, earlier = drafting.queued, queued = true)
+        }
+    }
+
+    /** What a draft waits for: [missing], which the light client never verified on this device. */
+    private fun waitsText(missing: DraftInput): String {
+        val what = when (missing) {
+            DraftInput.BALANCE -> "this account's balance"
+            DraftInput.NONCE -> "this account's count of transactions, which its next nonce comes from,"
+            DraftInput.FEES -> "${network.displayName}'s fees"
+        }
+        return "The light client is still syncing, and $what has never been verified on this device, so nothing " +
+            "can be prepared from it yet. The review waits for the light client to catch up."
+    }
+
+    /** Why lenient Max cannot be told: the balance, the count of transactions or the fees were never verified here. */
+    private fun maxUnknown(): String = "Max can't be worked out yet: this account's balance, its count of " +
+        "transactions or ${network.displayName}'s fees have not been verified on this device. Enter an amount, " +
+        "or wait for the light client to catch up."
+
+    /** Why lenient Max fills in nothing: the most the fee can be, and the transfers not mined yet, take it all. */
+    private fun maxNothingLeft(): String = "Nothing is left to send once the most the fee can be, and what " +
+        "transfers not mined yet may take, are set aside."
 
     /** Applies [change] to the compose step's inputs: only while composing, dropping a quote in flight. */
     private fun change(edit: (Inputs) -> Inputs) {
@@ -559,7 +795,13 @@ class SendViewModel(
             }
         }
 
-    private fun modelOf(list: AccountList, value: AccountValue, inputs: Inputs, lookup: RecipientState): Model {
+    private fun modelOf(
+        list: AccountList,
+        value: AccountValue,
+        inputs: Inputs,
+        lookup: RecipientState,
+        lenient: Boolean,
+    ): Model {
         // The sender's network's accounts only: the same address on another network is another account.
         val accounts = (list as? AccountList.Loaded)?.accounts.orEmpty().filter { it.network == network }
         val sender = when (list) {
@@ -574,7 +816,8 @@ class SendViewModel(
                 }
             }
         }
-        val options = assetOptions(value, inputs.asset, network)
+        // Lenient: a balance last verified is offered too, labelled, for a draft.
+        val options = assetOptions(value, inputs.asset, network, lastKnown = lenient)
         return Model(
             sender = sender,
             accounts = accounts,
@@ -584,6 +827,7 @@ class SendViewModel(
             tokensRead = value.tokensRead,
             inputs = inputs,
             lookup = lookup,
+            lenient = lenient,
         )
     }
 
@@ -591,9 +835,12 @@ class SendViewModel(
         val network = network.displayName
         val composing = when (step) {
             is Step.Sent -> return SendUiState.Sent(network, step.hash)
+            is Step.Queued -> return SendUiState.Queued(network, step.id)
             // A review stands on its quote, whatever the account list says meanwhile: a refresh
             // quotes it again, and the signature finds whether the key is still here.
             is Step.Reviewing -> return review(model?.accounts ?: step.accounts, step)
+            // A draft's likewise, on its draft.
+            is Step.Drafting -> return draftReview(model?.accounts ?: step.accounts, step)
             is Step.Composing -> step
         }
         model ?: return SendUiState.Loading(network)
@@ -643,7 +890,12 @@ class SendViewModel(
             simpleError = step.simpleError,
             canReview = !step.quoting && requestOf(model) != null,
         )
-        return SendUiState.Compose(form, inputs.fee, earlier = step.earlier)
+        return SendUiState.Compose(
+            form,
+            inputs.fee,
+            earlier = step.earlier,
+            earlierLabel = if (step.queued) OPEN_QUEUED else "Open the earlier transaction",
+        )
     }
 
     private fun review(accounts: List<Account>, step: Step.Reviewing): SendUiState.Review {
@@ -683,7 +935,7 @@ class SendViewModel(
                 "The transfer, run as a verified call from this account $ran, goes through."
             },
             unlock = step.unlock,
-            pending = pendingText(quote, option),
+            pending = pendingText(quote.pendingTokenAmount, quote.pendingCost, quote.heldByOrders, option),
             refreshing = step.refreshing,
             signing = step.signing,
             notSent = step.notSent?.let {
@@ -692,14 +944,77 @@ class SendViewModel(
         )
     }
 
+    /**
+     * The review of a lenient draft (docs/lenient-mode.md, *The draft's review*): each figure with
+     * the block it was last verified at and its age against [now], the balances after "if nothing
+     * changed", no simulation and no fiat value.
+     */
+    private fun draftReview(accounts: List<Account>, step: Step.Drafting): SendUiState.DraftReview {
+        val draft = step.draft
+        val basis = draft.builtOn
+        val option = step.request.option
+        val native = network.nativeSymbol
+        val at = now()
+        fun age(asOf: Long?) = asOf?.let { "as of ${agoText(it, at)}" } ?: "as last verified"
+        val tokenBalance = draft.tokenBefore?.let { before ->
+            val after = draft.tokenAfter ?: return@let null
+            BalanceChange(
+                what = "${option.symbol} balance",
+                before = exactAmount(before, option.decimals, option.symbol),
+                after = exactAmount(after, option.decimals, option.symbol) + IF_NOTHING_CHANGED,
+                verifiedAt = lastVerifiedAt(basis.tokenBalanceBlock),
+                age = age(basis.tokenBalanceAsOf),
+            )
+        }
+        val nativeBalance = BalanceChange(
+            what = "$native balance" + if (tokenBalance != null) ", which pays the fee" else "",
+            short = "$native balance",
+            before = exactAmount(draft.nativeBefore, NATIVE_DECIMALS, native),
+            after = "at least " + exactAmount(draft.nativeAfterAtLeast, NATIVE_DECIMALS, native) + IF_NOTHING_CHANGED,
+            verifiedAt = lastVerifiedAt(basis.balanceBlock),
+            age = age(basis.balanceAsOf),
+        )
+        val transaction = draft.transaction
+        val oldest = basis.oldestAsOf?.let { agoText(it, at) } ?: "an earlier block"
+        return SendUiState.DraftReview(
+            network = network.displayName,
+            from = step.sender,
+            amount = exactAmount(draft.amount, option.decimals, option.symbol),
+            asset = option.choice(),
+            recipient = recipientItem(step.request.to, accounts, option),
+            preparedOn = "Prepared on data from $oldest. It's checked on chain again before it's sent.",
+            maxFee = exactAmount(draft.maxFee, NATIVE_DECIMALS, native),
+            feeDetail = "${levelName(draft.level)} fee: ${grouped(transaction.gasLimit)} gas, the most this " +
+                "transfer is signed for, × at most ${transaction.maxFeePerGas.formatUnits(GWEI_DECIMALS)} gwei, " +
+                "from the fee history last verified up to block ${grouped(basis.feeBlock)}. Only the gas used, " +
+                "at what the block charges, is paid.",
+            feeAge = "Fees ${age(basis.feeAsOf)}",
+            nonce = "Nonce ${transaction.nonce}, after this account's count of mined transactions last verified at " +
+                "block ${grouped(basis.nonceBlock)}",
+            nonceAge = "Nonce ${transaction.nonce}, counted ${age(basis.nonceAsOf)}",
+            balances = listOfNotNull(tokenBalance, nativeBalance),
+            unlock = step.unlock,
+            pending = pendingText(draft.pendingTokenAmount, draft.pendingCost, draft.heldByOrders, option),
+            signing = step.signing,
+        )
+    }
+
+    /** The block a draft's figure was last verified at, as its review says it. */
+    private fun lastVerifiedAt(block: Long?) = block?.let { "last verified at block ${grouped(it)}" } ?: "last verified"
+
     /** What this account's earlier transfers, not mined yet, and its CoW orders may still take, when anything. */
-    private fun pendingText(quote: TransferQuote, option: AssetOption): String? {
+    private fun pendingText(
+        pendingTokenAmount: UInt256?,
+        pendingCost: UInt256,
+        heldByOrders: UInt256?,
+        option: AssetOption,
+    ): String? {
         val native = network.nativeSymbol
         val parts = listOfNotNull(
-            quote.pendingTokenAmount?.takeUnless { it.isZero }?.let { exactAmount(it, option.decimals, option.symbol) },
-            quote.pendingCost.takeUnless { it.isZero }?.let { "up to " + exactAmount(it, NATIVE_DECIMALS, native) },
+            pendingTokenAmount?.takeUnless { it.isZero }?.let { exactAmount(it, option.decimals, option.symbol) },
+            pendingCost.takeUnless { it.isZero }?.let { "up to " + exactAmount(it, NATIVE_DECIMALS, native) },
         )
-        val held = quote.heldByOrders?.takeUnless { it.isZero }?.let { exactAmount(it, option.decimals, option.symbol) }
+        val held = heldByOrders?.takeUnless { it.isZero }?.let { exactAmount(it, option.decimals, option.symbol) }
         val sentences = listOfNotNull(
             parts.takeIf { it.isNotEmpty() }?.let {
                 "Earlier transfers from this account, not mined yet, may still take ${it.joinToString(" and ")}."
@@ -773,9 +1088,14 @@ class SendViewModel(
                 "time: try again."
             ReadUnavailable.REFUSED -> "The light client on this device cannot quote this transfer."
         }
-        is TransferQuoting.EarlierMaybeSent -> "An earlier transaction from this account may still be on its way: " +
-            "no peer answered when it was broadcast, and no block has it yet. Try it again from its status rather " +
-            "than sign a new one, which could pay twice."
+        // Queued in lenient mode: one per account, in either mode (docs/lenient-mode.md, decision 6).
+        is TransferQuoting.EarlierMaybeSent -> if (quoting.queued) {
+            QUEUED_FIRST
+        } else {
+            "An earlier transaction from this account may still be on its way: no peer answered when it was " +
+                "broadcast, and no block has it yet. Try it again from its status rather than sign a new one, which " +
+                "could pay twice."
+        }
     }
 
     /** What [text] names, resolved ([ResolveRecipient]); never throws. */
@@ -813,8 +1133,15 @@ class SendViewModel(
     }
 
     private companion object {
+        const val GWEI_DECIMALS = 9
+        const val IF_NOTHING_CHANGED = ", if nothing changed"
         const val SEND_FAILED =
             "Serotine could not finish this transfer. Check the account's balance before you send again."
+        const val QUEUE_FAILED = "Serotine could not finish signing this transfer. Nothing was queued or sent."
+        const val NOT_KEPT = "Signed, but the outbox could not keep it, so the signature was dropped: nothing was " +
+            "queued or sent. Try again."
+        const val NO_NAME_IN_A_DRAFT = "The light client is still syncing, and a name is resolved only once it has " +
+            "caught up: to prepare this transfer now, enter the address, or pick one of your accounts."
         const val LIST_UNAVAILABLE =
             "Your account list cannot be read right now, so nothing can be sent. Serotine keeps trying."
         const val NOT_IN_WALLET = "This account is not in your wallet any more."

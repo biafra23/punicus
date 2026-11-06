@@ -66,6 +66,8 @@ import eth.serotine.domain.usecase.WarmFeeHistory
 import eth.serotine.domain.usecase.WrapQuote
 import eth.serotine.domain.usecase.WrapQuoting
 import eth.serotine.ui.components.AssetOption
+import eth.serotine.ui.outbox.OPEN_QUEUED
+import eth.serotine.ui.outbox.QUEUED_FIRST
 import eth.serotine.ui.components.BalanceChange
 import eth.serotine.ui.components.Eip55
 import eth.serotine.ui.components.NATIVE_DECIMALS
@@ -1062,10 +1064,7 @@ class SwapViewModel(
             when (val wrapping = askWrap(request)) {
                 WrapQuoting.NotAWrap -> Unit
                 is WrapQuoting.Quoted -> return Quoted.Wrap(wrapping.quote)
-                is WrapQuoting.EarlierMaybeSent -> return Step.Composing(
-                    error = EARLIER_MAYBE_SENT,
-                    earlier = EarlierItem(wrapping.hash, "Open the earlier transaction", waiting = false),
-                )
+                is WrapQuoting.EarlierMaybeSent -> return heldBack(wrapping.hash, wrapping.queued)
                 else -> return Step.Composing(error = wrapRefusal(wrapping, request))
             }
         }
@@ -1120,10 +1119,7 @@ class SwapViewModel(
             info = earlierSwapText(request),
             earlier = EarlierItem(approving.hash, "Open the earlier swap", waiting = true),
         )
-        is ApprovalQuoting.EarlierMaybeSent -> Step.Composing(
-            error = EARLIER_MAYBE_SENT,
-            earlier = EarlierItem(approving.hash, "Open the earlier transaction", waiting = false),
-        )
+        is ApprovalQuoting.EarlierMaybeSent -> heldBack(approving.hash, approving.queued)
         else -> Step.Composing(
             error = approvalRefusal(approving, request.sell),
             simpleError = simpleApprovalRefusal(approving, request.sell),
@@ -1174,10 +1170,7 @@ class SwapViewModel(
         )
         // Short of the allowance on a second read, after an approval read it as enough.
         is SwapQuoting.NeedsApproval -> Step.Composing(error = ALLOWANCE_MOVED)
-        is SwapQuoting.EarlierMaybeSent -> Step.Composing(
-            error = EARLIER_MAYBE_SENT,
-            earlier = EarlierItem(quoting.hash, "Open the earlier transaction", waiting = false),
-        )
+        is SwapQuoting.EarlierMaybeSent -> heldBack(quoting.hash, quoting.queued)
         else -> Step.Composing(error = swapRefusal(quoting, request), simpleError = simpleSwapRefusal(quoting))
     }
 
@@ -1189,16 +1182,23 @@ class SwapViewModel(
         )
         // Short of the allowance on a second read, after an approval read it as enough.
         is CowSwapQuoting.NeedsApproval -> Step.Composing(error = RELAYER_ALLOWANCE_MOVED)
-        is CowSwapQuoting.EarlierMaybeSent -> Step.Composing(
-            error = EARLIER_MAYBE_SENT,
-            earlier = EarlierItem(quoting.hash, "Open the earlier transaction", waiting = false),
-        )
+        is CowSwapQuoting.EarlierMaybeSent -> heldBack(quoting.hash, quoting.queued)
         else -> Step.Composing(
             error = cowRefusal(quoting, request),
             uniswapInstead = uniswapMayTake(quoting),
             liveOrder = (quoting as? CowSwapQuoting.EarlierOrderLive)?.uid?.hex,
         )
     }
+
+    /**
+     * The compose step held back by the earlier transaction [hash]: maybe sent, retried from its
+     * status; or, [queued], waiting in the outbox (lenient mode, one per account), sent or discarded
+     * first (docs/lenient-mode.md, *The outbox*). Its status is offered either way.
+     */
+    private fun heldBack(hash: String, queued: Boolean) = Step.Composing(
+        error = if (queued) QUEUED_FIRST else EARLIER_MAYBE_SENT,
+        earlier = EarlierItem(hash, if (queued) OPEN_QUEUED else "Open the earlier transaction", waiting = false),
+    )
 
     /**
      * Whether the same swap is offered on Uniswap after [quoting]: CoW itself refused it or did not

@@ -42,8 +42,12 @@ import eth.serotine.domain.repository.Simulation
 import eth.serotine.domain.repository.TokenBalanceReading
 import eth.serotine.domain.repository.TransactionProgress
 import eth.serotine.domain.repository.Unlock
-import eth.serotine.domain.repository.Outbox
 import eth.serotine.domain.usecase.DescribeKeyStore
+import eth.serotine.domain.usecase.DraftTransfer
+import eth.serotine.domain.usecase.ObserveEnabledNetworks
+import eth.serotine.domain.usecase.ObserveSyncPolicy
+import eth.serotine.domain.usecase.OutboxLock
+import eth.serotine.domain.usecase.QueueTransfer
 import eth.serotine.domain.usecase.ObserveAccountValue
 import eth.serotine.domain.usecase.ObserveAccounts
 import eth.serotine.domain.usecase.ObserveDisplayCurrencies
@@ -57,6 +61,10 @@ import eth.serotine.domain.usecase.ResolveRecipient
 import eth.serotine.domain.usecase.SendTransfer
 import eth.serotine.domain.usecase.WarmFeeHistory
 import eth.serotine.ui.FakeAccounts
+import eth.serotine.ui.FakeKeptInputs
+import eth.serotine.ui.MemoryNetworkSettings
+import eth.serotine.ui.MemoryOutbox
+import eth.serotine.ui.MemorySyncPolicy
 import eth.serotine.ui.FakeBalances
 import eth.serotine.ui.FakeBroadcaster
 import eth.serotine.ui.FakeCowChain
@@ -104,6 +112,11 @@ import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.test.setMain
+import eth.serotine.ui.components.Eip55
+import eth.serotine.domain.repository.FeeQuote
+import eth.serotine.domain.repository.KeptFees
+import eth.serotine.domain.repository.KeptNonce
+import eth.serotine.domain.model.SyncPolicy
 
 /** [SendViewModel] over fake ports, through the real use cases. */
 @OptIn(ExperimentalCoroutinesApi::class)
@@ -172,7 +185,18 @@ class SendViewModelTest {
     private var wallClock = 1_800_000_000L
     private val receipts = FakeReceipts()
 
-    private fun TestScope.viewModel(from: Address = daily.address, asset: Address? = null): SendViewModel {
+    /** Lenient mode's switch, strict as in every build, and the outbox a draft is queued in. */
+    private val policy = MemorySyncPolicy()
+    private val outbox = MemoryOutbox()
+    private val lock = OutboxLock()
+    private val kept = FakeKeptInputs()
+    private val networks = MemoryNetworkSettings()
+
+    private fun TestScope.viewModel(
+        from: Address = daily.address,
+        asset: Address? = null,
+        fill: SendFill? = null,
+    ): SendViewModel {
         Dispatchers.setMain(UnconfinedTestDispatcher(testScheduler))
         val currency = MemoryCurrencySetting()
         val viewModel = SendViewModel(
@@ -190,11 +214,28 @@ class SendViewModelTest {
             ),
             DescribeKeyStore(keys),
             ResolveRecipient(names),
-            QuoteTransfer(inputs, balances, tokenBalances, sent, cowOrders, FakeCowChain(), light, Network.SEPOLIA, Outbox.None),
+            QuoteTransfer(
+                inputs,
+                balances,
+                tokenBalances,
+                sent,
+                cowOrders,
+                FakeCowChain(),
+                light,
+                Network.SEPOLIA,
+                outbox,
+            ),
             SendTransfer(signer, broadcaster, sent) { 1_800_000_000 },
             RebroadcastTransfer(broadcaster, sent, receipts),
             WarmFeeHistory(inputs),
-            clock,
+            ObserveSyncPolicy(policy),
+            ObserveEnabledNetworks(networks),
+            DraftTransfer(kept, balances, tokenBalances, sent, cowOrders, FakeCowChain(), outbox, Network.SEPOLIA) {
+                wallClock
+            },
+            QueueTransfer(signer, outbox, lock) { wallClock },
+            fill = fill,
+            timeSource = clock,
             now = { wallClock },
         )
         backgroundScope.launch { viewModel.uiState.collect {} }
@@ -996,5 +1037,251 @@ class SendViewModelTest {
 
         assertEquals(quotes + 1, inputs.estimated.size, "the refresh from before the hide is made again")
         assertFalse(viewModel.review.refreshing)
+    }
+
+    // Lenient mode (docs/lenient-mode.md; owner rulings, 2026-11-06).
+
+    /** The balances last verified 12 min ago, as while the light client catches up, and the inputs kept for a draft. */
+    private fun lastVerified(eth: String = "1500000000000000000", usdcUnits: String = "250000000") {
+        val asOf = wallClock - 12 * 60
+        balances.of(daily.address).value = BalanceReading.LastKnown(Wei.of(eth), 9_412_118, asOf)
+        tokenBalances.of(daily.address, usdc.address).value =
+            TokenBalanceReading.LastKnown(TokenUnits.of(usdcUnits), 9_412_117, asOf)
+        kept.nonces[Network.SEPOLIA to daily.address] = KeptNonce(7, 9_412_110, wallClock - 13 * 60)
+        kept.fees[Network.SEPOLIA] = KeptFees(
+            FeeQuote(
+                nextBaseFee = UInt256.of(10_000_000_000),
+                tips = FeeLevel.entries.associateWith { UInt256.of(1_000_000_000) },
+                blockNumber = 9_412_100,
+            ),
+            wallClock - 13 * 60,
+        )
+    }
+
+    /** Composes 0.1 ETH to Savings in lenient mode, on the balances last verified, and asks for the review. */
+    private fun TestScope.drafted(): SendViewModel {
+        policy.policy.value = SyncPolicy.LENIENT
+        lastVerified()
+        val viewModel = viewModel()
+        viewModel.onPickAccount(viewModel.compose.accounts.single().address)
+        viewModel.onAmountChange("0.1")
+        viewModel.review()
+        runCurrent()
+        return viewModel
+    }
+
+    private val SendViewModel.draft get() = assertIs<SendUiState.DraftReview>(uiState.value)
+
+    @Test
+    fun strictModeKeepsABalanceLastVerifiedOutOfTheFormAndRefusesTheReview() = runTest {
+        lastVerified()
+        val viewModel = viewModel()
+        runCurrent()
+
+        assertEquals("Syncing…", viewModel.compose.asset?.balance, "strict mode: not one to send from")
+        assertFalse(viewModel.compose.canMax)
+        assertEquals(listOf("ETH"), viewModel.compose.assets.map { it.symbol }, "a token last verified is not offered")
+        viewModel.onPickAccount(viewModel.compose.accounts.single().address)
+        viewModel.onAmountChange("0.1")
+        viewModel.review()
+        runCurrent()
+
+        assertEquals("The light client is not synced yet: try again in a moment.", viewModel.compose.error)
+        assertTrue(outbox.queued.isEmpty(), "nothing drafted, nothing queued")
+    }
+
+    @Test
+    fun lenientModeOffersTheBalancesLastVerifiedLabelledWithTheirAgeAndNoValue() = runTest {
+        policy.policy.value = SyncPolicy.LENIENT
+        lastVerified()
+        val viewModel = viewModel()
+        runCurrent()
+
+        val ether = assertNotNull(viewModel.compose.asset)
+        assertEquals("1.5 ETH", ether.balance)
+        assertTrue(ether.lastKnown)
+        assertEquals("block 9,412,118", ether.verifiedAt)
+        assertEquals("as of 12 min ago", ether.age)
+        assertEquals(listOf("ETH", "USDC"), viewModel.compose.assets.map { it.symbol }, "a token last verified as held")
+        viewModel.onAmountChange("0.1")
+        assertNull(viewModel.compose.amountHint, "a price is never shown last known")
+    }
+
+    @Test
+    fun aReviewTheStrictQuoteRefusesAsSyncingIsDraftedAndSaysEachFiguresAge() = runTest {
+        val viewModel = drafted()
+
+        val draft = viewModel.draft
+        assertEquals("0.1 ETH", draft.amount)
+        assertEquals(
+            "Prepared on data from 13 min ago. It's checked on chain again before it's sent.",
+            draft.preparedOn,
+            "the oldest figure it is built on",
+        )
+        assertEquals(NOT_CHECKED_YET, draft.notChecked)
+        val balance = draft.balances.single()
+        assertEquals("1.5 ETH", balance.before)
+        assertTrue(balance.after.endsWith(", if nothing changed"), balance.after)
+        assertEquals("last verified at block 9,412,118", balance.verifiedAt)
+        assertEquals("as of 12 min ago", balance.age)
+        assertTrue("up to block 9,412,100" in draft.feeDetail, draft.feeDetail)
+        assertEquals("Fees as of 13 min ago", draft.feeAge)
+        assertEquals(
+            "Nonce 7, after this account's count of mined transactions last verified at block 9,412,110",
+            draft.nonce,
+        )
+        assertEquals(0, inputs.estimated.size, "a draft is not estimated")
+    }
+
+    @Test
+    fun aDraftSignedIsQueuedNeverBroadcastAndItsStatusIsNamed() = runTest {
+        val viewModel = drafted()
+        viewModel.onPasswordChange("made-up password")
+        viewModel.sign()
+        runCurrent()
+
+        val queued = outbox.queued.single()
+        assertEquals(SendUiState.Queued("Sepolia", queued.id), viewModel.uiState.value)
+        assertEquals(daily.address, queued.account)
+        assertEquals(7, queued.transaction.nonce, "the nonce kept, as its review said")
+        assertTrue(broadcaster.sent.isEmpty(), "nothing leaves the device before the check")
+        assertEquals(listOf("made-up password"), signer.passwords)
+    }
+
+    @Test
+    fun aDraftsBiometricPromptHasNoDeadline() = runTest {
+        biometrics = BiometricUnlock.On
+        val viewModel = drafted()
+        assertTrue(viewModel.draft.canSignWithBiometrics)
+        viewModel.signWithBiometrics()
+        runCurrent()
+
+        val unlock = assertIs<Unlock.WithBiometrics>(signer.asked.single().second)
+        assertNull(unlock.notAfter, "a draft is old by definition: the minute applies to the check")
+        assertEquals("Sign and queue 0.1 ETH to 0xfB6916095ca1df60bB79Ce92cE3Ea74c37c5d359", unlock.reason)
+        assertIs<SendUiState.Queued>(viewModel.uiState.value)
+    }
+
+    @Test
+    fun aDraftTheOutboxCannotKeepIsSaidAndNothingIsQueued() = runTest {
+        val viewModel = drafted()
+        outbox.failSaves = true
+        viewModel.onPasswordChange("made-up password")
+        viewModel.sign()
+        runCurrent()
+
+        assertEquals(
+            "Signed, but the outbox could not keep it, so the signature was dropped: nothing was queued or sent. " +
+                "Try again.",
+            viewModel.draft.unlock.error,
+        )
+        assertTrue(outbox.queued.isEmpty())
+        assertTrue(broadcaster.sent.isEmpty())
+    }
+
+    @Test
+    fun aDraftThatWaitsForWhatWasNeverVerifiedSaysSoOnTheComposeStep() = runTest {
+        policy.policy.value = SyncPolicy.LENIENT
+        lastVerified()
+        kept.nonces.clear()
+        val viewModel = viewModel()
+        viewModel.onPickAccount(viewModel.compose.accounts.single().address)
+        viewModel.onAmountChange("0.1")
+        viewModel.review()
+        runCurrent()
+
+        assertEquals(
+            "The light client is still syncing, and this account's count of transactions, which its next nonce " +
+                "comes from, has never been verified on this device, so nothing can be prepared from it yet. The " +
+                "review waits for the light client to catch up.",
+            viewModel.compose.error,
+        )
+    }
+
+    @Test
+    fun aTransactionQueuedFromTheAccountHoldsANewOneBackWithItsStatusInEitherMode() = runTest {
+        val first = drafted()
+        first.onPasswordChange("made-up password")
+        first.sign()
+        runCurrent()
+        val id = outbox.queued.single().id
+
+        policy.policy.value = SyncPolicy.STRICT
+        holding()
+        val viewModel = viewModel()
+        viewModel.onPickAccount(viewModel.compose.accounts.single().address)
+        viewModel.onAmountChange("0.2")
+        viewModel.review()
+        runCurrent()
+
+        val compose = assertIs<SendUiState.Compose>(viewModel.uiState.value)
+        assertEquals(
+            "A transaction from this account is waiting to be sent. Send or discard it first.",
+            compose.form.error,
+        )
+        assertEquals(id, compose.earlier)
+        assertEquals("Open the transaction waiting to be sent", compose.earlierLabel)
+    }
+
+    @Test
+    fun lenientMaxLeavesRoomForTheMostTheFeeCanBe() = runTest {
+        policy.policy.value = SyncPolicy.LENIENT
+        lastVerified()
+        val viewModel = viewModel()
+        runCurrent()
+        assertTrue(viewModel.compose.canMax)
+        viewModel.onMax()
+        runCurrent()
+
+        // 1.5 ETH less 50,000 gas × (2 × 10 gwei + 1 gwei).
+        assertEquals("1.49895", viewModel.compose.amount)
+    }
+
+    @Test
+    fun aNetworkThatIsOffIsNotSyncingAndNothingIsDraftedOnIt() = runTest {
+        policy.policy.value = SyncPolicy.LENIENT
+        networks.on.value = emptySet()
+        lastVerified()
+        val viewModel = viewModel()
+        runCurrent()
+
+        assertEquals("Syncing…", viewModel.compose.asset?.balance, "no balance last verified offered")
+        viewModel.onPickAccount(viewModel.compose.accounts.single().address)
+        viewModel.onAmountChange("0.1")
+        viewModel.review()
+        runCurrent()
+
+        assertIs<SendUiState.Compose>(viewModel.uiState.value)
+        assertTrue(outbox.queued.isEmpty())
+    }
+
+    @Test
+    fun aNameIsNotResolvedForADraft() = runTest {
+        policy.policy.value = SyncPolicy.LENIENT
+        lastVerified()
+        names.names["friend.eth"] = NameResolution.Resolved("friend.eth", friend, 9_411_900)
+        val viewModel = viewModel()
+        viewModel.onToChange("friend.eth")
+        advanceTimeBy(1_000)
+        runCurrent()
+        viewModel.onAmountChange("0.1")
+        viewModel.review()
+        runCurrent()
+
+        val error = assertNotNull(viewModel.compose.error)
+        assertTrue("enter the address" in error, error)
+        assertTrue(outbox.queued.isEmpty())
+    }
+
+    @Test
+    fun sendOpensFilledInWithAQueuedTransferSignedAgain() = runTest {
+        holding()
+        val viewModel = viewModel(fill = SendFill(Eip55.format(savings.address), "0.25", FeeLevel.FAST))
+        runCurrent()
+
+        assertEquals("0xfB6916095ca1df60bB79Ce92cE3Ea74c37c5d359", viewModel.compose.to)
+        assertEquals("0.25", viewModel.compose.amount)
+        assertEquals(FeeLevel.FAST, assertIs<SendUiState.Compose>(viewModel.uiState.value).fee)
+        assertTrue(viewModel.compose.canReview)
     }
 }

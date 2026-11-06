@@ -548,6 +548,44 @@ private fun AccountDetailActivityPreview() = AccountDetailPreview(
     daily.copy(segment = DetailSegment.ACTIVITY, activity = ActivityUiState.Shown(activityRows, ACTIVITY_COVERAGE)),
 )
 
+/** Lenient mode: what the account has queued, first whichever way the rows run (docs/lenient-mode.md). */
+private val QUEUED_ROWS = listOf(
+    ActivityRow(
+        key = "queued:0x" + "9a".repeat(32),
+        title = "Send 0.1 ETH",
+        detail = "To Savings · 0xfB69…d359",
+        about = "0xfB6916095ca1df60bB79Ce92cE3Ea74c37c5d359",
+        time = "Signed Nov 7, 2026, 9:12 AM",
+        status = "Waiting to be sent",
+        state = ActivityState.WAITING,
+        opens = ActivityKey("0x" + "9a".repeat(32), queued = true),
+    ),
+)
+
+@Preview
+@Composable
+private fun AccountDetailActivityQueuedPreview() = AccountDetailPreview(
+    daily.copy(
+        segment = DetailSegment.ACTIVITY,
+        activity = ActivityUiState.Shown(activityRows, ACTIVITY_COVERAGE, queued = QUEUED_ROWS),
+    ),
+)
+
+/** One the check found in conflict: it needs a signature again. */
+@Preview
+@Composable
+private fun AccountDetailActivityQueuedConflictPreview() = AccountDetailPreview(
+    daily.copy(
+        segment = DetailSegment.ACTIVITY,
+        activity = ActivityUiState.Shown(
+            activityRows,
+            ACTIVITY_COVERAGE,
+            queued = QUEUED_ROWS.map { it.copy(status = "Needs your signature again", state = ActivityState.FAILED) },
+        ),
+    ),
+    darkTheme = true,
+)
+
 /** A swap whose step 2 waits: its card above the Activity, the same in both views. */
 @Preview
 @Composable
@@ -841,4 +879,6 @@ internal val accountDetailScreenPreviews: List<ScreenPreview> = listOf(
     ScreenPreview("nft-add") { AccountDetailNftAddPreview() },
     ScreenPreview("nft-add-unavailable") { AccountDetailNftAddUnavailablePreview() },
     ScreenPreview("nft-adding") { AccountDetailNftAddingPreview() },
+    ScreenPreview("activity-queued") { AccountDetailActivityQueuedPreview() },
+    ScreenPreview("activity-queued-conflict-dark") { AccountDetailActivityQueuedConflictPreview() },
 )

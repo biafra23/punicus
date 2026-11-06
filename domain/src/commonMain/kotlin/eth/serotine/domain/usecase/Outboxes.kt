@@ -316,3 +316,12 @@ class ConfirmQueued(
 class ObserveOutbox(private val outbox: Outbox) {
     operator fun invoke(): Flow<OutboxList> = outbox.observe()
 }
+
+/**
+ * The user dismissed the notice that queued signed bytes were lost ([OutboxList.Loaded.lost]; the
+ * seal key gone, docs/lenient-mode.md, *The signed bytes kept*): it is said once. False when that
+ * could not be saved, and the notice stays.
+ */
+class AcknowledgeLostOutbox(private val outbox: Outbox) {
+    suspend operator fun invoke(): Boolean = outbox.acknowledgeLost()
+}

@@ -4,7 +4,9 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import eth.serotine.domain.model.InterfaceMode
 import eth.serotine.domain.model.Network
+import eth.serotine.domain.model.SyncPolicy
 import eth.serotine.domain.repository.LightClientStatus
+import eth.serotine.domain.repository.OutboxList
 import eth.serotine.domain.usecase.NetworkOverview
 import eth.serotine.domain.usecase.ObserveDebugScreen
 import eth.serotine.domain.usecase.ObserveDisplayCurrencies
@@ -12,9 +14,12 @@ import eth.serotine.domain.usecase.ObserveInterfaceMode
 import eth.serotine.domain.usecase.ObserveKnownTokens
 import eth.serotine.domain.usecase.ObserveNetworkLive
 import eth.serotine.domain.usecase.ObserveNetworkOverview
+import eth.serotine.domain.usecase.ObserveOutbox
+import eth.serotine.domain.usecase.ObserveSyncPolicy
 import eth.serotine.domain.usecase.SetDebugScreen
 import eth.serotine.domain.usecase.SetInterfaceMode
 import eth.serotine.domain.usecase.SetNetworkEnabled
+import eth.serotine.domain.usecase.SetSyncPolicy
 import eth.serotine.domain.usecase.SyncPastStaleAnchor
 import eth.serotine.domain.usecase.TokenOrigin
 import eth.serotine.ui.APP_VERSION
@@ -29,8 +34,10 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.onStart
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
@@ -38,7 +45,9 @@ import kotlinx.coroutines.launch
 /**
  * The Settings screen's ViewModel: the display currency, the known tokens, the networks with their
  * switches and light clients (docs/networks.md, N16 and N20), Detailed view's switch
- * (docs/simple-ui.md), the Debug tab's switch (in Detailed view only) and the version; and, in a
+ * (docs/simple-ui.md), the Debug tab's switch (in Detailed view only), lenient mode's *Sign while
+ * syncing* (docs/lenient-mode.md, *The setting*: what turning it off leaves queued, said while the
+ * outbox holds something, [ObserveOutbox]) and the version; and, in a
  * debug build, the switch that allows screen recordings of the protected screens. Turning a
  * network on asks nothing; turning off one with accounts asks first, and one without turns off at
  * once. The tokens are every network's, counted together; the currency is
@@ -58,6 +67,11 @@ class SettingsViewModel(
     private val setInterfaceMode: SetInterfaceMode,
     /** Whether each network updates live, which simple mode's rows say. */
     observeNetworkLive: ObserveNetworkLive,
+    /** Lenient mode's switch, *Sign while syncing*: strict by default. */
+    observeSyncPolicy: ObserveSyncPolicy,
+    private val setSyncPolicy: SetSyncPolicy,
+    /** What the outbox holds: what turning the switch off leaves queued (decision 10). */
+    observeOutbox: ObserveOutbox,
     /** Now, in unix seconds: what the light clients' lines date the head block against. */
     private val clock: () -> Long = ::epochSecondsNow,
 ) : ViewModel() {
@@ -67,6 +81,17 @@ class SettingsViewModel(
 
     /** Whether the last switch of Detailed view could not be saved. */
     private val detailedViewNotSaved = MutableStateFlow(false)
+
+    /** Whether the last switch of *Sign while syncing* could not be saved. */
+    private val signWhileSyncingNotSaved = MutableStateFlow(false)
+
+    /** Lenient mode's switch as read and as last saved, and how many transactions the outbox holds. */
+    private val lenient = combine(
+        observeSyncPolicy(),
+        signWhileSyncingNotSaved,
+        observeOutbox().map { (it as? OutboxList.Loaded)?.queued?.size ?: 0 }.distinctUntilChanged(),
+        ::Lenient,
+    )
 
     /** The networks whose last switch could not be saved. */
     private val networkNotSaved = MutableStateFlow(emptySet<Network>())
@@ -124,6 +149,13 @@ class SettingsViewModel(
                 turningOff = confirming,
             )
         }
+            .combine(lenient) { state, lenient ->
+                state.copy(
+                    signWhileSyncing = lenient.policy == SyncPolicy.LENIENT,
+                    signWhileSyncingNotSaved = lenient.notSaved,
+                    signWhileSyncingNote = queuedNote(lenient.queued, lenient.policy),
+                )
+            }
             .stateIn(
                 viewModelScope,
                 // A tab back after the timeout must not show an old head as current.
@@ -244,6 +276,20 @@ class SettingsViewModel(
         }
     }
 
+    /**
+     * Turns lenient mode on (*Sign while syncing*) or off. Off, what is queued stays queued, checked
+     * and sent, or discarded by the user (decision 10). A switch that cannot be saved leaves the row
+     * as it was, saying so.
+     */
+    fun signWhileSyncing(on: Boolean) {
+        viewModelScope.launch {
+            signWhileSyncingNotSaved.value = !setSyncPolicy(if (on) SyncPolicy.LENIENT else SyncPolicy.STRICT)
+        }
+    }
+
+    /** Lenient mode's switch as read ([policy]) and as last saved ([notSaved]), and how many are [queued]. */
+    private data class Lenient(val policy: SyncPolicy, val notSaved: Boolean, val queued: Int)
+
     /** The switches at the bottom of Settings, as read and as last saved. */
     private data class Switches(
         val debugScreen: Boolean,
@@ -255,6 +301,27 @@ class SettingsViewModel(
     internal companion object {
         /** What turning Detailed view off does to a Debug tab that is on. */
         const val DEBUG_TAB_GOES = "Turning it off also hides the Debug tab and empties its log."
+
+        /**
+         * What turning *Sign while syncing* off leaves in place while the outbox holds [queued]
+         * transactions (decision 10); with it off already, what is still queued and why. Null while
+         * nothing is queued.
+         */
+        fun queuedNote(queued: Int, policy: SyncPolicy): String? {
+            if (queued <= 0) return null
+            val what = if (queued == 1) {
+                "The transaction waiting to be sent"
+            } else {
+                "The $queued transactions waiting to be sent"
+            }
+            val stay = if (queued == 1) "stays queued" else "stay queued"
+            return if (policy == SyncPolicy.LENIENT) {
+                "Turning it off leaves what is queued in place: ${what.replaceFirstChar { it.lowercase() }} $stay, " +
+                    "checked and sent, or discarded by you."
+            } else {
+                "$what $stay, checked and sent, or discarded by you: only new transactions wait for the light client."
+            }
+        }
 
         /** The question before [overview]'s network, which has accounts, is turned off (N20). */
         fun confirmationOf(overview: NetworkOverview): TurnOffConfirmation {

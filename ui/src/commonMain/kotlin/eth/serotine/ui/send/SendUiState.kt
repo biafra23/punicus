@@ -35,10 +35,16 @@ sealed interface SendUiState {
     /**
      * Screen 7: the transfer [form] (from, asset, to, amount; docs/wallet-ux.md, screen 7) and the
      * [fee] level chosen, the one thing Send asks beyond the form. [earlier] is the hash of an
-     * earlier transaction from the account that may still be on its way, when that is why the
-     * last review was refused: its status, which tries it again, is offered.
+     * earlier transaction from the account that may still be on its way, or the id of the one it
+     * has queued (lenient mode), when that is why the last review was refused: its status, which
+     * tries it again or says where it stands, is offered by the button [earlierLabel].
      */
-    data class Compose(val form: TransferForm, val fee: FeeLevel, val earlier: String? = null) : SendUiState {
+    data class Compose(
+        val form: TransferForm,
+        val fee: FeeLevel,
+        val earlier: String? = null,
+        val earlierLabel: String = "Open the earlier transaction",
+    ) : SendUiState {
         override val network: String
             get() = form.network
     }
@@ -83,6 +89,55 @@ sealed interface SendUiState {
             get() = !refreshing && !signing && notSent == null
     }
 
+    /**
+     * Screen 8 for a lenient draft (docs/lenient-mode.md, *The draft's review*; owner rulings,
+     * 2026-11-06): the transfer drafted on the state the light client verified last, while it
+     * catches up, to be signed and queued, never sent from here. [preparedOn] is the line on top
+     * ("Prepared on data from 12 min ago. It's checked on chain again before it's sent."). Each
+     * figure says the block it was last verified at, which Detailed view shows, and its age, which
+     * simple mode shows: the [balances] (before, and after "if nothing changed"; [BalanceChange.age]),
+     * the fee ([feeDetail], [feeAge]) and the nonce ([nonce], [nonceAge]). [notChecked] stands in for
+     * the verified simulation. No figure has a value in the display currency: a price is never
+     * shown last known. [maxFee] is the most the fee can be, at the pinned gas ceiling. [unlock]
+     * signs it with no deadline; [signing] while it is signed and queued.
+     */
+    data class DraftReview(
+        override val network: String,
+        val from: SendFrom,
+        val amount: String,
+        val asset: AssetChoice,
+        val recipient: RecipientItem,
+        val preparedOn: String,
+        val maxFee: String,
+        val feeDetail: String,
+        val feeAge: String,
+        val nonce: String,
+        val nonceAge: String,
+        val balances: List<BalanceChange>,
+        val unlock: UnlockStep,
+        val pending: String? = null,
+        val signing: Boolean = false,
+        val notChecked: String = NOT_CHECKED_YET,
+    ) : SendUiState {
+
+        /** Something is typed, and no signature runs: the password may sign. */
+        val canSign: Boolean
+            get() = !signing && unlock.password.text.isNotEmpty()
+
+        /** The biometric prompt may be offered now. */
+        val canSignWithBiometrics: Boolean
+            get() = !signing && unlock.biometrics
+    }
+
     /** Broadcast: [hash] is the transaction's, which the status screen follows. */
     data class Sent(override val network: String, val hash: String) : SendUiState
+
+    /**
+     * Signed and queued in the outbox (lenient mode): [id] names it, which the status screen
+     * follows; nothing was broadcast.
+     */
+    data class Queued(override val network: String, val id: String) : SendUiState
 }
+
+/** What a draft's review says in place of the verified simulation (docs/lenient-mode.md, *The draft's review*). */
+const val NOT_CHECKED_YET = "Not checked yet: it runs on chain before it's sent."

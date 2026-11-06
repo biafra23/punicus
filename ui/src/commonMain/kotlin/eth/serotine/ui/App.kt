@@ -47,6 +47,7 @@ import eth.serotine.domain.model.CowOrderUid
 import eth.serotine.domain.model.Digest
 import eth.serotine.domain.model.Network
 import eth.serotine.domain.model.SwapVenue
+import eth.serotine.domain.repository.FeeLevel
 import eth.serotine.ui.addnetwork.AddOnNetworksRoute
 import eth.serotine.ui.accountdetail.AccountDetailRoute
 import eth.serotine.ui.accounts.AccountAction
@@ -85,12 +86,14 @@ import eth.serotine.ui.safesettings.SafeSettingsRoute
 import eth.serotine.ui.safeswap.SafeSwapRoute
 import eth.serotine.ui.safetx.SafeTxRoute
 import eth.serotine.ui.security.SecurityRoute
+import eth.serotine.ui.send.SendFill
 import eth.serotine.ui.send.SendRoute
 import eth.serotine.ui.settings.SettingsRoute
 import eth.serotine.ui.swap.SwapFill
 import eth.serotine.ui.swap.SwapRoute
 import eth.serotine.ui.theme.SerotineTheme
 import eth.serotine.ui.tokens.TokensRoute
+import eth.serotine.ui.transferstatus.SendAgain
 import eth.serotine.ui.transferstatus.TransferStatusRoute
 import eth.serotine.ui.update.UpdateRequiredRoute
 import eth.serotine.ui.update.UpdateRequiredUiState
@@ -598,25 +601,37 @@ private fun Destinations(
         // Send, and then where the transfer stands: the transaction's flow, over the bar too.
         composable(
             SEND_ROUTE,
-            arguments = listOf(
-                navArgument(ASSET) {
+            arguments = listOf(ASSET, TO, AMOUNT, FEE).map { name ->
+                navArgument(name) {
                     type = NavType.StringType
                     nullable = true
                     defaultValue = null
-                },
-            ),
+                }
+            },
         ) { entry ->
             val account = entry.account()
             val asked = entry.savedStateHandle.get<String>(ASSET)
             val asset = asked?.let(Address::parse)
+            // A queued transfer signed again (Sign again, Edit): what the form opens with.
+            val fill = sendFillOf(
+                entry.savedStateHandle.get<String>(TO),
+                entry.savedStateHandle.get<String>(AMOUNT),
+                entry.savedStateHandle.get<String>(FEE),
+            )
             if (account != null && (asked == null || asset != null)) {
                 SendRoute(
-                    viewModel = viewModel { graph.sendViewModel(account, asset) },
+                    viewModel = viewModel { graph.sendViewModel(account, asset, fill) },
                     lightClient = lightClient.item(account.network),
                     onBack = { navController.popBackStack(SEND_ROUTE, inclusive = true) },
                     // Back from the status goes where Send was opened from, not to a signed review.
                     onSent = { hash ->
                         navController.navigate(transferRoute(account.network, hash)) {
+                            popUpTo(SEND_ROUTE) { inclusive = true }
+                        }
+                    },
+                    // Signed and queued (lenient mode): its status, and back from it where Send was opened from.
+                    onQueued = { id ->
+                        navController.navigate(transferRoute(account.network, id)) {
                             popUpTo(SEND_ROUTE) { inclusive = true }
                         }
                     },
@@ -842,6 +857,8 @@ private fun Destinations(
                     viewModel = viewModel { graph.transferStatusViewModel(network, hash) },
                     lightClient = lightClient.item(network),
                     onDone = { navController.popBackStack(TRANSFER_ROUTE, inclusive = true) },
+                    // A queued transfer discarded to be signed again: Send filled in with it, in this one's place.
+                    onSendAgain = { again -> navController.sendAgain(again) },
                 )
             } else {
                 LaunchedEffect(Unit) { navController.popBackStack(TRANSFER_ROUTE, inclusive = true) }
@@ -948,6 +965,8 @@ private fun NavController.safeSwap(safe: AccountId, asset: String?, replacing: D
 /** Opens the detail of the row [key] of the Activity of the [account]; for a CoW order, its status. */
 private fun NavController.openActivityDetail(account: AccountId, key: ActivityKey) {
     if (key.cowOrder) return openCowOrder(account.network, key.hash)
+    // A transfer queued in lenient mode: its status, which shows it while it waits.
+    if (key.queued) return openTransfer(account.network, key.hash)
     // A second tap while the first one's screen is opening: one screen, the first one asked for.
     // (Not launchSingleTop: that would reuse the entry, and its key, for another one.)
     if (currentDestination?.route == ACTIVITY_DETAIL_ROUTE) return
@@ -994,6 +1013,38 @@ private fun NavController.swapAgain(network: Network, again: SwapAgain) {
     popBackStack(COW_ORDER_ROUTE, inclusive = true)
     if (currentDestination?.route == SWAP_ROUTE) popBackStack()
     navigate("${Destination.SWAP}/${from.route}?$ASSET=${sell.hex}&$BUY=$buy&$AMOUNT=$amount&$VENUE=$UNISWAP_VENUE")
+}
+
+/**
+ * Opens Send filled in with [again], a queued transfer discarded to be signed again, in place of its
+ * status: back from it goes where the status was opened from. Identifiers in lower case.
+ */
+private fun NavController.sendAgain(again: SendAgain) {
+    if (currentDestination?.route == SEND_ROUTE) return
+    val network = Network.ofChainId(again.chainId) ?: return
+    val from = AccountId(network, Address.parse(again.from) ?: return)
+    val to = Address.parse(again.to) ?: return
+    val asset = again.asset?.let { Address.parse(it) ?: return }
+    val amount = again.amount.takeIf(AMOUNT_TEXT::matches) ?: return
+    val query = listOfNotNull(
+        asset?.let { "$ASSET=${it.hex}" },
+        "$TO=${to.hex}",
+        "$AMOUNT=$amount",
+        "$FEE=${again.fee.name.lowercase()}",
+    ).joinToString("&")
+    popBackStack(TRANSFER_ROUTE, inclusive = true)
+    navigate("${Destination.SEND}/${from.route}?$query")
+}
+
+/**
+ * What Send's route asks to be filled in: the recipient [to] (an address), the [amount] as text and
+ * the [fee] level; null when it asks for none, or not in a form this build reads.
+ */
+private fun sendFillOf(to: String?, amount: String?, fee: String?): SendFill? {
+    if (to == null || amount == null || fee == null) return null
+    val address = Address.parse(to) ?: return null
+    val level = FeeLevel.entries.firstOrNull { it.name.lowercase() == fee } ?: return null
+    return SendFill(Eip55.format(address), amount.takeIf(AMOUNT_TEXT::matches) ?: return null, level)
 }
 
 /**
@@ -1175,16 +1226,24 @@ private const val REPLACING = "replacing"
 /** Set on a Safe transaction's entry that an import has just queued, until its ViewModel takes it. */
 private const val IMPORTED = "imported"
 
-/** Send from an account, with a token chosen or not. */
-private const val SEND_ROUTE = "${Destination.SEND}/{$CHAIN}/{$ADDRESS}?$ASSET={$ASSET}"
-
-/** Send from another wallet (#255), with a token chosen or not. */
-private const val HANDOFF_ROUTE = "${Destination.SEND_ELSEWHERE}/{$CHAIN}/{$ADDRESS}?$ASSET={$ASSET}"
-
 /** Swap's optional route arguments, all three or none: what it buys, the amount as text, the venue. */
 private const val BUY = "buy"
 private const val AMOUNT = "amount"
 private const val VENUE = "venue"
+
+/**
+ * Send's optional route arguments for a queued transfer signed again, all three or none: the
+ * recipient, the [AMOUNT] as text and the fee level.
+ */
+private const val TO = "to"
+private const val FEE = "fee"
+
+/** Send from an account, with a token chosen or not, filled in or not ([TO], [AMOUNT], [FEE]). */
+private const val SEND_ROUTE =
+    "${Destination.SEND}/{$CHAIN}/{$ADDRESS}?$ASSET={$ASSET}&$TO={$TO}&$AMOUNT={$AMOUNT}&$FEE={$FEE}"
+
+/** Send from another wallet (#255), with a token chosen or not. */
+private const val HANDOFF_ROUTE = "${Destination.SEND_ELSEWHERE}/{$CHAIN}/{$ADDRESS}?$ASSET={$ASSET}"
 
 /** Swap's route argument for a swap whose next step waits, opened from the account's Activity: [CONTINUING]. */
 private const val CONTINUE = "continue"

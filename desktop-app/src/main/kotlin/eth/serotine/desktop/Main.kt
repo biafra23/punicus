@@ -458,6 +458,10 @@ private fun openWallet(dataDir: File) {
                 cowApi = HttpCowApi.create(),
                 cowOrders = cowOrders,
                 outbox = outbox,
+                // The follower's own lock, the inputs kept for a lenient draft, and Sign while syncing.
+                outboxLock = outboxLock,
+                keptTransactionInputs = node.keptTransactionInputs,
+                syncPolicy = syncPolicy,
                 swapVenue = FileSwapVenue(dataDir.resolve("swap-venue.json").path),
                 waitingSwaps = FileWaitingSwaps(dataDir.resolve("waiting-swaps.json").path),
                 debugLog = apiLog,

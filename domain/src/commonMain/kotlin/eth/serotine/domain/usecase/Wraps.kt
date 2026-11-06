@@ -117,7 +117,9 @@ data class WrapQuote internal constructor(
  * move of the WETH, and what its CoW orders may still take of it ([CowOrders], [CowChain]), is not
  * an unwrap's to take; a record of orders that cannot be read unwraps nothing
  * ([WrapQuoting.CowOrdersUnreadable]). Nothing is quoted on anything less than verified state, and
- * the amount is in wei: prices never reach it. On [network] only. [clock] is in unix seconds.
+ * the amount is in wei: prices never reach it. A wrap stays strict in both modes, for now (owner
+ * rulings, 2026-11-06; docs/lenient-mode.md, *What stays strict*). On [network] only. [clock] is in
+ * unix seconds.
  */
 class QuoteWrap(
     private val uniswap: UniswapV3Chain,

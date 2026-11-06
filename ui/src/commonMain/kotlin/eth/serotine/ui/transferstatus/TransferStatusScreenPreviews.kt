@@ -1,8 +1,10 @@
 package eth.serotine.ui.transferstatus
 
 import androidx.compose.runtime.Composable
+import eth.serotine.domain.repository.FeeLevel
 import eth.serotine.ui.components.LightClientItem
 import eth.serotine.ui.components.NotSentItem
+import eth.serotine.ui.components.catchingUpStripSample
 import eth.serotine.ui.components.verifiedStripSample
 import eth.serotine.ui.ScreenPreview
 import eth.serotine.ui.theme.SerotineTheme
@@ -69,6 +71,93 @@ private val maybeSent = pending.copy(
         canRetry = true,
     ),
 )
+
+// A transfer queued in lenient mode (docs/lenient-mode.md, *The outbox*): its step before Signed, in
+// each state it draws differently; the simple previews draw the same samples.
+
+private const val QUEUED_ID = "0x9a3c5e7f1b2d4f6a8c0e2b4d6f8a1c3e5b7d9f0a2c4e6b8d1f3a5c7e9b0d2f4a"
+
+internal val queuedSample = TransferStatusUiState.Queued(
+    network = "Sepolia",
+    id = QUEUED_ID,
+    sent = sent,
+    steps = listOf(
+        StatusStep("Queued", StepState.WAITING, "Waits for Sepolia to catch up. Keep Serotine open to send it sooner."),
+        StatusStep("Signed", StepState.DONE, "On this device, Nov 7, 2026, 9:12 AM"),
+        StatusStep(
+            "Broadcast",
+            StepState.WAITING,
+            "Once it checks out at a fresh verified head",
+            simpleLabel = "Sent",
+            simpleDetail = "Once it checks out on chain",
+        ),
+    ),
+    again = SendAgain(
+        chainId = 11_155_111,
+        from = "0x5aaeb6053f3e94c9b9a09f33669435e7ef1beaed",
+        asset = null,
+        to = "0xfb6916095ca1df60bb79ce92ce3ea74c37c5d359",
+        amount = "0.1",
+        fee = FeeLevel.NORMAL,
+    ),
+    againLabel = "Edit",
+    againNote = "Edit discards it and opens Send with it filled in. Discard deletes its signature: nothing is sent.",
+)
+
+internal val queuedSendingSample = queuedSample.copy(
+    steps = listOf(StatusStep("Sending…", StepState.WAITING, "It's being checked and sent.")) +
+        queuedSample.steps.drop(1),
+    busy = "It's being checked and sent.",
+)
+
+internal val queuedPastItsHourSample = queuedSample.copy(
+    steps = listOf(StatusStep("Queued", StepState.UNKNOWN, "Not sent by itself after an hour: it waits for you.")) +
+        queuedSample.steps.drop(1),
+    question = "Still send this? You signed it 2 h ago.",
+)
+
+internal val queuedConflictSample = queuedSample.copy(
+    steps = listOf(
+        StatusStep(
+            "Needs your signature again",
+            StepState.FAILED,
+            "Fees rose since you signed: the most it can cost is now 0.0031 ETH. Nothing was sent, and its " +
+                "signature was deleted.",
+        ),
+        StatusStep("Signed", StepState.UNKNOWN, "On this device, Nov 7, 2026, 9:12 AM: deleted since"),
+        StatusStep("Broadcast", StepState.UNKNOWN, "Not sent", simpleLabel = "Sent", simpleDetail = "Not sent"),
+    ),
+    againLabel = "Sign again",
+    againNote = "Sign again discards it and opens Send with it filled in, to be reviewed and signed anew.",
+)
+
+internal val discardedSample =
+    TransferStatusUiState.Discarded("Sepolia", "Discarded: its signature was deleted, and nothing was sent.")
+
+@Preview
+@Composable
+private fun TransferStatusQueuedPreview() = TransferStatusPreview(queuedSample, lightClient = catchingUpStripSample)
+
+@Preview
+@Composable
+private fun TransferStatusQueuedDarkPreview() =
+    TransferStatusPreview(queuedSample, darkTheme = true, lightClient = catchingUpStripSample)
+
+@Preview
+@Composable
+private fun TransferStatusQueuedSendingPreview() = TransferStatusPreview(queuedSendingSample)
+
+@Preview
+@Composable
+private fun TransferStatusQueuedPastItsHourPreview() = TransferStatusPreview(queuedPastItsHourSample)
+
+@Preview
+@Composable
+private fun TransferStatusQueuedConflictPreview() = TransferStatusPreview(queuedConflictSample)
+
+@Preview
+@Composable
+private fun TransferStatusDiscardedPreview() = TransferStatusPreview(discardedSample)
 
 @Composable
 private fun TransferStatusPreview(
@@ -413,4 +502,10 @@ internal val transferStatusScreenPreviews: List<ScreenPreview> = listOf(
     ScreenPreview("maybe-sent-nonce-used") { TransferStatusMaybeSentNonceUsedPreview() },
     ScreenPreview("cow-cancellation") { TransferStatusCowCancellationPreview() },
     ScreenPreview("wrap") { TransferStatusWrapPreview() },
+    ScreenPreview("queued") { TransferStatusQueuedPreview() },
+    ScreenPreview("queued-dark") { TransferStatusQueuedDarkPreview() },
+    ScreenPreview("queued-sending") { TransferStatusQueuedSendingPreview() },
+    ScreenPreview("queued-past-its-hour") { TransferStatusQueuedPastItsHourPreview() },
+    ScreenPreview("queued-conflict") { TransferStatusQueuedConflictPreview() },
+    ScreenPreview("discarded") { TransferStatusDiscardedPreview() },
 )

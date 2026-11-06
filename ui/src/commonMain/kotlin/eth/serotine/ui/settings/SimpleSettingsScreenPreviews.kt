@@ -82,9 +82,15 @@ private fun SimpleSettingsOffPreview() = SimpleSettingsPreview(
     ),
 )
 
+/** Lenient mode on, the same switch as in Detailed view: Sign while syncing. */
+@Preview
+@Composable
+private fun SimpleSettingsSignWhileSyncingPreview() = SimpleSettingsPreview(simple.copy(signWhileSyncing = true))
+
 /** Every preview above, which SimpleSettingsScreenPreviewsTest renders: a new preview goes in here too. */
 internal val simpleSettingsScreenPreviews: List<ScreenPreview> = listOf(
     ScreenPreview("default") { SimpleSettingsPreviewDefault() },
     ScreenPreview("default-dark") { SimpleSettingsDarkPreview() },
     ScreenPreview("off") { SimpleSettingsOffPreview() },
+    ScreenPreview("sign-while-syncing") { SimpleSettingsSignWhileSyncingPreview() },
 )
