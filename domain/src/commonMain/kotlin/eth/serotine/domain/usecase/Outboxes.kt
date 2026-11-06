@@ -285,8 +285,9 @@ class FollowOutbox(
 
     private suspend fun conflicted(entry: QueuedTransaction, conflict: QueueConflict) {
         // The signed bytes go first: nothing can send them once the conflict is found.
-        val kept = outbox.put(entry.copy(signed = null, conflict = conflict, sending = false))
-        if (kept) notifier.conflict(entry, conflict)
+        val stripped = entry.copy(signed = null, conflict = conflict, sending = false)
+        // The notifier is told the copy kept, never the bytes of a transaction not sent.
+        if (outbox.put(stripped)) notifier.conflict(stripped, conflict)
     }
 }
 

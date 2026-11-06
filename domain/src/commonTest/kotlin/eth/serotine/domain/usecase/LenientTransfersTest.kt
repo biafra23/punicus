@@ -590,6 +590,8 @@ class LenientTransfersTest {
         }
 
         override fun conflict(queued: QueuedTransaction, conflict: QueueConflict) {
+            // Never the bytes of a transaction not sent.
+            assertNull(queued.signed)
             told += "conflict"
         }
     }
