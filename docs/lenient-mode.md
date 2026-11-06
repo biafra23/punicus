@@ -187,8 +187,8 @@ differences:
   first." Why: two queued transactions take consecutive nonces, and a
   conflict on the first breaks the second as well.
 - **Where it shows.** The transfer's status screen (9 in Detailed view, S3 in
-  simple mode) gets a step before Signed: "Queued: waits for Ethereum to
-  catch up". The account's Activity lists it first. Home says "1 waiting to
+  simple mode) gets a step after Signed, before the broadcast: "Queued:
+  waits for Ethereum to catch up". The account's Activity lists it first. Home says "1 waiting to
   send" under the network's sync line.
 - **What the user can do with it:** Discard (its signature is deleted;
   nothing was sent), and Edit (discard, and open the form filled with its

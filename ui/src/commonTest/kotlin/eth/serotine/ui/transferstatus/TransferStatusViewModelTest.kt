@@ -630,17 +630,17 @@ class TransferStatusViewModelTest {
     private val TransferStatusViewModel.queuedState get() = assertIs<TransferStatusUiState.Queued>(uiState.value)
 
     @Test
-    fun aQueuedTransferHasAStepBeforeSignedThatWaitsForTheNetwork() = runTest {
+    fun aQueuedTransferHasAStepAfterSignedThatWaitsForTheNetwork() = runTest {
         outbox.list.value = OutboxList.Loaded(listOf(queued()))
         val viewModel = viewModel(hash = queuedBytes.hash)
         runCurrent()
 
         val state = viewModel.queuedState
         assertEquals("40.5 USDC", state.sent?.amount)
-        assertEquals(listOf("Queued", "Signed", "Broadcast"), state.steps.map { it.label })
+        assertEquals(listOf("Signed", "Queued", "Broadcast"), state.steps.map { it.label })
         assertEquals(
             "Waits for Sepolia to catch up. Keep Serotine open to send it sooner.",
-            state.steps.first().detail,
+            state.steps[1].detail,
         )
         assertEquals("Edit", state.againLabel)
         assertNull(state.question)
@@ -651,7 +651,7 @@ class TransferStatusViewModelTest {
         runCurrent()
         assertEquals(
             "Sepolia has caught up: it's checked on chain, and sent once it checks out.",
-            viewModel.queuedState.steps.first().detail,
+            viewModel.queuedState.steps[1].detail,
         )
     }
 
@@ -677,7 +677,7 @@ class TransferStatusViewModelTest {
         runCurrent()
 
         val state = viewModel.queuedState
-        val step = state.steps.first()
+        val step = state.steps[1]
         assertEquals("Needs your signature again", step.label)
         assertEquals(StepState.FAILED, step.state)
         assertTrue(step.detail!!.startsWith(conflictReason(conflict, queued(conflict = conflict))), step.detail)
@@ -741,7 +741,7 @@ class TransferStatusViewModelTest {
         runCurrent()
 
         val state = viewModel.queuedState
-        assertEquals("Sending…", state.steps.first().label)
+        assertEquals("Sending…", state.steps[1].label)
         assertEquals("It's being checked and sent.", state.busy)
         viewModel.discard()
         runCurrent()
@@ -794,7 +794,7 @@ class TransferStatusViewModelTest {
         runCurrent()
 
         val state = viewModel.queuedState
-        assertEquals("Sending…", state.steps.first().label)
+        assertEquals("Sending…", state.steps[1].label)
         assertEquals(
             "It's being checked and sent, so it was not discarded: it may reach the network. Its status follows.",
             state.error,
@@ -811,7 +811,7 @@ class TransferStatusViewModelTest {
 
         assertEquals(
             "Sepolia is off, so nothing checks or sends it: turn Sepolia on in Settings to send it.",
-            viewModel.queuedState.steps.first().detail,
+            viewModel.queuedState.steps[1].detail,
         )
     }
 

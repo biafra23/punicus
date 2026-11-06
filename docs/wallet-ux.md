@@ -460,14 +460,14 @@ upgrades*).
    mined count bound it. Done returns to where Send was opened from.
    - **A queued transaction** (lenient mode; docs/lenient-mode.md, *The
      outbox*; owner rulings, 2026-11-06). While the id names one in the
-     outbox, the screen shows it: what it sends, then a step before Signed,
-     "Queued: waits for ‹network› to catch up. Keep Serotine open to send it
-     sooner." (decision 7), or, once the network's light client verifies,
-     that it is checked on chain and sent once it checks out, or, on a
-     network that is off, that nothing checks or sends it until it is
-     turned on (owner ruling, 2026-10-22); "Sending…"
-     while its broadcast runs; then Signed (when, on this device) and
-     Broadcast, which waits for the check. Its hash, once sent, is the id.
+     outbox, the screen shows it: what it sends, then Signed (when, on this
+     device), then a step "Queued: waits for ‹network› to catch up. Keep
+     Serotine open to send it sooner." (decision 7), or, once the network's
+     light client verifies, that it is checked on chain and sent once it
+     checks out, or, on a network that is off, that nothing checks or sends
+     it until it is turned on (owner ruling, 2026-10-22); "Sending…" while
+     its broadcast runs; then Broadcast, which waits for the check. Its
+     hash, once sent, is the id.
    - Past its hour without a tap (decision 4): "Still send this? You signed
      it 2 h ago.", with Send now (`ConfirmQueued`), which lets the check send
      it within the next hour, with no new signature.

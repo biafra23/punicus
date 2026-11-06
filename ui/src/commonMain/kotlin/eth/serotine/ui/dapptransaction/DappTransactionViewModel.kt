@@ -6,6 +6,7 @@ import eth.serotine.domain.model.AccountId
 import eth.serotine.domain.model.AccountKind
 import eth.serotine.domain.model.DappCallMeaning
 import eth.serotine.domain.model.Network
+import eth.serotine.domain.model.SyncPolicy
 import eth.serotine.domain.model.Token
 import eth.serotine.domain.model.UInt256
 import eth.serotine.domain.model.WalletPassword
@@ -15,9 +16,11 @@ import eth.serotine.domain.repository.DappRequestId
 import eth.serotine.domain.repository.DappSessionId
 import eth.serotine.domain.repository.Signing
 import eth.serotine.domain.repository.Unlock
+import eth.serotine.domain.usecase.CallRefusal
 import eth.serotine.domain.usecase.DappMessageReview
 import eth.serotine.domain.usecase.DappSafeProposal
 import eth.serotine.domain.usecase.DappSafeProposing
+import eth.serotine.domain.usecase.ObserveSyncPolicy
 import eth.serotine.domain.usecase.ProposeDappSafeTx
 import eth.serotine.domain.usecase.SafeCallSimulation
 import eth.serotine.domain.usecase.DappSafeSigning
@@ -39,6 +42,7 @@ import eth.serotine.domain.usecase.SignedAnswer
 import eth.serotine.domain.usecase.SignedState
 import eth.serotine.domain.usecase.TransferSending
 import eth.serotine.domain.repository.SentTransfer
+import eth.serotine.ui.components.DAPP_REQUESTS_STAY_STRICT
 import eth.serotine.ui.components.Eip55
 import eth.serotine.ui.components.NotSentItem
 import eth.serotine.ui.components.CHECK_TOOK_THE_TIME
@@ -169,11 +173,17 @@ class DappTransactionViewModel(
     private val signDappSafeTx: SignDappSafeTx,
     private val refuseDappRequest: RefuseDappRequest,
     private val describeKeyStore: DescribeKeyStore,
+    /** Whether the user chose *Sign while syncing*, which a dApp's request does not follow: its refusal says so. */
+    observeSyncPolicy: ObserveSyncPolicy,
     private val clock: () -> Long = ::epochSecondsNow,
     private val timeSource: TimeSource = TimeSource.Monotonic,
     /** When how long the dApp waits is said again: every 15 seconds while the screen is open. */
     ticks: Flow<Unit> = DappRequestViewModel.every15Seconds(),
 ) : ViewModel() {
+
+    /** Whether lenient mode is chosen: a refusal while syncing then says the setting does not reach this. */
+    private val lenient = observeSyncPolicy().map { it == SyncPolicy.LENIENT }
+        .stateIn(viewModelScope, SharingStarted.Eagerly, false)
 
     private val id: DappRequestId? = requestKey.split('/').takeIf { it.size == 2 }?.let { (topic, number) ->
         number.toLongOrNull()?.let { DappRequestId(DappSessionId(topic), it) }
@@ -285,7 +295,8 @@ class DappTransactionViewModel(
                         current.copy(
                             quoting = false,
                             quote = null,
-                            notQuoted = callRefusalText(quoting.refusal, network),
+                            notQuoted = callRefusalText(quoting.refusal, network) +
+                                if (quoting.refusal == CallRefusal.Syncing && lenient.value) DAPP_REQUESTS_STAY_STRICT else "",
                         )
                     is DappTransactionQuoting.GasTooLow -> current.copy(
                         quoting = false,

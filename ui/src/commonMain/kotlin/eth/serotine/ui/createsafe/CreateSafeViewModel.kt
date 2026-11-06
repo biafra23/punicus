@@ -7,6 +7,7 @@ import eth.serotine.domain.model.AccountCustody
 import eth.serotine.domain.model.AccountKind
 import eth.serotine.domain.model.Address
 import eth.serotine.domain.model.Network
+import eth.serotine.domain.model.SyncPolicy
 import eth.serotine.domain.model.WalletPassword
 import eth.serotine.domain.repository.AccountList
 import eth.serotine.domain.repository.AddressKind
@@ -20,6 +21,7 @@ import eth.serotine.domain.usecase.DeploySafe
 import eth.serotine.domain.usecase.DescribeKeyStore
 import eth.serotine.domain.usecase.ObserveAccounts
 import eth.serotine.domain.usecase.ObserveEnabledNetworks
+import eth.serotine.domain.usecase.ObserveSyncPolicy
 import eth.serotine.domain.usecase.PlanSafe
 import eth.serotine.domain.usecase.PlannedOwner
 import eth.serotine.domain.usecase.QuoteSafeDeployment
@@ -38,6 +40,7 @@ import eth.serotine.domain.usecase.TransferSending
 import eth.serotine.domain.usecase.WarmFeeHistory
 import eth.serotine.ui.components.AccountChoice
 import eth.serotine.ui.components.BalanceChange
+import eth.serotine.ui.components.CREATE_SAFE_STAYS_STRICT
 import eth.serotine.ui.components.Eip55
 import eth.serotine.ui.components.NATIVE_DECIMALS
 import eth.serotine.ui.components.NetworkChip
@@ -118,8 +121,14 @@ class CreateSafeViewModel(
     private val warmFeeHistory: WarmFeeHistory,
     observeEnabledNetworks: ObserveEnabledNetworks,
     private val setNetworkEnabled: SetNetworkEnabled,
+    /** Whether the user chose *Sign while syncing*, which creating a Safe does not follow: its refusal says so. */
+    observeSyncPolicy: ObserveSyncPolicy,
     private val timeSource: TimeSource = TimeSource.Monotonic,
 ) : ViewModel() {
+
+    /** Whether lenient mode is chosen: a refusal while syncing then says the setting does not reach this. */
+    private val lenient = observeSyncPolicy().map { it == SyncPolicy.LENIENT }
+        .stateIn(viewModelScope, SharingStarted.Eagerly, false)
 
     /** The network the user picked; null until they pick one, the default standing until then. */
     private val picked = MutableStateFlow<Network?>(null)
@@ -956,7 +965,8 @@ class CreateSafeViewModel(
             "The factory's verified run $returned, not the address computed here: the Safe release Serotine " +
                 "pins does not match the chain, so nothing is deployed."
         }
-        SafeDeploymentRefusal.Syncing -> "The light client is not synced yet: try again in a moment."
+        SafeDeploymentRefusal.Syncing -> "The light client is not synced yet: try again in a moment." +
+            if (lenient.value) CREATE_SAFE_STAYS_STRICT else ""
         is SafeDeploymentRefusal.Unavailable -> unavailableText(refusal.reason)
         is SafeDeploymentRefusal.NotQuoted -> callRefusalText(refusal.refusal, network)
     }

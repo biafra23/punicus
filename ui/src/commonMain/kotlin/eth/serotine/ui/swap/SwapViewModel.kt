@@ -11,6 +11,7 @@ import eth.serotine.domain.model.DisplayCurrency
 import eth.serotine.domain.model.Network
 import eth.serotine.domain.model.SlippageTolerance
 import eth.serotine.domain.model.SwapVenue
+import eth.serotine.domain.model.SyncPolicy
 import eth.serotine.domain.model.Token
 import eth.serotine.domain.model.TransferAsset
 import eth.serotine.domain.model.UInt256
@@ -45,6 +46,7 @@ import eth.serotine.domain.usecase.KeepWaitingSwap
 import eth.serotine.domain.usecase.ObserveAccountValue
 import eth.serotine.domain.usecase.ObserveAccounts
 import eth.serotine.domain.usecase.ObserveSwapVenue
+import eth.serotine.domain.usecase.ObserveSyncPolicy
 import eth.serotine.domain.usecase.PlaceCowOrder
 import eth.serotine.domain.usecase.QuoteCowSwap
 import eth.serotine.domain.usecase.QuoteFigure
@@ -66,6 +68,8 @@ import eth.serotine.domain.usecase.WarmFeeHistory
 import eth.serotine.domain.usecase.WrapQuote
 import eth.serotine.domain.usecase.WrapQuoting
 import eth.serotine.ui.components.AssetOption
+import eth.serotine.ui.components.SWAPS_STAY_STRICT
+import eth.serotine.ui.components.WRAPS_STAY_STRICT
 import eth.serotine.ui.outbox.OPEN_QUEUED
 import eth.serotine.ui.outbox.QUEUED_FIRST
 import eth.serotine.ui.components.BalanceChange
@@ -202,12 +206,21 @@ class SwapViewModel(
     private val keepWaitingSwap: KeepWaitingSwap,
     private val dropWaitingSwap: DropWaitingSwap,
     private val findWaitingSwap: FindWaitingSwap,
+    /** Whether the user chose *Sign while syncing*, which a swap does not follow: its refusal says so. */
+    observeSyncPolicy: ObserveSyncPolicy,
     private val timeSource: TimeSource = TimeSource.Monotonic,
     private val formatTime: (Long) -> String = ::formatDateTime,
     private val now: () -> Long = ::epochSecondsNow,
     fill: SwapFill? = null,
     continuing: Boolean = false,
 ) : ViewModel() {
+    /** Whether lenient mode is chosen: a refusal while syncing then says the setting does not reach this. */
+    private val lenient = observeSyncPolicy().map { it == SyncPolicy.LENIENT }
+        .stateIn(viewModelScope, SharingStarted.Eagerly, false)
+
+    /** [note] in lenient mode, nothing in strict mode. */
+    private fun lenientNote(note: String): String = if (lenient.value) note else ""
+
     /** The account this screen is about: its address, on its network. */
     private val from: Address = account.address
 
@@ -1650,7 +1663,7 @@ class SwapViewModel(
             }
             WrapQuoting.NotAToken -> NOT_A_TOKEN
             WrapQuoting.Refused -> "The light client on this device cannot quote this $verb."
-            WrapQuoting.Syncing -> "The light client is not synced yet: try again in a moment."
+            WrapQuoting.Syncing -> "The light client is not synced yet: try again in a moment." + lenientNote(WRAPS_STAY_STRICT)
             is WrapQuoting.Unavailable -> unavailableText(quoting.reason, quoting.figure)
         }
     }
@@ -1811,7 +1824,7 @@ class SwapViewModel(
         }
         SwapQuoting.NotAToken -> NOT_A_TOKEN
         SwapQuoting.Refused -> "The light client on this device cannot quote this swap."
-        SwapQuoting.Syncing -> "The light client is not synced yet: try again in a moment."
+        SwapQuoting.Syncing -> "The light client is not synced yet: try again in a moment." + lenientNote(SWAPS_STAY_STRICT)
         is SwapQuoting.Unavailable -> unavailableText(quoting.reason, quoting.figure)
     }
 
@@ -1863,7 +1876,7 @@ class SwapViewModel(
             "its transactions not mined yet can take is set aside."
         CowSwapQuoting.NotAToken -> NOT_A_TOKEN
         CowSwapQuoting.Refused -> "The light client on this device cannot quote this swap."
-        CowSwapQuoting.Syncing -> "The light client is not synced yet: try again in a moment."
+        CowSwapQuoting.Syncing -> "The light client is not synced yet: try again in a moment." + lenientNote(SWAPS_STAY_STRICT)
         is CowSwapQuoting.Unavailable -> unavailableText(quoting.reason, quoting.figure)
         is CowSwapQuoting.CowRefused -> when (quoting.why) {
             CowRefusal.NO_LIQUIDITY -> "CoW found no liquidity for this swap"
@@ -1900,7 +1913,7 @@ class SwapViewModel(
             (quoting.blockNumber?.let { " at block ${grouped(it)}" }.orEmpty()) + ". Nothing was signed."
         ApprovalQuoting.NotAToken -> "${sell.symbol}'s contract does not answer as a token."
         ApprovalQuoting.Refused -> "The light client on this device cannot quote the approval."
-        ApprovalQuoting.Syncing -> "The light client is not synced yet: try again in a moment."
+        ApprovalQuoting.Syncing -> "The light client is not synced yet: try again in a moment." + lenientNote(SWAPS_STAY_STRICT)
         is ApprovalQuoting.Unavailable -> unavailableText(quoting.reason, quoting.figure)
     }
 

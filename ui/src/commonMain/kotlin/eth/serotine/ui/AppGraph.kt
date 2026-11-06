@@ -680,6 +680,7 @@ class AppGraph(
         KeepWaitingSwap(waitingSwaps),
         DropWaitingSwap(waitingSwaps),
         FindWaitingSwap(waitingSwaps),
+        ObserveSyncPolicy(syncPolicy),
         fill = fill,
         continuing = continuing,
     )
@@ -774,6 +775,7 @@ class AppGraph(
         WarmFeeHistory(transactionInputs),
         ObserveEnabledNetworks(networkSettings),
         SetNetworkEnabled(networkSettings),
+        ObserveSyncPolicy(syncPolicy),
     )
 
     /** Add on another network (docs/networks.md, N6), for the EOA [account]. */
@@ -894,6 +896,7 @@ class AppGraph(
         SignDappSafeTx(dappRequests, ::signSafeTx),
         RefuseDappRequest(dappRequests, accounts, networkSettings),
         DescribeKeyStore(keys),
+        ObserveSyncPolicy(syncPolicy),
     )
 
     /** The review of the request [requestKey] names (`topic/id`, as its route carries it): screen D4. */

@@ -17,6 +17,7 @@ import eth.serotine.domain.repository.Simulation
 import eth.serotine.domain.model.Network
 import eth.serotine.domain.usecase.DescribeKeyStore
 import eth.serotine.domain.usecase.ObserveDappMessages
+import eth.serotine.domain.usecase.ObserveSyncPolicy
 import eth.serotine.domain.usecase.ProposeDappSafeTx
 import eth.serotine.domain.usecase.QuoteDappTransaction
 import eth.serotine.domain.usecase.RefuseDappRequest
@@ -26,6 +27,7 @@ import eth.serotine.domain.usecase.SignSafeTx
 import eth.serotine.ui.FakeDappRequests
 import eth.serotine.ui.FakeKeys
 import eth.serotine.ui.MemoryNetworkSettings
+import eth.serotine.ui.MemorySyncPolicy
 import eth.serotine.ui.MemoryTransactionHistory
 import eth.serotine.ui.SafeWorld
 import eth.serotine.ui.components.Eip55
@@ -96,6 +98,7 @@ class DappSafeTransactionViewModelTest {
             SignDappSafeTx(requests) { SignSafeTx(world.signer, world.observeSafe, world.recovery, world.queue, it) },
             RefuseDappRequest(requests, world.accounts, networks, clock = { now }),
             DescribeKeyStore(FakeKeys()),
+            observeSyncPolicy = ObserveSyncPolicy(MemorySyncPolicy()),
             clock = { now },
             timeSource = clock,
             ticks = kotlinx.coroutines.flow.flowOf(Unit),
@@ -141,6 +144,7 @@ class DappSafeTransactionViewModelTest {
             SignDappSafeTx(requests) { SignSafeTx(gnosis.signer, gnosis.observeSafe, gnosis.recovery, gnosis.queue, it) },
             RefuseDappRequest(requests, gnosis.accounts, on, clock = { now }),
             DescribeKeyStore(FakeKeys()),
+            observeSyncPolicy = ObserveSyncPolicy(MemorySyncPolicy()),
             clock = { now },
             timeSource = clock,
             ticks = kotlinx.coroutines.flow.flowOf(Unit),

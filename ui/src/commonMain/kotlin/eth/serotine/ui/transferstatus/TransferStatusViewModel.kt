@@ -314,7 +314,8 @@ class TransferStatusViewModel(
             network = name,
             id = queued.id,
             sent = summary(queued.action, queued.account),
-            steps = listOf(first, signed, broadcast),
+            // Signed on this device first; then it waits in the outbox; then it is sent.
+            steps = listOf(signed, first, broadcast),
             again = sendAgainOf(queued),
             againLabel = action,
             againNote = if (conflict != null) {
