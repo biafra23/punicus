@@ -70,7 +70,7 @@ it names for your task.
 cd ios-app/xcode && SEROTINE_DEVELOPMENT_TEAM=<team id> xcodegen generate && open Serotine.xcodeproj
 ./gradlew :ios-app:linkDebugFrameworkIosSimulatorArm64                      # the framework alone
 ./gradlew :desktop-app:packageDeb   # Linux;  packageDmg on macOS;  packageMsi on Windows (WiX 3)
-# Every screen's previews as PNGs in build/screenshots/, for a PR that changes the UI
+# Every screen's previews as PNGs in build/screenshots/, to look at locally (CI commits docs/screenshots/)
 ./gradlew :ui:desktopTest --tests '*PreviewsTest' --rerun -Pscreenshots=build/screenshots
 ./gradlew -q :printReleaseVersion   # the release version the tag guard compares against
 ```
@@ -176,7 +176,9 @@ Full text: `.claude/skills/pr/SKILL.md`; the reviewer's side,
 - A PR description ends with the session link, never with the "Generated
   with Claude Code" footer (owner ruling, 2026-10-09).
 - A PR that changes the UI shows it in screenshots, or says "No UI change"
-  (owner's request, 2026-10-19). The `screenshots` skill.
+  (owner's request, 2026-10-19). CI renders every screen into
+  `docs/screenshots/` and commits the changed ones to the PR's branch; never
+  commit one yourself (owner rulings, 2026-11-04). The `screenshots` skill.
 - Reply to every review comment, one by one, on its own thread, with a plain
   verdict: Accepted, Disputed or Deferred. Verify the claim first.
 - Fix review comments on the PR's own branch, never in a separate PR (owner
@@ -254,3 +256,6 @@ rulings to the screens.
 - dApps connect over WalletConnect v2, whose relay never supplies chain
   state; a dApp session names Sepolia alone for now; the project ID is never
   committed (owner rulings, 2026-11-03, #22; docs/walletconnect.md).
+- Send from another wallet hands a transfer to another wallet app as an
+  `ethereum:` payment link; nothing comes back, and the outcome is read from
+  verified blocks alone (owner rulings, 2026-11-05, #255).

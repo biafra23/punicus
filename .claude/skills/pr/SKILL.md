@@ -14,7 +14,8 @@ are Myotis's, copied with their dates.
   internal review of the diff has been run and its findings addressed.
 - The base is `main` for a single-PR work item, or the feature branch for a
   part of a multi-PR plan (`.claude/skills/feature-branch/SKILL.md`).
-- If the PR changes what the user sees, the screenshots exist
+- If the PR changes what the user sees, every state it adds or changes has
+  its preview; CI renders the screenshots
   (`.claude/skills/screenshots/SKILL.md`).
 
 ## Step 3: open the PR
@@ -34,8 +35,9 @@ The description holds, in this order:
    layer.
 2. For a part of a multi-PR plan: it opens with "Part k/n of
    `feature/<topic>`" and lists the parts still to come.
-3. A `## Screenshots` section: the images, or "No UI change", as the
-   screenshots skill says.
+3. A `## Screenshots` section: one line on what the PR changes on screen,
+   or "No UI change". CI writes the before/after table under the heading
+   (the screenshots skill).
 4. **The last line is the session link** (owner's ruling, 2026-10-09): the
    opening session's link first, and each session that later takes the PR
    over appends its own below. Never the "🤖 Generated with Claude Code"
@@ -129,8 +131,10 @@ exception.
   own single PR into `main` (step 4 of the feature-branch skill).
 - **Drive CI to green.** Never leave a PR on a red or pending check without
   pushing a fix or stating the blocker explicitly.
-- A push that changes what the screenshots show republishes them in the same
-  round (the screenshots skill).
+- **Merge CI's screenshots commit before the next push.** The Screenshots
+  workflow may add a commit `Screenshots: …` to the branch after a push:
+  `git pull --no-rebase` first, never a force-push over it (the screenshots
+  skill).
 
 ## The session title (Claude Code desktop app only)
 

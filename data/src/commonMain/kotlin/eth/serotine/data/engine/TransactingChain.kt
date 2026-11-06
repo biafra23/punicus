@@ -44,6 +44,14 @@ internal interface TransactingChain : VerifiedChain {
      */
     fun receipt(hash: String): String?
 
+    /**
+     * Block [number] with its transactions, as the engine's verified `getBlockByNumber` answers it
+     * with full transactions: its JSON block object, the header one of its verified head chain and
+     * the body checked against the header's transactions root; the "null" literal for a block it
+     * does not hold (not reached yet); null: no answer, and from an engine that offers no such read.
+     */
+    fun blockWithTransactions(number: Long): String? = null
+
     /** [name]'s address, resolved against beacon-finalized state. */
     fun resolveName(name: String): NameAnswer
 }

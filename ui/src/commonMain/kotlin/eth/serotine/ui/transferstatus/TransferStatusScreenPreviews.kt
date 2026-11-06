@@ -4,6 +4,7 @@ import androidx.compose.runtime.Composable
 import eth.serotine.ui.components.LightClientItem
 import eth.serotine.ui.components.NotSentItem
 import eth.serotine.ui.components.verifiedStripSample
+import eth.serotine.ui.ScreenPreview
 import eth.serotine.ui.theme.SerotineTheme
 import org.jetbrains.compose.ui.tooling.preview.Preview
 
@@ -385,31 +386,31 @@ private fun TransferStatusWrapPreview() = TransferStatusPreview(
     ),
 )
 
-internal val transferStatusScreenPreviews: List<@Composable () -> Unit> = listOf(
-    { TransferStatusPendingPreview() },
-    { TransferStatusPendingDarkPreview() },
-    { TransferStatusIncludedPreview() },
-    { TransferStatusFinalizedPreview() },
-    { TransferStatusFailedPreview() },
-    { TransferStatusUnavailablePreview() },
-    { TransferStatusNoRecordPreview() },
-    { TransferStatusSafeExecutionPreview() },
-    { TransferStatusSafeDeploymentPreview() },
-    { TransferStatusSafeListedPreview() },
-    { TransferStatusSafeListedDarkPreview() },
-    { TransferStatusSafeNotListedPreview() },
-    { TransferStatusMaybeSentPreview() },
-    { TransferStatusRetryingPreview() },
-    { TransferStatusTurnedAwayPreview() },
-    { TransferStatusLoadingPreview() },
-    { TransferStatusSwapPreview() },
-    { TransferStatusSwapFailedPreview() },
-    { TransferStatusApprovalPreview() },
-    { TransferStatusAllowanceResetPreview() },
-    { TransferStatusSwapDarkPreview() },
-    { TransferStatusSwapReceivedPreview() },
-    { TransferStatusNonceUsedPreview() },
-    { TransferStatusMaybeSentNonceUsedPreview() },
-    { TransferStatusCowCancellationPreview() },
-    { TransferStatusWrapPreview() },
+internal val transferStatusScreenPreviews: List<ScreenPreview> = listOf(
+    ScreenPreview("pending") { TransferStatusPendingPreview() },
+    ScreenPreview("pending-dark") { TransferStatusPendingDarkPreview() },
+    ScreenPreview("included") { TransferStatusIncludedPreview() },
+    ScreenPreview("finalized") { TransferStatusFinalizedPreview() },
+    ScreenPreview("failed") { TransferStatusFailedPreview() },
+    ScreenPreview("unavailable") { TransferStatusUnavailablePreview() },
+    ScreenPreview("no-record") { TransferStatusNoRecordPreview() },
+    ScreenPreview("safe-execution") { TransferStatusSafeExecutionPreview() },
+    ScreenPreview("safe-deployment") { TransferStatusSafeDeploymentPreview() },
+    ScreenPreview("safe-listed") { TransferStatusSafeListedPreview() },
+    ScreenPreview("safe-listed-dark") { TransferStatusSafeListedDarkPreview() },
+    ScreenPreview("safe-not-listed") { TransferStatusSafeNotListedPreview() },
+    ScreenPreview("maybe-sent") { TransferStatusMaybeSentPreview() },
+    ScreenPreview("retrying") { TransferStatusRetryingPreview() },
+    ScreenPreview("turned-away") { TransferStatusTurnedAwayPreview() },
+    ScreenPreview("loading") { TransferStatusLoadingPreview() },
+    ScreenPreview("swap") { TransferStatusSwapPreview() },
+    ScreenPreview("swap-failed") { TransferStatusSwapFailedPreview() },
+    ScreenPreview("approval") { TransferStatusApprovalPreview() },
+    ScreenPreview("allowance-reset") { TransferStatusAllowanceResetPreview() },
+    ScreenPreview("swap-dark") { TransferStatusSwapDarkPreview() },
+    ScreenPreview("swap-received") { TransferStatusSwapReceivedPreview() },
+    ScreenPreview("nonce-used") { TransferStatusNonceUsedPreview() },
+    ScreenPreview("maybe-sent-nonce-used") { TransferStatusMaybeSentNonceUsedPreview() },
+    ScreenPreview("cow-cancellation") { TransferStatusCowCancellationPreview() },
+    ScreenPreview("wrap") { TransferStatusWrapPreview() },
 )

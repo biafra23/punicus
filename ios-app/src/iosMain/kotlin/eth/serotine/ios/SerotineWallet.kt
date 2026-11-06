@@ -3,6 +3,7 @@ package eth.serotine.ios
 import eth.serotine.data.account.FileAccountRepository
 import eth.serotine.data.cow.FileCowOrders
 import eth.serotine.data.cow.HttpCowApi
+import eth.serotine.data.handoff.NoWalletHandoff
 import eth.serotine.data.walletconnect.WalletConnectDapps
 import eth.serotine.data.engine.MyotisHost
 import eth.serotine.data.history.FileHistoryStarts
@@ -228,6 +229,10 @@ class SerotineWallet {
             transactionInputs = node.transactionInputs,
             broadcaster = node.broadcaster,
             receipts = node.receipts,
+            blockTransactions = node.blockTransactions,
+            // iOS hands no payment link over yet (#255): several apps may claim `ethereum:`, the one
+            // opened is undefined, and the engine's iOS reads have no verified block body.
+            walletHandoff = NoWalletHandoff,
             names = node.names,
             signer = keyStore,
             sentTransfers = sentTransfers,

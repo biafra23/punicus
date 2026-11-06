@@ -2,6 +2,7 @@ package eth.serotine.ui.tokens
 
 import androidx.compose.runtime.Composable
 import eth.serotine.ui.components.NetworkLabel
+import eth.serotine.ui.ScreenPreview
 import eth.serotine.ui.theme.SerotineTheme
 import org.jetbrains.compose.ui.tooling.preview.Preview
 
@@ -185,12 +186,12 @@ private fun TokensGnosisPreview() = TokensPreview(
 )
 
 /** Every preview above, which TokensScreenPreviewsTest renders: a new preview goes in here too. */
-internal val tokensScreenPreviews: List<@Composable () -> Unit> = listOf(
-    { TokensListPreview() },
-    { TokensListDarkPreview() },
-    { TokensChecksPreview() },
-    { TokensUnreadablePreview() },
-    { TokensBuiltInPreview() },
-    { TokensBuiltInRestPreview() },
-    { TokensGnosisPreview() },
+internal val tokensScreenPreviews: List<ScreenPreview> = listOf(
+    ScreenPreview("list") { TokensListPreview() },
+    ScreenPreview("list-dark") { TokensListDarkPreview() },
+    ScreenPreview("checks") { TokensChecksPreview() },
+    ScreenPreview("unreadable") { TokensUnreadablePreview() },
+    ScreenPreview("built-in") { TokensBuiltInPreview() },
+    ScreenPreview("built-in-rest") { TokensBuiltInRestPreview() },
+    ScreenPreview("gnosis") { TokensGnosisPreview() },
 )

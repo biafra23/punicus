@@ -1,6 +1,7 @@
 package eth.serotine.ui.components
 
 import androidx.compose.runtime.Composable
+import eth.serotine.ui.ScreenPreview
 import eth.serotine.ui.theme.SerotineTheme
 import org.jetbrains.compose.ui.tooling.preview.Preview
 
@@ -29,8 +30,8 @@ private fun CaptureWarningScreenshotDarkPreview() =
 private fun CaptureWarningRecordingPreview() = CaptureWarningPreview(ScreenCaptureEvent.RECORDING)
 
 /** Every preview above, which ScreenCaptureWarningDialogPreviewsTest renders: a new preview goes in here too. */
-internal val screenCaptureWarningDialogPreviews: List<@Composable () -> Unit> = listOf(
-    { CaptureWarningScreenshotPreview() },
-    { CaptureWarningScreenshotDarkPreview() },
-    { CaptureWarningRecordingPreview() },
+internal val screenCaptureWarningDialogPreviews: List<ScreenPreview> = listOf(
+    ScreenPreview("screenshot") { CaptureWarningScreenshotPreview() },
+    ScreenPreview("screenshot-dark") { CaptureWarningScreenshotDarkPreview() },
+    ScreenPreview("recording") { CaptureWarningRecordingPreview() },
 )

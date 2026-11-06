@@ -40,6 +40,7 @@ import eth.serotine.domain.usecase.SetTokenHidden
 import eth.serotine.domain.usecase.ToggleAmountsHidden
 import eth.serotine.domain.usecase.UpgradeWarning
 import eth.serotine.domain.usecase.Valuation
+import eth.serotine.domain.usecase.OfferHandoff
 import eth.serotine.ui.accounts.UnreachableNetwork
 import eth.serotine.ui.activity.AccountActivity
 import eth.serotine.ui.activity.ActivityOrder
@@ -70,6 +71,7 @@ import eth.serotine.ui.components.safeTxActionItem
 import eth.serotine.ui.components.totalNote
 import eth.serotine.ui.components.totalText
 import eth.serotine.ui.components.valuationText
+import eth.serotine.ui.components.handoffChoice
 import eth.serotine.ui.platform.formatDateTime
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.NonCancellable
@@ -138,6 +140,8 @@ class AccountDetailViewModel(
     private val formatTime: (Long) -> String = ::formatDateTime,
     /** Now, in unix seconds: what simple mode's ages are dated against. */
     private val clock: () -> Long = ::epochSecondsNow,
+    /** Whether Send from another wallet is offered (issue #255), asked anew for each state built. Null: never. */
+    private val offerHandoff: OfferHandoff? = null,
 ) : ViewModel() {
     /** The account this screen is about: its address, on its network. */
     private val address: Address = account.address
@@ -330,6 +334,9 @@ class AccountDetailViewModel(
                     networkOn = networkOn,
                     networkBlocked = networkBlocked,
                     swapVenue = swapVenue,
+                    handoff = offerHandoff?.let { offer ->
+                        handoffChoice(offer(lookup.account), network.displayName.takeUnless { networkOn })
+                    },
                 )
                 AccountLookup.NotInList -> AccountDetailUiState.Gone
                 AccountLookup.ListUnavailable -> AccountDetailUiState.Unavailable(LIST_UNAVAILABLE)

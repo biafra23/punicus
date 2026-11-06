@@ -18,6 +18,7 @@ import eth.serotine.domain.usecase.ObserveEnsNames
 import eth.serotine.domain.usecase.ObserveLightClient
 import eth.serotine.domain.usecase.ObserveNetworkLive
 import eth.serotine.domain.usecase.ObservePortfolio
+import eth.serotine.domain.usecase.OfferHandoff
 import eth.serotine.domain.usecase.ObserveSafes
 import eth.serotine.domain.usecase.ObserveUpgradeWarnings
 import eth.serotine.domain.usecase.Portfolio
@@ -31,6 +32,7 @@ import eth.serotine.domain.usecase.UpgradeWarning
 import eth.serotine.domain.usecase.UpgradeWarnings
 import eth.serotine.ui.components.AMOUNTS_NOT_SAVED
 import eth.serotine.ui.components.Eip55
+import eth.serotine.ui.components.handoffChoice
 import eth.serotine.ui.components.LightClientHealth
 import eth.serotine.ui.components.LightClientItem
 import eth.serotine.ui.components.StaleAnchorWarning
@@ -92,6 +94,11 @@ class AccountsViewModel(
     private val clock: () -> Long = ::epochSecondsNow,
     /** How the banner dates an upgrade, and a row a balance last verified (unix seconds). */
     private val formatTime: (Long) -> String = ::formatDateTime,
+    /**
+     * Whether a row's menu offers Send from another wallet (issue #255): asked anew for each list
+     * drawn, since a wallet app may have been installed meanwhile. Null: never offered.
+     */
+    private val offerHandoff: OfferHandoff? = null,
 ) : ViewModel() {
 
     /**
@@ -381,6 +388,8 @@ class AccountsViewModel(
                         ?.takeIf { isOn }
                     // A row from the start, "Checking…" until its first reading: an account just
                     // added, or a screen just back, never waits for every proof.
+                    // Which apps take payment links: asked once for the whole list, not once per row.
+                    val handoffs = offerHandoff?.availability()
                     val items = accounts.map { account ->
                         val value = portfolio.values[account.id]
                         // In the currency the value was computed in: just after a change of
@@ -398,6 +407,11 @@ class AccountsViewModel(
                             now = clock(),
                             total = value?.total,
                         ).let { item -> if (blocked != null) item.copy(networkBlocked = blocked) else item }
+                            .let { item ->
+                                val availability = handoffs ?: return@let item
+                                val offer = offerHandoff?.invoke(account, availability) ?: return@let item
+                                item.copy(handoff = handoffChoice(offer, item.networkOff))
+                            }
                     }
                     val total = portfolio.totalOn(network)
                     NetworkSection(

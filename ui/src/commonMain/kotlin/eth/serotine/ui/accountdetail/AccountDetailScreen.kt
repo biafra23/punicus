@@ -93,6 +93,8 @@ import eth.serotine.ui.components.TokenIcon
 import eth.serotine.ui.components.Unavailable
 import eth.serotine.ui.components.UnavailableDialog
 import eth.serotine.ui.components.UnavailableNotice
+import eth.serotine.ui.components.UnavailableFix
+import eth.serotine.ui.components.SEND_FROM_ANOTHER_WALLET
 import eth.serotine.ui.components.UnderLightClientStrip
 import eth.serotine.ui.components.WithActionMenu
 import eth.serotine.ui.components.addOnNetworkOffReason
@@ -161,6 +163,7 @@ fun AccountDetailRoute(
     onSafeSettings: () -> Unit = {},
     onDerive: () -> Unit = {},
     onContinueSwap: (sell: String) -> Unit = {},
+    onSendElsewhere: (contract: String?) -> Unit = {},
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
     val gone by rememberUpdatedState(onGone)
@@ -199,6 +202,7 @@ fun AccountDetailRoute(
             onAddOnNetwork = onAddOnNetwork,
             onSafeSettings = onSafeSettings,
             onContinueSwap = onContinueSwap,
+            onSendElsewhere = onSendElsewhere,
             onDismissWaiting = viewModel::dismissWaiting,
             onDerive = onDerive,
             onToggleAmounts = viewModel::toggleAmounts,
@@ -227,6 +231,7 @@ fun AccountDetailRoute(
             onAddOnNetwork = onAddOnNetwork,
             onSafeSettings = onSafeSettings,
             onContinueSwap = onContinueSwap,
+            onSendElsewhere = onSendElsewhere,
             onDismissWaiting = viewModel::dismissWaiting,
             onDerive = onDerive,
             onToggleAmounts = viewModel::toggleAmounts,
@@ -284,6 +289,7 @@ fun AccountDetailScreen(
     onDerive: () -> Unit = {},
     onToggleAmounts: () -> Unit = {},
     onOrderActivity: (ActivityOrder) -> Unit = {},
+    onSendElsewhere: (contract: String?) -> Unit = {},
 ) {
     val snackbar = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
@@ -316,9 +322,26 @@ fun AccountDetailScreen(
         val reason = (state as? AccountDetailUiState.Ready)?.safeSettingsReason
         if (reason == null) onSafeSettings() else unavailable = notice("Safe settings", reason)
     }
+    // Send from another wallet (#255): greyed out with its reason, and offered as the way out of a
+    // greyed-out Send for an account whose key is in another wallet app.
+    val sendElsewhere: (String?) -> Unit = { contract ->
+        val reason = (state as? AccountDetailUiState.Ready)?.handoff?.reason
+        if (reason == null) onSendElsewhere(contract) else unavailable = notice(SEND_FROM_ANOTHER_WALLET, reason)
+    }
     val send: (String?) -> Unit = { contract ->
-        val reason = (state as? AccountDetailUiState.Ready)?.sendReason
-        if (reason == null) onSend(contract) else unavailable = notice("Send", reason)
+        val ready = state as? AccountDetailUiState.Ready
+        val reason = ready?.sendReason
+        when {
+            reason == null -> onSend(contract)
+            ready.handoff?.available == true -> unavailable = notice("Send", reason).let { blocked ->
+                UnavailableNotice(
+                    blocked.title,
+                    blocked.reason,
+                    blocked.fixes + UnavailableFix(SEND_FROM_ANOTHER_WALLET) { onSendElsewhere(contract) },
+                )
+            }
+            else -> unavailable = notice("Send", reason)
+        }
     }
     val swap: (String?) -> Unit = { contract ->
         val reason = (state as? AccountDetailUiState.Ready)?.swapReason
@@ -459,6 +482,7 @@ fun AccountDetailScreen(
                     onDismissWaiting = onDismissWaiting,
                     onSafeSettings = safeSettings,
                     simple = chrome is AccountChrome.Refresh,
+                    onSendElsewhere = sendElsewhere,
                 )
             }
         }
@@ -496,6 +520,7 @@ private fun Details(
     onSafeSettings: () -> Unit,
     /** Simple mode's chrome: the network on the blockie, the freshness line and the "can't check" banner. */
     simple: Boolean,
+    onSendElsewhere: (String?) -> Unit,
 ) {
     // Each item ends with the space before the next, but an Activity's rows, which follow one another.
     val spaced = Modifier.padding(bottom = 16.dp)
@@ -598,7 +623,7 @@ private fun Details(
         item { SegmentChoice(state.segments, state.segment, state.queue, onSegment, spaced) }
         // The same predicate as the top bar's sort entry, so the menu sorts exactly when the rows are shown.
         when {
-            state.showsAssets -> item { Assets(state, onSend, onSwap, onCopyContract, onHideToken) }
+            state.showsAssets -> item { Assets(state, onSend, onSwap, onCopyContract, onHideToken, onSendElsewhere) }
             state.segment == DetailSegment.ACTIVITY -> activityItems(
                 state.activity,
                 onOpenActivity,
@@ -715,6 +740,7 @@ private fun Assets(
     onSwap: (String?) -> Unit,
     onCopyContract: (String) -> Unit,
     onHideToken: (AssetRow) -> Unit,
+    onSendElsewhere: (String?) -> Unit,
 ) {
     Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
         state.assets.forEach { asset ->
@@ -724,6 +750,15 @@ private fun Assets(
             val actions = listOfNotNull(
                 MenuAction("Send ${asset.symbol}", Icons.AutoMirrored.Filled.Send, unavailable = !state.canSend) {
                     onSend(contract)
+                },
+                // Send from another wallet (#255), for an account whose key is in another wallet app;
+                // also behind the greyed-out Send button's explanation.
+                state.handoff?.let { handoff ->
+                    MenuAction(
+                        "Send ${asset.symbol} from another wallet",
+                        Icons.AutoMirrored.Filled.Send,
+                        unavailable = !handoff.available,
+                    ) { onSendElsewhere(contract) }
                 },
                 MenuAction("Swap ${asset.symbol}", SerotineIcons.Swap, unavailable = !state.canSwap) {
                     onSwap(contract)

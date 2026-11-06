@@ -7,6 +7,7 @@ import eth.serotine.ui.components.BalanceChange
 import eth.serotine.ui.components.NetworkChip
 import eth.serotine.ui.components.NetworkLabel
 import eth.serotine.ui.components.UnlockStep
+import eth.serotine.ui.ScreenPreview
 import eth.serotine.ui.theme.SerotineTheme
 import org.jetbrains.compose.ui.tooling.preview.Preview
 
@@ -93,8 +94,8 @@ private fun SimpleCreateSafePreview(state: CreateSafeUiState, darkTheme: Boolean
 }
 
 /** Every preview above, which SimpleCreateSafeScreenPreviewsTest renders: a new preview goes in here too. */
-internal val simpleCreateSafeScreenPreviews: List<@Composable () -> Unit> = listOf(
-    { SimpleCreateSafeOwnersPreview() },
-    { SimpleCreateSafeReviewPreview() },
-    { SimpleCreateSafeReviewDarkPreview() },
+internal val simpleCreateSafeScreenPreviews: List<ScreenPreview> = listOf(
+    ScreenPreview("owners") { SimpleCreateSafeOwnersPreview() },
+    ScreenPreview("review") { SimpleCreateSafeReviewPreview() },
+    ScreenPreview("review-dark") { SimpleCreateSafeReviewDarkPreview() },
 )
