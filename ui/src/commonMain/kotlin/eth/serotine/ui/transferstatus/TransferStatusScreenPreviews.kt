@@ -132,6 +132,24 @@ internal val queuedConflictSample = queuedSample.copy(
     againNote = "Sign again discards it and opens Send with it filled in, to be reviewed and signed anew.",
 )
 
+/** A Safe transaction's approval on chain, queued in lenient mode (docs/lenient-mode.md, *Safe transactions in lenient mode*). */
+internal val queuedSafeApprovalSample = queuedSample.copy(
+    sent = null,
+    safeTx = SafeTxSummary(
+        title = "Approval of a Safe transaction",
+        safe = "0xdbF03B407c01E7cD3CBea99509d93f8DDDC8C6FB",
+        nonce = "Safe nonce 12",
+        from = "0x5aAeb6053F3E94C9b9A09f33669435E7Ef1BeAed",
+    ),
+    again = null,
+    safeAgain = SafeTxAgain(
+        11_155_111,
+        "0xdbf03b407c01e7cd3cbea99509d93f8dddc8c6fb",
+        "0x3c9f1a7e5b2d8c4f6a0e9b1d3c5f7a9e2b4d6f8a0c1e3b5d7f9a2c4e6b8d0f1a",
+    ),
+    againNote = "Edit discards it and opens its Safe transaction. Discard deletes its signature: nothing is sent.",
+)
+
 internal val discardedSample =
     TransferStatusUiState.Discarded("Sepolia", "Discarded: its signature was deleted, and nothing was sent.")
 
@@ -143,6 +161,11 @@ private fun TransferStatusQueuedPreview() = TransferStatusPreview(queuedSample, 
 @Composable
 private fun TransferStatusQueuedDarkPreview() =
     TransferStatusPreview(queuedSample, darkTheme = true, lightClient = catchingUpStripSample)
+
+@Preview
+@Composable
+private fun TransferStatusQueuedSafeApprovalPreview() =
+    TransferStatusPreview(queuedSafeApprovalSample, lightClient = catchingUpStripSample)
 
 @Preview
 @Composable
@@ -534,4 +557,5 @@ internal val transferStatusScreenPreviews: List<ScreenPreview> = listOf(
     ScreenPreview("queued-discarding") { TransferStatusQueuedDiscardingPreview() },
     ScreenPreview("queued-not-discarded") { TransferStatusQueuedNotDiscardedPreview() },
     ScreenPreview("queued-outbox-unreadable") { TransferStatusFoundNowherePreview() },
+    ScreenPreview("queued-safe-approval") { TransferStatusQueuedSafeApprovalPreview() },
 )

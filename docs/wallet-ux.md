@@ -492,6 +492,19 @@ upgrades*).
      finds it sent, and the screen shows it as sent, never as discarded, and
      opens no Send. Once sent, the same id is the sent transfer's hash, and
      the screen is as above.
+   - A Safe transaction's approval on chain or its execution queued in
+     lenient mode (17; docs/lenient-mode.md, *Safe transactions in lenient
+     mode*; owner rulings, 2026-11-06) shows as a queued transfer does, with
+     "Approval of a Safe transaction" or "Execution of a Safe transaction",
+     the Safe and its nonce, and the account that sends it, in place of what
+     a transfer sends. Its check is the strict quote of the approval or the
+     execution made again (`CheckQueued`), every Safe check among them, an
+     execution run with the confirmations it was signed with; a conflict
+     says its reason as the notification does ("This account is no longer
+     an owner of the Safe.", "The Safe's nonce has passed its transaction:
+     it ran, or another transaction used its nonce."). Sign again and Edit
+     discard it and open its Safe transaction (17), to approve or execute it
+     anew.
 10. **Watch address**
     - An address or ENS name, and a name for the account.
     - A detection card built from verified code and storage: an EOA; an EOA
@@ -631,6 +644,11 @@ upgrades*).
       the reason for a delegate call or gas terms.
       While the Safe cannot be verified, the rows say that neither its nonce
       nor the signatures are checked. A tap opens 17.
+      In lenient mode a row with a signature held here until its check says
+      "your signature is held until it checks out on chain", and a transfer
+      proposed while syncing, held and in no queue yet, is listed by its
+      nonce with that line (docs/lenient-mode.md, *Safe transactions in
+      lenient mode*).
     - Import a request (above the rows): the text another owner's Share
       request gave, pasted, then `ImportSigningRequest`, for this Safe only (a
       request for another Safe is refused, `SafeTxRefusal.OtherSafe`, before
@@ -676,6 +694,26 @@ upgrades*).
       transaction (another nonce) drops it and says so. The review stands on
       its proposal while the Safe's reading or the account list is not
       there; a refresh or the signature checks the Safe again.
+    - **In lenient mode** (*Sign while syncing*, 18; docs/lenient-mode.md,
+      *Safe transactions in lenient mode*; owner rulings, 2026-11-06), while
+      the network's light client catches up, Send from a Safe proposes from
+      the Safe as last verified (`KeptSafes`: its nonce, owners and
+      threshold, kept across restarts with the block and the time they were
+      verified at, rule change 4); with none verified on this device, it
+      says so and waits. The form offers the Safe's balance last verified,
+      with no fiat value. Review drafts the transfer (`DraftSafeTx`) at the
+      Safe's next nonce after those queued and held here, every refusal of a
+      proposal applying (the zero address, the token's contract, the Safe
+      itself, nothing to send, the Safe's balance less what those before it
+      move), and no name resolved (decision 8). Its review is the draft's:
+      "Prepared on data from 12 min ago. It's checked on chain before it's
+      shown to anyone." on top; the Safe nonce, the owners and threshold and
+      the balance each with the block it was last verified at; the balance
+      after "if nothing changed"; "Not checked yet" in place of the
+      simulation; no Refresh, no minute and no deadline on the prompt; and
+      "Sign and hold". Signed (`HoldSafeSignature`), the signature is held
+      in the outbox, sealed as queued transactions are, never saved to the
+      queue and never shown: 17 opens on it.
 17. **Safe transaction**
     - The action, decoded here from the raw transaction (`SafeTxAction`): a
       native or ERC-20 transfer, an ERC-20 approval, a swap through a router
@@ -830,6 +868,54 @@ upgrades*).
       a signature already shared stays valid elsewhere until the Safe's
       nonce passes it. One the Safe's nonce has passed says it ran, or that
       another transaction used its nonce.
+    - **In lenient mode** (*Sign while syncing*; docs/lenient-mode.md, *Safe
+      transactions in lenient mode*; owner rulings, 2026-11-06), while the
+      owners' stand cannot be read because the light client catches up, it
+      is read from the Safe as last verified (`ReadKeptSafeTxOwners`): each
+      owner's signature here checked to recover to it over the hash computed
+      here, the rest "No signature here; whether it approved on chain is
+      read once ‹network› has caught up", "1 of 2 confirmations here", and
+      "Owners as last verified at block …, 12 min ago". A line on top says
+      what Sign, Approve on chain and Execute are prepared on and that each
+      is checked on chain before it is shown or sent. Every Safe refusal
+      applies unchanged, against the Safe as last verified; a swap and its
+      token approval stay strict ("A swap, and the token approval it needs,
+      are checked against the market and the router's code at a fresh head,
+      so this waits for the light client…"). Share request stays shut: the
+      Safe is not verified.
+      - Sign ("Sign and hold") holds the owner's signature in the outbox
+        until its check, never in the queue: one per Safe and nonce, so a
+        second at a nonce with one held waits for it. The screen then shows
+        the held signature: Signed (when, as whom), Held ("Waits for
+        ‹network› to catch up. Keep Serotine open to check it sooner.";
+        once it has caught up, that it is checked and saved to the queue once
+        it checks out; on a network that is off, that nothing checks it until
+        it is turned on), then In the queue, to share, which waits for the
+        check. Its QR code and text are not offered until then. Discard
+        deletes it (`DiscardHeld`, under the outbox's lock): a co-signature's
+        request stays in the queue, unsigned by it.
+      - The check (`CheckHeldSignature`, run by the outbox's follower at a
+        fresh verified head): the Safe verified as a Safe, the transaction's
+        nonce not used yet, the signer a current owner, and the threshold it
+        would leave. Passing, it is saved to the queue (pruned to the Safe's
+        nonce), where its QR code and text are offered, and a notification
+        says so. A nonce used meanwhile deletes the signature ("Needs your
+        signature again"): a proposal offers Propose again, which discards it
+        and opens Send from the Safe filled in, at the Safe's next nonce. A
+        signer no longer an owner deletes it too ("Discarded"); Dismiss
+        clears it. Each is told in a notification.
+      - Approve on chain and Execute are drafted on what was verified last
+        (`DraftSafeCall`): the account's count of mined transactions, the
+        network's fee quote and the account's balance last verified, and a
+        pinned gas ceiling (`DraftGas.SAFE_APPROVAL`, `SAFE_EXECUTION`). An
+        execution counts the signatures here valid against the owners last
+        verified and the executor's own; approvals on chain cannot be read
+        while syncing, so one short of the threshold without them says so
+        and waits. Their review is the draft's, as 8's: "Prepared on data
+        from …", each figure's block, "Not checked yet", no Refresh and no
+        deadline, and "Sign and queue on ‹network›". Signed
+        (`QueueSafeCall`), it is queued in the outbox like a send, and its
+        status (9) replaces the screen.
 
 28. **Safe settings** (issue #183), from the Owners tab of 16: the Safe's
     settings as its verified storage holds them, and the changes of them
@@ -908,7 +994,9 @@ Screens 22 to 24 are the swap screens (docs/swaps.md).
       owner rulings, 2026-11-06): "Send 0.1 ETH", "To Savings · 0x5aAe…eAed",
       when it was signed, and "Waiting to send", "Waiting for your answer"
       (past its hour) or "Needs your signature again". A tap opens its
-      status (9).
+      status (9). A Safe transaction's approval or execution queued from the
+      account reads "Approve on chain: Safe nonce 12" or "Execute: Safe
+      nonce 12", to the Safe.
     - One row per transaction: the blockie of its other side, what it did
       ("Sent 0.25 ETH", "Swapped 100 USDC for at least 4.28845 LINK",
       "Executed: Send 40 USDC", "Deployed a Safe"), whom or what else it

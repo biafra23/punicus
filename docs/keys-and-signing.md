@@ -592,7 +592,13 @@ only what the user signed, once. They are not public data either, since
 nothing has broadcast them, and whoever has them can. So they are sealed.
 
 - **What it seals.** `outbox.json`, the outbox's file, and nothing else. It
-  never touches an envelope, and no envelope's key touches it.
+  never touches an envelope, and no envelope's key touches it. The file
+  holds the queued transactions' signed bytes and, beside them, the Safe
+  signatures held in lenient mode until their check (docs/lenient-mode.md,
+  *Safe transactions in lenient mode*): an owner's signature of a Safe
+  transaction nobody has checked against the chain yet, which no other
+  owner may see before it is. They are sealed, lost and kept in memory
+  only exactly as the queued bytes are.
 - **A hardware key of its own** (rule 4's spirit: each use its own key).
   Android: a Keystore key that `KeyInfo` reports as hardware-backed (rule
   5). iOS and a Mac with a Secure Enclave: an enclave key, made as the

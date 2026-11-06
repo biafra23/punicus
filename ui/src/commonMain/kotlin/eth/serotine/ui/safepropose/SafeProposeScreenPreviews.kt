@@ -12,6 +12,7 @@ import eth.serotine.ui.components.SafeTxActionItem
 import eth.serotine.ui.components.SendFrom
 import eth.serotine.ui.components.TransferForm
 import eth.serotine.ui.components.UnlockStep
+import eth.serotine.ui.components.catchingUpStripSample
 import eth.serotine.ui.components.verifiedStripSample
 import eth.serotine.ui.ScreenPreview
 import eth.serotine.ui.theme.SerotineTheme
@@ -65,6 +66,36 @@ private val review = SafeProposeUiState.Review(
     owners = listOf(AccountChoice("Daily", DAILY)),
     owner = DAILY,
     unlock = UnlockStep(),
+)
+
+/**
+ * A transfer from a Safe drafted in lenient mode, the light client catching up (docs/lenient-mode.md,
+ * *Safe transactions in lenient mode*): for this file's previews and simple mode's.
+ */
+internal val draftReviewSample = SafeProposeUiState.DraftReview(
+    network = "Sepolia",
+    from = from,
+    action = review.action,
+    amount = "0.5 ETH",
+    asset = ether.copy(verifiedAt = null, age = "as of 12 min ago", lastKnown = true),
+    recipient = RecipientItem(FRIEND),
+    preparedOn = "Prepared on data from 12 min ago. It's checked on chain before it's shown to anyone.",
+    nonce = "Safe nonce 12, after the Safe's nonce last verified at block 8,412,307",
+    nonceAge = "Safe nonce 12, counted as of 12 min ago",
+    threshold = "2 of 3 owners must sign, as last verified at block 8,412,307",
+    thresholdAge = "2 of 3 owners must sign, as of 12 min ago",
+    balance = SafeBalanceChange(
+        "ETH balance of the Safe",
+        "2.5 ETH",
+        "2 ETH, if nothing changed",
+        "Last verified at block 8,412,307",
+    ),
+    balanceAge = "Balance as of 12 min ago",
+    notChecked = "Not checked yet: the Safe's owners and nonce are checked on chain before the signature is saved " +
+        "to the queue or shown to anyone, and its call runs when its execution is quoted.",
+    owners = listOf(AccountChoice("Daily", DAILY)),
+    owner = DAILY,
+    unlock = UnlockStep(biometrics = true),
 )
 
 @Composable
@@ -167,6 +198,36 @@ private fun SafeProposeWatchOnlyPreview() = SafeProposePreview(
     ),
 )
 
+@Preview
+@Composable
+private fun SafeProposeDraftPreview() = SafeProposePreview(draftReviewSample, lightClient = catchingUpStripSample)
+
+@Preview
+@Composable
+private fun SafeProposeDraftDarkPreview() =
+    SafeProposePreview(draftReviewSample, darkTheme = true, lightClient = catchingUpStripSample)
+
+@Preview
+@Composable
+private fun SafeProposeDraftNonceBusyPreview() = SafeProposePreview(
+    draftReviewSample.copy(
+        error = "A signature of another transaction at this Safe nonce is held on this device: one per nonce. " +
+            "Discard it, or wait for its check, to sign this one.",
+    ),
+    lightClient = catchingUpStripSample,
+)
+
+@Preview
+@Composable
+private fun SafeProposeNeverVerifiedPreview() = SafeProposePreview(
+    SafeProposeUiState.CannotPropose(
+        "Sepolia",
+        "The light client is still syncing, and this Safe's owners and nonce have never been verified on this " +
+            "device, so nothing can be prepared from it yet. Serotine keeps trying.",
+    ),
+    lightClient = catchingUpStripSample,
+)
+
 /** Every preview above, which SafeProposeScreenPreviewsTest renders: a new preview goes in here too. */
 internal val safeProposeScreenPreviews: List<ScreenPreview> = listOf(
     ScreenPreview("compose") { SafeProposeComposePreview() },
@@ -182,4 +243,8 @@ internal val safeProposeScreenPreviews: List<ScreenPreview> = listOf(
     ScreenPreview("review-checking") { SafeProposeReviewCheckingPreview() },
     ScreenPreview("loading") { SafeProposeLoadingPreview() },
     ScreenPreview("watch-only") { SafeProposeWatchOnlyPreview() },
+    ScreenPreview("draft") { SafeProposeDraftPreview() },
+    ScreenPreview("draft-dark") { SafeProposeDraftDarkPreview() },
+    ScreenPreview("draft-nonce-busy") { SafeProposeDraftNonceBusyPreview() },
+    ScreenPreview("never-verified") { SafeProposeNeverVerifiedPreview() },
 )

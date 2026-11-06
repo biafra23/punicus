@@ -4,6 +4,7 @@ import eth.serotine.domain.model.AccountId
 import eth.serotine.domain.model.Address
 import eth.serotine.domain.model.Mnemonic
 import eth.serotine.domain.model.Network
+import eth.serotine.domain.model.SyncPolicy
 import eth.serotine.domain.model.Token
 import eth.serotine.domain.model.TokenUnits
 import eth.serotine.domain.model.WalletPassword
@@ -17,6 +18,7 @@ import eth.serotine.domain.repository.KeyDerivation
 import eth.serotine.domain.repository.KeyImport
 import eth.serotine.domain.repository.KeyProtection
 import eth.serotine.domain.repository.KeyStore
+import eth.serotine.domain.repository.KeptSafe
 import eth.serotine.domain.repository.KeyStoreDescription
 import eth.serotine.domain.repository.KindReading
 import eth.serotine.domain.repository.NewMnemonic
@@ -705,5 +707,92 @@ class SafeProposeViewModelTest {
         val review = viewModel.review
         assertEquals(shared, review.share, "still there to be shared")
         assertEquals("The Safe's owners and nonce could not be verified this time: try again.", review.error)
+    }
+
+    // Lenient mode (docs/lenient-mode.md, *Safe transactions in lenient mode*)
+
+    /** The light client catches up: the Safe cannot be verified, its balance as last verified 10 min ago. */
+    private fun syncing() {
+        world.kind.value = KindReading.Syncing
+        world.balances.of(world.safe).value =
+            BalanceReading.LastKnown(Wei.of("1000000000000000000"), 90, asOf = wallClock - 600)
+        world.keptSafes.kept.value = KeptSafe(world.state, 90, asOf = wallClock - 600)
+    }
+
+    @Test
+    fun inStrictModeASafeThatSyncsProposesNothingYet() = runTest {
+        syncing()
+        val viewModel = viewModel()
+        assertIs<SafeProposeUiState.Loading>(viewModel.uiState.value, "strict mode waits for the light client")
+    }
+
+    @Test
+    fun inLenientModeAProposalIsDraftedOnTheSafeLastVerifiedAndItsSignatureHeldNotQueued() = runTest {
+        world.policy.policy.value = SyncPolicy.LENIENT
+        syncing()
+        val viewModel = viewModel()
+        viewModel.onToChange(Eip55.format(world.recipient))
+        viewModel.onAmountChange("0.1")
+        runCurrent()
+        assertEquals("1 ETH", viewModel.form.asset?.balance, "the balance last verified, offered")
+        viewModel.review()
+        runCurrent()
+
+        val draft = assertIs<SafeProposeUiState.DraftReview>(viewModel.uiState.value)
+        assertEquals("Prepared on data from 10 min ago. It's checked on chain before it's shown to anyone.", draft.preparedOn)
+        assertEquals("Send 0.1 ETH", draft.action.title)
+        assertEquals("Safe nonce 4, after the Safe's nonce last verified at block 90", draft.nonce)
+        assertEquals("Safe nonce 4, counted as of 10 min ago", draft.nonceAge)
+        assertEquals("0.9 ETH, if nothing changed", draft.balance.after)
+        assertTrue(draft.notChecked.startsWith("Not checked yet"))
+        assertTrue(world.inputs.estimated.isEmpty(), "nothing is estimated or run while syncing")
+
+        viewModel.onPasswordChange("made-up test password")
+        viewModel.sign()
+        runCurrent()
+
+        val held = world.outbox.held.single()
+        assertEquals(world.alice.address, held.owner)
+        assertTrue(held.proposed)
+        assertEquals(SafeProposeUiState.Proposed("Sepolia", "0x" + held.hash.hex), viewModel.uiState.value)
+        assertEquals(emptyList(), world.queue.requests.value, "never queued before its check")
+        assertEquals(emptyList(), world.outbox.queued, "it takes no place of the owner's account")
+    }
+
+    @Test
+    fun aDraftWithASafeNeverVerifiedHereSaysSo() = runTest {
+        world.policy.policy.value = SyncPolicy.LENIENT
+        syncing()
+        world.keptSafes.kept.value = null
+        val viewModel = viewModel()
+        val cannot = assertIs<SafeProposeUiState.CannotPropose>(viewModel.uiState.value)
+        assertTrue(cannot.message.contains("never been verified on this device"))
+    }
+
+    @Test
+    fun aDraftsPromptHasNoDeadlineAndSaysItIsHeld() = runTest {
+        biometrics = BiometricUnlock.On
+        world.policy.policy.value = SyncPolicy.LENIENT
+        syncing()
+        val viewModel = viewModel()
+        viewModel.onToChange(Eip55.format(world.recipient))
+        viewModel.onAmountChange("0.1")
+        runCurrent()
+        viewModel.review()
+        runCurrent()
+        viewModel.signWithBiometrics()
+        runCurrent()
+
+        val unlock = assertIs<Unlock.WithBiometrics>(world.signer.asked.single().second)
+        assertEquals(null, unlock.notAfter)
+        assertTrue(unlock.reason.endsWith("held until it checks out on chain"))
+    }
+
+    @Test
+    fun aFillOpensTheFormFilledIn() = runTest {
+        holding()
+        val viewModel = viewModel(fill = SafeProposeFill(Eip55.format(world.recipient), "0.25"))
+        assertEquals(Eip55.format(world.recipient), viewModel.form.to)
+        assertEquals("0.25", viewModel.form.amount)
     }
 }

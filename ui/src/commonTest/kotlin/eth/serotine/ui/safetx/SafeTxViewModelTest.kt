@@ -1,5 +1,14 @@
 package eth.serotine.ui.safetx
 
+import eth.serotine.domain.model.SyncPolicy
+import eth.serotine.domain.repository.FeeQuote
+import eth.serotine.domain.repository.HeldConflict
+import eth.serotine.domain.repository.HeldSafeSignature
+import eth.serotine.domain.repository.KeptFees
+import eth.serotine.domain.repository.KeptNonce
+import eth.serotine.domain.repository.KeptSafe
+import eth.serotine.domain.repository.SafeDraftBasis
+import kotlin.test.assertNotNull
 import eth.serotine.domain.model.AccountId
 import eth.serotine.domain.model.Address
 import eth.serotine.domain.model.Erc20
@@ -1296,5 +1305,153 @@ class SafeTxViewModelTest {
         runCurrent()
 
         assertIs<SafeTxUiState.NotQueued>(viewModel.uiState.value)
+    }
+
+    // Lenient mode (docs/lenient-mode.md, *Safe transactions in lenient mode*)
+
+    /** Sign while syncing on, the light client catching up: the Safe as last verified 10 min ago. */
+    private fun lenientWhileSyncing() {
+        world.policy.policy.value = SyncPolicy.LENIENT
+        world.keptSafes.kept.value = KeptSafe(world.state, 90, asOf = 1_800_000_000L - 600)
+        world.kind.value = KindReading.Syncing
+        world.head.value = LightClientStatus.CatchingUp(1, 3)
+        world.balances.of(world.alice.address).value =
+            BalanceReading.LastKnown(Wei.of("1000000000000000000"), 90, asOf = 1_800_000_000L - 600)
+        world.keptInputs.nonces[Network.SEPOLIA to world.alice.address] = KeptNonce(7, 88, 1_800_000_000L - 900)
+        world.keptInputs.fees[Network.SEPOLIA] = KeptFees(
+            FeeQuote(UInt256.of(10_000_000_000L), FeeLevel.entries.associateWith { UInt256.of(1_000_000_000L) }, 89),
+            1_800_000_000L - 900,
+        )
+    }
+
+    @Test
+    fun inStrictModeWhileSyncingNothingIsSignedOnTheSafeLastVerified() = runTest {
+        val request = queued(world.request(world.ether(4)))
+        world.keptSafes.kept.value = KeptSafe(world.state, 90, asOf = 1_800_000_000L - 600)
+        world.kind.value = KindReading.Syncing
+        val viewModel = viewModel(request)
+
+        val overview = viewModel.overview
+        assertIs<OwnersItem.Unavailable>(overview.owners)
+        assertFalse(overview.canSign)
+        assertEquals(null, overview.draftNote)
+    }
+
+    @Test
+    fun inLenientModeTheOwnersAreReadFromTheSafeLastVerifiedAndASignatureIsHeldNotQueued() = runTest {
+        lenientWhileSyncing()
+        val request = queued(world.request(world.ether(4)))
+        val viewModel = viewModel(request)
+
+        val overview = viewModel.overview
+        val owners = assertIs<OwnersItem.Shown>(overview.owners)
+        assertEquals("0 of 2 confirmations here", owners.confirmations)
+        assertEquals("Owners as last verified at block 90, 10 min ago", owners.verifiedAt)
+        assertTrue(overview.draftNote!!.contains("as last verified 10 min ago"), overview.draftNote)
+        assertTrue(overview.canSign)
+        assertFalse(overview.canShare, "nothing is shared while the Safe is not verified")
+
+        viewModel.startSigning()
+        runCurrent()
+        assertEquals("Sign and hold", viewModel.signing.signLabel)
+        viewModel.onPasswordChange("made-up test password")
+        viewModel.sign()
+        runCurrent()
+
+        val held = world.outbox.held.single()
+        assertEquals(world.alice.address, held.owner)
+        assertFalse(held.proposed)
+        assertEquals(emptyList(), world.queue.requests.value.single().signers, "never queued before its check")
+        val state = assertIs<SafeTxUiState.Held>(viewModel.uiState.value)
+        assertEquals(listOf("Signed", "Held", "In the queue, to share"), state.steps.map { it.label })
+        assertEquals("Waits for Sepolia to catch up. Keep Serotine open to check it sooner.", state.steps[1].detail)
+        assertEquals("Discard", state.discardLabel)
+        assertEquals(null, state.again)
+    }
+
+    @Test
+    fun aHeldSignatureDiscardedLeavesTheRequestInTheQueueUnsigned() = runTest {
+        lenientWhileSyncing()
+        val request = queued(world.request(world.ether(4)))
+        val viewModel = viewModel(request)
+        viewModel.startSigning()
+        viewModel.onPasswordChange("made-up test password")
+        viewModel.sign()
+        runCurrent()
+
+        viewModel.discardHeldSignature()
+        runCurrent()
+
+        assertEquals(emptyList(), world.outbox.held)
+        assertEquals("Discarded: your signature was deleted, and it was never shown to anyone.", viewModel.overview.message)
+    }
+
+    @Test
+    fun anApprovalIsDraftedOnWhatWasVerifiedLastAndQueuedNotSent() = runTest {
+        lenientWhileSyncing()
+        val request = queued(world.request(world.ether(4)))
+        val viewModel = viewModel(request)
+
+        viewModel.startApproval()
+        runCurrent()
+        val draft = assertIs<SafeTxUiState.DraftReview>(viewModel.uiState.value)
+        assertEquals(ReviewKind.APPROVAL, draft.kind)
+        assertEquals("Prepared on data from 15 min ago. It's checked on chain again before it's sent.", draft.preparedOn)
+        assertEquals("Nonce 7, counted as of 15 min ago", draft.txNonceAge)
+        assertTrue(draft.notChecked.startsWith("Not checked yet"))
+        viewModel.onPasswordChange("made-up test password")
+        viewModel.sign()
+        runCurrent()
+
+        val queuedCall = world.outbox.queued.single()
+        assertEquals(SentAction.SafeApproval(request), queuedCall.action)
+        assertEquals(SafeTxUiState.Queued("Sepolia", queuedCall.id), viewModel.uiState.value)
+        assertTrue(world.broadcaster.sent.isEmpty(), "nothing is broadcast from here")
+    }
+
+    @Test
+    fun anExecutionShortOfSignaturesHereSaysApprovalsOnChainWaitForTheLightClient() = runTest {
+        lenientWhileSyncing()
+        val viewModel = viewModel(queued(world.request(world.ether(4))))
+
+        // Alice's own sending is one confirmation of two; no signature here.
+        val overview = viewModel.overview
+        assertFalse(overview.canExecute)
+        assertEquals(
+            "1 of the 2 confirmations it needs here. Approvals on chain are read once Sepolia has caught up.",
+            overview.executeNote,
+        )
+    }
+
+    @Test
+    fun aHeldProposalWhoseNonceWasUsedIsProposedAgainOnceDiscarded() = runTest {
+        lenientWhileSyncing()
+        val proposal = SigningRequest.of(Network.SEPOLIA, world.safe, world.ether(4))
+        world.outbox.hold(
+            HeldSafeSignature(
+                request = proposal,
+                owner = world.alice.address,
+                signature = null,
+                proposed = true,
+                signedAt = 1_800_000_000L - 60,
+                builtOn = SafeDraftBasis(90, 1_800_000_000L - 600),
+                conflict = HeldConflict.NonceUsed(5),
+            ),
+        )
+        val viewModel = viewModel(proposal)
+
+        val held = assertIs<SafeTxUiState.Held>(viewModel.uiState.value)
+        assertEquals("Needs your signature again", held.steps[1].label)
+        assertTrue(held.steps[1].detail!!.startsWith("Another Safe transaction used nonce 4"))
+        assertEquals("Dismiss", held.discardLabel)
+        val again = assertNotNull(held.again)
+        assertEquals("0.1", again.amount)
+        assertEquals(world.recipient.hex, again.to)
+
+        viewModel.proposeHeldAgain()
+        runCurrent()
+
+        assertEquals(emptyList(), world.outbox.held)
+        assertEquals(again, assertIs<SafeTxUiState.Discarded>(viewModel.uiState.value).reopen)
     }
 }
