@@ -21,6 +21,7 @@ import eth.serotine.data.settings.FileDebugScreen
 import eth.serotine.data.settings.FileDisplayCurrency
 import eth.serotine.data.settings.FileAmountsHidden
 import eth.serotine.data.settings.FileInterfaceMode
+import eth.serotine.data.settings.FileSyncPolicy
 import eth.serotine.data.settings.FileSwapVenue
 import eth.serotine.data.swaps.FileWaitingSwaps
 import eth.serotine.data.tokens.BuiltInTokenCatalog
@@ -37,6 +38,7 @@ import eth.serotine.domain.usecase.FollowDebugScreen
 import eth.serotine.domain.usecase.FollowInterfaceMode
 import eth.serotine.domain.usecase.FollowNetworks
 import eth.serotine.domain.usecase.FollowSafeDeployments
+import eth.serotine.domain.usecase.KeepTransactionInputs
 import eth.serotine.domain.usecase.FollowSentTransactions
 import eth.serotine.domain.usecase.FollowUpgradeReports
 import eth.serotine.domain.usecase.HistoryNotingAccounts
@@ -130,6 +132,9 @@ class SerotineWallet {
     private val interfaceMode = FileInterfaceMode("$dataDir/ui-mode.json")
     private val amountsHidden = FileAmountsHidden("$dataDir/amounts-hidden.json")
 
+    /** Whether a transaction may be signed while the light client syncs (docs/lenient-mode.md), beside the other settings. */
+    private val syncPolicy = FileSyncPolicy("$dataDir/sync-policy.json")
+
     // One engine, one light client per network that is on and needed: FollowNetworks starts with
     // the wallet and runs for the life of the process (docs/networks.md, *The engine host*). The
     // engine's state can be fetched again, so it stays out of backups. The balances last verified
@@ -150,6 +155,7 @@ class SerotineWallet {
             lastBalances = "$dataDir/last-balances.json",
             debugLog = debugLog,
             apiLog = this.debugLog,
+            keptInputs = "$dataDir/kept-inputs.json",
         )
     }
 
@@ -401,6 +407,12 @@ class SerotineWallet {
                 }
             }
         } + listOf(
+            scope.launch {
+                // What a lenient draft is built on, kept recent while the light clients verify (docs/lenient-mode.md).
+                reportingFailure("keeping the transaction inputs") {
+                    KeepTransactionInputs(syncPolicy, accounts, node.lightClient, node.transactionInputs)()
+                }
+            },
             scope.launch {
                 // The Safes this wallet deployed are listed whatever screen is open, and again after a
                 // restart (docs/wallet-ux.md, screen 15).

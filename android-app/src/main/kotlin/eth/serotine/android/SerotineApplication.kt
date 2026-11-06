@@ -43,6 +43,7 @@ import eth.serotine.data.settings.FileDebugScreen
 import eth.serotine.data.settings.FileDisplayCurrency
 import eth.serotine.data.settings.FileAmountsHidden
 import eth.serotine.data.settings.FileInterfaceMode
+import eth.serotine.data.settings.FileSyncPolicy
 import eth.serotine.data.settings.FileSwapVenue
 import eth.serotine.data.swaps.FileWaitingSwaps
 import eth.serotine.data.tokens.BuiltInTokenCatalog
@@ -63,6 +64,7 @@ import eth.serotine.domain.usecase.FollowExchangeRate
 import eth.serotine.domain.usecase.FollowInterfaceMode
 import eth.serotine.domain.usecase.FollowNetworks
 import eth.serotine.domain.usecase.FollowSafeDeployments
+import eth.serotine.domain.usecase.KeepTransactionInputs
 import eth.serotine.domain.usecase.FollowSentTransactions
 import eth.serotine.domain.usecase.FollowUpgradeReports
 import eth.serotine.domain.usecase.HistoryNotingAccounts
@@ -142,6 +144,7 @@ class SerotineApplication : Application() {
             lastBalances = filesDir.resolve("last-balances.json").path,
             debugLog = if (debuggable) { line -> Log.d(LOG_TAG, line) } else null,
             apiLog = debugLog,
+            keptInputs = filesDir.resolve("kept-inputs.json").path,
         ).also { host ->
             scope.launch { followNetworks(host) }
             // Values proven on demand in simple mode, at every head in Detailed view (docs/simple-ui.md).
@@ -185,6 +188,9 @@ class SerotineApplication : Application() {
 
     /** The view the user chose, simple mode or Detailed view (docs/simple-ui.md), beside the other settings. */
     private val interfaceMode by lazy { FileInterfaceMode(filesDir.resolve("ui-mode.json").path) }
+
+    /** Whether a transaction may be signed while the light client syncs (docs/lenient-mode.md), beside the other settings. */
+    private val syncPolicy by lazy { FileSyncPolicy(filesDir.resolve("sync-policy.json").path) }
     private val amountsHidden by lazy { FileAmountsHidden(filesDir.resolve("amounts-hidden.json").path) }
 
     /** eth.serotine.debug is debuggable, the release app is not: what the debug app's extras hang on. */
@@ -467,6 +473,7 @@ class SerotineApplication : Application() {
     private var cowOrderEnds: Job? = null
     private var rateFollowing: Job? = null
     private var dappRelay: Job? = null
+    private var keptInputs: Job? = null
     private val sleep = Runnable { node.pause() }
     private val stopAppWork = Runnable {
         following?.cancel()
@@ -481,6 +488,8 @@ class SerotineApplication : Application() {
         cowOrderEnds = null
         dappRelay?.cancel()
         dappRelay = null
+        keptInputs?.cancel()
+        keptInputs = null
     }
 
     /** The activity in front, for the biometric prompt. */
@@ -522,8 +531,8 @@ class SerotineApplication : Application() {
     /**
      * Keeps the engine's networking on, its upgrade reports followed into notifications, the
      * Safes this wallet deployed listed once proven, how the transactions sent from here end
-     * recorded, and the accounts followed by the engine's log index, until the matching
-     * [releaseEngine]. Main thread.
+     * recorded, the accounts followed by the engine's log index, and in lenient mode what a draft
+     * is built on kept recent, until the matching [releaseEngine]. Main thread.
      */
     fun holdEngine() {
         wakeEngine()
@@ -542,6 +551,14 @@ class SerotineApplication : Application() {
         if (sentTransactions?.isActive != true) sentTransactions = scope.launch { followSentTransactions() }
         if (accountLogs?.isActive != true) accountLogs = scope.launch { followAccountLogs() }
         if (cowOrderEnds?.isActive != true) cowOrderEnds = scope.launch { proveCowOrderEnds() }
+        // What a lenient draft is built on, kept recent while the light clients verify (docs/lenient-mode.md).
+        if (keptInputs?.isActive != true) {
+            keptInputs = scope.launch {
+                reportingFailure("keeping the transaction inputs") {
+                    KeepTransactionInputs(syncPolicy, accounts, node.lightClient, node.transactionInputs)()
+                }
+            }
+        }
         // The relay connection while the app holds its work: dApp messages arrive while it is open.
         if (dappRelay?.isActive != true) dappRelay = scope.launch { runDappRelay() }
     }

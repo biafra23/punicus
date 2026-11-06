@@ -32,6 +32,7 @@ import eth.serotine.domain.repository.SafeApprovals
 import eth.serotine.domain.repository.StaleAnchorConsent
 import eth.serotine.domain.repository.TokenBalances
 import eth.serotine.domain.repository.TokenMetadata
+import eth.serotine.domain.repository.KeptTransactionInputs
 import eth.serotine.domain.repository.TransactionInputs
 import eth.serotine.domain.repository.UniswapV3Chain
 import io.myotis.api.BeaconState
@@ -90,6 +91,7 @@ class MyotisHost private constructor(
     lastBalancesPath: String?,
     private val debugLog: ((String) -> Unit)?,
     private val apiLog: LogSink?,
+    keptInputsPath: String?,
 ) : LightClientControl, StaleAnchorConsent, NetworkFreshness {
 
     /** The engine of this process: none until a first start, [Absent] when its library does not run here. */
@@ -123,6 +125,9 @@ class MyotisHost private constructor(
     /** The balances last verified, kept for after a restart; none kept without a path. Shared by every network. */
     private val lastBalances = lastBalancesPath?.let { LastBalancesFile(it, Dispatchers.IO) }
 
+    /** The mined counts and fee quotes last verified, kept for a lenient draft; none kept without a path. */
+    private val keptInputsFile = keptInputsPath?.let { KeptInputsFile(it, Dispatchers.IO) }
+
     /** One light client per network the engine can host. */
     private val nodes: Map<Network, ChainNode> = Network.entries.associateWith { ChainNode(it) }
 
@@ -154,6 +159,9 @@ class MyotisHost private constructor(
 
     /** A transaction's nonce, fees, gas and verified simulation, from its network's verified reads. */
     val transactionInputs: TransactionInputs = routed.transactionInputs
+
+    /** The mined counts and fee quotes [transactionInputs] last verified, for a lenient draft (docs/lenient-mode.md). */
+    val keptTransactionInputs: KeptTransactionInputs = keptInputsFile ?: NoKeptTransactionInputs
 
     /** Gossips a signed transaction to its network's peers (the engine never signs). */
     val broadcaster: Broadcaster = routed.broadcaster
@@ -439,7 +447,7 @@ class MyotisHost private constructor(
             networkUpgrades = EngineNetworkUpgrades(network, chain, Dispatchers.IO, POLL_INTERVAL),
             priceFeeds = prices,
             priceHistory = prices,
-            transactionInputs = EngineTransactionInputs(network, chain, Dispatchers.IO),
+            transactionInputs = EngineTransactionInputs(network, chain, Dispatchers.IO, kept = keptInputsFile),
             broadcaster = EngineBroadcaster(network, chain, Dispatchers.IO),
             receipts = EngineReceipts(network, chain, Dispatchers.IO, POLL_INTERVAL),
             blockTransactions = EngineBlockTransactions(network, chain, Dispatchers.IO),
@@ -831,7 +839,8 @@ class MyotisHost private constructor(
          * path that writes to it. [lastBalances] is the file the balances last verified are kept
          * in ([LastBalancesFile]); null keeps them for the process only. [apiLog] takes each
          * request the adapters make of the engine ([LoggedChain]): the Debug tab's log, in memory
-         * only; null records none.
+         * only; null records none. [keptInputs] is the file the mined counts and fee quotes last
+         * verified are kept in, for a lenient draft ([KeptInputsFile]); null keeps none.
          *
          * A device without an engine — an Android ABI the library does not ship, a desktop whose
          * resources carry no host library (Windows, for now) — or one whose engine fails to start
@@ -843,12 +852,14 @@ class MyotisHost private constructor(
             lastBalances: String? = null,
             debugLog: ((String) -> Unit)? = null,
             apiLog: LogSink? = null,
+            keptInputs: String? = null,
         ): MyotisHost = MyotisHost(
             dataDir,
             dnsServers?.let { servers -> DnsServers { servers() } },
             lastBalances,
             debugLog,
             apiLog,
+            keptInputs,
         )
     }
 }

@@ -28,6 +28,7 @@ import eth.serotine.data.settings.FileDebugScreen
 import eth.serotine.data.settings.FileDisplayCurrency
 import eth.serotine.data.settings.FileAmountsHidden
 import eth.serotine.data.settings.FileInterfaceMode
+import eth.serotine.data.settings.FileSyncPolicy
 import eth.serotine.data.settings.FileSwapVenue
 import eth.serotine.data.swaps.FileWaitingSwaps
 import eth.serotine.data.walletconnect.WalletConnectDapps
@@ -45,6 +46,7 @@ import eth.serotine.domain.usecase.FollowDebugScreen
 import eth.serotine.domain.usecase.FollowInterfaceMode
 import eth.serotine.domain.usecase.FollowNetworks
 import eth.serotine.domain.usecase.FollowSafeDeployments
+import eth.serotine.domain.usecase.KeepTransactionInputs
 import eth.serotine.domain.usecase.FollowSentTransactions
 import eth.serotine.domain.usecase.FollowUpgradeReports
 import eth.serotine.domain.usecase.HistoryNotingAccounts
@@ -158,12 +160,15 @@ private fun openWallet(dataDir: File) {
     // The view the user chose, simple mode or Detailed view (docs/simple-ui.md); the Debug tab is the latter's.
     val interfaceMode = FileInterfaceMode(dataDir.resolve("ui-mode.json").path)
     val amountsHidden = FileAmountsHidden(dataDir.resolve("amounts-hidden.json").path)
+    // Whether a transaction may be signed while the light client syncs (docs/lenient-mode.md).
+    val syncPolicy = FileSyncPolicy(dataDir.resolve("sync-policy.json").path)
     // One engine, one light client per network that is on and needed (FollowNetworks, below).
     val node = MyotisHost.start(
         dataDir.resolve("myotis"),
         lastBalances = dataDir.resolve("last-balances.json").path,
         debugLog = debugLog,
         apiLog = apiLog,
+        keptInputs = dataDir.resolve("kept-inputs.json").path,
     )
     // One record per process, read by the screens and written by the notices; this version's only.
     val knownUpgrades = FileKnownUpgradeStore(dataDir.resolve("upgrade.json").path, APP_VERSION)
@@ -271,6 +276,17 @@ private fun openWallet(dataDir: File) {
                 throw e
             } catch (e: Exception) {
                 System.err.println("Serotine: following the Debug tab's switch stopped: ${e::class.simpleName}")
+            }
+        }
+        LaunchedEffect(Unit) {
+            // What a lenient draft is built on, kept recent while the light clients verify
+            // (docs/lenient-mode.md). A failure ends it, never the wallet.
+            try {
+                KeepTransactionInputs(syncPolicy, accounts, node.lightClient, node.transactionInputs)()
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                System.err.println("Serotine: keeping the transaction inputs stopped: ${e::class.simpleName}")
             }
         }
         LaunchedEffect(Unit) {

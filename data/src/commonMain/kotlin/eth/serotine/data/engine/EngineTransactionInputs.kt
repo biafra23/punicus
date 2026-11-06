@@ -26,6 +26,10 @@ import kotlinx.coroutines.delay
  * The fee history is asked again while it is cold ([fees]): every [feeRetryInterval], never
  * starting a read that could end past [feeWait] from the first, given the [engineFeeWait] the
  * engine itself may take, measured on [timeSource].
+ *
+ * Each verified mined count and fee quote is kept in [kept], with the head it was read at, for a
+ * lenient draft after a restart (docs/lenient-mode.md); null keeps none. Keeping it never changes
+ * the answer.
  */
 class EngineTransactionInputs internal constructor(
     private val served: Network,
@@ -35,6 +39,7 @@ class EngineTransactionInputs internal constructor(
     private val feeWait: Duration = 15.seconds,
     private val engineFeeWait: Duration = 5.seconds,
     private val timeSource: TimeSource = TimeSource.Monotonic,
+    private val kept: KeptInputsFile? = null,
 ) : TransactionInputs {
 
     override suspend fun nonce(network: Network, account: Address): NonceReading =
@@ -43,10 +48,17 @@ class EngineTransactionInputs internal constructor(
             ?: NonceReading.Unavailable(ReadUnavailable.UNPROVEN)
     }
 
-    override suspend fun minedNonce(network: Network, account: Address): NonceReading =
-        ask(network, NonceReading::Unavailable) { chain ->
-        chain.minedNonce(account)?.takeIf { it >= 0 }?.let(NonceReading::Read)
-            ?: NonceReading.Unavailable(ReadUnavailable.UNPROVEN)
+    override suspend fun minedNonce(network: Network, account: Address): NonceReading {
+        val (reading, head) = ask(network, { Answered(NonceReading.Unavailable(it), null) }) { chain ->
+            val head = chain.readableHeadAt()
+            val reading = chain.minedNonce(account)?.takeIf { it >= 0 }?.let(NonceReading::Read)
+                ?: NonceReading.Unavailable(ReadUnavailable.UNPROVEN)
+            Answered(reading, head)
+        }
+        if (reading is NonceReading.Read && head != null) {
+            kept?.saveNonce(network, account, reading.nonce, head.block, head.asOf)
+        }
+        return reading
     }
 
     /**
@@ -63,12 +75,15 @@ class EngineTransactionInputs internal constructor(
     override suspend fun fees(network: Network): FeeReading {
         val started = timeSource.markNow()
         while (true) {
-            val reading = ask(network, FeeReading::Unavailable) { chain ->
-                chain.feeHistory(FEE_BLOCKS, EngineJson.PERCENTILES)
+            val (reading, head) = ask(network, { Answered(FeeReading.Unavailable(it), null) }) { chain ->
+                val head = chain.readableHeadAt()
+                val reading = chain.feeHistory(FEE_BLOCKS, EngineJson.PERCENTILES)
                     ?.let(EngineJson::feeQuote)
                     ?.let(FeeReading::Quoted)
                     ?: COLD
+                Answered(reading, head)
             }
+            if (reading is FeeReading.Quoted) kept?.saveFees(network, reading.quote, head?.asOf)
             if (reading !== COLD) return reading
             // No room for another wait and a read the engine may hold for its own wait: no answer.
             if (started.elapsedNow() + feeRetryInterval + engineFeeWait > feeWait) return COLD
@@ -119,6 +134,16 @@ class EngineTransactionInputs internal constructor(
         if (network != served) unavailable(
                 ReadUnavailable.NO_ENGINE,
             ) else chain.askVerified(dispatcher, unavailable, read)
+
+    /** A [reading], and the verified [head] it was read at (null: none could be told). */
+    private data class Answered<T>(val reading: T, val head: HeadAt?)
+
+    /** A verified head: [block], produced at [asOf] (unix seconds; null when unknown). */
+    private data class HeadAt(val block: Long, val asOf: Long?)
+
+    /** The head reads are verified at right now, from the engine's snapshot, or null when none can be told. */
+    private fun TransactingChain.readableHeadAt(): HeadAt? = (snapshot() as? EngineSnapshot.Running)
+        ?.let { running -> running.readableHead?.let { HeadAt(it, running.headTimestamp) } }
 
     private companion object {
         /** The blocks the fee history covers: about two minutes of Sepolia. */
