@@ -162,6 +162,15 @@ sealed interface SafeTxRefusal {
     /** The light client has no verified head yet. */
     data object Syncing : SafeTxRefusal
 
+    /**
+     * A swap, or the token approval a swap needs, while the light client catches up: neither is
+     * drafted on what was verified last, also with *Sign while syncing* on (docs/lenient-mode.md,
+     * *What stays strict*): a swap's minimum is judged against a fresh quote, and an approval's
+     * spender against the router's code proven now, which the review shows before anything is
+     * signed. It waits for the light client.
+     */
+    data object SwapNeedsFreshCheck : SafeTxRefusal
+
     /** A verified figure could not be had right now, for [reason]. */
     data class Unavailable(val reason: ReadUnavailable) : SafeTxRefusal
 

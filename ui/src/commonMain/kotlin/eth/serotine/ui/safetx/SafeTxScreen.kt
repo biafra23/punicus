@@ -117,10 +117,21 @@ const val SAFE_TX_PASSWORD_TAG = "safe-tx-password"
 /** Test tag of the button that signs (the hash, or the approval or execution under review), for UI tests. */
 const val SAFE_TX_SIGN_TAG = "safe-tx-sign"
 
+/** Test tag of the line on top of a lenient draft or held signature: what it was prepared on, for UI tests. */
+const val SAFE_TX_PREPARED_ON_TAG = "safe-tx-prepared-on"
+
+/** Test tag of a held signature's Discard (or Dismiss) button, for UI tests. */
+const val SAFE_TX_DISCARD_HELD_TAG = "safe-tx-discard-held"
+
+/** Test tag of a held signature's steps, for UI tests. */
+const val SAFE_TX_HELD_STEP_TAG = "safe-tx-held-step"
+
 /**
  * Binds [SafeTxScreen] to its ViewModel. An approval or execution broadcast ends the screen through
- * [onSent] with its hash, and a removal through [onBack]; [onProposeAgain] opens Swap for a Safe on
- * this swap, to propose it again in its place. The screen stopping being shown becomes
+ * [onSent] with its hash, as does one queued in lenient mode with its id (its status follows it), and
+ * a removal through [onBack]; [onProposeAgain] opens Swap for a Safe on this swap, to propose it again
+ * in its place, and [onProposeTransferAgain] Send for a Safe filled in with a held proposal discarded
+ * to be proposed again. The screen stopping being shown becomes
  * [SafeTxViewModel.onHidden] (the password goes) and being shown again [SafeTxViewModel.onShown]
  * (the owners are read again, a review quoted anew).
  */
@@ -132,20 +143,25 @@ fun SafeTxRoute(
     onBack: () -> Unit,
     onSent: (hash: String) -> Unit,
     onProposeAgain: () -> Unit,
+    onProposeTransferAgain: (SafeProposeAgain) -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
     // Main.immediate: as on Send, an edit reaches its field in the same frame.
     val state by viewModel.uiState.collectAsStateWithLifecycle(context = Dispatchers.Main.immediate)
     LifecycleEventEffect(Lifecycle.Event.ON_STOP) { viewModel.onHidden() }
     LifecycleEventEffect(Lifecycle.Event.ON_START) { viewModel.onShown() }
-    val sent = (state as? SafeTxUiState.Sent)?.hash
+    // Broadcast, or queued in the outbox (lenient mode): its status follows it, by its hash or its id.
+    val sent = (state as? SafeTxUiState.Sent)?.hash ?: (state as? SafeTxUiState.Queued)?.id
     val removed = state is SafeTxUiState.Removed
+    val reopen = (state as? SafeTxUiState.Discarded)?.reopen
     val currentOnSent by rememberUpdatedState(onSent)
     val currentOnBack by rememberUpdatedState(onBack)
-    LaunchedEffect(sent, removed) {
+    val currentOnProposeTransferAgain by rememberUpdatedState(onProposeTransferAgain)
+    LaunchedEffect(sent, removed, reopen) {
         when {
             sent != null -> currentOnSent(sent)
             removed -> currentOnBack()
+            reopen != null -> currentOnProposeTransferAgain(reopen)
         }
     }
     val actions = remember(viewModel, onProposeAgain) {
@@ -167,6 +183,8 @@ fun SafeTxRoute(
             onRetry = viewModel::retry,
             onStepBack = viewModel::back,
             onProposeAgain = onProposeAgain,
+            onDiscardHeld = viewModel::discardHeldSignature,
+            onProposeHeldAgain = viewModel::proposeHeldAgain,
         )
     }
     val copy = rememberCopyText()
@@ -200,7 +218,8 @@ fun SafeTxRoute(
  * again, start signing the hash, an approval on chain or the execution, remove the transaction;
  * in a step, choose the owner or account and the fee, refresh the quote, type the password, sign
  * ([onConfirm], or [onConfirmWithBiometrics]), retry a broadcast, and go back to the overview;
- * and, for a swap worth it, propose it again in its place ([onProposeAgain]).
+ * and, for a swap worth it, propose it again in its place ([onProposeAgain]); for a held signature,
+ * discard it ([onDiscardHeld]) or, a proposal whose nonce was used, propose it again ([onProposeHeldAgain]).
  */
 class SafeTxActions(
     val onShare: () -> Unit = {},
@@ -220,6 +239,8 @@ class SafeTxActions(
     val onRetry: () -> Unit = {},
     val onStepBack: () -> Unit = {},
     val onProposeAgain: () -> Unit = {},
+    val onDiscardHeld: () -> Unit = {},
+    val onProposeHeldAgain: () -> Unit = {},
 )
 
 /**
@@ -247,18 +268,19 @@ fun SafeTxScreen(
     syncLine: LightClientItem? = null,
 ) {
     val review = state as? SafeTxUiState.Review
+    val draft = state as? SafeTxUiState.DraftReview
     val signing = state as? SafeTxUiState.Signing
     val quoting = (state as? SafeTxUiState.Overview)?.quoting == true
     // In a step, back is to the overview, until bytes may be out there: after a broadcast no peer
     // answered, only Try again may send them, so back leaves the screen. While a signature runs,
     // back waits for it: leaving would not stop it, only hide what it did. While the Safe is still
     // checked before a signature, nothing is signed yet, and back stops the check.
-    val busy = review?.signing == true || (signing?.signing == true && !signing.checking)
+    val busy = review?.signing == true || draft?.signing == true || (signing?.signing == true && !signing.checking)
     // A check of the Safe can take up to 45 s: a screen that times out meanwhile is a screen left,
     // which stops a check before Sign.
     if (signing?.checking == true || quoting) KeepScreenOn()
     val leaves = review?.notSent?.canRetry == true
-    val inStep = review != null || signing != null || quoting
+    val inStep = review != null || draft != null || signing != null || quoting
     BackHandler(enabled = inStep) {
         when {
             busy -> Unit
@@ -286,8 +308,8 @@ fun SafeTxScreen(
                     Text(
                         when {
                             signing != null -> "Sign"
-                            review?.kind == ReviewKind.APPROVAL -> "Approve on chain"
-                            review?.kind == ReviewKind.EXECUTION -> "Execute"
+                            (review?.kind ?: draft?.kind) == ReviewKind.APPROVAL -> "Approve on chain"
+                            (review?.kind ?: draft?.kind) == ReviewKind.EXECUTION -> "Execute"
                             else -> "Safe transaction"
                         },
                     )
@@ -305,9 +327,14 @@ fun SafeTxScreen(
     ) { padding ->
         UnderLightClientStripIfAny(lightClient, Modifier.padding(padding), syncLine) {
             when (state) {
-                is SafeTxUiState.Loading, is SafeTxUiState.Sent, is SafeTxUiState.Removed ->
+                is SafeTxUiState.Loading, is SafeTxUiState.Sent, is SafeTxUiState.Queued, is SafeTxUiState.Removed ->
                     CircularProgressIndicator(Modifier.align(Alignment.Center))
                 is SafeTxUiState.NotQueued -> Text(
+                    state.message,
+                    Modifier.align(Alignment.Center).padding(24.dp),
+                    textAlign = TextAlign.Center,
+                )
+                is SafeTxUiState.Discarded -> Text(
                     state.message,
                     Modifier.align(Alignment.Center).padding(24.dp),
                     textAlign = TextAlign.Center,
@@ -315,6 +342,8 @@ fun SafeTxScreen(
                 is SafeTxUiState.Overview -> OverviewContent(state, actions, copy, onShareText, details)
                 is SafeTxUiState.Signing -> SigningContent(state, actions, details)
                 is SafeTxUiState.Review -> ReviewContent(state, actions, details)
+                is SafeTxUiState.DraftReview -> DraftReviewContent(state, actions, details)
+                is SafeTxUiState.Held -> HeldContent(state, actions, details)
             }
         }
     }
@@ -334,6 +363,7 @@ private fun OverviewContent(
         Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
+        state.draftNote?.let { PreparedOnLine(it) }
         SafeLine(state.safe)
         SafeTxActionCard(state.action)
         // Not while Approve or Execute is quoted: the screen would be left mid-quote.
@@ -570,6 +600,7 @@ private fun SigningContent(state: SafeTxUiState.Signing, actions: SafeTxActions,
         Text(state.nonce, style = MaterialTheme.typography.titleSmall)
         HashLine(state.hash)
         Note("The owner signs this hash, computed here from the transaction's fields: nothing else.")
+        state.preparedOn?.let { PreparedOnLine(it) }
         Heading("Sign as")
         Choices(state.owners, state.owner, enabled = !state.signing, onChoose = actions.onSignerChange)
         HorizontalDivider()
@@ -578,7 +609,7 @@ private fun SigningContent(state: SafeTxUiState.Signing, actions: SafeTxActions,
             signing = state.signing,
             canSign = state.canSign,
             canSignWithBiometrics = state.canSignWithBiometrics,
-            signLabel = "Sign",
+            signLabel = state.signLabel,
             signingLabel = if (state.checking) CHECKING_SAFE else "Signing…",
             onPasswordChange = actions.onPasswordChange,
             onSign = actions.onConfirm,
@@ -657,6 +688,169 @@ private fun ReviewContent(state: SafeTxUiState.Review, actions: SafeTxActions, d
                 signTag = SAFE_TX_SIGN_TAG,
             )
         }
+    }
+}
+
+/**
+ * A lenient draft's review of an approval on chain or an execution (docs/lenient-mode.md, *Safe
+ * transactions in lenient mode*): the line saying what it was prepared on, the account that sends
+ * it, the fee level, the most the fee can be, the nonce and the balance, each with the block it was
+ * last verified at (simple mode: its age, the blocks behind *Details*), and in place of the verified
+ * simulation that it is not checked yet. No Refresh: a draft is old by definition. Then the unlock,
+ * which signs and queues it.
+ */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun DraftReviewContent(state: SafeTxUiState.DraftReview, actions: SafeTxActions, details: List<String>) {
+    Column(
+        Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+        PreparedOnLine(state.preparedOn)
+        SafeLine(state.safe)
+        SafeTxActionCard(state.action)
+        Text(state.nonce, style = MaterialTheme.typography.titleSmall)
+        Heading(if (state.kind == ReviewKind.APPROVAL) "Approve as" else "Send the execution from")
+        Choices(state.accounts, state.account, enabled = !state.signing, onChoose = actions.onAccountChange)
+        state.confirmations?.let { Text(it, style = MaterialTheme.typography.bodyMedium) }
+        Heading("Fee")
+        SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth()) {
+            FeeLevel.entries.forEachIndexed { index, level ->
+                SegmentedButton(
+                    selected = state.fee == level,
+                    onClick = { actions.onFeeChange(level) },
+                    enabled = !state.signing,
+                    shape = SegmentedButtonDefaults.itemShape(index, FeeLevel.entries.size),
+                    label = { Text(levelName(level)) },
+                )
+            }
+        }
+        Text("At most ${state.maxFee}")
+        // Empty in simple mode, which keeps it behind Details and says its age instead.
+        state.feeDetail.takeIf { it.isNotEmpty() }?.let { Note(it) } ?: Note(state.feeAge)
+        state.txNonce.takeIf { it.isNotEmpty() }?.let { Note(it) } ?: Note(state.txNonceAge)
+        Heading("Balance, if nothing changed")
+        Column {
+            Text(state.balance.what, style = MaterialTheme.typography.labelLarge)
+            Text("${state.balance.before} → ${state.balance.after}")
+            Note(state.balance.verifiedAt.takeIf { it.isNotEmpty() } ?: state.balance.age.orEmpty())
+        }
+        Surface(
+            Modifier.fillMaxWidth(),
+            shape = MaterialTheme.shapes.medium,
+            color = MaterialTheme.colorScheme.surfaceContainerHigh,
+        ) {
+            Text(state.notChecked, Modifier.padding(12.dp), style = MaterialTheme.typography.bodyMedium)
+        }
+        state.pending?.let { Text(it, style = MaterialTheme.typography.bodySmall) }
+        if (details.isNotEmpty()) HiddenDetails(SAFE_TX_DETAILS_TAG) { details.forEach { Note(it) } }
+        state.error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
+        HorizontalDivider()
+        UnlockFields(
+            unlock = state.unlock,
+            signing = state.signing,
+            canSign = state.canSign,
+            canSignWithBiometrics = state.canSignWithBiometrics,
+            signLabel = "Sign and queue on ${state.network}",
+            signingLabel = "Signing and queueing…",
+            onPasswordChange = actions.onPasswordChange,
+            onSign = actions.onConfirm,
+            onSignWithBiometrics = actions.onConfirmWithBiometrics,
+            passwordTag = SAFE_TX_PASSWORD_TAG,
+            signTag = SAFE_TX_SIGN_TAG,
+        )
+    }
+}
+
+/**
+ * A signature held until its check (docs/lenient-mode.md, *Safe transactions in lenient mode*): the
+ * transaction, what it was signed on, its steps (Signed, Held, In the queue to share), that its QR code
+ * and text wait for the check, and Discard (Dismiss once a conflict deleted it), with Propose again for
+ * a proposal whose nonce was used.
+ */
+@Composable
+private fun HeldContent(state: SafeTxUiState.Held, actions: SafeTxActions, details: List<String>) {
+    Column(
+        Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+        PreparedOnLine(state.preparedOn)
+        SafeLine(state.safe)
+        SafeTxActionCard(state.action)
+        Text(state.nonce, style = MaterialTheme.typography.titleSmall)
+        HashLine(state.hash)
+        // Empty in simple mode, which keeps it behind Details.
+        state.safeVerifiedAt.takeIf { it.isNotEmpty() }?.let { Note(it) }
+        Heading("Your signature")
+        state.steps.forEach { HeldStepItem(it) }
+        Note(state.shareNote)
+        if (details.isNotEmpty()) HiddenDetails(SAFE_TX_DETAILS_TAG) { details.forEach { Note(it) } }
+        state.error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
+        HorizontalDivider()
+        if (state.again != null) {
+            Button(
+                onClick = actions.onProposeHeldAgain,
+                enabled = !state.discarding,
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                Text("Propose again")
+            }
+            Note("Propose again discards it and opens Send from this Safe with it filled in, at the Safe's next nonce.")
+        }
+        OutlinedButton(
+            onClick = actions.onDiscardHeld,
+            enabled = !state.discarding,
+            modifier = Modifier.fillMaxWidth().testTag(SAFE_TX_DISCARD_HELD_TAG),
+        ) {
+            if (state.discarding) {
+                CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp)
+                Spacer(Modifier.size(8.dp))
+            }
+            Text(state.discardLabel)
+        }
+        Note(state.discardNote)
+    }
+}
+
+/** One step of a held signature: its mark, its label and its detail. */
+@Composable
+private fun HeldStepItem(step: HeldStep) {
+    val colors = MaterialTheme.colorScheme
+    ListItem(
+        modifier = Modifier.testTag(SAFE_TX_HELD_STEP_TAG),
+        leadingContent = {
+            val mark = Modifier.size(20.dp).semantics { contentDescription = step.state.description }
+            when (step.state) {
+                HeldStepState.DONE -> Icon(Icons.Filled.CheckCircle, null, mark, tint = colors.primary)
+                HeldStepState.FAILED -> Icon(Icons.Filled.Info, null, mark, tint = colors.error)
+                HeldStepState.WAITING, HeldStepState.UNKNOWN ->
+                    Icon(Icons.Filled.Info, null, mark, tint = colors.onSurfaceVariant)
+            }
+        },
+        headlineContent = { Text(step.label) },
+        supportingContent = step.detail?.let { { Text(it) } },
+    )
+}
+
+/** What a held step's mark says to accessibility services. */
+private val HeldStepState.description: String
+    get() = when (this) {
+        HeldStepState.DONE -> "Done"
+        HeldStepState.WAITING -> "Waiting"
+        HeldStepState.FAILED -> "Did not check out"
+        HeldStepState.UNKNOWN -> "Cannot happen yet"
+    }
+
+/** A lenient line on top: what it was prepared on, and that it is checked before it is shown or sent. */
+@Composable
+private fun PreparedOnLine(text: String) {
+    Surface(
+        Modifier.fillMaxWidth(),
+        shape = MaterialTheme.shapes.medium,
+        color = MaterialTheme.colorScheme.tertiaryContainer,
+        contentColor = MaterialTheme.colorScheme.onTertiaryContainer,
+    ) {
+        Text(text, Modifier.padding(12.dp).testTag(SAFE_TX_PREPARED_ON_TAG), style = MaterialTheme.typography.bodyMedium)
     }
 }
 

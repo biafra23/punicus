@@ -75,6 +75,7 @@ import eth.serotine.domain.repository.CowVenueReading
 import eth.serotine.domain.repository.HistoryEntry
 import eth.serotine.domain.repository.HistoryStart
 import eth.serotine.domain.repository.IndexedLog
+import eth.serotine.domain.repository.KeptSafes
 import eth.serotine.domain.repository.KeyDeletion
 import eth.serotine.domain.repository.KeyDerivation
 import eth.serotine.domain.repository.KeyImport
@@ -310,6 +311,7 @@ class AppNavigationTest {
         outbox = Outbox.None,
         outboxLock = OutboxLock(),
         keptTransactionInputs = FakeKeptInputs(),
+        keptSafes = KeptSafes.None,
         syncPolicy = MemorySyncPolicy(),
         keys = object : KeyStore {
             override suspend fun newMnemonic(): NewMnemonic = NewMnemonic.Unavailable
@@ -1001,7 +1003,7 @@ class AppNavigationTest {
         rule.onAllNodesWithTag(ACCOUNT_ASSET_TAG)[0].performClick()
         rule.onNodeWithText("Send from a Safe").assertIsDisplayed()
         assertEquals(
-            listOf("accounts", "account/{chain}/{address}", "safe/{chain}/{address}/propose?asset={asset}"),
+            listOf("accounts", "account/{chain}/{address}", "safe/{chain}/{address}/propose?asset={asset}&to={to}&amount={amount}"),
             screens(),
         )
     }

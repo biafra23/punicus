@@ -41,6 +41,10 @@ import eth.serotine.data.transfers.FileTransactionHistory
 import eth.serotine.data.upgrade.FileKnownUpgradeStore
 import eth.serotine.domain.model.Network
 import eth.serotine.domain.usecase.CheckQueued
+import eth.serotine.domain.usecase.CheckHeldSignature
+import eth.serotine.domain.usecase.ObserveSafe
+import eth.serotine.domain.usecase.QuoteSafeApproval
+import eth.serotine.domain.usecase.QuoteSafeExecution
 import eth.serotine.domain.usecase.FollowAccountLogs
 import eth.serotine.domain.usecase.AnswerDappRequestsAtOnce
 import eth.serotine.domain.usecase.FollowDappAccounts
@@ -174,6 +178,7 @@ private fun openWallet(dataDir: File) {
         debugLog = debugLog,
         apiLog = apiLog,
         keptInputs = dataDir.resolve("kept-inputs.json").path,
+        keptSafes = dataDir.resolve("kept-safes.json").path,
     )
     // One record per process, read by the screens and written by the notices; this version's only.
     val knownUpgrades = FileKnownUpgradeStore(dataDir.resolve("upgrade.json").path, APP_VERSION)
@@ -198,6 +203,10 @@ private fun openWallet(dataDir: File) {
     excludeFromBackups(outboxDir)
     val outbox = desktopOutbox(outboxDir.path)
     val outboxLock = OutboxLock()
+    // The Safe transactions waiting for their owners, with the signatures collected (public), and who
+    // made a co-signer's signature: one instance each, which the graph and the outbox's follower share.
+    val safeTxQueue = FileSafeTxQueue(dataDir.resolve("safe-tx-queue.json").path)
+    val signatureRecovery = Secp256k1Recovery()
     // Which networks are on (docs/networks.md, *Networks on and off*). A network the file does not
     // mention yet gets this build's default: an installed app turns on the real networks and leaves
     // Sepolia off, a development run (its debug build, the property's) turns on Sepolia alone.
@@ -295,24 +304,53 @@ private fun openWallet(dataDir: File) {
             try {
                 FollowOutbox(
                     outbox,
-                    CheckQueued { network ->
-                        QuoteTransfer(
-                            node.transactionInputs,
-                            node.nativeBalances,
-                            node.tokenBalances,
-                            sentTransfers,
-                            cowOrders,
-                            node.cow,
-                            node.lightClient,
-                            network,
-                            outbox,
-                        )
-                    },
+                    CheckQueued(
+                        { network ->
+                            QuoteTransfer(
+                                node.transactionInputs,
+                                node.nativeBalances,
+                                node.tokenBalances,
+                                sentTransfers,
+                                cowOrders,
+                                node.cow,
+                                node.lightClient,
+                                network,
+                                outbox,
+                            )
+                        },
+                        // A Safe's approval on chain or its execution, queued while syncing: its strict quote again.
+                        { network ->
+                            QuoteSafeApproval(
+                                ObserveSafe(node.addressKinds, accounts),
+                                node.safeApprovals,
+                                node.nativeBalances,
+                                node.transactionInputs,
+                                sentTransfers,
+                                network,
+                                outbox,
+                            )
+                        },
+                        { network ->
+                            QuoteSafeExecution(
+                                ObserveSafe(node.addressKinds, accounts),
+                                signatureRecovery,
+                                node.safeApprovals,
+                                node.nativeBalances,
+                                node.transactionInputs,
+                                sentTransfers,
+                                network,
+                                outbox,
+                            )
+                        },
+                    ),
                     node.lightClient,
                     node.broadcaster,
                     sentTransfers,
                     TrayOutboxNotifier(),
                     outboxLock,
+                    // A Safe signature held while syncing: checked at a fresh head, then saved to the one queue.
+                    CheckHeldSignature(ObserveSafe(node.addressKinds, accounts), signatureRecovery),
+                    safeTxQueue,
                 )()
             } catch (e: CancellationException) {
                 throw e
@@ -443,10 +481,10 @@ private fun openWallet(dataDir: File) {
                 ensNfts = node.ensNfts,
                 // The NFTs added by contract and id, beside tokens.json (issue #246).
                 addedNfts = FileAddedNfts(dataDir.resolve("nfts.json").path),
-                // The Safe transactions waiting for their owners, with the signatures collected (public).
-                safeTxQueue = FileSafeTxQueue(dataDir.resolve("safe-tx-queue.json").path),
+                // The Safe transactions waiting for their owners: the follower's one instance.
+                safeTxQueue = safeTxQueue,
                 signingRequests = JsonSigningRequestCodec(),
-                signatureRecovery = Secp256k1Recovery(),
+                signatureRecovery = signatureRecovery,
                 safeApprovals = node.safeApprovals,
                 // Safe 1.4.1's singleton, factory and proxy code, pinned in code: what a new Safe is created from.
                 safeReleases = PinnedSafeReleases(),
@@ -461,6 +499,7 @@ private fun openWallet(dataDir: File) {
                 // The follower's own lock, the inputs kept for a lenient draft, and Sign while syncing.
                 outboxLock = outboxLock,
                 keptTransactionInputs = node.keptTransactionInputs,
+                keptSafes = node.keptSafes,
                 syncPolicy = syncPolicy,
                 swapVenue = FileSwapVenue(dataDir.resolve("swap-venue.json").path),
                 waitingSwaps = FileWaitingSwaps(dataDir.resolve("waiting-swaps.json").path),

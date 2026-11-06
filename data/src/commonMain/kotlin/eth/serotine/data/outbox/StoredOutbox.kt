@@ -2,38 +2,55 @@ package eth.serotine.data.outbox
 
 import eth.serotine.data.keys.fromHex
 import eth.serotine.data.keys.toHex
+import eth.serotine.data.safe.WireRequest
+import eth.serotine.data.safe.WireSignature
 import eth.serotine.data.transfers.StoredTransfer
 import eth.serotine.data.transfers.storedTransfer
 import eth.serotine.domain.model.Address
 import eth.serotine.domain.model.Eip1559Transaction
+import eth.serotine.domain.model.Network
+import eth.serotine.domain.model.SafeSignature
 import eth.serotine.domain.model.SignedTransfer
 import eth.serotine.domain.model.UInt256
 import eth.serotine.domain.repository.DraftBasis
 import eth.serotine.domain.repository.FeeLevel
+import eth.serotine.domain.repository.HeldConflict
+import eth.serotine.domain.repository.HeldRefusal
+import eth.serotine.domain.repository.HeldSafeSignature
 import eth.serotine.domain.repository.QueueConflict
 import eth.serotine.domain.repository.QueueRefusal
 import eth.serotine.domain.repository.QueuedTransaction
+import eth.serotine.domain.repository.SafeDraftBasis
 import eth.serotine.domain.repository.SentTransfer
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 
 /**
  * The outbox's content as it is sealed (docs/lenient-mode.md, *The signed bytes kept*): what is
- * queued, oldest first. [version] comes first and is always written; a newer one does not open
- * here. Never logged: it holds signed bytes that are not public yet.
+ * queued, oldest first, and the Safe signatures held until their check ([held], oldest first;
+ * *Safe transactions in lenient mode*). [version] comes first and is always written; a newer one
+ * does not open here. Version 1 held no signatures, and reads as holding none. Never logged: it
+ * holds signed bytes that are not public yet.
  */
 @Serializable
-internal class StoredOutbox(val version: Int, val queued: List<StoredQueued>) {
+internal class StoredOutbox(
+    val version: Int,
+    val queued: List<StoredQueued>,
+    val held: List<StoredHeld> = emptyList(),
+) {
     companion object {
-        const val VERSION = 1
+        const val VERSION = 2
         private val JSON = Json { ignoreUnknownKeys = false }
         private val VERSION_JSON = Json { ignoreUnknownKeys = true }
 
-        /** [queued] as the bytes sealed. */
-        fun encode(queued: List<QueuedTransaction>): ByteArray =
-            JSON.encodeToString(serializer(), StoredOutbox(VERSION, queued.map(::stored))).encodeToByteArray()
+        /** [queued] and [held] as the bytes sealed. */
+        fun encode(queued: List<QueuedTransaction>, held: List<HeldSafeSignature> = emptyList()): ByteArray =
+            JSON.encodeToString(
+                serializer(),
+                StoredOutbox(VERSION, queued.map(::stored), held.map(StoredHeld::of)),
+            ).encodeToByteArray()
 
-        /** What [bytes] hold: the queued transactions, that a newer version wrote them, or that they are damaged. */
+        /** What [bytes] hold: what is queued and held, that a newer version wrote them, or that they are damaged. */
         fun decode(bytes: ByteArray): Decoding {
             val text = bytes.decodeToString()
             val version = try {
@@ -44,10 +61,10 @@ internal class StoredOutbox(val version: Int, val queued: List<StoredQueued>) {
             if (version > VERSION) return Decoding.Newer
             return try {
                 val stored = JSON.decodeFromString(serializer(), text)
-                if (stored.version != VERSION) {
+                if (stored.version !in 1..VERSION || stored.version == 1 && stored.held.isNotEmpty()) {
                     Decoding.Damaged
                 } else {
-                    Decoding.Read(stored.queued.map(StoredQueued::toQueued))
+                    Decoding.Read(stored.queued.map(StoredQueued::toQueued), stored.held.map(StoredHeld::toHeld))
                 }
             } catch (e: Exception) {
                 // A SerializationException, a field out of range as the domain's types refuse it,
@@ -59,8 +76,8 @@ internal class StoredOutbox(val version: Int, val queued: List<StoredQueued>) {
 
     /** What [decode] found. */
     sealed interface Decoding {
-        /** The [queued] transactions. */
-        data class Read(val queued: List<QueuedTransaction>) : Decoding
+        /** The [queued] transactions and the [held] Safe signatures. */
+        data class Read(val queued: List<QueuedTransaction>, val held: List<HeldSafeSignature> = emptyList()) : Decoding
 
         /** A newer version wrote it: it is left as it is. */
         data object Newer : Decoding
@@ -180,6 +197,8 @@ internal class StoredBasis(
     val nonceAsOf: Long? = null,
     val feeBlock: Long,
     val feeAsOf: Long? = null,
+    val safeBlock: Long? = null,
+    val safeAsOf: Long? = null,
 ) {
     fun toBasis() = DraftBasis(
         balanceBlock,
@@ -190,6 +209,8 @@ internal class StoredBasis(
         nonceAsOf,
         feeBlock,
         feeAsOf,
+        safeBlock,
+        safeAsOf,
     )
 
     companion object {
@@ -202,6 +223,8 @@ internal class StoredBasis(
             basis.nonceAsOf,
             basis.feeBlock,
             basis.feeAsOf,
+            basis.safeBlock,
+            basis.safeAsOf,
         )
     }
 }
@@ -264,4 +287,105 @@ private val QueueRefusal.code: String
         QueueRefusal.REVERTS -> "reverts"
         QueueRefusal.INFEASIBLE -> "infeasible"
         QueueRefusal.ENGINE_REFUSED -> "engine-refused"
+        QueueRefusal.SAFE_NONCE_USED -> "safe-nonce-used"
+        QueueRefusal.NOT_AN_OWNER -> "not-an-owner"
+        QueueRefusal.ALREADY_APPROVED -> "already-approved"
+        QueueRefusal.ALREADY_SENT -> "already-sent"
+        QueueRefusal.NOT_A_SAFE -> "not-a-safe"
+        QueueRefusal.SAFE_REFUSED -> "safe-refused"
+    }
+
+/**
+ * One held Safe signature: its [request] with no signature (the Safe transaction, on its chain), the
+ * [owner]'s [signature] of its hash (null once a conflict deleted it), whether this device [proposed]
+ * it, when it was signed ([signedAt]), what it was signed on ([builtOn]), and its [conflict].
+ */
+@Serializable
+internal class StoredHeld(
+    val request: WireRequest,
+    val owner: String,
+    val signature: WireSignature? = null,
+    val proposed: Boolean,
+    val signedAt: Long,
+    val builtOn: StoredSafeBasis,
+    val conflict: StoredHeldConflict? = null,
+) {
+    fun toHeld(): HeldSafeSignature {
+        require(request.v == WireRequest.VERSION) { "a request of another version" }
+        val network = requireNotNull(Network.ofChainId(request.chainId)) { "a chain" }
+        val decoded = requireNotNull(request.toRequest(network)) { "a request out of range" }
+        val owner = Address.of(owner)
+        val ecdsa = signature?.let { requireNotNull(it.toSignature()) { "a signature out of range" } }
+        require(ecdsa == null || ecdsa.owner == owner) { "the owner's own signature" }
+        return HeldSafeSignature(
+            request = decoded,
+            owner = owner,
+            signature = ecdsa?.signature,
+            proposed = proposed,
+            signedAt = signedAt,
+            builtOn = builtOn.toBasis(),
+            conflict = conflict?.toConflict(),
+        )
+    }
+
+    companion object {
+        fun of(held: HeldSafeSignature) = StoredHeld(
+            request = WireRequest.of(held.request),
+            owner = held.owner.hex,
+            signature = held.signature?.let { WireSignature.of(SafeSignature.Ecdsa(held.owner, it)) },
+            proposed = held.proposed,
+            signedAt = held.signedAt,
+            builtOn = StoredSafeBasis.of(held.builtOn),
+            conflict = held.conflict?.let(StoredHeldConflict::of),
+        )
+    }
+}
+
+/** A [SafeDraftBasis] as stored. */
+@Serializable
+internal class StoredSafeBasis(
+    val safeBlock: Long,
+    val safeAsOf: Long? = null,
+    val balanceBlock: Long? = null,
+    val balanceAsOf: Long? = null,
+) {
+    fun toBasis() = SafeDraftBasis(safeBlock, safeAsOf, balanceBlock, balanceAsOf)
+
+    companion object {
+        fun of(basis: SafeDraftBasis) =
+            StoredSafeBasis(basis.safeBlock, basis.safeAsOf, basis.balanceBlock, basis.balanceAsOf)
+    }
+}
+
+/** A [HeldConflict] as stored: its [kind], and the Safe's nonce or the refusal that kind has. */
+@Serializable
+internal class StoredHeldConflict(val kind: String, val safeNonce: Long? = null, val refusal: String? = null) {
+    fun toConflict(): HeldConflict = when (kind) {
+        NONCE_USED -> HeldConflict.NonceUsed(requireNotNull(safeNonce))
+        NOT_AN_OWNER -> HeldConflict.NotAnOwner
+        REFUSED -> HeldConflict.Refused(HeldRefusal.entries.first { it.code == refusal })
+        else -> throw IllegalArgumentException("an unknown conflict")
+    }
+
+    companion object {
+        private const val NONCE_USED = "nonce-used"
+        private const val NOT_AN_OWNER = "not-an-owner"
+        private const val REFUSED = "refused"
+
+        fun of(conflict: HeldConflict): StoredHeldConflict = when (conflict) {
+            is HeldConflict.NonceUsed -> StoredHeldConflict(NONCE_USED, safeNonce = conflict.safeNonce)
+            HeldConflict.NotAnOwner -> StoredHeldConflict(NOT_AN_OWNER)
+            is HeldConflict.Refused -> StoredHeldConflict(REFUSED, refusal = conflict.reason.code)
+        }
+    }
+}
+
+/** How a held signature's refusal is written. */
+private val HeldRefusal.code: String
+    get() = when (this) {
+        HeldRefusal.NOT_A_SAFE -> "not-a-safe"
+        HeldRefusal.TOO_OLD_TO_SIGN -> "too-old-to-sign"
+        HeldRefusal.NEEDS_RECOVERY_MODULE -> "needs-recovery-module"
+        HeldRefusal.BAD_SIGNATURE -> "bad-signature"
+        HeldRefusal.UNSIGNABLE -> "unsignable"
     }

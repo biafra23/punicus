@@ -32,6 +32,7 @@ import eth.serotine.domain.repository.SafeApprovals
 import eth.serotine.domain.repository.StaleAnchorConsent
 import eth.serotine.domain.repository.TokenBalances
 import eth.serotine.domain.repository.TokenMetadata
+import eth.serotine.domain.repository.KeptSafes
 import eth.serotine.domain.repository.KeptTransactionInputs
 import eth.serotine.domain.repository.TransactionInputs
 import eth.serotine.domain.repository.UniswapV3Chain
@@ -92,6 +93,7 @@ class MyotisHost private constructor(
     private val debugLog: ((String) -> Unit)?,
     private val apiLog: LogSink?,
     keptInputsPath: String?,
+    keptSafesPath: String?,
 ) : LightClientControl, StaleAnchorConsent, NetworkFreshness {
 
     /** The engine of this process: none until a first start, [Absent] when its library does not run here. */
@@ -128,6 +130,9 @@ class MyotisHost private constructor(
     /** The mined counts and fee quotes last verified, kept for a lenient draft; none kept without a path. */
     private val keptInputsFile = keptInputsPath?.let { KeptInputsFile(it, Dispatchers.IO) }
 
+    /** Each Safe's state last verified, kept for a lenient Safe draft; none kept without a path. */
+    private val keptSafesFile = keptSafesPath?.let { KeptSafesFile(it, Dispatchers.IO) }
+
     /** One light client per network the engine can host. */
     private val nodes: Map<Network, ChainNode> = Network.entries.associateWith { ChainNode(it) }
 
@@ -162,6 +167,9 @@ class MyotisHost private constructor(
 
     /** The mined counts and fee quotes [transactionInputs] last verified, for a lenient draft (docs/lenient-mode.md). */
     val keptTransactionInputs: KeptTransactionInputs = keptInputsFile ?: NoKeptTransactionInputs
+
+    /** Each Safe's nonce, owners and threshold [addressKinds] last verified, for a lenient Safe draft. */
+    val keptSafes: KeptSafes = keptSafesFile ?: KeptSafes.None
 
     /** Gossips a signed transaction to its network's peers (the engine never signs). */
     val broadcaster: Broadcaster = routed.broadcaster
@@ -442,6 +450,7 @@ class MyotisHost private constructor(
                 POLL_INTERVAL,
                 SafeDeployments.of(network),
                 debugLog = debugLog,
+                kept = keptSafesFile?.proofs(network) ?: KeptProofs.none(),
             ),
             lightClient = EngineLightClient(network, chain, Dispatchers.IO, PROGRESS_POLL_INTERVAL),
             networkUpgrades = EngineNetworkUpgrades(network, chain, Dispatchers.IO, POLL_INTERVAL),
@@ -840,7 +849,9 @@ class MyotisHost private constructor(
          * in ([LastBalancesFile]); null keeps them for the process only. [apiLog] takes each
          * request the adapters make of the engine ([LoggedChain]): the Debug tab's log, in memory
          * only; null records none. [keptInputs] is the file the mined counts and fee quotes last
-         * verified are kept in, for a lenient draft ([KeptInputsFile]); null keeps none.
+         * verified are kept in, for a lenient draft ([KeptInputsFile]); null keeps none. [keptSafes] is
+         * the file each Safe's state last verified is kept in, for a lenient Safe draft
+         * ([KeptSafesFile]); null keeps none.
          *
          * A device without an engine — an Android ABI the library does not ship, a desktop whose
          * resources carry no host library (Windows, for now) — or one whose engine fails to start
@@ -853,6 +864,7 @@ class MyotisHost private constructor(
             debugLog: ((String) -> Unit)? = null,
             apiLog: LogSink? = null,
             keptInputs: String? = null,
+            keptSafes: String? = null,
         ): MyotisHost = MyotisHost(
             dataDir,
             dnsServers?.let { servers -> DnsServers { servers() } },
@@ -860,6 +872,7 @@ class MyotisHost private constructor(
             debugLog,
             apiLog,
             keptInputs,
+            keptSafes,
         )
     }
 }

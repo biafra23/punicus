@@ -3,6 +3,8 @@ package eth.serotine.data.outbox
 import eth.serotine.data.files.syncDirectoryOf
 import eth.serotine.data.keys.EnvelopeCrypto
 import eth.serotine.domain.model.AccountId
+import eth.serotine.domain.model.Digest
+import eth.serotine.domain.repository.HeldSafeSignature
 import eth.serotine.domain.repository.Outbox
 import eth.serotine.domain.repository.OutboxList
 import eth.serotine.domain.repository.QueuedTransaction
@@ -23,8 +25,8 @@ import kotlinx.io.readByteArray
 
 /**
  * The [Outbox] kept in the file at [path], sealed with [seal] (docs/keys-and-signing.md, *The
- * outbox's seal key*): an app-private file of its own, written whole and durably, never logged.
- * An empty outbox has no file. The host keeps it out of backups and device transfers, as it keeps
+ * outbox's seal key*): an app-private file of its own, written whole and durably, never logged,
+ * what is queued and what is held in it together. An empty outbox has no file. The host keeps it out of backups and device transfers, as it keeps
  * the envelopes.
  *
  * A file that will never open here is deleted and said once as lost ([OutboxList.Loaded.lost], a
@@ -54,11 +56,18 @@ internal class SealedOutboxFile(
     override fun observe(): Flow<OutboxList> = state.onStart { refreshIfNeeded() }.filterNotNull()
 
     override suspend fun put(queued: QueuedTransaction): Boolean = change { current ->
-        current.filterNot { it.accountId == queued.accountId } + queued
+        current.copy(queued = current.queued.filterNot { it.accountId == queued.accountId } + queued)
     }
 
     override suspend fun remove(account: AccountId): Boolean =
-        change { current -> current.filterNot { it.accountId == account } }
+        change { current -> current.copy(queued = current.queued.filterNot { it.accountId == account }) }
+
+    override suspend fun hold(held: HeldSafeSignature): Boolean = change { current ->
+        current.copy(held = current.held.filterNot { it.safe == held.safe && it.nonce == held.nonce } + held)
+    }
+
+    override suspend fun release(safe: AccountId, hash: Digest): Boolean =
+        change { current -> current.copy(held = current.held.filterNot { it.safe == safe && it.hash == hash }) }
 
     override suspend fun acknowledgeLost(): Boolean = lock.withLock {
         val loaded = loadedOrNull() ?: return@withLock false
@@ -106,7 +115,7 @@ internal class SealedOutboxFile(
                     val decoding = StoredOutbox.decode(opening.plaintext)
                     opening.plaintext.fill(0)
                     when (decoding) {
-                        is StoredOutbox.Decoding.Read -> OutboxList.Loaded(decoding.queued, lost)
+                        is StoredOutbox.Decoding.Read -> OutboxList.Loaded(decoding.queued, lost, decoding.held)
                         StoredOutbox.Decoding.Newer -> unreadable("a newer version of Serotine wrote it")
                         // The tag verified, so it is what a version of Serotine sealed: not damage, and kept.
                         StoredOutbox.Decoding.Damaged -> unreadable("this version cannot read what it holds")
@@ -140,19 +149,21 @@ internal class SealedOutboxFile(
         return OutboxList.Loaded(emptyList(), lost = true)
     }
 
-    /** Stores what [next] makes of what is queued, under [lock]; false when it cannot be read or written. */
-    private suspend fun change(next: (List<QueuedTransaction>) -> List<QueuedTransaction>): Boolean = lock.withLock {
+    /** Stores what [next] makes of what is queued and held, under [lock]; false when it cannot be read or written. */
+    private suspend fun change(next: (OutboxList.Loaded) -> OutboxList.Loaded): Boolean = lock.withLock {
         val loaded = loadedOrNull() ?: return@withLock false
-        val queued = next(loaded.queued)
+        val changed = next(loaded)
+        val queued = changed.queued
+        val held = changed.held
         // Not cancellable: a write that completes must also be what everyone observes.
         withContext(NonCancellable + dispatcher) {
             try {
-                if (queued.isEmpty()) {
+                if (queued.isEmpty() && held.isEmpty()) {
                     // Durably gone: a discarded transaction must not come back after a power loss.
                     SystemFileSystem.delete(file, mustExist = false)
                     syncDirectoryOf(path)
                 } else {
-                    val plain = StoredOutbox.encode(queued)
+                    val plain = StoredOutbox.encode(queued, held)
                     val sealed = try {
                         seal.seal(plain)
                     } finally {
@@ -163,7 +174,7 @@ internal class SealedOutboxFile(
                     EnvelopeCrypto.writeDurably(path, sealed)
                 }
                 keyChecked = true
-                state.value = loaded.copy(queued = queued)
+                state.value = loaded.copy(queued = queued, held = held)
                 true
             } catch (e: Exception) {
                 println("Serotine: the outbox could not be saved (${e::class.simpleName})")
@@ -176,7 +187,7 @@ internal class SealedOutboxFile(
 /**
  * The [Outbox] where there is no hardware key to seal with (docs/keys-and-signing.md, *The
  * outbox's seal key*): in memory only, for the life of the process, so a restart asks for the
- * signature again. Nothing is written anywhere.
+ * signature again, a held Safe signature's too. Nothing is written anywhere.
  */
 class MemoryOutbox : Outbox {
     private val state = MutableStateFlow<OutboxList.Loaded>(OutboxList.Loaded(emptyList()))
@@ -191,6 +202,17 @@ class MemoryOutbox : Outbox {
 
     override suspend fun remove(account: AccountId): Boolean = lock.withLock {
         state.value = state.value.copy(queued = state.value.queued.filterNot { it.accountId == account })
+        true
+    }
+
+    override suspend fun hold(held: HeldSafeSignature): Boolean = lock.withLock {
+        val current = state.value
+        state.value = current.copy(held = current.held.filterNot { it.safe == held.safe && it.nonce == held.nonce } + held)
+        true
+    }
+
+    override suspend fun release(safe: AccountId, hash: Digest): Boolean = lock.withLock {
+        state.value = state.value.copy(held = state.value.held.filterNot { it.safe == safe && it.hash == hash })
         true
     }
 

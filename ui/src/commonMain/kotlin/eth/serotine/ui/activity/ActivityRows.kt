@@ -328,14 +328,18 @@ internal class ActivityRows(
     }
 
     /**
-     * A transfer queued in lenient mode ([queued]) as a row, listed before every other one
-     * (docs/lenient-mode.md, *Where it shows*): what it sends, to whom, when it was signed, and
+     * A transaction queued in lenient mode ([queued]: a transfer, or a Safe's approval on chain or
+     * execution) as a row, listed before every other one (docs/lenient-mode.md, *Where it shows*):
+     * what it sends, to whom (the Safe, for a Safe's), when it was signed, and
      * whether it waits to be sent or needs a signature again. A tap opens its status, not 26.
      */
     fun queuedRow(queued: QueuedTransaction, names: Map<Address, String>, now: Long): ActivityRow {
         val (title, other) = when (val action = queued.action) {
             is SentAction.Transfer -> "Send ${amount(action.amount, action.asset)}" to action.to
-            // Only a transfer is queued today: any other is said as a transaction to its contract.
+            // A Safe's approval or execution, queued while syncing: the Safe it is of.
+            is SentAction.SafeApproval -> "Approve on chain: Safe nonce ${action.request.nonce}" to action.request.safe
+            is SentAction.SafeExecution -> "Execute: Safe nonce ${action.request.nonce}" to action.request.safe
+            // Nothing else is queued: any other is said as a transaction to its contract.
             else -> "A transaction waiting to be sent" to queued.transaction.to
         }
         val (status, state) = when {

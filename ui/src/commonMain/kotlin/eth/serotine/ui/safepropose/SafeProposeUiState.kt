@@ -89,6 +89,62 @@ sealed interface SafeProposeUiState {
             get() = !refreshing && !signing
     }
 
-    /** Signed and queued: [hash] is the Safe transaction's, which its screen opens by. */
+    /**
+     * A transfer from the Safe drafted in lenient mode (docs/lenient-mode.md, *Safe transactions in
+     * lenient mode*; owner rulings, 2026-11-06) on what the light client verified last, to be signed
+     * and held until its check, never queued or shared from here: from the Safe ([from]), [amount] of
+     * [asset] to [recipient], the Safe transaction it is ([action], decoded here). [preparedOn] is the
+     * line on top ("Prepared on data from 12 min ago…"). Each figure says the block it was last
+     * verified at, which Detailed view shows, and its age, which simple mode shows: the Safe's
+     * [nonce] and [nonceAge], its owners and threshold ([threshold], [thresholdAge]), and its
+     * [balance] (before, what those [queued] before it move, after "if nothing changed";
+     * [balanceAge]). [notChecked] stands in for the simulation. No fiat value, no Refresh and no
+     * deadline. An owner held here, [owner] (EIP-55) of [owners], signs it as [unlock] says; [signing]
+     * while it is signed and held, and [error] what the last attempt came to.
+     */
+    data class DraftReview(
+        override val network: String,
+        val from: SendFrom,
+        val action: SafeTxActionItem,
+        val amount: String,
+        val asset: AssetChoice,
+        val recipient: RecipientItem,
+        val preparedOn: String,
+        val nonce: String,
+        val nonceAge: String,
+        val threshold: String,
+        val thresholdAge: String,
+        val balance: SafeBalanceChange,
+        val balanceAge: String,
+        val notChecked: String,
+        val owners: List<AccountChoice>,
+        val owner: String,
+        val unlock: UnlockStep,
+        val queued: String? = null,
+        val signing: Boolean = false,
+        val error: String? = null,
+    ) : SafeProposeUiState {
+
+        /** Something is typed, and no signature runs: the password may sign. */
+        val canSign: Boolean
+            get() = !signing && unlock.password.text.isNotEmpty()
+
+        /** The biometric prompt may be offered now. */
+        val canSignWithBiometrics: Boolean
+            get() = !signing && unlock.biometrics
+    }
+
+    /**
+     * Signed and queued, or in lenient mode signed and held until its check: [hash] is the Safe
+     * transaction's, which its screen opens by, and which says which of the two.
+     */
     data class Proposed(override val network: String, val hash: String) : SafeProposeUiState
 }
+
+/**
+ * What Send for a Safe opens with filled in, beside the Safe and the asset: the recipient [to] as text
+ * (an address) and the [amount] as text in the asset's units. All of it still the user's to change, and
+ * the proposal theirs to review and sign: what Propose again opens for a held proposal whose nonce was
+ * used (docs/lenient-mode.md, *Safe transactions in lenient mode*), discarded first.
+ */
+data class SafeProposeFill(val to: String, val amount: String)

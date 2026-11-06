@@ -2,10 +2,14 @@ package eth.serotine.ui
 
 import eth.serotine.domain.model.AccountId
 import eth.serotine.domain.model.Address
+import eth.serotine.domain.model.Digest
 import eth.serotine.domain.model.Network
 import eth.serotine.domain.model.SyncPolicy
 import eth.serotine.domain.repository.KeptFees
 import eth.serotine.domain.repository.KeptNonce
+import eth.serotine.domain.repository.HeldSafeSignature
+import eth.serotine.domain.repository.KeptSafe
+import eth.serotine.domain.repository.KeptSafes
 import eth.serotine.domain.repository.KeptTransactionInputs
 import eth.serotine.domain.repository.Outbox
 import eth.serotine.domain.repository.OutboxList
@@ -44,12 +48,37 @@ internal class MemoryOutbox(vararg initial: QueuedTransaction) : Outbox {
         return true
     }
 
+    /** What is held now, an unreadable outbox's none. */
+    val held: List<HeldSafeSignature>
+        get() = (list.value as? OutboxList.Loaded)?.held.orEmpty()
+
+    override suspend fun hold(held: HeldSafeSignature): Boolean {
+        if (failSaves) return false
+        val loaded = list.value as? OutboxList.Loaded ?: return false
+        list.value = loaded.copy(held = loaded.held.filterNot { it.safe == held.safe && it.nonce == held.nonce } + held)
+        return true
+    }
+
+    override suspend fun release(safe: AccountId, hash: Digest): Boolean {
+        if (failSaves) return false
+        val loaded = list.value as? OutboxList.Loaded ?: return false
+        list.value = loaded.copy(held = loaded.held.filterNot { it.safe == safe && it.hash == hash })
+        return true
+    }
+
     override suspend fun acknowledgeLost(): Boolean {
         if (failSaves) return false
         val loaded = list.value as? OutboxList.Loaded ?: return false
         list.value = loaded.copy(lost = false)
         return true
     }
+}
+
+/** [KeptSafes] a test sets: the Safe last verified, [kept], or none. */
+internal class MemoryKeptSafes(kept: KeptSafe? = null) : KeptSafes {
+    val kept = MutableStateFlow(kept)
+
+    override fun observe(safe: AccountId): Flow<KeptSafe?> = this.kept
 }
 
 /** A [SyncPolicySetting] in memory, strict as in every build; [failSaves] makes a choice fail. */

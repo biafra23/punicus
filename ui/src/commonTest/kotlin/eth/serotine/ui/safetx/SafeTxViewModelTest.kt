@@ -38,6 +38,15 @@ import eth.serotine.domain.repository.Unlock
 import eth.serotine.domain.usecase.ApproveSafeTxOnChain
 import eth.serotine.domain.usecase.CheckSafeSwap
 import eth.serotine.domain.usecase.DescribeKeyStore
+import eth.serotine.domain.usecase.DiscardHeld
+import eth.serotine.domain.usecase.DraftSafeCall
+import eth.serotine.domain.usecase.HoldSafeSignature
+import eth.serotine.domain.usecase.ObserveEnabledNetworks
+import eth.serotine.domain.usecase.ObserveLightClient
+import eth.serotine.domain.usecase.ObserveOutbox
+import eth.serotine.domain.usecase.ObserveSyncPolicy
+import eth.serotine.domain.usecase.QueueSafeCall
+import eth.serotine.domain.usecase.ReadKeptSafeTxOwners
 import eth.serotine.domain.usecase.EncodeSigningRequest
 import eth.serotine.domain.usecase.ExecuteSafeTx
 import eth.serotine.domain.usecase.ObserveAccounts
@@ -155,9 +164,36 @@ class SafeTxViewModelTest {
             RemoveQueuedSafeTx(world.queue),
             WarmFeeHistory(world.inputs),
             CheckSafeSwap(world.uniswap, world.lightClient, Network.SEPOLIA),
+            ObserveSyncPolicy(world.policy),
+            ObserveEnabledNetworks(world.networks),
+            ObserveLightClient(world.lightClient),
+            ReadKeptSafeTxOwners(world.keptSafes, world.accounts, world.recovery, Network.SEPOLIA),
+            ObserveOutbox(world.outbox),
+            HoldSafeSignature(
+                world.signer,
+                world.keptSafes,
+                world.recovery,
+                world.outbox,
+                world.outboxLock,
+                Network.SEPOLIA,
+                now,
+            ),
+            DiscardHeld(world.outbox, world.outboxLock),
+            DraftSafeCall(
+                world.keptSafes,
+                world.keptInputs,
+                world.recovery,
+                world.balances,
+                world.sent,
+                world.outbox,
+                Network.SEPOLIA,
+                now,
+            ),
+            QueueSafeCall(world.signer, world.outbox, world.outboxLock, now),
             clock,
             imported,
             formatTime = { "at $it" },
+            clock = now,
         )
         if (collect) backgroundScope.launch { viewModel.uiState.collect {} }
         runCurrent()

@@ -2,6 +2,8 @@ package eth.serotine.data.outbox
 
 import eth.serotine.data.keys.HardwareSecret
 import eth.serotine.domain.model.AccountId
+import eth.serotine.domain.model.Digest
+import eth.serotine.domain.repository.HeldSafeSignature
 import eth.serotine.domain.repository.KeyProtection
 import eth.serotine.domain.repository.Outbox
 import eth.serotine.domain.repository.OutboxList
@@ -78,6 +80,10 @@ internal class ChosenOutbox(
 
     override suspend fun remove(account: AccountId): Boolean = outbox().remove(account)
 
+    override suspend fun hold(held: HeldSafeSignature): Boolean = outbox().hold(held)
+
+    override suspend fun release(safe: AccountId, hash: Digest): Boolean = outbox().release(safe, hash)
+
     override suspend fun acknowledgeLost(): Boolean = outbox().acknowledgeLost()
 }
 
@@ -88,6 +94,10 @@ private object UnreadableOutbox : Outbox {
     override suspend fun put(queued: QueuedTransaction): Boolean = false
 
     override suspend fun remove(account: AccountId): Boolean = false
+
+    override suspend fun hold(held: HeldSafeSignature): Boolean = false
+
+    override suspend fun release(safe: AccountId, hash: Digest): Boolean = false
 
     override suspend fun acknowledgeLost(): Boolean = false
 }

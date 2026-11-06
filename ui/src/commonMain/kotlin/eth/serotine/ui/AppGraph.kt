@@ -42,6 +42,7 @@ import eth.serotine.domain.repository.LogIndex
 import eth.serotine.domain.repository.NftContracts
 import eth.serotine.domain.repository.NameResolver
 import eth.serotine.domain.repository.NativeBalances
+import eth.serotine.domain.repository.KeptSafes
 import eth.serotine.domain.repository.KeptTransactionInputs
 import eth.serotine.domain.repository.SyncPolicySetting
 import eth.serotine.domain.repository.NetworkFreshness
@@ -81,7 +82,14 @@ import eth.serotine.domain.usecase.DeploySafe
 import eth.serotine.domain.usecase.DeriveAccount
 import eth.serotine.domain.usecase.DescribeKeyStore
 import eth.serotine.domain.usecase.DisableBiometricUnlock
+import eth.serotine.domain.usecase.DiscardHeld
 import eth.serotine.domain.usecase.DiscardQueued
+import eth.serotine.domain.usecase.DraftSafeCall
+import eth.serotine.domain.usecase.DraftSafeTx
+import eth.serotine.domain.usecase.HoldSafeSignature
+import eth.serotine.domain.usecase.ObserveKeptSafe
+import eth.serotine.domain.usecase.QueueSafeCall
+import eth.serotine.domain.usecase.ReadKeptSafeTxOwners
 import eth.serotine.domain.usecase.DraftTransfer
 import eth.serotine.domain.usecase.DropWaitingSwap
 import eth.serotine.domain.usecase.EnableBiometricUnlock
@@ -213,6 +221,7 @@ import eth.serotine.ui.receive.ReceiveViewModel
 import eth.serotine.ui.removeaccount.RemoveAccountViewModel
 import eth.serotine.ui.renameaccount.RenameAccountViewModel
 import eth.serotine.ui.safeimport.SafeImportViewModel
+import eth.serotine.ui.safepropose.SafeProposeFill
 import eth.serotine.ui.safepropose.SafeProposeViewModel
 import eth.serotine.ui.safesettings.SafeSettingsViewModel
 import eth.serotine.ui.safeswap.SafeSwapViewModel
@@ -343,6 +352,12 @@ class AppGraph(
      * mined count, the network's fee quote): what a lenient draft is built on (docs/lenient-mode.md).
      */
     private val keptTransactionInputs: KeptTransactionInputs,
+    /**
+     * Each Safe's nonce, owners and threshold the light client verified last, kept across restarts:
+     * what a lenient Safe transaction is drafted on (docs/lenient-mode.md, *Safe transactions in
+     * lenient mode*).
+     */
+    private val keptSafes: KeptSafes,
     /** The policy the user chose in Settings → Advanced → *Sign while syncing*: strict by default. */
     private val syncPolicy: SyncPolicySetting,
     /** The venue the user last chose on Swap, compose, which the next swap starts at. */
@@ -444,6 +459,8 @@ class AppGraph(
             AddNft(nfts, addedNfts),
             RemoveAddedNft(addedNfts),
             offerHandoff = OfferHandoff(walletHandoff),
+            // A Safe's queue lists the signatures held for it too (lenient mode).
+            observeOutbox = ObserveOutbox(outbox),
         )
 
     /** Send from another wallet (#255) from [from], with the token at [asset] chosen (null: the network's currency). */
@@ -497,22 +514,49 @@ class AppGraph(
         RemoveQueuedSafeTx(safeTxQueue),
         WarmFeeHistory(transactionInputs),
         CheckSafeSwap(uniswap, lightClient, safe.network),
+        ObserveSyncPolicy(syncPolicy),
+        ObserveEnabledNetworks(networkSettings),
+        ObserveLightClient(lightClient),
+        ReadKeptSafeTxOwners(keptSafes, accounts, signatureRecovery, safe.network),
+        ObserveOutbox(outbox),
+        holdSafeSignature(safe.network),
+        DiscardHeld(outbox, outboxLock),
+        DraftSafeCall(
+            keptSafes,
+            keptTransactionInputs,
+            signatureRecovery,
+            nativeBalances,
+            sentTransfers,
+            outbox,
+            safe.network,
+        ),
+        QueueSafeCall(signer, outbox, outboxLock),
         imported = imported,
     )
 
-    /** Send from the Safe at [safe], with the token at [asset] chosen (null: the network's currency). */
-    fun safeProposeViewModel(safe: AccountId, asset: Address?): SafeProposeViewModel = SafeProposeViewModel(
-        safe,
-        asset,
-        ObserveAccounts(accounts),
-        accountValue(),
-        observeSafe(),
-        DescribeKeyStore(keys),
-        ResolveRecipient(names),
-        ProposeSafeTx(observeSafe(), nativeBalances, tokenBalances, transactionInputs, safeTxQueue, safe.network),
-        signSafeTx(safe.network),
-        EncodeSigningRequest(signingRequests),
-    )
+    /**
+     * Send from the Safe at [safe], with the token at [asset] chosen (null: the network's currency),
+     * opened with [fill] filled in when given: a held proposal proposed again (docs/lenient-mode.md).
+     */
+    fun safeProposeViewModel(safe: AccountId, asset: Address?, fill: SafeProposeFill? = null): SafeProposeViewModel =
+        SafeProposeViewModel(
+            safe,
+            asset,
+            ObserveAccounts(accounts),
+            accountValue(),
+            observeSafe(),
+            DescribeKeyStore(keys),
+            ResolveRecipient(names),
+            ProposeSafeTx(observeSafe(), nativeBalances, tokenBalances, transactionInputs, safeTxQueue, safe.network),
+            signSafeTx(safe.network),
+            EncodeSigningRequest(signingRequests),
+            ObserveSyncPolicy(syncPolicy),
+            ObserveEnabledNetworks(networkSettings),
+            ObserveKeptSafe(keptSafes),
+            DraftSafeTx(keptSafes, accounts, nativeBalances, tokenBalances, safeTxQueue, outbox, safe.network),
+            holdSafeSignature(safe.network),
+            fill = fill,
+        )
 
     /**
      * Swap from the Safe at [safe], with the token at [asset] sold (null: the network's currency); or,
@@ -563,6 +607,10 @@ class AppGraph(
 
     private fun observeSafeTxQueue(network: Network) =
         ObserveSafeTxQueue(safeTxQueue, observeSafe(), signatureRecovery, network)
+
+    /** Lenient mode's signature of a Safe transaction, held in the outbox under its one lock until its check. */
+    private fun holdSafeSignature(network: Network) =
+        HoldSafeSignature(signer, keptSafes, signatureRecovery, outbox, outboxLock, network)
 
     private fun signSafeTx(network: Network) = SignSafeTx(
         signer,

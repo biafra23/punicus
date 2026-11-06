@@ -5,6 +5,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
@@ -21,6 +22,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
@@ -76,6 +78,9 @@ const val PROPOSE_SIGN_TAG = "propose-sign"
 
 /** Test tag of the button that leaves a signature not saved behind, for UI tests. */
 const val PROPOSE_DROP_UNSAVED_TAG = "propose-drop-unsaved"
+
+/** Test tag of a lenient draft's line on top: what it was prepared on, for UI tests. */
+const val PROPOSE_PREPARED_ON_TAG = "propose-prepared-on"
 
 /**
  * Binds [SafeProposeScreen] to its ViewModel. A proposal signed and queued ends the screen through
@@ -197,13 +202,15 @@ fun SafeProposeScreen(
     syncLine: LightClientItem? = null,
 ) {
     val review = state as? SafeProposeUiState.Review
+    val draft = state as? SafeProposeUiState.DraftReview
     // In the review, back is to the form; while a signature runs, back waits for it. While the Safe
     // is still checked before it, nothing is signed yet, and back stops the check.
-    val busy = review?.signing == true && !review.checking
+    val busy = review?.signing == true && !review.checking || draft?.signing == true
     // A check of the Safe can take up to 45 s: a screen that times out meanwhile is a screen left,
     // which stops it.
     if (review?.checking == true) KeepScreenOn()
-    BackHandler(enabled = review != null) {
+    val reviewing = review != null || draft != null
+    BackHandler(enabled = reviewing) {
         if (!busy) actions.onEdit()
     }
     if (review?.askingToDrop == true) {
@@ -230,13 +237,13 @@ fun SafeProposeScreen(
             TopAppBar(
                 navigationIcon = {
                     IconButton(
-                        onClick = if (review != null) actions.onEdit else onBack,
+                        onClick = if (reviewing) actions.onEdit else onBack,
                         enabled = !busy,
                     ) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
                     }
                 },
-                title = { Text(if (review != null) "Review proposal" else "Send from a Safe") },
+                title = { Text(if (reviewing) "Review proposal" else "Send from a Safe") },
                 actions = {
                     Text(
                         state.network,
@@ -280,6 +287,7 @@ fun SafeProposeScreen(
                     ReviewButton(form, actions.onReview, Modifier.align(Alignment.End))
                 }
                 is SafeProposeUiState.Review -> ReviewContent(state, actions, onCopy, onShareText, details)
+                is SafeProposeUiState.DraftReview -> DraftReviewContent(state, actions, details)
             }
         }
     }
@@ -350,6 +358,93 @@ private fun ReviewContent(
             canSignWithBiometrics = state.canSignWithBiometrics,
             signLabel = "Sign and queue",
             signingLabel = if (state.checking) CHECKING_SAFE else "Signing…",
+            onPasswordChange = actions.onPasswordChange,
+            onSign = actions.onSign,
+            onSignWithBiometrics = actions.onSignWithBiometrics,
+            passwordTag = PROPOSE_PASSWORD_TAG,
+            signTag = PROPOSE_SIGN_TAG,
+        )
+    }
+}
+
+/**
+ * A lenient draft's review (docs/lenient-mode.md, *Safe transactions in lenient mode*): the line on top
+ * saying what it was prepared on, what the Safe sends and to whom, the Safe transaction decoded here,
+ * its nonce and the owners and threshold it needs, and the Safe's balance before, queued and after "if
+ * nothing changed", each with the block it was last verified at (simple mode: its age, the blocks
+ * behind *Details*), and in place of the simulation that it is not checked yet. No Refresh and no fiat
+ * value. Then the owner who signs and the unlock, which signs and holds it.
+ */
+@Composable
+private fun DraftReviewContent(state: SafeProposeUiState.DraftReview, actions: SafeProposeActions, details: List<String>) {
+    Column(
+        Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+        Surface(
+            Modifier.fillMaxWidth(),
+            shape = MaterialTheme.shapes.medium,
+            color = MaterialTheme.colorScheme.tertiaryContainer,
+            contentColor = MaterialTheme.colorScheme.onTertiaryContainer,
+        ) {
+            Text(
+                state.preparedOn,
+                Modifier.padding(12.dp).testTag(PROPOSE_PREPARED_ON_TAG),
+                style = MaterialTheme.typography.bodyMedium,
+            )
+        }
+        Heading("The Safe sends")
+        Row(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
+            TokenIcon(state.asset.icon, state.asset.symbol, size = 40.dp)
+            SelectionContainer {
+                Text(
+                    state.amount,
+                    Modifier.testTag(PROPOSE_AMOUNT_REVIEWED_TAG),
+                    style = MaterialTheme.typography.headlineSmall,
+                )
+            }
+        }
+        state.asset.warning?.let { Text(it, color = MaterialTheme.colorScheme.error) }
+        Heading("To")
+        RecipientCard(state.recipient)
+        Heading("From")
+        FromLine(state.from)
+        Heading("The Safe transaction, decoded here")
+        SafeTxActionCard(state.action)
+        Text(state.nonce, style = MaterialTheme.typography.titleSmall)
+        Text(state.threshold, style = MaterialTheme.typography.bodyMedium)
+        state.queued?.let { Text(it, style = MaterialTheme.typography.bodyMedium) }
+        Heading("The Safe's balance, if nothing changed")
+        Column {
+            Text(state.balance.what, style = MaterialTheme.typography.labelLarge)
+            Text(state.balance.before)
+            state.balance.queued?.let { Text("− $it") }
+            Text("→ ${state.balance.after}")
+            Note(state.balance.verifiedAt.takeIf { it.isNotEmpty() } ?: state.balanceAge)
+        }
+        Surface(
+            Modifier.fillMaxWidth(),
+            shape = MaterialTheme.shapes.medium,
+            color = MaterialTheme.colorScheme.surfaceContainerHigh,
+        ) {
+            Text(state.notChecked, Modifier.padding(12.dp), style = MaterialTheme.typography.bodyMedium)
+        }
+        if (details.isNotEmpty()) HiddenDetails(PROPOSE_DETAILS_TAG) { details.forEach { Note(it) } }
+        HorizontalDivider()
+        Heading("Signed by")
+        OwnerChoices(state.owners, state.owner, enabled = !state.signing, onChoose = actions.onOwnerChange)
+        Note(
+            "Signed, it is held on this device until it checks out on chain: only then is it in the queue, and " +
+                "shared with the other owners.",
+        )
+        state.error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
+        UnlockFields(
+            unlock = state.unlock,
+            signing = state.signing,
+            canSign = state.canSign,
+            canSignWithBiometrics = state.canSignWithBiometrics,
+            signLabel = "Sign and hold",
+            signingLabel = "Signing…",
             onPasswordChange = actions.onPasswordChange,
             onSign = actions.onSign,
             onSignWithBiometrics = actions.onSignWithBiometrics,

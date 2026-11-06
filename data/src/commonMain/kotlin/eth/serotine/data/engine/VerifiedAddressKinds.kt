@@ -69,6 +69,12 @@ class VerifiedAddressKinds internal constructor(
     private val timeSource: TimeSource = TimeSource.Monotonic,
     /** Where a Safe's read says what failed or straddled and how many reads it took; null: nowhere (release). */
     private val debugLog: ((String) -> Unit)? = null,
+    /**
+     * Where each address's last proof is kept beyond the process ([KeptSafesFile.proofs]): a Safe's
+     * state, for a lenient draft (docs/lenient-mode.md, *Safe transactions in lenient mode*); none
+     * kept by default. A reading never says one: while no head can be read, it is syncing.
+     */
+    kept: KeptProofs<Address, AddressKind> = KeptProofs.none(),
 ) : AddressKinds {
 
     private val reads = ProvenReads<Address, AddressKind>(
@@ -77,6 +83,7 @@ class VerifiedAddressKinds internal constructor(
         pollInterval,
         keptForHeads = { kind -> if (kind is AddressKind.Safe) SAFE_KEPT_FOR_HEADS else 1 },
         sharedForHeads = SAFE_KEPT_FOR_HEADS,
+        kept = kept,
     ) { verified, address ->
         // One budget from the first proof on: the code's, asked for again like every other.
         val started = timeSource.markNow()

@@ -45,14 +45,16 @@ sealed interface TransferStatusUiState {
 
     /**
      * A transfer signed in lenient mode and waiting in the outbox under [id] (docs/lenient-mode.md,
-     * *The outbox*; owner rulings, 2026-11-06): what it sends ([sent]), and its [steps], a step
-     * after Signed saying where it stands: queued, waiting for the network to catch up or being
-     * checked, "Sending…", past its hour, or in conflict.
+     * *The outbox*; owner rulings, 2026-11-06): what it sends ([sent]; for a Safe transaction's
+     * approval on chain or execution, [safeTx]), and its [steps], a step after Signed saying where it
+     * stands: queued, waiting for the network to catch up or being checked, "Sending…", past its
+     * hour, or in conflict.
      *
      * - [question] past its hour without the user's tap (decision 4): "Still send this? You signed
      *   it 2 h ago.", answered by Send now ([confirming] while that is saved).
      * - [again] what Sign again (after a conflict) or Edit (otherwise) opens Send with, once it is
-     *   discarded; [againLabel] which of the two it is and [againNote] what it does.
+     *   discarded; for a Safe's approval or execution, [safeAgain], the Safe transaction they open
+     *   instead; [againLabel] which of the two it is and [againNote] what it does.
      * - [busy] why Discard and [again] wait, greyed out: its check and broadcast run ("It's being
      *   checked and sent."); null while they can be done. [discarding] while a discard runs, which
      *   waits for a check under way.
@@ -71,20 +73,31 @@ sealed interface TransferStatusUiState {
         val busy: String? = null,
         val discarding: Boolean = false,
         val error: String? = null,
+        val safeTx: SafeTxSummary? = null,
+        val safeAgain: SafeTxAgain? = null,
     ) : TransferStatusUiState
 
     /**
      * A queued transfer no longer queued: the user discarded it here ([message]: its signature was
      * deleted, and nothing was sent), or, when the discard came, it was gone already (sent meanwhile,
      * which its record shows once read, or discarded). [reopen], only for a transfer this discard
-     * deleted after Sign again or Edit, is what Send opens with in its place.
+     * deleted after Sign again or Edit, is what Send opens with in its place; [reopenSafe], for a
+     * Safe's approval or execution, the Safe transaction that opens instead.
      */
     data class Discarded(
         override val network: String,
         val message: String,
         val reopen: SendAgain? = null,
+        val reopenSafe: SafeTxAgain? = null,
     ) : TransferStatusUiState
 }
+
+/**
+ * The Safe transaction a queued approval on chain or execution was of, which Sign again and Edit open
+ * once it is discarded, to approve or execute it anew: the Safe on the network of [chainId] ([safe],
+ * an address in lower case) and the Safe transaction's [hash] (`0x` and 64 hex digits).
+ */
+data class SafeTxAgain(val chainId: Long, val safe: String, val hash: String)
 
 /**
  * What Send opens with for a queued transfer signed again (Sign again, Edit): the account it is from

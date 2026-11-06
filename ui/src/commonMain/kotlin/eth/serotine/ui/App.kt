@@ -81,9 +81,11 @@ import eth.serotine.ui.receive.ReceiveRoute
 import eth.serotine.ui.removeaccount.RemoveAccountRoute
 import eth.serotine.ui.renameaccount.RenameAccountRoute
 import eth.serotine.ui.safeimport.SafeImportRoute
+import eth.serotine.ui.safepropose.SafeProposeFill
 import eth.serotine.ui.safepropose.SafeProposeRoute
 import eth.serotine.ui.safesettings.SafeSettingsRoute
 import eth.serotine.ui.safeswap.SafeSwapRoute
+import eth.serotine.ui.safetx.SafeProposeAgain
 import eth.serotine.ui.safetx.SafeTxRoute
 import eth.serotine.ui.security.SecurityRoute
 import eth.serotine.ui.send.SendFill
@@ -94,6 +96,7 @@ import eth.serotine.ui.swap.SwapRoute
 import eth.serotine.ui.theme.SerotineTheme
 import eth.serotine.ui.tokens.TokensRoute
 import eth.serotine.ui.transferstatus.SendAgain
+import eth.serotine.ui.transferstatus.SafeTxAgain
 import eth.serotine.ui.transferstatus.TransferStatusRoute
 import eth.serotine.ui.update.UpdateRequiredRoute
 import eth.serotine.ui.update.UpdateRequiredUiState
@@ -738,20 +741,22 @@ private fun Destinations(
         // as each ends in a signature or a transaction.
         composable(
             SAFE_PROPOSE_ROUTE,
-            arguments = listOf(
-                navArgument(ASSET) {
+            arguments = listOf(ASSET, TO, AMOUNT).map { name ->
+                navArgument(name) {
                     type = NavType.StringType
                     nullable = true
                     defaultValue = null
-                },
-            ),
+                }
+            },
         ) { entry ->
             val account = entry.account()
             val asked = entry.savedStateHandle.get<String>(ASSET)
             val asset = asked?.let(Address::parse)
+            // A held proposal proposed again (lenient mode): what the form opens with.
+            val fill = proposeFillOf(entry.savedStateHandle.get<String>(TO), entry.savedStateHandle.get<String>(AMOUNT))
             if (account != null && (asked == null || asset != null)) {
                 SafeProposeRoute(
-                    viewModel = viewModel { graph.safeProposeViewModel(account, asset) },
+                    viewModel = viewModel { graph.safeProposeViewModel(account, asset, fill) },
                     lightClient = lightClient.item(account.network),
                     onBack = { navController.popBackStack(SAFE_PROPOSE_ROUTE, inclusive = true) },
                     // Signed and queued: the transaction's screen, and back from it to where Send was opened.
@@ -844,6 +849,8 @@ private fun Destinations(
                     },
                     // Over this one: once the new swap is signed, its own screen takes Swap's place.
                     onProposeAgain = { navController.safeSwap(account, asset = null, replacing = hash) },
+                    // A held proposal discarded to be proposed again: Send from the Safe, filled in, in its place.
+                    onProposeTransferAgain = { again -> navController.proposeAgain(again) },
                 )
             } else {
                 LaunchedEffect(Unit) { navController.popBackStack(SAFE_TX_ROUTE, inclusive = true) }
@@ -859,6 +866,8 @@ private fun Destinations(
                     onDone = { navController.popBackStack(TRANSFER_ROUTE, inclusive = true) },
                     // A queued transfer discarded to be signed again: Send filled in with it, in this one's place.
                     onSendAgain = { again -> navController.sendAgain(again) },
+                    // A queued approval or execution discarded to be signed again: its Safe transaction.
+                    onSafeAgain = { again -> navController.safeTxAgain(again) },
                 )
             } else {
                 LaunchedEffect(Unit) { navController.popBackStack(TRANSFER_ROUTE, inclusive = true) }
@@ -1038,6 +1047,44 @@ private fun NavController.sendAgain(again: SendAgain) {
     // refusal about the transfer just discarded.
     if (currentDestination?.route == SEND_ROUTE) popBackStack()
     navigate("${Destination.SEND}/${from.route}?$query")
+}
+
+/**
+ * Opens the Safe transaction [again] names, a queued approval or execution of it discarded to be
+ * signed again, in place of its status.
+ */
+private fun NavController.safeTxAgain(again: SafeTxAgain) {
+    val network = Network.ofChainId(again.chainId) ?: return
+    val safe = AccountId(network, Address.parse(again.safe) ?: return)
+    if (!TRANSACTION_HASH.matches(again.hash)) return
+    openSafeTx(safe, again.hash, replacing = TRANSFER_ROUTE)
+}
+
+/**
+ * Opens Send from a Safe filled in with [again], a held proposal discarded to be proposed again, in
+ * place of its Safe transaction's screen: back from it goes where that was opened from. Identifiers in
+ * lower case.
+ */
+private fun NavController.proposeAgain(again: SafeProposeAgain) {
+    if (currentDestination?.route == SAFE_PROPOSE_ROUTE) return
+    val network = Network.ofChainId(again.chainId) ?: return
+    val safe = AccountId(network, Address.parse(again.safe) ?: return)
+    val to = Address.parse(again.to) ?: return
+    val asset = again.asset?.let { Address.parse(it) ?: return }
+    val amount = again.amount.takeIf(AMOUNT_TEXT::matches) ?: return
+    val query = listOfNotNull(asset?.let { "$ASSET=${it.hex}" }, "$TO=${to.hex}", "$AMOUNT=$amount").joinToString("&")
+    popBackStack(SAFE_TX_ROUTE, inclusive = true)
+    navigate("${Destination.SAFE}/${safe.route}/${Destination.PROPOSE}?$query")
+}
+
+/**
+ * What Send from a Safe's route asks to be filled in: the recipient [to] (an address) and the
+ * [amount] as text; null when it asks for none, or not in a form this build reads.
+ */
+private fun proposeFillOf(to: String?, amount: String?): SafeProposeFill? {
+    if (to == null || amount == null) return null
+    val address = Address.parse(to) ?: return null
+    return SafeProposeFill(Eip55.format(address), amount.takeIf(AMOUNT_TEXT::matches) ?: return null)
 }
 
 /**
@@ -1299,7 +1346,7 @@ private const val SAFE_TX_ROUTE = "${Destination.SAFE}/{$CHAIN}/{$ADDRESS}/${Des
 
 /** Send from a Safe: a Safe transaction proposed, with a token chosen or not. */
 private const val SAFE_PROPOSE_ROUTE =
-    "${Destination.SAFE}/{$CHAIN}/{$ADDRESS}/${Destination.PROPOSE}?$ASSET={$ASSET}"
+    "${Destination.SAFE}/{$CHAIN}/{$ADDRESS}/${Destination.PROPOSE}?$ASSET={$ASSET}&$TO={$TO}&$AMOUNT={$AMOUNT}"
 
 /** Swap from a Safe: its Safe transactions proposed, selling a token or not, or a queued swap again. */
 private const val SAFE_SWAP_ROUTE =

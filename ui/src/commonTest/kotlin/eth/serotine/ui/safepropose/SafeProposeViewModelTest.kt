@@ -26,6 +26,11 @@ import eth.serotine.domain.repository.Simulation
 import eth.serotine.domain.repository.TokenBalanceReading
 import eth.serotine.domain.repository.Unlock
 import eth.serotine.domain.usecase.DescribeKeyStore
+import eth.serotine.domain.usecase.DraftSafeTx
+import eth.serotine.domain.usecase.HoldSafeSignature
+import eth.serotine.domain.usecase.ObserveEnabledNetworks
+import eth.serotine.domain.usecase.ObserveKeptSafe
+import eth.serotine.domain.usecase.ObserveSyncPolicy
 import eth.serotine.domain.usecase.EncodeSigningRequest
 import eth.serotine.domain.usecase.ObserveAccountValue
 import eth.serotine.domain.usecase.ObserveAccounts
@@ -96,7 +101,11 @@ class SafeProposeViewModelTest {
     @AfterTest
     fun resetMainDispatcher() = Dispatchers.resetMain()
 
-    private fun TestScope.viewModel(from: Address = world.safe, asset: Address? = null): SafeProposeViewModel {
+    private fun TestScope.viewModel(
+        from: Address = world.safe,
+        asset: Address? = null,
+        fill: SafeProposeFill? = null,
+    ): SafeProposeViewModel {
         Dispatchers.setMain(UnconfinedTestDispatcher(testScheduler))
         val viewModel = SafeProposeViewModel(
             AccountId(Network.SEPOLIA, from),
@@ -121,7 +130,28 @@ class SafeProposeViewModelTest {
             ),
             SignSafeTx(world.signer, world.observeSafe, world.recovery, world.queue, Network.SEPOLIA),
             EncodeSigningRequest(world.codec),
-            clock,
+            ObserveSyncPolicy(world.policy),
+            ObserveEnabledNetworks(world.networks),
+            ObserveKeptSafe(world.keptSafes),
+            DraftSafeTx(
+                world.keptSafes,
+                world.accounts,
+                world.balances,
+                world.tokenBalances,
+                world.queue,
+                world.outbox,
+                Network.SEPOLIA,
+            ),
+            HoldSafeSignature(
+                world.signer,
+                world.keptSafes,
+                world.recovery,
+                world.outbox,
+                world.outboxLock,
+                Network.SEPOLIA,
+            ) { wallClock },
+            fill = fill,
+            timeSource = clock,
             now = { wallClock },
         )
         backgroundScope.launch { viewModel.uiState.collect {} }

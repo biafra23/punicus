@@ -39,6 +39,11 @@ import eth.serotine.domain.usecase.ObserveUpgradeWarnings
 import eth.serotine.domain.usecase.RefreshNetworkData
 import eth.serotine.domain.usecase.SafeReading
 import eth.serotine.domain.usecase.SafeTxQueueReading
+import eth.serotine.domain.usecase.ObserveOutbox
+import eth.serotine.domain.repository.HeldConflict
+import eth.serotine.domain.repository.HeldSafeSignature
+import eth.serotine.domain.repository.Outbox
+import eth.serotine.domain.repository.OutboxList
 import eth.serotine.domain.usecase.SafeTxRefusal
 import eth.serotine.domain.usecase.SetNetworkEnabled
 import eth.serotine.domain.usecase.SetTokenHidden
@@ -155,6 +160,11 @@ class AccountDetailViewModel(
     private val clock: () -> Long = ::epochSecondsNow,
     /** Whether Send from another wallet is offered (issue #255), asked anew for each state built. Null: never. */
     private val offerHandoff: OfferHandoff? = null,
+    /**
+     * The Safe signatures held in lenient mode until their check (docs/lenient-mode.md, *Safe
+     * transactions in lenient mode*): a Safe's queue lists them too. None by default.
+     */
+    observeOutbox: ObserveOutbox = ObserveOutbox(Outbox.None),
 ) : ViewModel() {
     /** The account this screen is about: its address, on its network. */
     private val address: Address = account.address
@@ -258,8 +268,13 @@ class AccountDetailViewModel(
     @OptIn(ExperimentalCoroutinesApi::class)
     private val queue = isSafe.flatMapLatest { isSafe ->
         if (isSafe) {
-            combine(observeSafeTxQueue(address), observeKnownTokens(network)) { reading, tokens ->
-                QueueView.Read(reading, tokens.forDecoding())
+            combine(
+                observeSafeTxQueue(address),
+                observeKnownTokens(network),
+                // A queue is never kept from showing by an outbox that cannot be read: it lists none held then.
+                observeOutbox().map { list -> (list as? OutboxList.Loaded)?.held.orEmpty().filter { it.safe == account } },
+            ) { reading, tokens, held ->
+                QueueView.Read(reading, tokens.forDecoding(), held)
             }.onStart<QueueView> { emit(QueueView.Checking) }
         } else {
             flowOf(QueueView.None)
@@ -329,7 +344,12 @@ class AccountDetailViewModel(
     private sealed interface QueueView {
         data object None : QueueView
         data object Checking : QueueView
-        data class Read(val reading: SafeTxQueueReading, val tokens: List<DecodingToken>) : QueueView
+        /** The queue's [reading], the [tokens] its transfers are shown in, and the signatures [held] for the Safe. */
+        data class Read(
+            val reading: SafeTxQueueReading,
+            val tokens: List<DecodingToken>,
+            val held: List<HeldSafeSignature> = emptyList(),
+        ) : QueueView
     }
 
     val uiState: StateFlow<AccountDetailUiState> =
@@ -546,12 +566,33 @@ class AccountDetailViewModel(
             SafeTxQueueReading.Unreadable -> SafeQueue.Unavailable(QUEUE_UNREADABLE)
             is SafeTxQueueReading.Loaded -> {
                 val threshold = (safe as? SafeReading.Verified)?.state?.threshold
+                val queued = reading.transactions.map { tx ->
+                    queueRow(tx, reading.safeNonce, threshold, view.tokens)
+                        .withHeld(view.held.firstOrNull { it.hash == tx.request.hash })
+                }
+                // A proposal held until its check is in no queue yet: listed too, by its nonce.
+                val proposed = view.held.filter { held -> reading.transactions.none { it.request.hash == held.hash } }
+                    .map { held ->
+                        queueRow(DecodedSafeTx.of(held.request), reading.safeNonce, threshold, view.tokens)
+                            .copy(signatures = heldText(held))
+                    }
                 SafeQueue.Shown(
-                    rows = reading.transactions.map { queueRow(it, reading.safeNonce, threshold, view.tokens) },
+                    rows = (queued + proposed).sortedBy { it.order },
                     note = if (reading.safeNonce == null) QUEUE_UNVERIFIED else null,
                 )
             }
         }
+    }
+
+    /** [this] row with what the signature [held] for it says, when one is. */
+    private fun QueueRow.withHeld(held: HeldSafeSignature?): QueueRow =
+        if (held == null) this else copy(signatures = "$signatures · ${heldText(held).lowercase()}")
+
+    /** Where a signature held for a row stands: waiting for its check, or no longer standing. */
+    private fun heldText(held: HeldSafeSignature): String = when (held.conflict) {
+        null -> "Your signature is held until it checks out on chain"
+        HeldConflict.NotAnOwner -> "Your held signature was discarded"
+        else -> "Your held signature did not check out"
     }
 
     private fun queueRow(tx: DecodedSafeTx, safeNonce: Long?, threshold: Int?, tokens: List<DecodingToken>): QueueRow {
@@ -559,6 +600,7 @@ class AccountDetailViewModel(
         val action = safeTxActionItem(tx.action, request.nonce, tokens, network)
         val signed = request.signatures.size
         return QueueRow(
+            order = request.nonce,
             hash = "0x" + request.hash.hex,
             action = action.title,
             about = action.addresses.firstOrNull()?.address,

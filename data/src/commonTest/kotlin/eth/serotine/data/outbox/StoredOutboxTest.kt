@@ -3,12 +3,19 @@ package eth.serotine.data.outbox
 import eth.serotine.domain.model.Address
 import eth.serotine.domain.model.Eip1559Transaction
 import eth.serotine.domain.model.Network
+import eth.serotine.domain.model.SafeTx
+import eth.serotine.domain.model.Signature
+import eth.serotine.domain.model.SigningRequest
 import eth.serotine.domain.model.SignedTransfer
 import eth.serotine.domain.model.Token
 import eth.serotine.domain.model.TransferAsset
 import eth.serotine.domain.model.UInt256
 import eth.serotine.domain.repository.DraftBasis
 import eth.serotine.domain.repository.FeeLevel
+import eth.serotine.domain.repository.HeldConflict
+import eth.serotine.domain.repository.HeldRefusal
+import eth.serotine.domain.repository.HeldSafeSignature
+import eth.serotine.domain.repository.SafeDraftBasis
 import eth.serotine.domain.repository.QueueConflict
 import eth.serotine.domain.repository.QueueRefusal
 import eth.serotine.domain.repository.QueuedTransaction
@@ -18,6 +25,23 @@ import kotlin.test.assertEquals
 import kotlin.test.assertNull
 
 class StoredOutboxTest {
+
+    private fun held(): HeldSafeSignature {
+        val safe = Address.of("0x" + "5a".repeat(20))
+        val request = SigningRequest.of(
+            Network.SEPOLIA,
+            safe,
+            SafeTx.call(bob, UInt256.of(5), ByteArray(0), nonce = 12),
+        )
+        return HeldSafeSignature(
+            request = request,
+            owner = alice,
+            signature = Signature("1" + "0".repeat(62) + "7", "2".padStart(64, '0'), recoveryId = 1),
+            proposed = true,
+            signedAt = 1_800_000_000,
+            builtOn = SafeDraftBasis(90, 1_799_999_000, 91, null),
+        )
+    }
 
     private val alice = Address.of("0x" + "aa".repeat(20))
     private val bob = Address.of("0x" + "bb".repeat(20))
@@ -79,9 +103,36 @@ class StoredOutboxTest {
 
     @Test
     fun aNewerContentIsToldFromADamagedOne() {
-        assertEquals(StoredOutbox.Decoding.Newer, StoredOutbox.decode("""{"version":2,"queued":[],"x":1}""".encodeToByteArray()))
+        assertEquals(StoredOutbox.Decoding.Newer, StoredOutbox.decode("""{"version":3,"queued":[],"x":1}""".encodeToByteArray()))
         assertEquals(StoredOutbox.Decoding.Damaged, StoredOutbox.decode("not json".encodeToByteArray()))
         assertEquals(StoredOutbox.Decoding.Damaged, StoredOutbox.decode("""{"version":1,"queued":[{}]}""".encodeToByteArray()))
+    }
+
+    @Test
+    fun aHeldSafeSignatureComesBackAsItWasStoredItsConflictsWithoutTheSignature() {
+        val held = held()
+        val read = StoredOutbox.decode(StoredOutbox.encode(listOf(queued()), listOf(held))) as StoredOutbox.Decoding.Read
+        assertEquals(listOf(held), read.held)
+        assertEquals(listOf(queued()), read.queued)
+
+        val conflicts = listOf(
+            HeldConflict.NonceUsed(13),
+            HeldConflict.NotAnOwner,
+            HeldConflict.Refused(HeldRefusal.NEEDS_RECOVERY_MODULE),
+        )
+        for (conflict in conflicts) {
+            val stripped = held.copy(signature = null, conflict = conflict)
+            val back = (StoredOutbox.decode(StoredOutbox.encode(emptyList(), listOf(stripped))) as StoredOutbox.Decoding.Read)
+                .held.single()
+            assertEquals(stripped, back)
+            assertNull(back.signature)
+        }
+    }
+
+    @Test
+    fun anOutboxOfTheFirstVersionReadsAsHoldingNoSignature() {
+        val v1 = """{"version":1,"queued":[]}"""
+        assertEquals(StoredOutbox.Decoding.Read(emptyList(), emptyList()), StoredOutbox.decode(v1.encodeToByteArray()))
     }
 
     @Test

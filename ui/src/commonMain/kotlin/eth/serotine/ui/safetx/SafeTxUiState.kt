@@ -44,7 +44,10 @@ sealed interface SafeTxUiState {
      * shared carries only signatures its current owners made; [share] is the request opened for
      * sharing, null while closed; [message] what the last action came to, or null. Simple mode says
      * no block (docs/simple-ui.md): [simpleRefusal] and [simpleMessage] are [refusal] and [message]
-     * in its words, null where they are the same.
+     * in its words, null where they are the same. [draftNote] in lenient mode while the light client
+     * catches up (docs/lenient-mode.md, *Safe transactions in lenient mode*): what Sign, Approve on
+     * chain and Execute are prepared on (the Safe as last verified, its age), and that each is checked
+     * on chain before it is shown or sent; [simpleDraftNote] that with no block.
      */
     data class Overview(
         override val network: String,
@@ -66,11 +69,15 @@ sealed interface SafeTxUiState {
         val message: String? = null,
         val simpleRefusal: String? = null,
         val simpleMessage: String? = null,
+        val draftNote: String? = null,
+        val simpleDraftNote: String? = null,
     ) : SafeTxUiState
 
     /**
      * Signing the transaction's hash with the key of [owner] (EIP-55), one of [owners], the owners
-     * held here that have not confirmed it; [unlock] is how, [signing] while it runs.
+     * held here that have not confirmed it; [unlock] is how, [signing] while it runs. In lenient mode
+     * ([preparedOn] set: the Safe as last verified, its age), the signature is held until its check
+     * at a fresh head, never queued or shown before it ([signLabel] says so).
      */
     data class Signing(
         override val network: String,
@@ -86,6 +93,8 @@ sealed interface SafeTxUiState {
         val checking: Boolean = false,
         /** For a swap or its approval, where it stands now: the last thing shown before the key signs. */
         val swap: SafeSwapItem? = null,
+        val preparedOn: String? = null,
+        val signLabel: String = "Sign",
     ) : SafeTxUiState {
 
         /** Something is typed and nothing runs: the password may sign. */
@@ -149,12 +158,136 @@ sealed interface SafeTxUiState {
             get() = !refreshing && !signing && notSent == null
     }
 
+    /**
+     * An approval on chain or an execution ([kind]) drafted in lenient mode (docs/lenient-mode.md,
+     * *Safe transactions in lenient mode*; owner rulings, 2026-11-06), to be signed and queued, never
+     * sent from here: from [account] (EIP-55), one of [accounts], at the [fee] level, on what was
+     * verified last ([preparedOn], "Prepared on data from 12 min ago…"). [maxFee] the most its fee
+     * can be at the pinned gas ceiling, [feeDetail] what it is made of with its block and [feeAge]
+     * its age; [txNonce] the account's nonce with its block and [txNonceAge] its age; [balance] the
+     * account's native balance before → after "if nothing changed", its block and age; for an
+     * execution, the [confirmations] it is executed with. [notChecked] stands in for the verified
+     * simulation. No fiat value, no Refresh and no deadline: a draft is old by definition, and the
+     * check before sending reads fresh state. [unlock] signs it; [signing] while it is signed and
+     * queued; [error] what the last attempt came to.
+     */
+    data class DraftReview(
+        override val network: String,
+        val safe: SafeHeader,
+        val action: SafeTxActionItem,
+        val nonce: String,
+        val kind: ReviewKind,
+        val accounts: List<SignerChoice>,
+        val account: String,
+        val fee: FeeLevel,
+        val preparedOn: String,
+        val maxFee: String,
+        val feeDetail: String,
+        val feeAge: String,
+        val txNonce: String,
+        val txNonceAge: String,
+        val balance: BalanceChange,
+        val notChecked: String,
+        val unlock: UnlockStep,
+        val confirmations: String? = null,
+        val pending: String? = null,
+        val signing: Boolean = false,
+        val error: String? = null,
+    ) : SafeTxUiState {
+
+        /** Something is typed, and no signature runs: the password may sign. */
+        val canSign: Boolean
+            get() = !signing && unlock.password.text.isNotEmpty()
+
+        /** The biometric prompt may be offered now. */
+        val canSignWithBiometrics: Boolean
+            get() = !signing && unlock.biometrics
+    }
+
+    /**
+     * An owner's signature of this transaction, made in lenient mode and held on this device until its
+     * check at a fresh head (docs/lenient-mode.md, *Safe transactions in lenient mode*): what it does
+     * ([action], decoded here), its [nonce] and [hash], what it was signed on ([preparedOn]), and its
+     * [steps]: Signed, Held (waiting for the network, checked once it has caught up, the network off,
+     * or a conflict that deleted it), then In the queue and shared, which waits for the check. Its QR
+     * code and text are not offered ([shareNote] says when they are). [discardLabel] removes it
+     * (Discard, or Dismiss once a conflict deleted it) and [discardNote] says what that does;
+     * [discarding] while it runs. [again], for a transfer this device proposed whose nonce was used
+     * meanwhile, is what Propose again opens Send for a Safe with, once it is discarded. [error] a
+     * change that could not be saved.
+     */
+    data class Held(
+        override val network: String,
+        val safe: SafeHeader,
+        val action: SafeTxActionItem,
+        val nonce: String,
+        val hash: String,
+        val preparedOn: String,
+        val steps: List<HeldStep>,
+        val shareNote: String,
+        /** The block the Safe it was signed on was verified at, which simple mode keeps behind *Details*. */
+        val safeVerifiedAt: String,
+        val discardLabel: String,
+        val discardNote: String,
+        val again: SafeProposeAgain? = null,
+        val discarding: Boolean = false,
+        val error: String? = null,
+    ) : SafeTxUiState
+
     /** Broadcast: [hash] is the approval's or the execution's, which the status screen follows. */
     data class Sent(override val network: String, val hash: String) : SafeTxUiState
+
+    /**
+     * An approval or an execution signed in lenient mode and queued in the outbox under [id]: nothing
+     * was broadcast, and the status screen follows it.
+     */
+    data class Queued(override val network: String, val id: String) : SafeTxUiState
+
+    /**
+     * A held signature discarded here, for a transaction no longer in this device's queue: [message]
+     * says so; [reopen], after Propose again, is what Send for a Safe opens with in its place.
+     */
+    data class Discarded(
+        override val network: String,
+        val message: String,
+        val reopen: SafeProposeAgain? = null,
+    ) : SafeTxUiState
 
     /** Removed from this device's queue: the screen leaves. */
     data class Removed(override val network: String) : SafeTxUiState
 }
+
+/** One step of a held signature's way: its [label] ("Held"), where it stands ([state]), and its [detail]. */
+data class HeldStep(val label: String, val state: HeldStepState, val detail: String?)
+
+/** Where a [HeldStep] stands. */
+enum class HeldStepState {
+    /** Done, on this device. */
+    DONE,
+
+    /** Not yet: it waits. */
+    WAITING,
+
+    /** It no longer stands: its signature was deleted. */
+    FAILED,
+
+    /** It cannot happen while something else is missing (the network off, a signature deleted). */
+    UNKNOWN,
+}
+
+/**
+ * What Send for a Safe opens with for a proposal signed again (Propose again, after its nonce was
+ * used): the Safe on the network of [chainId] ([safe], an address), the token's contract [asset]
+ * (null: the network's currency), the recipient [to] (an address) and the [amount] in the asset's
+ * units as text. Identifiers in lower case, as a route carries them.
+ */
+data class SafeProposeAgain(
+    val chainId: Long,
+    val safe: String,
+    val asset: String?,
+    val to: String,
+    val amount: String,
+)
 
 /**
  * The Safe a transaction is of: its [label] in the wallet (null: not in it), its EIP-55 [address]

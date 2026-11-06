@@ -33,6 +33,10 @@ import eth.serotine.data.transfers.FileTransactionHistory
 import eth.serotine.data.upgrade.FileKnownUpgradeStore
 import eth.serotine.domain.model.Network
 import eth.serotine.domain.usecase.CheckQueued
+import eth.serotine.domain.usecase.CheckHeldSignature
+import eth.serotine.domain.usecase.ObserveSafe
+import eth.serotine.domain.usecase.QuoteSafeApproval
+import eth.serotine.domain.usecase.QuoteSafeExecution
 import eth.serotine.domain.usecase.FollowAccountLogs
 import eth.serotine.domain.usecase.AnswerDappRequestsAtOnce
 import eth.serotine.domain.usecase.FollowDappAccounts
@@ -161,6 +165,7 @@ class SerotineWallet {
             debugLog = debugLog,
             apiLog = this.debugLog,
             keptInputs = "$dataDir/kept-inputs.json",
+            keptSafes = "$dataDir/kept-safes.json",
         )
     }
 
@@ -216,6 +221,13 @@ class SerotineWallet {
     private val outbox = iosOutbox("$dataDir/outbox")
     private val outboxLock = OutboxLock()
 
+    /**
+     * The Safe transactions waiting for their owners, with the signatures collected (public), and who
+     * made a co-signer's signature: one instance each, which the graph and the outbox's follower share.
+     */
+    private val safeTxQueue = FileSafeTxQueue("$dataDir/safe-tx-queue.json")
+    private val signatureRecovery = Secp256k1Recovery()
+
     internal val graph: AppGraph = run {
         // This device's Secure Enclave; the password alone on a simulator without one, its Argon2id
         // tier sized by the memory the simulator reports (the Mac's). One instance is both the key
@@ -263,10 +275,10 @@ class SerotineWallet {
             ensNfts = node.ensNfts,
             // The NFTs added by contract and id, beside tokens.json (issue #246).
             addedNfts = FileAddedNfts("$dataDir/nfts.json"),
-            // The Safe transactions waiting for their owners, with the signatures collected (public).
-            safeTxQueue = FileSafeTxQueue("$dataDir/safe-tx-queue.json"),
+            // The Safe transactions waiting for their owners: the follower's one instance.
+            safeTxQueue = safeTxQueue,
             signingRequests = JsonSigningRequestCodec(),
-            signatureRecovery = Secp256k1Recovery(),
+            signatureRecovery = signatureRecovery,
             safeApprovals = node.safeApprovals,
             // Safe 1.4.1's singleton, factory and proxy code, pinned in code: what a new Safe is created from.
             safeReleases = PinnedSafeReleases(),
@@ -283,6 +295,7 @@ class SerotineWallet {
             // The follower's own lock, the inputs kept for a lenient draft, and Sign while syncing.
             outboxLock = outboxLock,
             keptTransactionInputs = node.keptTransactionInputs,
+            keptSafes = node.keptSafes,
             syncPolicy = syncPolicy,
             swapVenue = FileSwapVenue("$dataDir/swap-venue.json"),
             waitingSwaps = FileWaitingSwaps("$dataDir/waiting-swaps.json"),
@@ -430,24 +443,53 @@ class SerotineWallet {
                 reportingFailure("sending what is queued") {
                     FollowOutbox(
                         outbox,
-                        CheckQueued { network ->
-                            QuoteTransfer(
-                                node.transactionInputs,
-                                node.nativeBalances,
-                                node.tokenBalances,
-                                sentTransfers,
-                                cowOrders,
-                                node.cow,
-                                node.lightClient,
-                                network,
-                                outbox,
-                            )
-                        },
+                        CheckQueued(
+                            { network ->
+                                QuoteTransfer(
+                                    node.transactionInputs,
+                                    node.nativeBalances,
+                                    node.tokenBalances,
+                                    sentTransfers,
+                                    cowOrders,
+                                    node.cow,
+                                    node.lightClient,
+                                    network,
+                                    outbox,
+                                )
+                            },
+                            // A Safe's approval on chain or its execution, queued while syncing: its strict quote again.
+                            { network ->
+                                QuoteSafeApproval(
+                                    ObserveSafe(node.addressKinds, accounts),
+                                    node.safeApprovals,
+                                    node.nativeBalances,
+                                    node.transactionInputs,
+                                    sentTransfers,
+                                    network,
+                                    outbox,
+                                )
+                            },
+                            { network ->
+                                QuoteSafeExecution(
+                                    ObserveSafe(node.addressKinds, accounts),
+                                    signatureRecovery,
+                                    node.safeApprovals,
+                                    node.nativeBalances,
+                                    node.transactionInputs,
+                                    sentTransfers,
+                                    network,
+                                    outbox,
+                                )
+                            },
+                        ),
                         node.lightClient,
                         node.broadcaster,
                         sentTransfers,
                         IosOutboxNotifier(),
                         outboxLock,
+                        // A Safe signature held while syncing: checked at a fresh head, then saved to the one queue.
+                        CheckHeldSignature(ObserveSafe(node.addressKinds, accounts), signatureRecovery),
+                        safeTxQueue,
                     )()
                 }
             },

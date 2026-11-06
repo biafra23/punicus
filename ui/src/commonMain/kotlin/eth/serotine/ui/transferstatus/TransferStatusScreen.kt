@@ -89,7 +89,8 @@ const val TRANSFER_SEND_NOW_TAG = "transfer-send-now"
  * Binds [TransferStatusScreen] to its ViewModel; Done and Back end it through [onDone], and Try
  * again is [TransferStatusViewModel.retry]. For a transfer queued in lenient mode, Discard, Send
  * now and Sign again (or Edit) are the ViewModel's; once Sign again or Edit has discarded it,
- * [onSendAgain] opens Send filled in with it in this screen's place.
+ * [onSendAgain] opens Send filled in with it in this screen's place; for a Safe's approval or
+ * execution, [onSafeAgain] opens its Safe transaction instead.
  */
 @Composable
 fun TransferStatusRoute(
@@ -99,12 +100,18 @@ fun TransferStatusRoute(
     onDone: () -> Unit,
     modifier: Modifier = Modifier,
     onSendAgain: (SendAgain) -> Unit = {},
+    onSafeAgain: (SafeTxAgain) -> Unit = {},
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
     val reopen = (state as? TransferStatusUiState.Discarded)?.reopen
+    val reopenSafe = (state as? TransferStatusUiState.Discarded)?.reopenSafe
     val currentOnSendAgain by rememberUpdatedState(onSendAgain)
-    LaunchedEffect(reopen) {
-        if (reopen != null) currentOnSendAgain(reopen)
+    val currentOnSafeAgain by rememberUpdatedState(onSafeAgain)
+    LaunchedEffect(reopen, reopenSafe) {
+        when {
+            reopen != null -> currentOnSendAgain(reopen)
+            reopenSafe != null -> currentOnSafeAgain(reopenSafe)
+        }
     }
     // The same state in the view the user chose (docs/simple-ui.md): the strip in Detailed view; in simple
     // mode the same item, drawn as the sync line while it says something.
@@ -296,19 +303,7 @@ private fun Shown(state: TransferStatusUiState.Shown, onDone: () -> Unit, onRetr
         val sent = state.sent
         if (sent != null) SentBlock(sent)
         val safeTx = state.safeTx
-        if (safeTx != null) {
-            Text(safeTx.title, style = MaterialTheme.typography.titleMedium)
-            Row(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
-                Blockie(safeTx.safe, size = 32.dp)
-                Column {
-                    Text("Safe · ${safeTx.nonce}", style = MaterialTheme.typography.labelMedium)
-                    SelectionContainer {
-                        Text(safeTx.safe, style = MaterialTheme.typography.bodySmall, fontFamily = FontFamily.Monospace)
-                    }
-                }
-            }
-            FromRow(safeTx.from, "From")
-        }
+        if (safeTx != null) SafeTxBlock(safeTx)
         val deployment = state.deployment
         if (deployment != null) {
             Text(deployment.title, style = MaterialTheme.typography.titleMedium)
@@ -430,6 +425,7 @@ private fun QueuedContent(
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
         state.sent?.let { SentBlock(it) }
+        state.safeTx?.let { SafeTxBlock(it) }
         Column {
             state.steps.forEach { step -> StepRow(step) }
         }
@@ -446,7 +442,7 @@ private fun QueuedContent(
         state.error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
         val busy = state.busy != null
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-            if (state.again != null) {
+            if (state.again != null || state.safeAgain != null) {
                 OutlinedButton(
                     onClick = { if (busy) explaining = state.againLabel else onSignAgain() },
                     enabled = !state.discarding,
@@ -467,7 +463,7 @@ private fun QueuedContent(
                 }
             }
         }
-        if (state.again != null) {
+        if (state.again != null || state.safeAgain != null) {
             Text(
                 state.againNote,
                 style = MaterialTheme.typography.bodySmall,
@@ -533,3 +529,19 @@ private val StepState.description: String
         StepState.UNKNOWN -> "Not verified right now"
         StepState.UNCONFIRMED -> "Not confirmed by a peer"
     }
+
+/** What a Safe transaction's approval or execution is of: its title, the Safe with its nonce, and who sends it. */
+@Composable
+private fun SafeTxBlock(safeTx: SafeTxSummary) {
+    Text(safeTx.title, style = MaterialTheme.typography.titleMedium)
+    Row(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
+        Blockie(safeTx.safe, size = 32.dp)
+        Column {
+            Text("Safe · ${safeTx.nonce}", style = MaterialTheme.typography.labelMedium)
+            SelectionContainer {
+                Text(safeTx.safe, style = MaterialTheme.typography.bodySmall, fontFamily = FontFamily.Monospace)
+            }
+        }
+    }
+    FromRow(safeTx.from, "From")
+}
