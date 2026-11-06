@@ -158,7 +158,12 @@ consumer developed against an unreleased engine, Myotis's
   `MyotisHost.start`): at most 256 entries, rewritten when an amount changes
   or its stored proof is 50 blocks old, so the time a row shows after a
   restart can be up to ten minutes earlier than the last proof of that same
-  amount. Why a node is
+  amount. For a lenient draft (docs/lenient-mode.md) `EngineTransactionInputs`
+  keeps each verified mined count and fee quote the same way, in
+  `KeptInputsFile` (`kept-inputs.json`, another path the host passes): each
+  with the head it was read at, kept only when that head did not move during
+  the read, a fee quote dated only when its history ends at that head, and
+  rewritten when a count changes or a value is 25 blocks old. Why a node is
   down is written to stderr, with the engine's own log when it refused to
   start.
 - **Verified token balances.** `VerifiedTokenBalances` runs each token's
