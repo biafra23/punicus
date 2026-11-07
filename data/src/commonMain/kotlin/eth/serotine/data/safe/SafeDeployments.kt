@@ -115,6 +115,12 @@ internal object SafeDeployments {
         val creation: SafeRelease?,
     )
 
+    /**
+     * The releases that consult a guard: 1.3.0 introduced it. Declared before every table below,
+     * which [singleton] builds from it while this object initialises.
+     */
+    private val GUARDED_VERSIONS = setOf("1.3.0", "1.4.1", "1.5.0")
+
     /** The deployments of [network]. */
     fun of(network: Network): Table = when (network) {
         Network.ETHEREUM -> ETHEREUM
@@ -262,9 +268,6 @@ internal object SafeDeployments {
 
     private fun singleton(address: String, version: String, l2: Boolean, moduleGuard: Boolean = false) =
         Address.of(address) to SafeSingleton(version, l2, moduleGuard, guard = version in GUARDED_VERSIONS)
-
-    /** The releases that consult a guard: 1.3.0 introduced it. */
-    private val GUARDED_VERSIONS = setOf("1.3.0", "1.4.1", "1.5.0")
 }
 
 /**
