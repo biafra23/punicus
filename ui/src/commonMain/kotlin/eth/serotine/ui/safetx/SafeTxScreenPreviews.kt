@@ -16,6 +16,7 @@ import eth.serotine.ui.components.ShareItem
 import eth.serotine.ui.components.UnavailableDialog
 import eth.serotine.ui.components.UnavailableNotice
 import eth.serotine.ui.components.UnlockStep
+import eth.serotine.ui.components.catchingUpStripSample
 import eth.serotine.ui.components.verifiedStripSample
 import eth.serotine.ui.ScreenPreview
 import eth.serotine.ui.theme.SerotineTheme
@@ -123,6 +124,136 @@ private val approval = review.copy(
     simulation = "The Safe's approveHash of this transaction, run as a verified call from this account at block " +
         "8,412,307, goes through.",
     confirmations = null,
+)
+
+// Lenient mode (docs/lenient-mode.md, *Safe transactions in lenient mode*): the light client catches up.
+
+/** The owners as last verified, a signature here and the rest not readable while syncing. */
+internal val keptOwnersSample = OwnersItem.Shown(
+    rows = listOf(
+        OwnerStateRow(
+            DAILY,
+            "Daily",
+            heldHere = true,
+            OwnerState.UNKNOWN,
+            "No signature here; whether it approved on chain is read once Sepolia has caught up",
+        ),
+        OwnerStateRow(SAVINGS, "Savings", heldHere = false, OwnerState.SIGNED, "Signed"),
+        OwnerStateRow(
+            FRIEND,
+            null,
+            heldHere = false,
+            OwnerState.UNKNOWN,
+            "No signature here; whether it approved on chain is read once Sepolia has caught up",
+        ),
+    ),
+    threshold = "2 of 3 owners must confirm, as last verified",
+    confirmations = "1 of 2 confirmations here",
+    verifiedAt = "Owners as last verified at block 8,412,307, 12 min ago",
+    simpleVerifiedAt = "Owners as of 12 min ago",
+)
+
+/** A Safe transaction's overview in lenient mode, for this file's previews and simple mode's. */
+internal val lenientOverviewSample = overview.copy(
+    // No verified threshold badge, and the nonce's place said as last verified.
+    safe = SafeHeader("Treasury", TREASURY),
+    nonce = "Safe nonce 12 · next to run, as last verified",
+    owners = keptOwnersSample,
+    canShare = false,
+    draftNote = "Sepolia is catching up. Sign, Approve on chain and Execute are prepared on the Safe as last " +
+        "verified 12 min ago (block 8,412,307): a signature is held, and an approval or execution queued, until it " +
+        "checks out on chain at a fresh head. Nothing is shown to another owner or sent before then.",
+    simpleDraftNote = "Sepolia is catching up. Sign, Approve on chain and Execute are prepared on the Safe as last " +
+        "verified 12 min ago: a signature is held, and an approval or execution queued, until it checks out on " +
+        "chain at a fresh head. Nothing is shown to another owner or sent before then.",
+)
+
+private val lenientSigning = signing.copy(
+    safe = SafeHeader("Treasury", TREASURY),
+    nonce = "Safe nonce 12 · next to run, as last verified",
+    preparedOn = "Signed on the Safe as last verified 12 min ago: its owners and nonce. The signature is held on " +
+        "this device until it checks out on chain, and only then shown to anyone.",
+    signLabel = "Sign and hold",
+)
+
+/** A signature held until its check, for this file's previews and simple mode's. */
+internal val heldSample = SafeTxUiState.Held(
+    network = "Sepolia",
+    safe = SafeHeader("Treasury", TREASURY),
+    action = usdcTransfer,
+    nonce = "Safe nonce 12",
+    hash = HASH,
+    preparedOn = "Signed on data from 12 min ago. It's checked on chain before it's shown to anyone.",
+    steps = listOf(
+        HeldStep("Signed", HeldStepState.DONE, "As Daily on this device, 6 Nov 2026, 14:02"),
+        HeldStep(
+            "Held",
+            HeldStepState.WAITING,
+            "Waits for Sepolia to catch up. Keep Serotine open to check it sooner.",
+        ),
+        HeldStep("In the queue, to share", HeldStepState.WAITING, "Once it checks out on chain"),
+    ),
+    shareNote = "Its QR code and text are offered once it checks out on chain: until then it is shown to no one, " +
+        "and no other owner can use it.",
+    safeVerifiedAt = "The Safe's owners and nonce as last verified at block 8,412,307",
+    discardLabel = "Discard",
+    discardNote = "Discard deletes the signature and the proposal: nothing was shown to anyone.",
+)
+
+/** A co-signature held until its check, on the overview of the queued transaction it signs. */
+internal val heldCoSignatureSample = lenientOverviewSample.copy(
+    held = HeldSignatureItem(
+        steps = heldSample.steps,
+        shareNote = heldSample.shareNote,
+        discardLabel = "Discard",
+        discardNote = "Discard deletes the signature: the transaction stays in this device's queue, unsigned by " +
+            "Daily.",
+    ),
+)
+
+/** A held proposal whose nonce another transaction used, for this file's previews and simple mode's. */
+internal val heldConflictSample = heldSample.copy(
+    steps = listOf(
+        HeldStep("Signed", HeldStepState.UNKNOWN, "As Daily on this device, 6 Nov 2026, 14:02: deleted since"),
+        HeldStep(
+            "Needs your signature again",
+            HeldStepState.FAILED,
+            "Another Safe transaction used nonce 12: the Safe is at nonce 13 now. Its signature was deleted and " +
+                "never shown.",
+        ),
+        HeldStep("In the queue, to share", HeldStepState.UNKNOWN, "Never shown"),
+    ),
+    discardLabel = "Dismiss",
+    discardNote = "Its signature was deleted already: Dismiss clears this from the device.",
+    again = SafeProposeAgain(11155111, TREASURY.lowercase(), USDC.lowercase(), FRIEND.lowercase(), "40"),
+)
+
+/** An approval drafted in lenient mode, for this file's previews and simple mode's. */
+internal val draftApprovalSample = SafeTxUiState.DraftReview(
+    network = "Sepolia",
+    safe = SafeHeader("Treasury", TREASURY),
+    action = usdcTransfer,
+    nonce = "Safe nonce 12 · next to run, as last verified",
+    kind = ReviewKind.APPROVAL,
+    accounts = listOf(SignerChoice("Daily", DAILY)),
+    account = DAILY,
+    fee = FeeLevel.NORMAL,
+    preparedOn = "Prepared on data from 12 min ago. It's checked on chain again before it's sent.",
+    maxFee = "0.0022 ETH",
+    feeDetail = "100,000 gas, the most it is signed for, × at most 22 gwei, from the fee history last verified up " +
+        "to block 8,412,306. Only the gas used, at what the block charges, is paid.",
+    feeAge = "Fees as of 12 min ago",
+    txNonce = "Nonce 7, after this account's count of mined transactions last verified at block 8,412,307",
+    txNonceAge = "Nonce 7, counted as of 12 min ago",
+    balance = BalanceChange(
+        "ETH balance of Daily, which pays the fee",
+        "1.25 ETH",
+        "at least 1.2478 ETH, if nothing changed",
+        "last verified at block 8,412,307",
+        age = "as of 12 min ago",
+    ),
+    notChecked = "Not checked yet: the Safe and this transaction run on chain before it's sent.",
+    unlock = UnlockStep(biometrics = true),
 )
 
 @Composable
@@ -494,6 +625,79 @@ private fun SafeTxSwapApprovalPreview() = SafeTxPreview(
     ),
 )
 
+@Preview
+@Composable
+private fun SafeTxLenientOverviewPreview() = SafeTxPreview(lenientOverviewSample, lightClient = catchingUpStripSample)
+
+@Preview
+@Composable
+private fun SafeTxLenientSigningPreview() = SafeTxPreview(lenientSigning, lightClient = catchingUpStripSample)
+
+@Preview
+@Composable
+private fun SafeTxHeldPreview() = SafeTxPreview(heldSample, lightClient = catchingUpStripSample)
+
+@Preview
+@Composable
+private fun SafeTxHeldDarkPreview() = SafeTxPreview(heldSample, darkTheme = true, lightClient = catchingUpStripSample)
+
+@Preview
+@Composable
+private fun SafeTxHeldCheckingPreview() = SafeTxPreview(
+    heldSample.copy(
+        steps = heldSample.steps.mapIndexed { i, step ->
+            if (i == 1) {
+                step.copy(
+                    detail = "Sepolia has caught up: it's checked on chain, and saved to this device's queue once " +
+                        "it checks out.",
+                )
+            } else {
+                step
+            }
+        },
+    ),
+)
+
+@Preview
+@Composable
+private fun SafeTxHeldConflictPreview() = SafeTxPreview(heldConflictSample)
+
+@Preview
+@Composable
+private fun SafeTxHeldCoSignaturePreview() =
+    SafeTxPreview(heldCoSignatureSample, lightClient = catchingUpStripSample)
+
+@Preview
+@Composable
+private fun SafeTxHeldDiscardedPreview() = SafeTxPreview(heldDiscardedSample)
+
+/** A held signature discarded, for this file's previews and simple mode's. */
+internal val heldDiscardedSample =
+    SafeTxUiState.Discarded("Sepolia", "Discarded: your signature was deleted, and it was never shown to anyone.")
+
+@Preview
+@Composable
+private fun SafeTxDraftApprovalPreview() = SafeTxPreview(draftApprovalSample, lightClient = catchingUpStripSample)
+
+@Preview
+@Composable
+private fun SafeTxDraftExecutionPreview() = SafeTxPreview(draftExecutionSample, lightClient = catchingUpStripSample)
+
+/** An execution drafted in lenient mode, for this file's previews and simple mode's. */
+internal val draftExecutionSample = draftApprovalSample.copy(
+    kind = ReviewKind.EXECUTION,
+    maxFee = "0.0066 ETH",
+    feeDetail = "300,000 gas, the most it is signed for, × at most 22 gwei, from the fee history last verified " +
+        "up to block 8,412,306. Only the gas used, at what the block charges, is paid.",
+    balance = draftApprovalSample.balance.copy(after = "at least 1.2434 ETH, if nothing changed"),
+    confirmations = "Executed with: Daily, by sending the execution; Savings's signature",
+)
+
+@Preview
+@Composable
+private fun SafeTxDraftDarkPreview() =
+    SafeTxPreview(draftApprovalSample, darkTheme = true, lightClient = catchingUpStripSample)
+
 /** Every preview above, which SafeTxScreenPreviewsTest renders: a new preview goes in here too. */
 internal val safeTxScreenPreviews: List<ScreenPreview> = listOf(
     ScreenPreview("overview") { SafeTxOverviewPreview() },
@@ -530,4 +734,15 @@ internal val safeTxScreenPreviews: List<ScreenPreview> = listOf(
     ScreenPreview("swap-approval") { SafeTxSwapApprovalPreview() },
     ScreenPreview("swap-propose-again-greyed") { SafeTxSwapProposeAgainGreyedPreview() },
     ScreenPreview("fallback-handler-removed") { SafeTxFallbackHandlerRemovedPreview() },
+    ScreenPreview("lenient-overview") { SafeTxLenientOverviewPreview() },
+    ScreenPreview("lenient-signing") { SafeTxLenientSigningPreview() },
+    ScreenPreview("held") { SafeTxHeldPreview() },
+    ScreenPreview("held-dark") { SafeTxHeldDarkPreview() },
+    ScreenPreview("held-checking") { SafeTxHeldCheckingPreview() },
+    ScreenPreview("held-conflict") { SafeTxHeldConflictPreview() },
+    ScreenPreview("held-discarded") { SafeTxHeldDiscardedPreview() },
+    ScreenPreview("held-co-signature") { SafeTxHeldCoSignaturePreview() },
+    ScreenPreview("draft-approval") { SafeTxDraftApprovalPreview() },
+    ScreenPreview("draft-execution") { SafeTxDraftExecutionPreview() },
+    ScreenPreview("draft-dark") { SafeTxDraftDarkPreview() },
 )

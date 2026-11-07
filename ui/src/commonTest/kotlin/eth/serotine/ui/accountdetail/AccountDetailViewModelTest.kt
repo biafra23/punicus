@@ -1,5 +1,7 @@
 package eth.serotine.ui.accountdetail
 
+import eth.serotine.domain.repository.SafeDraftBasis
+import eth.serotine.domain.repository.HeldSafeSignature
 import eth.serotine.domain.model.Account
 import eth.serotine.domain.model.AccountCustody
 import eth.serotine.domain.model.AccountId
@@ -84,6 +86,7 @@ import eth.serotine.ui.FakeTokenCatalog
 import eth.serotine.ui.FakeUpgradeReports
 import eth.serotine.ui.MemoryAmountsHidden
 import eth.serotine.ui.MemoryCowOrders
+import eth.serotine.ui.MemoryOutbox
 import eth.serotine.ui.MemoryCurrencySetting
 import eth.serotine.ui.MemoryHistoryStarts
 import eth.serotine.ui.MemoryNetworkSettings
@@ -121,6 +124,7 @@ import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.test.setMain
+import eth.serotine.domain.usecase.ObserveOutbox
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class AccountDetailViewModelTest {
@@ -177,6 +181,9 @@ class AccountDetailViewModelTest {
 
     private val freshness = FakeFreshness()
 
+    /** The outbox: the Safe signatures held in lenient mode, which a Safe's queue lists too. */
+    private val outbox = MemoryOutbox()
+
     private fun viewModel(address: Address = daily.address) = AccountDetailViewModel(
         AccountId(Network.SEPOLIA, address),
         ObserveAccount(accounts),
@@ -205,6 +212,7 @@ class AccountDetailViewModelTest {
         ObserveNfts(nftLogIndex, historyStarts, nftContracts, FakeEnsNfts(), FakeReceiptsNever(), addedNfts),
         AddNft(nftContracts, addedNfts),
         RemoveAddedNft(addedNfts),
+        ObserveOutbox(outbox),
         formatTime = { "<$it>" },
         clock = { NOW },
     )
@@ -232,6 +240,7 @@ class AccountDetailViewModelTest {
         ObserveSentToAddresses(history),
         ObserveAccountCowOrders(cowOrders),
         ObserveWaitingSwaps(waitingSwaps),
+        ObserveOutbox(MemoryOutbox()),
     ) { "at $it" }
 
     @AfterTest
@@ -1070,6 +1079,7 @@ class AccountDetailViewModelTest {
             ObserveNfts(nftLogIndex, historyStarts, nftContracts, FakeEnsNfts(), FakeReceiptsNever(), addedNfts),
         AddNft(nftContracts, addedNfts),
         RemoveAddedNft(addedNfts),
+        ObserveOutbox(outbox),
         )
         backgroundScope.launch { viewModel.uiState.collect {} }
         runCurrent()
@@ -1078,6 +1088,50 @@ class AccountDetailViewModelTest {
         assertEquals(SafeDetails.Checking, ready.safe)
         assertEquals("Safe", ready.kindNote)
         assertEquals(null, ready.threshold)
+    }
+
+    @Test
+    fun aSafesQueueListsTheSignaturesHeldInLenientModeAProposalByItsNonce() = runTest {
+        Dispatchers.setMain(UnconfinedTestDispatcher(testScheduler))
+        val treasury = Account(
+            Network.SEPOLIA,
+            Address.of("0x" + "5a".repeat(20)),
+            AccountKind.SAFE,
+            "Treasury",
+            AccountCustody.Watched,
+        )
+        accounts.accounts.value = listOf(daily, treasury)
+        val friend = Address.of("0xdbf03b407c01e7cd3cbea99509d93f8dddc8c6fb")
+        val state = SafeState("1.4.1", l2 = false, listOf(daily.address), 1, 12, emptyList(), guard = null)
+        kind.value = KindReading.Verified(AddressKind.Safe(state), 9_412_118)
+        val queued = SigningRequest.of(Network.SEPOLIA, treasury.address, SafeTx.call(friend, UInt256.ONE, ByteArray(0), 12))
+        queue.requests.value = listOf(queued)
+        val proposed = SigningRequest.of(Network.SEPOLIA, treasury.address, SafeTx.call(friend, UInt256.of(2), ByteArray(0), 13))
+        fun held(request: SigningRequest) = HeldSafeSignature(
+            request = request,
+            owner = daily.address,
+            signature = recovery.sign(daily.address, request.hash),
+            proposed = request == proposed,
+            signedAt = NOW - 60,
+            builtOn = SafeDraftBasis(9_412_000, NOW - 600),
+        )
+        // A co-signature of the queued one, and a proposal in no queue yet.
+        outbox.hold(held(queued))
+        outbox.hold(held(proposed))
+        val viewModel = viewModel(treasury.address)
+        backgroundScope.launch { viewModel.uiState.collect {} }
+        viewModel.show(DetailSegment.QUEUE)
+        runCurrent()
+
+        val rows = ((viewModel.uiState.value as AccountDetailUiState.Ready).queue as SafeQueue.Shown).rows
+        assertEquals(listOf("0x" + queued.hash.hex, "0x" + proposed.hash.hex), rows.map { it.hash })
+        assertEquals(
+            listOf(
+                "0 of 1 signatures on this device · your signature is held until it checks out on chain",
+                "Your signature is held until it checks out on chain",
+            ),
+            rows.map { it.signatures },
+        )
     }
 
     @Test

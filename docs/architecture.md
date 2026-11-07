@@ -84,7 +84,7 @@ review finding, whatever it saves.
 | `eth.serotine.domain.model` | entities and value objects (`Account`, `Address`, `AccountKind`, `SafeTx` and its `SigningRequest`, `SafeRelease`) and the encodings computed here (`SafeCreation`: `setup`, `createProxyWithNonce` and the CREATE2 address) — immutable, validated in `init`/factory |
 | `eth.serotine.domain.repository` | the ports, as interfaces named after what they manage |
 | `eth.serotine.domain.usecase` | one class per user-visible capability, `operator fun invoke`; what several share is internal there (`CallQuoter` and `signAndSend`, the quote and the send of any transaction from an account the wallet holds: a transfer, a Safe transaction's approval or execution, a Safe's deployment) |
-| `eth.serotine.data.<area>` | adapters, one package per area (`account`, `keys`, `engine`, `upgrade`, `tokens`, `prices`, `safe` — the pinned deployments and the release a Safe is created from, the queue of Safe transactions and the signing requests' text —, `settings`, `transfers`, `history` — where each account's history starts —, `rates` — the exchange rate last verified, for a home-screen widget —, `logs` — the Debug tab's log, in memory, and the `LogSink` adapters write it through —, `files`, `walletconnect` — WalletConnect v2's wallet role over its relay, docs/walletconnect.md —) |
+| `eth.serotine.data.<area>` | adapters, one package per area (`account`, `keys`, `engine`, `upgrade`, `tokens`, `prices`, `safe` — the pinned deployments and the release a Safe is created from, the queue of Safe transactions and the signing requests' text —, `settings`, `transfers`, `history` — where each account's history starts —, `rates` — the exchange rate last verified, for a home-screen widget —, `logs` — the Debug tab's log, in memory, and the `LogSink` adapters write it through —, `files`, `walletconnect` — WalletConnect v2's wallet role over its relay, docs/walletconnect.md —, `outbox` — lenient mode's outbox, what is signed and waits for its check, sealed with a hardware key of its own or in memory only, docs/lenient-mode.md and docs/keys-and-signing.md, *The outbox's seal key* —) |
 | `eth.serotine.ui.<feature>` | one package per screen: `<Feature>Screen`, `<Feature>ViewModel`, `<Feature>UiState` (`send` holds one screen with two steps, compose and review; `safepropose` is Send from a Safe, on the same transfer form; `transferstatus` follows a transaction once sent; `safetx` is one Safe transaction with its signing, approval and execution steps; `safeimport` imports a signing request; `createsafe` holds one screen with three steps, owners, threshold and review) |
 | `eth.serotine.ui.activity` | an account's Activity, a tab of its detail rather than a screen, so with no ViewModel of its own: `AccountActivity`, which `AccountDetailViewModel` reads while the tab is shown, `ActivityUiState` and the list's items (`activityItems`), which `AccountDetailScreen` draws in the tab |
 | `eth.serotine.ui.ratewidget` | what a host's home-screen widget shows of the exchange rate last verified, display-ready (`rateWidgetContent`), which the host draws in its own widget toolkit; and the widget's configuration (`WidgetPairScreen`: network, price, currency), whose steps the host computes: no ViewModel |
@@ -140,7 +140,11 @@ review finding, whatever it saves.
   `FollowSafeDeployments`, which lists the Safes this wallet deployed
   whatever screen is open (docs/wallet-ux.md, screen 15). On Android both run
   while the application holds the engine; on the desktop, while `main()`
-  runs; on iOS, while the app is in the foreground. `FollowDebugScreen`, which
+  runs; on iOS, while the app is in the foreground. Lenient mode's
+  `FollowOutbox`, which checks and sends what is queued and checks the Safe
+  signatures held, and `KeepTransactionInputs`, which keeps what a draft is
+  built on while lenient mode is on, run the same way, the outbox also
+  during Android's grace period (docs/lenient-mode.md). `FollowDebugScreen`, which
   keeps the debug log recording only while the Debug tab is on and empties it
   when the tab is turned off (screen 27), runs for the life of the process on
   every host: it needs no engine.

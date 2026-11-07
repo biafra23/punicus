@@ -298,4 +298,95 @@ class SendScreenTest {
         rule.onNodeWithTag(SEND_TO_TAG).performScrollTo().performImeAction()
         rule.onNodeWithTag(SEND_AMOUNT_TAG).assertIsFocused()
     }
+
+    // A lenient draft (docs/lenient-mode.md, *The draft's review*).
+
+    private val draft = SendUiState.DraftReview(
+        network = "Sepolia",
+        from = form.from,
+        amount = "0.1 ETH",
+        asset = form.assets.first().copy(lastKnown = true, age = "as of 12 min ago"),
+        recipient = RecipientItem(savings, label = "Savings"),
+        preparedOn = "Prepared on data from 12 min ago. It's checked on chain again before it's sent.",
+        maxFee = "0.0011 ETH",
+        feeDetail = "Normal fee: 50,000 gas, the most this transfer is signed for, × at most 22 gwei, from the fee " +
+            "history last verified up to block 8.",
+        feeAge = "Fees as of 13 min ago",
+        nonce = "Nonce 7, after this account's count of mined transactions last verified at block 8",
+        nonceAge = "Nonce 7, counted as of 13 min ago",
+        balances = listOf(
+            BalanceChange(
+                "ETH balance",
+                "1.5 ETH",
+                "at least 1.3989 ETH, if nothing changed",
+                "last verified at block 9",
+                age = "as of 12 min ago",
+            ),
+        ),
+        unlock = UnlockStep(WalletPassword("made-up password")),
+    )
+
+    @Test
+    fun aDraftsReviewSaysWhatItIsPreparedOnThatItIsNotCheckedYetAndSignsAndQueues() {
+        show(draft)
+
+        rule.onNodeWithTag(SEND_PREPARED_ON_TAG).assertTextEquals(draft.preparedOn)
+        rule.onNodeWithText("last verified at block 9").performScrollTo().assertIsDisplayed()
+        rule.onNodeWithTag(SEND_SIMULATION_TAG).performScrollTo().assertTextEquals(NOT_CHECKED_YET)
+        rule.onNodeWithText("Refresh the quote").assertDoesNotExist()
+        rule.onNodeWithTag(SEND_SIGN_TAG).performScrollTo().assertTextEquals("Sign and queue on Sepolia").performClick()
+        assertEquals(listOf("sign"), events)
+    }
+
+    @Test
+    fun backFromADraftsReviewReturnsToTheComposeStep() {
+        show(draft)
+
+        rule.onNodeWithContentDescription("Back").performClick()
+        assertEquals(listOf("edit"), events)
+    }
+
+    @Test
+    fun aDraftsReviewInSimpleModeSaysEachFiguresAgeAndKeepsTheBlocksUnderDetails() {
+        rule.setContent {
+            SerotineTheme {
+                SimpleSendScreen(
+                    state = draft,
+                    onAssetChange = {},
+                    onToChange = {},
+                    onPickAccount = {},
+                    onRetryLookup = {},
+                    onAmountChange = {},
+                    onMax = {},
+                    onFeeChange = {},
+                    onReview = {},
+                    onEdit = {},
+                    onRefresh = {},
+                    onPasswordChange = {},
+                    onSign = { events += "sign" },
+                    onSignWithBiometrics = {},
+                    onRetry = {},
+                    onOpenTransfer = {},
+                    onBack = {},
+                )
+            }
+        }
+
+        rule.onNodeWithText("Fees as of 13 min ago").performScrollTo().assertIsDisplayed()
+        rule.onNodeWithText("as of 12 min ago").performScrollTo().assertIsDisplayed()
+        rule.onNodeWithText("last verified at block 9", substring = true).assertDoesNotExist()
+        rule.onNodeWithTag(SEND_DETAILS_TAG).performScrollTo().performClick()
+        rule.onNodeWithText("Nonce 7, counted as of 13 min ago").performScrollTo().assertIsDisplayed()
+        rule.onNodeWithTag(SEND_SIGN_TAG).performScrollTo().assertTextEquals("Sign and queue on Sepolia")
+    }
+
+    @Test
+    fun theTransactionAnAccountHasQueuedIsOpenedFromTheComposeStep() {
+        val id = "0x" + "9a".repeat(32)
+        val refused = compose.form.copy(error = "A transaction from this account is waiting to be sent.")
+        show(compose.copy(form = refused, earlier = id, earlierLabel = "Open the transaction waiting to be sent"))
+
+        rule.onNodeWithText("Open the transaction waiting to be sent").performScrollTo().performClick()
+        assertEquals(listOf("open $id"), events)
+    }
 }

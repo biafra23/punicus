@@ -21,6 +21,7 @@ import eth.serotine.data.keys.desktopHardwareSecret
 import eth.serotine.data.keys.desktopPasswordOnlyProtection
 import eth.serotine.data.logs.MemoryDebugLog
 import eth.serotine.data.networks.FileNetworkSettings
+import eth.serotine.data.outbox.desktopOutbox
 import eth.serotine.data.safe.FileSafeTxQueue
 import eth.serotine.data.safe.JsonSigningRequestCodec
 import eth.serotine.data.safe.PinnedSafeReleases
@@ -28,6 +29,7 @@ import eth.serotine.data.settings.FileDebugScreen
 import eth.serotine.data.settings.FileDisplayCurrency
 import eth.serotine.data.settings.FileAmountsHidden
 import eth.serotine.data.settings.FileInterfaceMode
+import eth.serotine.data.settings.FileSyncPolicy
 import eth.serotine.data.settings.FileSwapVenue
 import eth.serotine.data.swaps.FileWaitingSwaps
 import eth.serotine.data.walletconnect.WalletConnectDapps
@@ -38,13 +40,21 @@ import eth.serotine.data.transfers.FileSentTransfers
 import eth.serotine.data.transfers.FileTransactionHistory
 import eth.serotine.data.upgrade.FileKnownUpgradeStore
 import eth.serotine.domain.model.Network
+import eth.serotine.domain.usecase.CheckQueued
+import eth.serotine.domain.usecase.CheckHeldSignature
+import eth.serotine.domain.usecase.ObserveSafe
+import eth.serotine.domain.usecase.QuoteSafeApproval
+import eth.serotine.domain.usecase.QuoteSafeExecution
 import eth.serotine.domain.usecase.FollowAccountLogs
 import eth.serotine.domain.usecase.AnswerDappRequestsAtOnce
 import eth.serotine.domain.usecase.FollowDappAccounts
 import eth.serotine.domain.usecase.FollowDebugScreen
 import eth.serotine.domain.usecase.FollowInterfaceMode
 import eth.serotine.domain.usecase.FollowNetworks
+import eth.serotine.domain.usecase.FollowOutbox
 import eth.serotine.domain.usecase.FollowSafeDeployments
+import eth.serotine.domain.usecase.KeepTransactionInputs
+import eth.serotine.domain.usecase.OutboxLock
 import eth.serotine.domain.usecase.FollowSentTransactions
 import eth.serotine.domain.usecase.FollowUpgradeReports
 import eth.serotine.domain.usecase.HistoryNotingAccounts
@@ -53,6 +63,7 @@ import eth.serotine.domain.usecase.ListDeployedSafe
 import eth.serotine.domain.usecase.NetworkDemand
 import eth.serotine.domain.usecase.ObserveDebugTab
 import eth.serotine.domain.usecase.ProveCowOrderEnds
+import eth.serotine.domain.usecase.QuoteTransfer
 import eth.serotine.domain.usecase.UpgradeNotices
 import eth.serotine.domain.usecase.WatchAddress
 import eth.serotine.ui.APP_VERSION
@@ -158,12 +169,16 @@ private fun openWallet(dataDir: File) {
     // The view the user chose, simple mode or Detailed view (docs/simple-ui.md); the Debug tab is the latter's.
     val interfaceMode = FileInterfaceMode(dataDir.resolve("ui-mode.json").path)
     val amountsHidden = FileAmountsHidden(dataDir.resolve("amounts-hidden.json").path)
+    // Whether a transaction may be signed while the light client syncs (docs/lenient-mode.md).
+    val syncPolicy = FileSyncPolicy(dataDir.resolve("sync-policy.json").path)
     // One engine, one light client per network that is on and needed (FollowNetworks, below).
     val node = MyotisHost.start(
         dataDir.resolve("myotis"),
         lastBalances = dataDir.resolve("last-balances.json").path,
         debugLog = debugLog,
         apiLog = apiLog,
+        keptInputs = dataDir.resolve("kept-inputs.json").path,
+        keptSafes = dataDir.resolve("kept-safes.json").path,
     )
     // One record per process, read by the screens and written by the notices; this version's only.
     val knownUpgrades = FileKnownUpgradeStore(dataDir.resolve("upgrade.json").path, APP_VERSION)
@@ -181,6 +196,17 @@ private fun openWallet(dataDir: File) {
     // The CoW orders signed here, each live until its end is proven (docs/swaps.md): public data only.
     val cowOrders = FileCowOrders(dataDir.resolve("cow-orders.json").path)
     val sentTransfers = HistoryRecordingSentTransfers(sentRecord, transactionHistory)
+    // Lenient mode's outbox (docs/lenient-mode.md): sealed with an enclave key of its own on a Mac
+    // with one, in a directory kept out of backups as the keys' is; in memory only elsewhere. One
+    // instance, which the graph and the follower share, with the one lock they share too.
+    val outboxDir = dataDir.resolve("outbox")
+    excludeFromBackups(outboxDir)
+    val outbox = desktopOutbox(outboxDir.path)
+    val outboxLock = OutboxLock()
+    // The Safe transactions waiting for their owners, with the signatures collected (public), and who
+    // made a co-signer's signature: one instance each, which the graph and the outbox's follower share.
+    val safeTxQueue = FileSafeTxQueue(dataDir.resolve("safe-tx-queue.json").path)
+    val signatureRecovery = Secp256k1Recovery()
     // Which networks are on (docs/networks.md, *Networks on and off*). A network the file does not
     // mention yet gets this build's default: an installed app turns on the real networks and leaves
     // Sepolia off, a development run (its debug build, the property's) turns on Sepolia alone.
@@ -271,6 +297,76 @@ private fun openWallet(dataDir: File) {
                 throw e
             } catch (e: Exception) {
                 System.err.println("Serotine: following the Debug tab's switch stopped: ${e::class.simpleName}")
+            }
+        }
+        LaunchedEffect(Unit) {
+            // What is queued is checked at a fresh head and sent while the app runs (docs/lenient-mode.md).
+            try {
+                FollowOutbox(
+                    outbox,
+                    CheckQueued(
+                        { network ->
+                            QuoteTransfer(
+                                node.transactionInputs,
+                                node.nativeBalances,
+                                node.tokenBalances,
+                                sentTransfers,
+                                cowOrders,
+                                node.cow,
+                                node.lightClient,
+                                network,
+                                outbox,
+                            )
+                        },
+                        // A Safe's approval on chain or its execution, queued while syncing: its strict quote again.
+                        { network ->
+                            QuoteSafeApproval(
+                                ObserveSafe(node.addressKinds, accounts),
+                                node.safeApprovals,
+                                node.nativeBalances,
+                                node.transactionInputs,
+                                sentTransfers,
+                                network,
+                                outbox,
+                            )
+                        },
+                        { network ->
+                            QuoteSafeExecution(
+                                ObserveSafe(node.addressKinds, accounts),
+                                signatureRecovery,
+                                node.safeApprovals,
+                                node.nativeBalances,
+                                node.transactionInputs,
+                                sentTransfers,
+                                network,
+                                outbox,
+                            )
+                        },
+                    ),
+                    node.lightClient,
+                    node.broadcaster,
+                    sentTransfers,
+                    TrayOutboxNotifier(),
+                    outboxLock,
+                    // A Safe signature held while syncing: checked at a fresh head, then saved to the one queue.
+                    CheckHeldSignature(ObserveSafe(node.addressKinds, accounts), signatureRecovery),
+                    safeTxQueue,
+                )()
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                System.err.println("Serotine: sending what is queued stopped: ${e::class.simpleName}")
+            }
+        }
+        LaunchedEffect(Unit) {
+            // What a lenient draft is built on, kept recent while the light clients verify
+            // (docs/lenient-mode.md). A failure ends it, never the wallet.
+            try {
+                KeepTransactionInputs(syncPolicy, accounts, node.lightClient, node.transactionInputs)()
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                System.err.println("Serotine: keeping the transaction inputs stopped: ${e::class.simpleName}")
             }
         }
         LaunchedEffect(Unit) {
@@ -385,10 +481,10 @@ private fun openWallet(dataDir: File) {
                 ensNfts = node.ensNfts,
                 // The NFTs added by contract and id, beside tokens.json (issue #246).
                 addedNfts = FileAddedNfts(dataDir.resolve("nfts.json").path),
-                // The Safe transactions waiting for their owners, with the signatures collected (public).
-                safeTxQueue = FileSafeTxQueue(dataDir.resolve("safe-tx-queue.json").path),
+                // The Safe transactions waiting for their owners: the follower's one instance.
+                safeTxQueue = safeTxQueue,
                 signingRequests = JsonSigningRequestCodec(),
-                signatureRecovery = Secp256k1Recovery(),
+                signatureRecovery = signatureRecovery,
                 safeApprovals = node.safeApprovals,
                 // Safe 1.4.1's singleton, factory and proxy code, pinned in code: what a new Safe is created from.
                 safeReleases = PinnedSafeReleases(),
@@ -399,6 +495,12 @@ private fun openWallet(dataDir: File) {
                 cowChain = node.cow,
                 cowApi = HttpCowApi.create(),
                 cowOrders = cowOrders,
+                outbox = outbox,
+                // The follower's own lock, the inputs kept for a lenient draft, and Sign while syncing.
+                outboxLock = outboxLock,
+                keptTransactionInputs = node.keptTransactionInputs,
+                keptSafes = node.keptSafes,
+                syncPolicy = syncPolicy,
                 swapVenue = FileSwapVenue(dataDir.resolve("swap-venue.json").path),
                 waitingSwaps = FileWaitingSwaps(dataDir.resolve("waiting-swaps.json").path),
                 debugLog = apiLog,

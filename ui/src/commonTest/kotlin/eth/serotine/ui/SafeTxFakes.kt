@@ -37,6 +37,7 @@ import eth.serotine.domain.repository.Simulation
 import eth.serotine.domain.repository.UniswapV3Chain
 import eth.serotine.domain.repository.VenueReading
 import eth.serotine.domain.usecase.ObserveKnownTokens
+import eth.serotine.domain.usecase.OutboxLock
 import eth.serotine.domain.usecase.ObserveSafe
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.flow.Flow
@@ -202,6 +203,15 @@ internal class SafeWorld(
     val userTokens = MemoryUserTokens()
     val metadata = FakeMetadata()
     val knownTokens = ObserveKnownTokens(catalog, userTokens, metadata)
+
+    // Lenient mode (docs/lenient-mode.md): Sign while syncing off unless a test turns it on, the Safe
+    // last verified as a test keeps it, and the outbox its held signatures and queued calls go into.
+    val policy = MemorySyncPolicy()
+    val networks = MemoryNetworkSettings(setOf(network))
+    val keptSafes = MemoryKeptSafes()
+    val keptInputs = FakeKeptInputs()
+    val outbox = MemoryOutbox()
+    val outboxLock = OutboxLock()
 
     /** Uniswap as pinned on Sepolia, its code proven; QuoterV2 answers [quotes] by call data, or reverts. */
     val uniswapDeployment = UniswapV3Deployment(

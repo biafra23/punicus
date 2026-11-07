@@ -18,6 +18,7 @@ import eth.serotine.domain.model.SignedTransfer
 import eth.serotine.domain.model.SlippageTolerance
 import eth.serotine.domain.model.SwapRoute
 import eth.serotine.domain.model.SwapVenue
+import eth.serotine.domain.model.SyncPolicy
 import eth.serotine.domain.model.Token
 import eth.serotine.domain.model.TokenUnits
 import eth.serotine.domain.model.TransferAsset
@@ -48,6 +49,7 @@ import eth.serotine.domain.repository.KeyStoreDescription
 import eth.serotine.domain.repository.LightClient
 import eth.serotine.domain.repository.LightClientStatus
 import eth.serotine.domain.repository.NewMnemonic
+import eth.serotine.domain.repository.Outbox
 import eth.serotine.domain.repository.ReadUnavailable
 import eth.serotine.domain.repository.SentAction
 import eth.serotine.domain.repository.Simulation
@@ -71,6 +73,7 @@ import eth.serotine.domain.usecase.ObserveDisplayCurrencies
 import eth.serotine.domain.usecase.ObserveKnownTokens
 import eth.serotine.domain.usecase.ObserveNativeBalance
 import eth.serotine.domain.usecase.ObserveSwapVenue
+import eth.serotine.domain.usecase.ObserveSyncPolicy
 import eth.serotine.domain.usecase.ObserveTokenHoldings
 import eth.serotine.domain.usecase.ObserveUsdPrice
 import eth.serotine.domain.usecase.PlaceCowOrder
@@ -102,6 +105,7 @@ import eth.serotine.ui.MemoryCowOrders
 import eth.serotine.ui.MemoryHistoryStarts
 import eth.serotine.ui.MemorySentTransfers
 import eth.serotine.ui.MemorySwapVenue
+import eth.serotine.ui.MemorySyncPolicy
 import eth.serotine.ui.MemoryUserTokens
 import eth.serotine.ui.MemoryWaitingSwaps
 import eth.serotine.ui.components.Eip55
@@ -136,6 +140,8 @@ import kotlinx.coroutines.test.setMain
 /** [SwapViewModel] over fake ports, through the real use cases. */
 @OptIn(ExperimentalCoroutinesApi::class)
 class SwapViewModelTest {
+    private val policy = MemorySyncPolicy()
+
 
     private val daily = Account(
         Network.SEPOLIA,
@@ -246,13 +252,14 @@ class SwapViewModelTest {
                 cowChain,
                 light,
                 Network.SEPOLIA,
+                Outbox.None,
                 now,
             ),
             EstimateSwap(FindUniswapRoute(uniswap, inputs), RouteRanking.NET_OF_FEES),
             SendSwap(inputs, signer, broadcaster, sent, now),
-            QuoteWrap(uniswap, inputs, balances, tokenBalances, sent, cowOrders, cowChain, light, Network.SEPOLIA, now),
+            QuoteWrap(uniswap, inputs, balances, tokenBalances, sent, cowOrders, cowChain, light, Network.SEPOLIA, Outbox.None, now),
             SendWrap(signer, broadcaster, sent, now),
-            QuoteTokenApproval(inputs, balances, sent, Network.SEPOLIA, now),
+            QuoteTokenApproval(inputs, balances, sent, Network.SEPOLIA, Outbox.None, now),
             SendTokenApproval(signer, broadcaster, sent, now),
             RebroadcastTransfer(broadcaster, sent, FakeReceipts()),
             WarmFeeHistory(inputs),
@@ -270,12 +277,14 @@ class SwapViewModelTest {
                 historyStarts,
                 light,
                 Network.SEPOLIA,
+                Outbox.None,
                 now,
             ),
             PlaceCowOrder(FindUniswapRoute(uniswap, inputs), signer, cowOrders, cowApi, light),
             KeepWaitingSwap(waitingSwaps),
             DropWaitingSwap(waitingSwaps),
             FindWaitingSwap(waitingSwaps),
+            ObserveSyncPolicy(policy),
             clock,
             formatTime = { "at $it" },
             now = { wallClock },
@@ -438,6 +447,25 @@ class SwapViewModelTest {
         runCurrent()
         assertNotNull(viewModel.compose.error)
         assertNull(viewModel.compose.estimate, "the refused Review says why, once")
+    }
+
+    @Test
+    fun inLenientModeASwapRefusedWhileSyncingSaysTheSettingDoesNotReachIt() = runTest {
+        for ((chosen, said) in listOf(SyncPolicy.STRICT to false, SyncPolicy.LENIENT to true)) {
+            policy.policy.value = chosen
+            balances.of(daily.address).value = BalanceReading.Verified(Wei.of("1000000000000000000"), 100)
+            val viewModel = viewModel(sell = usdc.address)
+            viewModel.onBuyChange(null)
+            viewModel.onAmountChange("40")
+            advanceTimeBy(1.seconds)
+            runCurrent()
+            balances.of(daily.address).value = BalanceReading.Syncing
+            viewModel.review()
+            runCurrent()
+
+            val error = assertNotNull(viewModel.compose.error)
+            assertEquals(said, "Sign while syncing does not apply to swaps" in error, error)
+        }
     }
 
     @Test

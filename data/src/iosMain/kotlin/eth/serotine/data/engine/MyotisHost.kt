@@ -32,6 +32,8 @@ import eth.serotine.domain.repository.SafeApprovals
 import eth.serotine.domain.repository.StaleAnchorConsent
 import eth.serotine.domain.repository.TokenBalances
 import eth.serotine.domain.repository.TokenMetadata
+import eth.serotine.domain.repository.KeptSafes
+import eth.serotine.domain.repository.KeptTransactionInputs
 import eth.serotine.domain.repository.TransactionInputs
 import eth.serotine.domain.repository.UniswapV3Chain
 import io.myotis.engine.ios.BeaconState
@@ -91,6 +93,8 @@ class MyotisHost private constructor(
     lastBalancesPath: String?,
     private val debugLog: ((String) -> Unit)?,
     private val apiLog: LogSink?,
+    keptInputsPath: String?,
+    keptSafesPath: String?,
 ) : LightClientControl, StaleAnchorConsent, NetworkFreshness {
 
     /** The engine of this process: none until a first start, [Absent] when it cannot be created here. */
@@ -123,6 +127,12 @@ class MyotisHost private constructor(
     /** The balances last verified, kept for after a restart; none kept without a path. Shared by every network. */
     private val lastBalances = lastBalancesPath?.let { LastBalancesFile(it, Dispatchers.IO) }
 
+    /** The mined counts and fee quotes last verified, kept for a lenient draft; none kept without a path. */
+    private val keptInputsFile = keptInputsPath?.let { KeptInputsFile(it, Dispatchers.IO) }
+
+    /** Each Safe's state last verified, kept for a lenient Safe draft; none kept without a path. */
+    private val keptSafesFile = keptSafesPath?.let { KeptSafesFile(it, Dispatchers.IO) }
+
     /** One light client per network the engine can host. */
     private val nodes: Map<Network, ChainNode> = Network.entries.associateWith { ChainNode(it) }
 
@@ -154,6 +164,12 @@ class MyotisHost private constructor(
 
     /** A transaction's nonce, fees, gas and verified simulation, from its network's verified reads. */
     val transactionInputs: TransactionInputs = routed.transactionInputs
+
+    /** The mined counts and fee quotes [transactionInputs] last verified, for a lenient draft (docs/lenient-mode.md). */
+    val keptTransactionInputs: KeptTransactionInputs = keptInputsFile ?: NoKeptTransactionInputs
+
+    /** Each Safe's nonce, owners and threshold [addressKinds] last verified, for a lenient Safe draft. */
+    val keptSafes: KeptSafes = keptSafesFile ?: KeptSafes.None
 
     /** Gossips a signed transaction to its network's peers (the engine never signs). */
     val broadcaster: Broadcaster = routed.broadcaster
@@ -429,6 +445,7 @@ class MyotisHost private constructor(
                 POLL_INTERVAL,
                 SafeDeployments.of(network),
                 debugLog = debugLog,
+                kept = keptSafesFile?.proofs(network) ?: KeptProofs.none(),
             ),
             // No finalized block's own time here (the iOS module reads no block by number): no CoW order.
             lightClient = object : LightClient by EngineLightClient(
@@ -442,7 +459,7 @@ class MyotisHost private constructor(
             networkUpgrades = EngineNetworkUpgrades(network, chain, Dispatchers.IO, POLL_INTERVAL),
             priceFeeds = prices,
             priceHistory = prices,
-            transactionInputs = EngineTransactionInputs(network, chain, Dispatchers.IO),
+            transactionInputs = EngineTransactionInputs(network, chain, Dispatchers.IO, kept = keptInputsFile),
             broadcaster = EngineBroadcaster(network, chain, Dispatchers.IO),
             receipts = EngineReceipts(network, chain, Dispatchers.IO, POLL_INTERVAL),
             blockTransactions = EngineBlockTransactions(network, chain, Dispatchers.IO),
@@ -779,14 +796,19 @@ class MyotisHost private constructor(
          * balances last verified are kept in, to be shown as such after a restart until a head can
          * be read ([LastBalancesFile]); null keeps them for the process only. [apiLog] takes each
          * request the adapters make of the engine ([LoggedChain]): the Debug tab's log, in memory
-         * only; null records none.
+         * only; null records none. [keptInputs] is the file the mined counts and fee quotes last
+         * verified are kept in, for a lenient draft ([KeptInputsFile]); null keeps none. [keptSafes] is
+         * the file each Safe's state last verified is kept in, for a lenient Safe draft
+         * ([KeptSafesFile]); null keeps none.
          */
         fun start(
             dataDir: String,
             lastBalances: String? = null,
             debugLog: ((String) -> Unit)? = null,
             apiLog: LogSink? = null,
-        ): MyotisHost = MyotisHost(dataDir, lastBalances, debugLog, apiLog)
+            keptInputs: String? = null,
+            keptSafes: String? = null,
+        ): MyotisHost = MyotisHost(dataDir, lastBalances, debugLog, apiLog, keptInputs, keptSafes)
     }
 }
 

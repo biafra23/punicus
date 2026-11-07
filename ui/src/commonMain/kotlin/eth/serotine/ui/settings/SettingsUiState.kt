@@ -12,6 +12,10 @@ import eth.serotine.ui.components.StaleAnchorWarning
  * the screens, null when nothing), whether the Debug tab is on ([debugScreen], null in
  * simple mode, where the tab and its switch are not offered; [debugScreenNotSaved] likewise),
  * and the app's [version]. The security settings join it with the features they belong to.
+ * [signWhileSyncing] is lenient mode's switch (Settings → Advanced → *Sign while syncing*;
+ * docs/lenient-mode.md, owner rulings, 2026-11-06), off by default; [signWhileSyncingNotSaved]
+ * when its last switch could not be saved, and [signWhileSyncingNote] what turning it off leaves
+ * in place while the outbox holds something (decision 10), null otherwise.
  * [turningOff] is the confirmation asked before a network with accounts is turned off (N20), null
  * while none is asked.
  *
@@ -31,6 +35,9 @@ data class SettingsUiState(
     val detailedViewNotSaved: Boolean = false,
     val detailedViewNote: String? = null,
     val turningOff: TurnOffConfirmation? = null,
+    val signWhileSyncing: Boolean = false,
+    val signWhileSyncingNotSaved: Boolean = false,
+    val signWhileSyncingNote: String? = null,
 )
 
 /**

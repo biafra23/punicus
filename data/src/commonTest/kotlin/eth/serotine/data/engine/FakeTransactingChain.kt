@@ -20,7 +20,13 @@ internal class FakeTransactingChain(val base: FakeChain = FakeChain()) : Transac
 
     var mined: Long? = null
 
-    override fun minedNonce(address: Address): Long? = answer { mined }
+    /** Run as each mined count is read, before it answers: what a test moves the head with. */
+    var onMinedNonce: (() -> Unit)? = null
+
+    override fun minedNonce(address: Address): Long? = answer {
+        onMinedNonce?.invoke()
+        mined
+    }
 
     /** What each fee history read answers; unset, [feeHistory]. */
     var feeAnswer: (() -> String?)? = null

@@ -21,6 +21,7 @@ import eth.serotine.domain.repository.LightClient
 import eth.serotine.domain.repository.LightClientStatus
 import eth.serotine.domain.repository.NativeBalances
 import eth.serotine.domain.repository.NonceReading
+import eth.serotine.domain.repository.Outbox
 import eth.serotine.domain.repository.ReadUnavailable
 import eth.serotine.domain.repository.SentAction
 import eth.serotine.domain.repository.SentTransfer
@@ -139,7 +140,9 @@ const val SWAP_DEADLINE_SECONDS: Long = 10 * 60
  * of its quote), the allowance the router needs, and the swap's transaction, quoted as every
  * transaction from an account held here is ([CallQuoter]) and run as a verified call that must
  * return at least the minimum. Nothing is quoted on anything less than verified state, and the
- * amount is in the sold asset's smallest unit: prices never reach a swap.
+ * amount is in the sold asset's smallest unit: prices never reach a swap. A swap stays strict in
+ * both modes: a minimum from an old quote is no minimum to sign (owner rulings, 2026-11-06;
+ * docs/lenient-mode.md, *What stays strict*).
  *
  * A token sold needs the router's allowance for the whole amount: one that falls short is
  * [SwapQuoting.NeedsApproval] (the approval is its own transaction, [QuoteTokenApproval]), and one
@@ -164,9 +167,11 @@ class QuoteSwap(
     private val cowChain: CowChain,
     private val lightClient: LightClient,
     private val network: Network,
+    /** What the account has queued in lenient mode, which holds a new quote back (docs/lenient-mode.md). */
+    private val outbox: Outbox,
     private val clock: () -> Long = ::epochSecondsNow,
 ) {
-    private val quoter = CallQuoter(inputs, sentTransfers, network, clock)
+    private val quoter = CallQuoter(inputs, sentTransfers, network, clock, outbox)
 
     /** Exactly [amountIn] of [sell] for [buy] from [from], at [tolerance], at [level]'s fees. */
     suspend operator fun invoke(
@@ -286,7 +291,7 @@ class QuoteSwap(
             returned?.let { it >= minimum } == true
         }
         val (call, unmined) = when (
-            val quoting = quoter.quote(from, swap.to, swap.value, swap.data, level, nativeBefore, accepts)
+            val quoting = quoter.quote(from, swap.to, swap.value, swap.data, level, nativeBefore, accepts = accepts)
         ) {
             is CallQuoting.Quoted -> quoting
             is CallQuoting.Refused -> return@cancellingReads quoting.refusal.asSwapQuoting()
@@ -440,7 +445,7 @@ private fun CallRefusal.asSwapQuoting(): SwapQuoting = when (this) {
     CallRefusal.Refused -> SwapQuoting.Refused
     CallRefusal.Syncing -> SwapQuoting.Syncing
     is CallRefusal.Unavailable -> SwapQuoting.Unavailable(reason, figure)
-    is CallRefusal.EarlierMaybeSent -> SwapQuoting.EarlierMaybeSent(hash)
+    is CallRefusal.EarlierMaybeSent -> SwapQuoting.EarlierMaybeSent(hash, queued)
 }
 
 /** A route that was not found, as the swap's refusal. */
@@ -521,7 +526,7 @@ sealed interface SwapQuoting {
     data class Unavailable(val reason: ReadUnavailable, val figure: QuoteFigure? = null) : SwapQuoting
 
     /** An earlier transaction from the sender, [hash], may still be on its way: retried, not replaced. */
-    data class EarlierMaybeSent(val hash: String) : SwapQuoting
+    data class EarlierMaybeSent(val hash: String, val queued: Boolean = false) : SwapQuoting
 
     /**
      * The record of the CoW orders signed here cannot be read: one may still fill, so no token is
@@ -641,9 +646,11 @@ class QuoteTokenApproval(
     private val nativeBalances: NativeBalances,
     private val sentTransfers: SentTransfers,
     private val network: Network,
+    /** What the account has queued in lenient mode, which holds a new quote back (docs/lenient-mode.md). */
+    private val outbox: Outbox,
     private val clock: () -> Long = ::epochSecondsNow,
 ) {
-    private val quoter = CallQuoter(inputs, sentTransfers, network, clock)
+    private val quoter = CallQuoter(inputs, sentTransfers, network, clock, outbox)
 
     /** [spender]'s allowance over [from]'s [token] set to [amount] (not zero), at [level]'s fees. */
     suspend operator fun invoke(
@@ -685,7 +692,7 @@ class QuoteTokenApproval(
         val accepts: (String) -> Boolean = { returned -> !Erc20.returnedFalse(returned) }
         suspend fun quote(setTo: UInt256): CallQuoting {
             val data = Erc20.approveData(spender, setTo)
-            return quoter.quote(from, token.address, UInt256.ZERO, data, level, nativeBefore, accepts)
+            return quoter.quote(from, token.address, UInt256.ZERO, data, level, nativeBefore, accepts = accepts)
         }
 
         var resetsFirst = false
@@ -730,7 +737,7 @@ private fun CallRefusal.asApprovalQuoting(): ApprovalQuoting = when (this) {
     CallRefusal.Refused -> ApprovalQuoting.Refused
     CallRefusal.Syncing -> ApprovalQuoting.Syncing
     is CallRefusal.Unavailable -> ApprovalQuoting.Unavailable(reason, figure)
-    is CallRefusal.EarlierMaybeSent -> ApprovalQuoting.EarlierMaybeSent(hash)
+    is CallRefusal.EarlierMaybeSent -> ApprovalQuoting.EarlierMaybeSent(hash, queued)
 }
 
 /** The outcome of [QuoteTokenApproval]. */
@@ -770,7 +777,7 @@ sealed interface ApprovalQuoting {
     data class Unavailable(val reason: ReadUnavailable, val figure: QuoteFigure? = null) : ApprovalQuoting
 
     /** An earlier transaction from the sender, [hash], may still be on its way: retried, not replaced. */
-    data class EarlierMaybeSent(val hash: String) : ApprovalQuoting
+    data class EarlierMaybeSent(val hash: String, val queued: Boolean = false) : ApprovalQuoting
 }
 
 /**

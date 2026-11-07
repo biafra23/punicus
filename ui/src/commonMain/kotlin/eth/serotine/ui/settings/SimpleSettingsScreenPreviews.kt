@@ -82,9 +82,34 @@ private fun SimpleSettingsOffPreview() = SimpleSettingsPreview(
     ),
 )
 
+/** Lenient mode on, the same switch as in Detailed view: Sign while syncing. */
+@Preview
+@Composable
+private fun SimpleSettingsSignWhileSyncingPreview() = SimpleSettingsPreview(simple.copy(signWhileSyncing = true))
+
+/** On with a transaction queued: turning it off leaves that queued (decision 10). */
+@Preview
+@Composable
+private fun SimpleSettingsSignWhileSyncingQueuedPreview() = SimpleSettingsPreview(
+    simple.copy(
+        signWhileSyncing = true,
+        signWhileSyncingNote = "Turning it off leaves what is queued in place: the transaction waiting to be sent " +
+            "stays queued, checked and sent, or discarded by you.",
+    ),
+)
+
+/** A switch of it that could not be saved. */
+@Preview
+@Composable
+private fun SimpleSettingsSignWhileSyncingNotSavedPreview() =
+    SimpleSettingsPreview(simple.copy(signWhileSyncingNotSaved = true))
+
 /** Every preview above, which SimpleSettingsScreenPreviewsTest renders: a new preview goes in here too. */
 internal val simpleSettingsScreenPreviews: List<ScreenPreview> = listOf(
     ScreenPreview("default") { SimpleSettingsPreviewDefault() },
     ScreenPreview("default-dark") { SimpleSettingsDarkPreview() },
     ScreenPreview("off") { SimpleSettingsOffPreview() },
+    ScreenPreview("sign-while-syncing") { SimpleSettingsSignWhileSyncingPreview() },
+    ScreenPreview("sign-while-syncing-queued") { SimpleSettingsSignWhileSyncingQueuedPreview() },
+    ScreenPreview("sign-while-syncing-not-saved") { SimpleSettingsSignWhileSyncingNotSavedPreview() },
 )

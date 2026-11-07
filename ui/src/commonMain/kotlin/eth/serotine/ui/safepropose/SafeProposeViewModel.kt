@@ -9,30 +9,43 @@ import eth.serotine.domain.model.Address
 import eth.serotine.domain.model.DisplayCurrency
 import eth.serotine.domain.model.Network
 import eth.serotine.domain.model.SigningRequest
+import eth.serotine.domain.model.SyncPolicy
 import eth.serotine.domain.model.TransferAsset
 import eth.serotine.domain.model.UInt256
 import eth.serotine.domain.model.WalletPassword
 import eth.serotine.domain.repository.AccountList
+import eth.serotine.domain.repository.KeptSafe
 import eth.serotine.domain.repository.ReadUnavailable
 import eth.serotine.domain.repository.Signing
 import eth.serotine.domain.repository.Unlock
 import eth.serotine.domain.usecase.AccountValue
 import eth.serotine.domain.usecase.DescribeKeyStore
+import eth.serotine.domain.usecase.DraftInput
+import eth.serotine.domain.usecase.DraftSafeTx
 import eth.serotine.domain.usecase.EncodeSigningRequest
+import eth.serotine.domain.usecase.HeldSignCheck
+import eth.serotine.domain.usecase.HoldSafeSignature
 import eth.serotine.domain.usecase.ObserveAccountValue
 import eth.serotine.domain.usecase.ObserveAccounts
+import eth.serotine.domain.usecase.ObserveEnabledNetworks
+import eth.serotine.domain.usecase.ObserveKeptSafe
 import eth.serotine.domain.usecase.ObserveSafe
+import eth.serotine.domain.usecase.ObserveSyncPolicy
 import eth.serotine.domain.usecase.ProposeSafeTx
 import eth.serotine.domain.usecase.RecipientLookup
 import eth.serotine.domain.usecase.ResolveRecipient
 import eth.serotine.domain.usecase.SafeCallSimulation
 import eth.serotine.domain.usecase.SafeReading
+import eth.serotine.domain.usecase.SafeSignatureHolding
+import eth.serotine.domain.usecase.SafeTxDraft
+import eth.serotine.domain.usecase.SafeTxDrafting
 import eth.serotine.domain.usecase.SafeTxProposal
 import eth.serotine.domain.usecase.SafeTxProposing
 import eth.serotine.domain.usecase.SafeTxRefusal
 import eth.serotine.domain.usecase.SafeTxSignCheck
 import eth.serotine.domain.usecase.SafeTxSigning
 import eth.serotine.domain.usecase.SignSafeTx
+import eth.serotine.domain.usecase.ownersHeld
 import eth.serotine.ui.components.AccountChoice
 import eth.serotine.ui.components.AssetOption
 import eth.serotine.ui.components.CHECK_TOOK_THE_TIME
@@ -51,6 +64,7 @@ import eth.serotine.ui.components.TransferForm
 import eth.serotine.ui.components.UnlockStep
 import eth.serotine.ui.components.ZERO_ADDRESS
 import eth.serotine.ui.components.addressFieldLabel
+import eth.serotine.ui.components.agoText
 import eth.serotine.ui.components.amountHint
 import eth.serotine.ui.components.assetOptions
 import eth.serotine.ui.components.biometricsOn
@@ -86,6 +100,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
@@ -107,6 +122,16 @@ import kotlinx.coroutines.withContext
  * recipient's name is resolved again with every one. Nothing is queued until it is signed, so a
  * proposal given up takes no nonce. A price never reaches it.
  *
+ * In lenient mode (*Sign while syncing*, [ObserveSyncPolicy]; docs/lenient-mode.md, *Safe transactions
+ * in lenient mode*; owner rulings, 2026-11-06), on a network that is on ([ObserveEnabledNetworks]),
+ * while the light client catches up: the Safe proposed from is the Safe as last verified
+ * ([ObserveKeptSafe]), the compose step offers a balance last verified too, labelled, with no fiat
+ * value, and a review is drafted on what was verified last ([DraftSafeTx]), each figure with its age,
+ * no simulation, and signed with no deadline into the outbox, where the signature is held until its
+ * check at a fresh head ([HoldSafeSignature]): never queued, nor shared, from here. No name is
+ * resolved for a draft. Strict mode is as above, unchanged. [fill], when given, is what the compose
+ * step opens with: a held proposal proposed again.
+ *
  * One of the ViewModels the [WalletPassword] passes through (CLAUDE.md, *Trust*): it holds it in the
  * review's state while the field is shown, hands it to the signer in an [Unlock], and never logs,
  * saves or caches it; it is dropped once used, when the screen is not shown ([onHidden]) and when
@@ -123,6 +148,17 @@ class SafeProposeViewModel(
     private val proposeSafeTx: ProposeSafeTx,
     private val signSafeTx: SignSafeTx,
     private val encodeSigningRequest: EncodeSigningRequest,
+    /** Whether the user turned on *Sign while syncing* (lenient mode); strict by default. */
+    observeSyncPolicy: ObserveSyncPolicy,
+    /** Which networks are on: a network that is off is not syncing, and nothing is drafted on it. */
+    observeEnabledNetworks: ObserveEnabledNetworks,
+    /** The Safe as last verified, what a lenient draft is built on. */
+    observeKeptSafe: ObserveKeptSafe,
+    /** A lenient draft of the proposal, on what was verified last. */
+    private val draftSafeTx: DraftSafeTx,
+    /** Signs a reviewed draft and holds the signature until its check. */
+    private val holdSafeSignature: HoldSafeSignature,
+    fill: SafeProposeFill? = null,
     private val timeSource: TimeSource = TimeSource.Monotonic,
     private val now: () -> Long = ::epochSecondsNow,
 ) : ViewModel() {
@@ -147,10 +183,16 @@ class SafeProposeViewModel(
 
         data class From(val account: Account, val reading: SafeReading.Verified) : Sender
 
+        /** Lenient mode, while the light client catches up: the Safe as last verified, with the owners held here. */
+        data class Kept(val account: Account, val safe: KeptSafe, val ownersHeld: List<Address>) : Sender
+
         data class Cannot(val message: String) : Sender
     }
 
-    /** Everything the form is derived from. */
+    /**
+     * Everything the form is derived from; [lenient] while *Sign while syncing* is on and the network
+     * is on: a balance last verified is offered, and a review may be a draft.
+     */
     private class Model(
         val sender: Sender,
         val accounts: List<Account>,
@@ -160,6 +202,7 @@ class SafeProposeViewModel(
         val tokensRead: Boolean,
         val inputs: Inputs,
         val lookup: RecipientState,
+        val lenient: Boolean,
     )
 
     /** A transfer the form can have proposed, exactly as it has it. */
@@ -211,14 +254,40 @@ class SafeProposeViewModel(
                 get() = !refreshing && !signing
         }
 
+        /**
+         * Lenient mode: [draft] of [request], drafted on what was verified last, under review, to be
+         * signed by [owner] and held; [safeAccount] and [accounts] as when it was drafted. Never
+         * drafted again while shown: a draft is old by definition.
+         */
+        data class Drafting(
+            val request: Request,
+            val draft: SafeTxDraft,
+            val owner: Address,
+            val unlock: UnlockStep,
+            val safeAccount: Account,
+            val accounts: List<Account>,
+            val signing: Boolean = false,
+            val error: String? = null,
+        ) : Step
+
         data class Proposed(val hash: String) : Step
     }
 
     // The checksum once, not on every balance reading.
     private val display = Eip55.format(safe)
 
-    private val inputs = MutableStateFlow(Inputs(asset))
+    private val inputs = MutableStateFlow(fill?.let { Inputs(asset, to = it.to, amount = it.amount) } ?: Inputs(asset))
     private val step = MutableStateFlow<Step>(Step.Composing())
+
+    /** Whether a review may be a lenient draft: *Sign while syncing* on, and the network on. */
+    private val lenient: Flow<Boolean> =
+        combine(observeSyncPolicy(), observeEnabledNetworks()) { policy, on ->
+            policy == SyncPolicy.LENIENT && network in on
+        }.distinctUntilChanged()
+
+    /** Whether lenient mode applies, and the Safe as last verified: what a draft is built on. */
+    private val leniency: Flow<Pair<Boolean, KeptSafe?>> =
+        combine(lenient, observeKeptSafe(account)) { lenient, kept -> lenient to kept }
 
     /** The proposal or signature in flight. */
     private var job: Job? = null
@@ -238,9 +307,9 @@ class SafeProposeViewModel(
         observeSafe(account),
         observeAccountValue(account),
         inputs,
-        lookup,
-    ) { list, reading, value, inputs, lookup ->
-        modelOf(list, reading, value, inputs, lookup)
+        combine(lookup, leniency) { lookup, leniency -> lookup to leniency },
+    ) { list, reading, value, inputs, (lookup, leniency) ->
+        modelOf(list, reading, value, inputs, lookup, leniency.first, leniency.second)
     }.stateIn(
         viewModelScope,
         // As on the account screens: back after the timeout, no old balance stands as current.
@@ -249,9 +318,10 @@ class SafeProposeViewModel(
     )
 
     val uiState: StateFlow<SafeProposeUiState> = combine(model, step) { model, step -> model to step }
-        // A balance's age, which simple mode shows, is dated anew every second on the compose step.
+        // A balance's age, which simple mode shows, is dated anew every second on the compose step; a
+        // draft's figures likewise on its review.
         .redatedWhile { (model, step) ->
-            step is Step.Composing && model?.options.orEmpty().any { it.provenAt != null }
+            step is Step.Drafting || step is Step.Composing && model?.options.orEmpty().any { it.provenAt != null }
         }
         .map { (model, step) -> render(model, step) }
         .stateIn(
@@ -291,11 +361,26 @@ class SafeProposeViewModel(
         if (current.proposing) return
         val model = model.value ?: return
         val request = requestOf(model) ?: return
-        val sender = model.sender as? Sender.From ?: return
+        val sender = model.sender
+        if (sender !is Sender.From && sender !is Sender.Kept) return
         step.value = Step.Composing(proposing = true)
         hiddenWhileProposing = false
         job = viewModelScope.launch {
-            val next = proposed(request, sender.reading.ownersHeld.firstOrNull(), null, sender.account, model.accounts)
+            val next = when (sender) {
+                // The Safe cannot be verified now: drafted on the Safe as last verified.
+                is Sender.Kept -> drafted(request, sender.ownersHeld.firstOrNull(), sender.account, model.accounts)
+                else -> {
+                    val from = sender as Sender.From
+                    proposed(
+                        request,
+                        from.reading.ownersHeld.firstOrNull(),
+                        null,
+                        from.account,
+                        model.accounts,
+                        lenient = model.lenient,
+                    )
+                }
+            }
             if (step.value != Step.Composing(proposing = true)) return@launch
             // Made while hidden: it is from before the screen came back, so it is made again.
             step.value = if (next is Step.Reviewing) next.copy(hidden = hiddenWhileProposing) else next
@@ -310,6 +395,13 @@ class SafeProposeViewModel(
      * nowhere else.
      */
     fun edit() {
+        (step.value as? Step.Drafting)?.let { draft ->
+            // Not while it is signed and held, which leaving would only hide.
+            if (draft.signing) return
+            job?.cancel()
+            step.value = Step.Composing()
+            return
+        }
         var current = step.value as? Step.Reviewing ?: return
         if (current.signing && !current.checking) return
         if (current.checking) {
@@ -343,6 +435,9 @@ class SafeProposeViewModel(
     fun onOwnerChange(address: String) {
         val owner = Address.parse(address) ?: return
         step.update { current ->
+            if (current is Step.Drafting && !current.signing && owner in current.draft.ownersHeld) {
+                return@update current.copy(owner = owner, unlock = current.unlock.copy(error = null), error = null)
+            }
             if (current is Step.Reviewing && current.idle && owner in current.proposal.safe.ownersHeld) {
                 current.copy(
                     owner = owner,
@@ -408,15 +503,22 @@ class SafeProposeViewModel(
 
     /** The password field now reads [text]. */
     fun onPasswordChange(text: String) = step.update { current ->
-        if (current is Step.Reviewing && !current.signing) {
-            current.copy(unlock = current.unlock.copy(password = WalletPassword(text), error = null))
-        } else {
-            current
+        when {
+            current is Step.Reviewing && !current.signing ->
+                current.copy(unlock = current.unlock.copy(password = WalletPassword(text), error = null))
+            current is Step.Drafting && !current.signing ->
+                current.copy(unlock = current.unlock.copy(password = WalletPassword(text), error = null))
+            else -> current
         }
     }
 
     /** Signs the reviewed proposal with the typed wallet password, and queues it. */
     fun sign() {
+        (step.value as? Step.Drafting)?.let { draft ->
+            val password = draft.unlock.password
+            if (draft.signing || password.text.isEmpty()) return
+            return hold(draft, Unlock.WithPassword(password))
+        }
         val current = step.value as? Step.Reviewing ?: return
         val password = current.unlock.password
         if (!current.idle || password.text.isEmpty() || reproposed(current)) return
@@ -425,6 +527,17 @@ class SafeProposeViewModel(
 
     /** Signs the reviewed proposal with a fingerprint or face, and queues it. */
     fun signWithBiometrics() {
+        (step.value as? Step.Drafting)?.let { draft ->
+            if (draft.signing || !draft.unlock.biometrics) return
+            val option = draft.request.option
+            val amount = exactAmount(draft.request.amount, option.decimals, option.symbol)
+            val to = Eip55.format(draft.request.to.address)
+            val warning = option.warning?.let { " ($it)" }.orEmpty()
+            // No deadline: a draft is old by definition, and the check at a fresh head comes before it is shown.
+            val reason = "Sign a Safe transaction of ${draft.safeAccount.label}: send $amount$warning to $to, held " +
+                "until it checks out on chain"
+            return hold(draft, Unlock.WithBiometrics(reason, notAfter = null))
+        }
         val current = step.value as? Step.Reviewing ?: return
         if (!current.idle || !current.unlock.biometrics || reproposed(current)) return
         val option = current.request.option
@@ -462,15 +575,16 @@ class SafeProposeViewModel(
         // Only ever the Safe's check before a signature: a refresh in flight finishes.
         if ((step.value as? Step.Reviewing)?.let { it.signing && it.checking } == true) job?.cancel()
         step.update { current ->
-            if (current is Step.Reviewing) {
-                current.copy(
+            when (current) {
+                is Step.Reviewing -> current.copy(
                     unlock = current.unlock.copy(password = WalletPassword.EMPTY),
                     hidden = true,
                     signing = current.signing && !current.checking,
                     checking = false,
                 )
-            } else {
-                current
+                // A draft is not drafted again when shown: only the password goes.
+                is Step.Drafting -> current.copy(unlock = current.unlock.copy(password = WalletPassword.EMPTY))
+                else -> current
             }
         }
     }
@@ -578,6 +692,7 @@ class SafeProposeViewModel(
         unlock: UnlockStep?,
         safeAccount: Account,
         accounts: List<Account>,
+        lenient: Boolean = false,
     ): Step {
         val to = when (val again = resolveAgain(request.to, ::lookUp)) {
             is ResolvedAgain.Same -> again.found
@@ -600,6 +715,8 @@ class SafeProposeViewModel(
             SafeTxProposing.Refused(SafeTxRefusal.Unavailable(ReadUnavailable.UNPROVEN))
         }
         if (proposing !is SafeTxProposing.Proposed) {
+            // Refused only because the light client catches up: drafted on what was verified last instead.
+            if (lenient && proposing.syncing) return drafted(request, owner, safeAccount, accounts)
             return Step.Composing(error = refusal(proposing, request.option), simpleError = simpleRefusal(proposing))
         }
         val proposal = proposing.proposal
@@ -617,6 +734,125 @@ class SafeProposeViewModel(
         )
     }
 
+    /** Whether this strict refusal only waits for the light client to catch up: what a lenient draft stands in for. */
+    private val SafeTxProposing.syncing: Boolean
+        get() = this is SafeTxProposing.Refused && (
+            refusal == SafeTxRefusal.Syncing ||
+                refusal == SafeTxRefusal.Unavailable(ReadUnavailable.SYNCING)
+            )
+
+    /**
+     * [request] drafted on what the light client verified last (docs/lenient-mode.md, *Safe
+     * transactions in lenient mode*), for the draft's review, signed by [owner] (the first held when
+     * that is none); or the form saying why it is not: a refusal in strict mode's words, or what it
+     * waits for. A name is not resolved for a draft (decision 8).
+     */
+    private suspend fun drafted(
+        request: Request,
+        owner: Address?,
+        safeAccount: Account,
+        accounts: List<Account>,
+    ): Step {
+        if (request.to.name != null) return Step.Composing(error = NO_NAME_IN_A_DRAFT)
+        val drafting = try {
+            draftSafeTx(safe, request.to.address, request.option.asset, request.amount)
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            // The use case promises not to throw; the backstop.
+            SafeTxDrafting.Refused(SafeTxProposing.Refused(SafeTxRefusal.Unavailable(ReadUnavailable.UNPROVEN)))
+        }
+        return when (drafting) {
+            is SafeTxDrafting.Drafted -> {
+                val held = drafting.draft.ownersHeld
+                val signer = owner?.takeIf { it in held } ?: held.firstOrNull()
+                    ?: return Step.Composing(error = NO_OWNER_HELD)
+                Step.Drafting(
+                    request,
+                    drafting.draft,
+                    signer,
+                    UnlockStep(biometrics = biometricsOffered()),
+                    safeAccount,
+                    accounts,
+                )
+            }
+            is SafeTxDrafting.Refused -> Step.Composing(
+                error = refusal(drafting.proposing, request.option),
+                simpleError = simpleRefusal(drafting.proposing),
+            )
+            is SafeTxDrafting.Waits -> Step.Composing(error = waitsText(drafting.missing))
+        }
+    }
+
+    /** What a draft waits for: [missing], which the light client never verified on this device. */
+    private fun waitsText(missing: DraftInput): String {
+        val what = when (missing) {
+            DraftInput.SAFE -> "this Safe's owners and nonce"
+            DraftInput.BALANCE -> "this Safe's balance"
+            DraftInput.NONCE, DraftInput.FEES -> "what the proposal is built on"
+        }
+        return "The light client is still syncing, and $what has never been verified on this device, so nothing " +
+            "can be prepared yet. The review waits for the light client to catch up."
+    }
+
+    /**
+     * Signs [draft] and holds the signature ([HoldSafeSignature]): nothing is queued or shared. Once
+     * held, the Safe transaction's screen shows where it stands. A signature the outbox could not keep
+     * is dropped, and said. Not once lenient mode no longer applies, or the Safe is verified now (the
+     * light client caught up), as the Safe transaction's screen refuses: the strict review signs then.
+     */
+    private fun hold(draft: Step.Drafting, unlock: Unlock) {
+        // Sign while syncing turned off, or the network, since the draft was made: it follows strict
+        // mode now, and is not signed.
+        val model = model.value
+        if (model?.lenient != true) {
+            step.value = Step.Composing(error = NO_LONGER_LENIENT)
+            return
+        }
+        // The light client caught up meanwhile: the Safe is verified now, so the strict review proposes it.
+        if (model.sender is Sender.From) {
+            step.value = Step.Composing(error = CAUGHT_UP)
+            return
+        }
+        // The password leaves the state now: it is in the unlock, which the signer zeroes after use.
+        val unlocked = draft.unlock.copy(password = WalletPassword.EMPTY, error = null)
+        step.value = draft.copy(signing = true, unlock = unlocked, error = null)
+        job = viewModelScope.launch {
+            // To its end even when the screen is left meanwhile: a signature is held or dropped, never half.
+            val holding = withContext(NonCancellable) {
+                try {
+                    when (val checked = holdSafeSignature.check(draft.draft.request, draft.owner)) {
+                        is HeldSignCheck.Ready -> holdSafeSignature.sign(checked, unlock, draft.draft)
+                        is HeldSignCheck.Refused -> SafeSignatureHolding.Refused(checked.refusal)
+                        is HeldSignCheck.NonceBusy -> SafeSignatureHolding.NonceBusy(checked.held)
+                        is HeldSignCheck.Waits -> SafeSignatureHolding.Refused(SafeTxRefusal.Syncing)
+                    }
+                } catch (e: Exception) {
+                    null // the use case promises not to throw; the backstop
+                }
+            }
+            step.update { latest ->
+                if (latest !is Step.Drafting) return@update latest
+                when (holding) {
+                    is SafeSignatureHolding.Held -> Step.Proposed("0x" + holding.held.hash.hex)
+                    is SafeSignatureHolding.NotSigned -> latest.copy(
+                        signing = false,
+                        unlock = latest.unlock.copy(
+                            error = notSignedText(holding.signing, SIGN_FAILED),
+                            biometrics = latest.unlock.biometrics && biometricsStillOffered(holding.signing),
+                        ),
+                    )
+                    is SafeSignatureHolding.Refused ->
+                        latest.copy(signing = false, error = safeTxRefusalText(holding.refusal, network))
+                    is SafeSignatureHolding.NonceBusy -> latest.copy(signing = false, error = NONCE_BUSY)
+                    SafeSignatureHolding.NotSaved ->
+                        latest.copy(signing = false, unlock = latest.unlock.copy(error = NOT_HELD))
+                    null -> latest.copy(signing = false, unlock = latest.unlock.copy(error = SIGN_FAILED))
+                }
+            }
+        }
+    }
+
     /** Applies [edit] to the form's inputs: only while composing, dropping a proposal in flight. */
     private fun change(edit: (Inputs) -> Inputs) {
         if (step.value !is Step.Composing) return
@@ -631,6 +867,8 @@ class SafeProposeViewModel(
         value: AccountValue,
         inputs: Inputs,
         lookup: RecipientState,
+        lenient: Boolean,
+        kept: KeptSafe?,
     ): Model {
         // The Safe's network's accounts only: the same address on another network is another account.
         val accounts = (list as? AccountList.Loaded)?.accounts.orEmpty().filter { it.network == network }
@@ -642,7 +880,16 @@ class SafeProposeViewModel(
                     account == null -> Sender.Cannot(NOT_IN_WALLET)
                     account.kind != AccountKind.SAFE -> Sender.Cannot(NOT_A_SAFE_ACCOUNT)
                     else -> when (reading) {
-                        SafeReading.Checking -> Sender.Checking
+                        // The light client catches up: in lenient mode, the Safe as last verified.
+                        SafeReading.Checking -> when {
+                            !lenient -> Sender.Checking
+                            kept == null -> Sender.Cannot(NEVER_VERIFIED)
+                            else -> {
+                                val all = (list as? AccountList.Loaded)?.accounts.orEmpty()
+                                val held = kept.state.ownersHeld(all.filter { it.address in kept.state.owners })
+                                if (held.isEmpty()) Sender.Cannot(WATCH_ONLY) else Sender.Kept(account, kept, held)
+                            }
+                        }
                         SafeReading.NotASafe -> Sender.Cannot(NOT_A_SAFE)
                         is SafeReading.Unavailable -> Sender.Cannot(UNVERIFIED)
                         is SafeReading.Verified -> if (reading.ownersHeld.isEmpty()) {
@@ -654,7 +901,8 @@ class SafeProposeViewModel(
                 }
             }
         }
-        val options = assetOptions(value, inputs.asset, network)
+        // Lenient: a balance last verified is offered too, labelled, for a draft.
+        val options = assetOptions(value, inputs.asset, network, lastKnown = lenient)
         return Model(
             sender = sender,
             accounts = accounts,
@@ -664,6 +912,7 @@ class SafeProposeViewModel(
             tokensRead = value.tokensRead,
             inputs = inputs,
             lookup = lookup,
+            lenient = lenient,
         )
     }
 
@@ -673,16 +922,20 @@ class SafeProposeViewModel(
         // A review stands on its proposal, whatever the Safe's reading says meanwhile: a refresh or
         // the signature checks the Safe again, and says what it finds.
         if (step is Step.Reviewing) return review(model?.accounts ?: step.accounts, step)
+        // A draft's likewise, on its draft.
+        if (step is Step.Drafting) return draftReview(model?.accounts ?: step.accounts, step)
         model ?: return SafeProposeUiState.Loading(network)
         val account = when (val sender = model.sender) {
             Sender.Checking -> return SafeProposeUiState.Loading(network)
             is Sender.Cannot -> return SafeProposeUiState.CannotPropose(network, sender.message)
             is Sender.From -> sender.account
+            is Sender.Kept -> sender.account
         }
         val from = SendFrom(account.label, display)
         return when (step) {
             is Step.Composing -> SafeProposeUiState.Compose(compose(model, from, step))
             is Step.Reviewing -> review(model.accounts, step)
+            is Step.Drafting -> draftReview(model.accounts, step)
             is Step.Proposed -> SafeProposeUiState.Proposed(network, step.hash)
         }
     }
@@ -788,6 +1041,64 @@ class SafeProposeViewModel(
         )
     }
 
+    /**
+     * The review of a lenient draft (docs/lenient-mode.md, *Safe transactions in lenient mode*): each
+     * figure with the block it was last verified at and its age against [now], the balance after "if
+     * nothing changed", no simulation and no fiat value.
+     */
+    private fun draftReview(accounts: List<Account>, step: Step.Drafting): SafeProposeUiState.DraftReview {
+        val draft = step.draft
+        val option = step.request.option
+        val token = (option.asset as? TransferAsset.Erc20Token)?.token
+        val request = draft.request
+        val kept = draft.safe
+        val labels = accounts.associate { it.address to it.label }
+        val decoding = listOfNotNull(token?.let { DecodingToken(it, sharesBuiltInSymbol = option.warning != null) })
+        val at = now()
+        fun age(asOf: Long?) = asOf?.let { "as of ${agoText(it, at)}" } ?: "as last verified"
+        val oldest = draft.builtOn.oldestAsOf?.let { agoText(it, at) } ?: "an earlier block"
+        val owners = kept.state.owners.size
+        return SafeProposeUiState.DraftReview(
+            network = network.displayName,
+            from = SendFrom(step.safeAccount.label, display),
+            action = safeTxActionItem(draft.tx.action, request.nonce, decoding, network),
+            amount = exactAmount(step.request.amount, option.decimals, option.symbol),
+            asset = option.choice(),
+            recipient = recipientItem(step.request.to, accounts, option),
+            preparedOn = "Prepared on data from $oldest. It's checked on chain before it's shown to anyone.",
+            nonce = "Safe nonce ${request.nonce}, after the Safe's nonce last verified at block " +
+                grouped(kept.blockNumber),
+            nonceAge = "Safe nonce ${request.nonce}, counted ${age(kept.asOf)}",
+            threshold = "${kept.state.threshold} of $owners owners must sign, as last verified at block " +
+                grouped(kept.blockNumber),
+            thresholdAge = "${kept.state.threshold} of $owners owners must sign, ${age(kept.asOf)}",
+            queued = draft.queuedAhead.takeIf { it > 0 }?.let { ahead ->
+                if (ahead == 1) {
+                    "1 transaction queued or held on this device runs before it."
+                } else {
+                    "$ahead transactions queued or held on this device run before it."
+                }
+            },
+            balance = SafeBalanceChange(
+                what = "${option.symbol} balance of the Safe",
+                before = exactAmount(draft.balanceBefore, option.decimals, option.symbol),
+                queued = draft.queuedAmount.takeUnless { it.isZero }?.let {
+                    exactAmount(it, option.decimals, option.symbol) + " moved by those before it"
+                },
+                after = exactAmount(draft.balanceAfter, option.decimals, option.symbol) + ", if nothing changed",
+                verifiedAt = draft.balanceBlock?.let { "Last verified at block ${grouped(it)}" } ?: "Last verified",
+            ),
+            balanceAge = "Balance ${age(draft.balanceAsOf)}",
+            notChecked = "Not checked yet: the Safe's owners and nonce are checked on chain before the signature " +
+                "is saved to the queue or shown to anyone, and its call runs when its execution is quoted.",
+            owners = draft.ownersHeld.map { AccountChoice(labels[it] ?: Eip55.format(it), Eip55.format(it)) },
+            owner = Eip55.format(step.owner),
+            unlock = step.unlock,
+            signing = step.signing,
+            error = step.error,
+        )
+    }
+
     private fun recipientItem(found: RecipientLookup.Found, accounts: List<Account>, asset: AssetOption?) =
         recipientItem(found, accounts) { address ->
             when (address) {
@@ -799,7 +1110,7 @@ class SafeProposeViewModel(
 
     /** The form's transfer, when it is complete and the recipient is known: what a proposal is asked for. */
     private fun requestOf(model: Model): Request? {
-        if (model.sender !is Sender.From) return null
+        if (model.sender !is Sender.From && model.sender !is Sender.Kept) return null
         val lookup = model.lookup as? RecipientState.Done ?: return null
         if (lookup.text != model.inputs.to.trim()) return null
         val to = lookup.result as? RecipientLookup.Found ?: return null
@@ -856,6 +1167,18 @@ class SafeProposeViewModel(
     }
 
     private companion object {
+        const val NEVER_VERIFIED = "The light client is still syncing, and this Safe's owners and nonce have " +
+            "never been verified on this device, so nothing can be prepared from it yet. Serotine keeps trying."
+        const val NO_NAME_IN_A_DRAFT = "The light client is still syncing, and a name is resolved only once it " +
+            "has caught up: to prepare this proposal now, enter the address, or pick one of your accounts."
+        const val NO_LONGER_LENIENT = "Sign while syncing, or the network, was turned off since this was " +
+            "prepared, so it was not signed: review it again."
+        const val CAUGHT_UP = "The light client has caught up since this was prepared, so it was not signed: " +
+            "review it again to check it on chain."
+        const val NONCE_BUSY = "A signature of another transaction at this Safe nonce is held on this device: one " +
+            "per nonce. Discard it, or wait for its check, to sign this one."
+        const val NOT_HELD = "Signed, but the outbox could not keep it, so the signature was dropped: nothing is " +
+            "held or shown. Try again."
         const val SIGN_FAILED = "Serotine could not finish this signature. Nothing was queued: try again."
         const val UNSAVED_REPLACED =
             "Proposed again as another transaction, so the signature made for the earlier one, which this " +

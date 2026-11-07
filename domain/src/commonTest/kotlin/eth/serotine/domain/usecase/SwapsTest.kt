@@ -30,6 +30,7 @@ import eth.serotine.domain.repository.FeeReading
 import eth.serotine.domain.repository.GasEstimate
 import eth.serotine.domain.repository.LightClientStatus
 import eth.serotine.domain.repository.NonceReading
+import eth.serotine.domain.repository.Outbox
 import eth.serotine.domain.repository.ReadUnavailable
 import eth.serotine.domain.repository.SentAction
 import eth.serotine.domain.repository.SentTransfer
@@ -80,6 +81,7 @@ class SwapsTest {
         cowChain,
         light,
         Network.SEPOLIA,
+        outbox = Outbox.None,
         clock = { headTime },
     )
 
@@ -355,7 +357,7 @@ class SwapsTest {
 
     @Test
     fun anApprovalIsForTheExactAmountAndOneCoveredNeedsNone() = runTest {
-        val approve = QuoteTokenApproval(inputs, native, sent, Network.SEPOLIA, clock = { headTime })
+        val approve = QuoteTokenApproval(inputs, native, sent, Network.SEPOLIA, outbox = Outbox.None, clock = { headTime })
         allow(UInt256.ZERO)
         val quoted = assertIs<ApprovalQuoting.Quoted>(
             approve(account, usdcToken, router, hundredUsdc, FeeLevel.NORMAL),
@@ -379,7 +381,7 @@ class SwapsTest {
 
     @Test
     fun aTokenThatRefusesOneAllowanceForAnotherIsSetToZeroFirst() = runTest {
-        val approve = QuoteTokenApproval(inputs, native, sent, Network.SEPOLIA, clock = { headTime })
+        val approve = QuoteTokenApproval(inputs, native, sent, Network.SEPOLIA, outbox = Outbox.None, clock = { headTime })
         allow(UInt256.of(5))
         inputs.reverting += Erc20.approveData(router, hundredUsdc).toHex()
 
@@ -441,7 +443,7 @@ class SwapsTest {
 
     @Test
     fun noApprovalIsSetUnderAnEarlierSwapOrBesideAnEarlierApproval() = runTest {
-        val approve = QuoteTokenApproval(inputs, native, sent, Network.SEPOLIA, clock = { headTime })
+        val approve = QuoteTokenApproval(inputs, native, sent, Network.SEPOLIA, outbox = Outbox.None, clock = { headTime })
         allow(UInt256.ZERO)
         val swap = record(7, SentAction.Swap(router, usdc, UInt256.of(100_000_000), link, UInt256.ONE))
         sent.transfers.value = listOf(swap)

@@ -216,4 +216,32 @@ class SettingsScreenTest {
 
         rule.onNodeWithTag(SETTINGS_DEBUG_SCREEN_TAG).assertDoesNotExist()
     }
+
+    @Test
+    fun signWhileSyncingIsAnAdvancedSwitchThatSaysWhatItDoesAndWhatStaysQueued() {
+        val changes = mutableListOf<Boolean>()
+        rule.setContent {
+            SerotineTheme {
+                SettingsScreen(
+                    SettingsUiState(
+                        listOf(sepolia),
+                        APP_VERSION,
+                        signWhileSyncing = true,
+                        signWhileSyncingNote = "Turning it off leaves what is queued in place.",
+                    ),
+                    onCurrency = {},
+                    onTokens = {},
+                    onSecurity = {},
+                    onScreenCaptureChange = {},
+                    onDebugScreenChange = {},
+                    onSignWhileSyncingChange = { changes += it },
+                )
+            }
+        }
+
+        rule.onNodeWithText(SIGN_WHILE_SYNCING).performScrollTo().assertIsDisplayed()
+        rule.onNodeWithText("Turning it off leaves what is queued in place.").performScrollTo().assertIsDisplayed()
+        rule.onNodeWithTag(SETTINGS_SIGN_WHILE_SYNCING_TAG).performScrollTo().assertIsOn().performClick()
+        assertEquals(listOf(false), changes)
+    }
 }

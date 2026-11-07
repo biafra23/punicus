@@ -1,5 +1,8 @@
 package eth.serotine.ui.coworder
 
+import kotlin.test.assertNotNull
+import eth.serotine.domain.repository.ReadUnavailable
+import eth.serotine.domain.model.SyncPolicy
 import eth.serotine.domain.model.Account
 import eth.serotine.domain.model.AccountCustody
 import eth.serotine.domain.model.AccountKind
@@ -21,12 +24,14 @@ import eth.serotine.domain.repository.CowPlacement
 import eth.serotine.domain.repository.FinalizedBlock
 import eth.serotine.domain.repository.LightClient
 import eth.serotine.domain.repository.LightClientStatus
+import eth.serotine.domain.repository.Outbox
 import eth.serotine.domain.repository.SentAction
 import eth.serotine.domain.repository.Simulation
 import eth.serotine.domain.usecase.DescribeKeyStore
 import eth.serotine.domain.usecase.ObserveAccounts
 import eth.serotine.domain.usecase.ObserveCowOrder
 import eth.serotine.domain.usecase.ObserveCowOrderLife
+import eth.serotine.domain.usecase.ObserveSyncPolicy
 import eth.serotine.domain.usecase.QuoteCowCancellation
 import eth.serotine.domain.usecase.RebroadcastTransfer
 import eth.serotine.domain.usecase.SendCowCancellation
@@ -41,6 +46,7 @@ import eth.serotine.ui.FakeSigner
 import eth.serotine.ui.FakeTransactionInputs
 import eth.serotine.ui.MemoryCowOrders
 import eth.serotine.ui.MemorySentTransfers
+import eth.serotine.ui.MemorySyncPolicy
 import kotlin.test.assertFalse
 import kotlin.time.Duration.Companion.seconds
 import kotlinx.coroutines.CompletableDeferred
@@ -108,6 +114,7 @@ class CowOrderViewModelTest {
     private val sent = MemorySentTransfers()
     private val signer = FakeSigner()
     private val broadcaster = FakeBroadcaster()
+    private val policy = MemorySyncPolicy()
     private val status = MutableStateFlow<LightClientStatus>(
         LightClientStatus.Synced(9_412_118, validTo - 200, FinalizedBlock(9_412_050, validTo - 1_000)),
     )
@@ -136,10 +143,11 @@ class CowOrderViewModelTest {
             ObserveCowOrderLife(cowApi, Network.SEPOLIA),
             ObserveAccounts(accounts),
             DescribeKeyStore(FakeKeys()),
-            QuoteCowCancellation(inputs, balances, sent, cowChain, light, Network.SEPOLIA) { now },
+            QuoteCowCancellation(inputs, balances, sent, cowChain, light, Network.SEPOLIA, Outbox.None) { now },
             SendCowCancellation(signer, broadcaster, sent) { now },
             RebroadcastTransfer(broadcaster, sent, FakeReceipts()),
             Network.SEPOLIA,
+            ObserveSyncPolicy(policy),
             clock = { now },
             formatTime = { "at $it" },
         )
@@ -339,4 +347,20 @@ class CowOrderViewModelTest {
     }
 
     private fun ByteArray.hex(): String = joinToString("") { (it.toInt() and 0xff).toString(16).padStart(2, '0') }
+    @Test
+    fun inLenientModeACancellationWhoseReadWaitsForTheSyncSaysTheSettingDoesNotReachIt() = runTest {
+        // The settlement's count of the order filled waits for the light client to catch up.
+        cowChain.answers[settlement to GPv2Settlement.filledAmount(record.uid).hex()] =
+            Simulation.Unavailable(ReadUnavailable.SYNCING)
+        for ((chosen, said) in listOf(SyncPolicy.STRICT to false, SyncPolicy.LENIENT to true)) {
+            policy.policy.value = chosen
+            val viewModel = viewModel()
+            viewModel.cancel()
+            runCurrent()
+
+            val error = assertNotNull(viewModel.shown.error)
+            assertTrue(error.startsWith("The light client is still syncing"), error)
+            assertEquals(said, "Sign while syncing does not apply to swaps" in error, error)
+        }
+    }
 }

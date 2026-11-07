@@ -10,6 +10,8 @@ import eth.serotine.domain.repository.CowOrderEnd
 import eth.serotine.domain.repository.CowOrderRecord
 import eth.serotine.domain.repository.HistoryEntry
 import eth.serotine.domain.repository.HistoryList
+import eth.serotine.domain.repository.OutboxList
+import eth.serotine.domain.repository.QueuedTransaction
 import eth.serotine.domain.repository.SentAction
 import eth.serotine.domain.repository.SentOutcome
 import eth.serotine.domain.repository.WaitingSwap
@@ -20,17 +22,22 @@ import eth.serotine.domain.usecase.ObserveAccountCowOrders
 import eth.serotine.domain.usecase.ObserveAccountHistory
 import eth.serotine.domain.usecase.ObserveAccounts
 import eth.serotine.domain.usecase.ObserveKnownTokens
+import eth.serotine.domain.usecase.ObserveOutbox
 import eth.serotine.domain.usecase.ObserveSafeHistory
 import eth.serotine.domain.usecase.ObserveSentToAddresses
 import eth.serotine.domain.usecase.ObserveTokenTransfers
 import eth.serotine.domain.usecase.ObserveWaitingSwaps
 import eth.serotine.domain.usecase.SafeChainEvent
 import eth.serotine.domain.usecase.TokenTransferEvent
+import eth.serotine.ui.components.epochSecondsNow
 import eth.serotine.ui.components.grouped
+import eth.serotine.ui.outbox.redatedAtTheirHour
 import eth.serotine.ui.platform.formatDateTime
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.onStart
 
 /**
  * What an account's Activity shows, its detail's Activity tab (docs/wallet-ux.md, screen 25;
@@ -45,8 +52,10 @@ import kotlinx.coroutines.flow.map
  * the same. The CoW orders the account signed here ([ObserveAccountCowOrders]) are listed among
  * the transactions, and open their status. Every row goes by when it happened, newest first
  * ([merged]). Above them, each swap whose next step waits for the user ([ObserveWaitingSwaps]),
- * said from its approval's outcome in the account's history. [formatTime] dates each in the
- * user's own time zone. A row opens its detail, which is navigation.
+ * said from its approval's outcome in the account's history; and before everything, what the
+ * account has queued in lenient mode ([ObserveOutbox]; docs/lenient-mode.md, *Where it shows*).
+ * [formatTime] dates each in the user's own time zone. A row opens its detail, which is
+ * navigation; a queued one, its status.
  */
 class AccountActivity(
     private val observeAccountHistory: ObserveAccountHistory,
@@ -57,6 +66,9 @@ class AccountActivity(
     private val observeSentTo: ObserveSentToAddresses,
     private val observeCowOrders: ObserveAccountCowOrders,
     private val observeWaitingSwaps: ObserveWaitingSwaps,
+    private val observeOutbox: ObserveOutbox,
+    /** Now, in unix seconds: whether a queued transaction is past its hour, and waits for the user's answer. */
+    private val now: () -> Long = ::epochSecondsNow,
     private val formatTime: (Long) -> String = ::formatDateTime,
 ) {
 
@@ -81,13 +93,23 @@ class AccountActivity(
             observeSentTo,
         )
 
+        /** What the account has queued in lenient mode; an outbox that cannot be read lists none. */
+        private val queued: Flow<List<QueuedTransaction>> = observeOutbox()
+            .map { list -> (list as? OutboxList.Loaded)?.queued.orEmpty().filter { it.accountId == account } }
+            // Nothing queued until the outbox is read: the Activity never waits for it.
+            .onStart { emit(emptyList()) }
+            .distinctUntilChanged()
+            // Drawn again when one passes its hour: "Waiting to send" becomes "Waiting for your answer".
+            .redatedAtTheirHour(now)
+
         val state: Flow<ActivityUiState> = combine(
             combine(
                 observeAccountHistory(account),
                 observeCowOrders(account),
                 observeWaitingSwaps(account),
                 hideAmounts,
-            ) { history, orders, waiting, hidden -> SentHere(history, orders, waiting, hidden) },
+                queued,
+            ) { history, orders, waiting, hidden, queued -> SentHere(history, orders, waiting, hidden, queued) },
             sources.parties,
             sources.safeHistory,
             sources.transfers,
@@ -120,6 +142,7 @@ class AccountActivity(
                 requests = ActivityRows.requestsIn(entries),
             )
             val waiting = sentHere.waiting.map { waitingStep(it, entries, tokens, rows) }
+            val queued = sentHere.queued.map { rows.queuedRow(it, names, now()) }
             val safeEvents = (safe as? IndexedHistory.Read)?.events.orEmpty()
             val tokenEvents = (transfers as? IndexedHistory.Read)?.events.orEmpty()
             // When each block was produced, as the engine reported it with any event in it: what a
@@ -143,7 +166,9 @@ class AccountActivity(
                 val block = it.end?.placedAt
                 Listed(rows.orderRow(it), block, pending = it.live, moment = block?.let(blockTimes::get) ?: it.signedAt)
             }
-            if (transfers == null) return ActivityUiState.Shown(merged(sent, emptyList()), COVERAGE, waiting = waiting)
+            if (transfers == null) {
+                return ActivityUiState.Shown(merged(sent, emptyList()), COVERAGE, waiting = waiting, queued = queued)
+            }
             // Only a row that names its block says what its logs say: one no block was seen for (a
             // transaction mined while the app was closed) gets the verified log beside it.
             val seenInBlocks = entries.filter { it.outcome.blockNumberOrNull != null }.associateBy { it.transfer.hash }
@@ -205,6 +230,7 @@ class AccountActivity(
                 empty = "Nothing listed yet.",
                 simpleCoverage = simple,
                 waiting = waiting,
+                queued = queued,
             )
         }
 
@@ -248,13 +274,14 @@ class AccountActivity(
 
     /**
      * What this device sent for the account: its [history], its CoW [orders], and its swaps [waiting]
-     * for a step; and whether amounts are [hidden].
+     * for a step; whether amounts are [hidden]; and what it has [queued] in lenient mode.
      */
     private data class SentHere(
         val history: HistoryList,
         val orders: List<CowOrderRecord>,
         val waiting: List<WaitingSwap>,
         val hidden: Boolean,
+        val queued: List<QueuedTransaction>,
     )
 
     /**

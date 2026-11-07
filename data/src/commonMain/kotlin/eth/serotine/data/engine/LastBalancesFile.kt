@@ -14,8 +14,10 @@ import kotlinx.serialization.json.Json
  * [VersionedJsonFile]) so that after a restart a row shows them as last known until a head can
  * be read again (owner's request, 2026-10-19). Each entry is public chain data: an amount, the
  * block it was proven at and the time of the head it was proven at, under an address (or a holder
- * and a token); no key material. Shown only, never acted on: a quote and a signature read a fresh
- * proof (docs/wallet-ux.md).
+ * and a token); no key material. Shown, and never acted on but by a lenient draft, labelled with
+ * its age, which is sent only after the check at a fresh head (owner rulings, 2026-11-06;
+ * docs/lenient-mode.md): a strict quote and signature, and that check, read a fresh proof
+ * (docs/wallet-ux.md).
  *
  * At most [maxKept] entries ([MAX_KEPT] but in tests), the least recently proven dropped first.
  * A balance is written again only when it changed or its stored proof is [REWRITE_AFTER_BLOCKS]

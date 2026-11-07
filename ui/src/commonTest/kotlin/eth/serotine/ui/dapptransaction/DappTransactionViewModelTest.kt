@@ -18,10 +18,12 @@ import eth.serotine.domain.repository.DappRequest
 import eth.serotine.domain.repository.DappRequestError
 import eth.serotine.domain.repository.DappRequestId
 import eth.serotine.domain.repository.DappSessionId
+import eth.serotine.domain.repository.Outbox
 import eth.serotine.domain.repository.Signing
 import eth.serotine.domain.repository.Simulation
 import eth.serotine.domain.usecase.DescribeKeyStore
 import eth.serotine.domain.usecase.ObserveDappMessages
+import eth.serotine.domain.usecase.ObserveSyncPolicy
 import eth.serotine.domain.usecase.ProposeDappSafeTx
 import eth.serotine.domain.usecase.QuoteDappTransaction
 import eth.serotine.domain.usecase.RefuseDappRequest
@@ -39,6 +41,7 @@ import eth.serotine.ui.FakeTokenCatalog
 import eth.serotine.ui.FakeTransactionInputs
 import eth.serotine.ui.MemoryNetworkSettings
 import eth.serotine.ui.MemorySentTransfers
+import eth.serotine.ui.MemorySyncPolicy
 import eth.serotine.ui.SafeWorld
 import eth.serotine.ui.components.STALE_QUOTE
 import kotlinx.coroutines.Dispatchers
@@ -108,13 +111,19 @@ class DappTransactionViewModelTest {
         val vm = DappTransactionViewModel(
             "t/$id",
             ObserveDappMessages(requests, accounts, networks, catalog, clock = { now }),
-            QuoteDappTransaction(requests, accounts, networks, catalog, balances, inputs, sent, history, clock = { now }),
+            QuoteDappTransaction(
+                requests, accounts, networks, catalog, balances, inputs, sent, history, Outbox.None, clock = { now },
+            ),
             SendDappTransaction(requests, accounts, networks, signer, broadcaster, sent, history, FakeReceipts(), clock = { now }),
             // A Safe's side, never reached from an account held here.
-            ProposeDappSafeTx(requests, accounts, networks, catalog, safes.observeSafe, balances, inputs, safes.queue, clock = { now }),
+            ProposeDappSafeTx(
+                requests, accounts, networks, catalog, safes.observeSafe, balances, inputs, safes.queue, Outbox.None,
+                clock = { now },
+            ),
             SignDappSafeTx(requests) { SignSafeTx(signer, safes.observeSafe, safes.recovery, safes.queue, it) },
             RefuseDappRequest(requests, accounts, networks, clock = { now }),
             DescribeKeyStore(FakeKeys()),
+            observeSyncPolicy = ObserveSyncPolicy(MemorySyncPolicy()),
             clock = { now },
             timeSource = clock,
             ticks = kotlinx.coroutines.flow.flowOf(Unit),

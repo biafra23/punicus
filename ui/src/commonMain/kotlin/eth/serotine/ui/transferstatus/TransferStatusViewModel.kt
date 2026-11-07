@@ -2,34 +2,51 @@ package eth.serotine.ui.transferstatus
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import eth.serotine.domain.model.Address
 import eth.serotine.domain.model.Network
 import eth.serotine.domain.model.TransferAsset
 import eth.serotine.domain.model.Token
 import eth.serotine.domain.model.UInt256
 import eth.serotine.domain.repository.AccountList
-import eth.serotine.domain.repository.Broadcast
+import eth.serotine.domain.repository.LightClientStatus
+import eth.serotine.domain.repository.OutboxList
+import eth.serotine.domain.repository.QueuedTransaction
 import eth.serotine.domain.repository.ReadUnavailable
 import eth.serotine.domain.repository.SafeListing
 import eth.serotine.domain.repository.SentAction
 import eth.serotine.domain.repository.SentOutcome
 import eth.serotine.domain.repository.SentTransfer
 import eth.serotine.domain.repository.TransactionProgress
+import eth.serotine.domain.usecase.ConfirmQueued
+import eth.serotine.domain.usecase.DiscardQueued
 import eth.serotine.domain.usecase.ObserveAccounts
+import eth.serotine.domain.usecase.ObserveEnabledNetworks
+import eth.serotine.domain.usecase.ObserveLightClient
+import eth.serotine.domain.usecase.ObserveOutbox
 import eth.serotine.domain.usecase.ObserveSentTransfer
+import eth.serotine.domain.usecase.QUEUED_UNATTENDED_SECONDS
+import eth.serotine.domain.usecase.QueuedDiscard
 import eth.serotine.domain.usecase.RebroadcastTransfer
 import eth.serotine.domain.usecase.SentTransferStatus
 import eth.serotine.domain.usecase.TransferSending
 import eth.serotine.ui.components.Eip55
 import eth.serotine.ui.components.NotSentItem
+import eth.serotine.ui.components.agoText
 import eth.serotine.ui.components.displaySymbol
+import eth.serotine.ui.components.epochSecondsNow
 import eth.serotine.ui.components.grouped
 import eth.serotine.ui.components.notSentItem
+import eth.serotine.ui.components.redatedWhile
+import eth.serotine.ui.outbox.conflictReason
 import eth.serotine.ui.platform.formatDateTime
 import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
@@ -49,6 +66,14 @@ import kotlinx.coroutines.withContext
  * A Safe's deployment is listed in the wallet by `FollowSafeDeployments`, which the host runs
  * whatever screen is open (docs/wallet-ux.md, screen 15); this screen only shows where that
  * stands, from the deployment's record and the account list ([ObserveAccounts]).
+ *
+ * While [hash] names a transfer queued in lenient mode ([ObserveOutbox]; docs/lenient-mode.md, *The
+ * outbox*), the screen shows it instead, dated against [clock] (unix seconds) and saying what it
+ * waits for: its network's light client to verify ([ObserveLightClient]), or the network, off, to be
+ * turned on ([ObserveEnabledNetworks]). Its own intents: [discard] ([DiscardQueued]), [signAgain] (a
+ * discard, then Send filled in with it) and, past its hour, [confirm] ([ConfirmQueued]). A discard is
+ * told as one only when it deleted the transfer: one whose broadcast ran, or that was sent meanwhile,
+ * never is. Once sent, the same id is the sent transfer's hash, shown as above.
  */
 class TransferStatusViewModel(
     private val hash: String,
@@ -56,7 +81,13 @@ class TransferStatusViewModel(
     observeAccounts: ObserveAccounts,
     private val rebroadcastTransfer: RebroadcastTransfer,
     private val network: Network,
+    observeOutbox: ObserveOutbox,
+    observeLightClient: ObserveLightClient,
+    observeEnabledNetworks: ObserveEnabledNetworks,
+    private val discardQueued: DiscardQueued,
+    private val confirmQueued: ConfirmQueued,
     private val formatTime: (Long) -> String = ::formatDateTime,
+    private val clock: () -> Long = ::epochSecondsNow,
 ) : ViewModel() {
 
     /** A retry of a transaction maybe sent: [running], and what the last one came to ([outcome], null: none yet). */
@@ -64,21 +95,312 @@ class TransferStatusViewModel(
 
     private val retrying = MutableStateFlow(Retry())
 
+    /**
+     * What the user did with a queued transfer: [discarding] or [confirming] while that runs,
+     * [discarded] once a discard deleted it, [gone] when a discard found it no longer queued (sent
+     * meanwhile, or discarded already), [reopen] what Send opens with after Sign again or Edit, and
+     * [error] a change that could not be made.
+     */
+    private data class Changes(
+        val discarding: Boolean = false,
+        val confirming: Boolean = false,
+        val discarded: Boolean = false,
+        val gone: Boolean = false,
+        val reopen: SendAgain? = null,
+        val reopenSafe: SafeTxAgain? = null,
+        val error: String? = null,
+    )
+
+    /** What a queued transfer waits for to be checked and sent. */
+    private enum class Waits {
+        /** Its network's light client to catch up. */
+        CATCHING_UP,
+
+        /** Nothing: the light client verifies, so it is checked and sent once it checks out. */
+        NOTHING,
+
+        /** Its network, off, to be turned on: it runs no light client meanwhile. */
+        NETWORK_ON,
+    }
+
+    private val changes = MutableStateFlow(Changes())
+
     /** The status as last read: what [retry] sends again. */
     private var latest: SentTransferStatus? = null
 
+    /** The transfer queued under [hash], as last read: what [discard], [signAgain] and [confirm] act on. */
+    private var queuedNow: QueuedTransaction? = null
+
+    /** The transfer last read as queued under [hash]: what the screen shows while a discard of it runs. */
+    private var lastQueued: QueuedTransaction? = null
+
+    /** Whether the outbox can be read, and whether it lost what it held: what an id found nowhere is said as. */
+    private val outboxState: Flow<OutboxState> = observeOutbox()
+        .map { list ->
+            when {
+                list is OutboxList.Unreadable -> OutboxState.UNREADABLE
+                (list as? OutboxList.Loaded)?.lost == true -> OutboxState.LOST
+                else -> OutboxState.READ
+            }
+        }
+        .distinctUntilChanged()
+
+    /** The transfer queued under [hash] on [network], null while none is (or the outbox cannot be read). */
+    private val queued: Flow<QueuedTransaction?> = observeOutbox()
+        .map { list ->
+            (list as? OutboxList.Loaded)?.queued?.firstOrNull { it.network == network && it.id.equals(hash, true) }
+        }
+        .distinctUntilChanged()
+        .onEach { queued ->
+            queuedNow = queued
+            if (queued != null) lastQueued = queued
+        }
+
+    /** What a queued transfer waits for: its network turned on, its light client to catch up, or nothing. */
+    private val waits: Flow<Waits> =
+        combine(observeLightClient(network), observeEnabledNetworks()) { status, on ->
+            when {
+                network !in on -> Waits.NETWORK_ON
+                status is LightClientStatus.Synced -> Waits.NOTHING
+                else -> Waits.CATCHING_UP
+            }
+        }.distinctUntilChanged()
+
     val uiState: StateFlow<TransferStatusUiState> =
         combine(
-            observeSentTransfer(network, hash).onEach { latest = it },
-            observeAccounts(),
-            retrying,
-            ::render,
-        ).stateIn(
-            viewModelScope,
-            // Back after the timeout, no old step stands as current.
-            SharingStarted.WhileSubscribed(stopTimeoutMillis = 5_000, replayExpirationMillis = 0),
-            TransferStatusUiState.Loading(network.displayName),
+            combine(observeSentTransfer(network, hash).onEach { latest = it }, observeAccounts(), retrying, ::Read),
+            queued,
+            waits,
+            changes,
+            outboxState,
+        ) { read, queued, waits, changes, outbox -> Inputs(read, queued, waits, changes, outbox) }
+            // A queued transfer's hour, and its age, are dated anew every second.
+            .redatedWhile { it.queued != null }
+            .map(::render)
+            .stateIn(
+                viewModelScope,
+                // Back after the timeout, no old step stands as current.
+                SharingStarted.WhileSubscribed(stopTimeoutMillis = 5_000, replayExpirationMillis = 0),
+                TransferStatusUiState.Loading(network.displayName),
+            )
+
+    /** The sent transfer's [status] as read, the account [list] and the [retry] of one maybe sent. */
+    private data class Read(val status: SentTransferStatus, val list: AccountList, val retry: Retry)
+
+    /** Everything the screen is drawn from: [read], what is [queued] under the id, and what that [waits] for. */
+    private data class Inputs(
+        val read: Read,
+        val queued: QueuedTransaction?,
+        val waits: Waits,
+        val changes: Changes,
+        val outbox: OutboxState,
+    )
+
+    /** What the outbox says of itself. */
+    private enum class OutboxState { READ, UNREADABLE, LOST }
+
+    /**
+     * Discards the queued transfer: its signature is deleted, and nothing is sent. It waits while
+     * its check runs; one a peer took meanwhile is shown as sent, never as discarded.
+     */
+    fun discard() = discard(reopen = false)
+
+    /**
+     * Sign again (after a conflict) or Edit: the queued transfer discarded, then Send opened with it
+     * filled in ([TransferStatusUiState.Discarded.reopen]), to be reviewed and signed anew.
+     */
+    fun signAgain() = discard(reopen = true)
+
+    private fun discard(reopen: Boolean) {
+        val queued = queuedNow ?: return
+        val current = changes.value
+        if (queued.sending || current.discarding || current.discarded || current.gone) return
+        val again = if (reopen) sendAgainOf(queued) else null
+        val safeAgain = if (reopen) safeAgainOf(queued) else null
+        if (reopen && again == null && safeAgain == null) return
+        changes.value = current.copy(discarding = true, error = null)
+        viewModelScope.launch {
+            // To its end even when the screen is left meanwhile: a discard is made or not, never half.
+            val outcome = withContext(NonCancellable) {
+                try {
+                    discardQueued(queued.accountId, queued.id)
+                } catch (e: Exception) {
+                    QueuedDiscard.NotSaved // the use case promises not to throw; the backstop
+                }
+            }
+            val latest = changes.value.copy(discarding = false)
+            changes.value = when (outcome) {
+                // Only a transfer this discard deleted is told as discarded, and only then is Send reopened.
+                QueuedDiscard.Discarded -> latest.copy(discarded = true, reopen = again, reopenSafe = safeAgain)
+                QueuedDiscard.Gone -> latest.copy(gone = true)
+                QueuedDiscard.BeingSent -> latest.copy(error = BEING_SENT_NOT_DISCARDED)
+                QueuedDiscard.NotSaved -> latest.copy(error = DISCARD_NOT_SAVED)
+            }
+        }
+    }
+
+    /**
+     * Still send this: the queued transfer past its hour, sent once its check passes within the hour
+     * from now, with no new signature (decision 4).
+     */
+    fun confirm() {
+        val queued = queuedNow ?: return
+        val current = changes.value
+        if (queued.signed == null || current.confirming || current.discarding) return
+        changes.value = current.copy(confirming = true, error = null)
+        viewModelScope.launch {
+            val saved = withContext(NonCancellable) {
+                try {
+                    confirmQueued(queued.accountId, queued.id)
+                } catch (e: Exception) {
+                    false // the use case promises not to throw; the backstop
+                }
+            }
+            // Not saved because a conflict deleted its bytes, or it was sent, meanwhile: the screen says that.
+            val stillAsks = queuedNow?.let { it.signed != null && it.conflict == null } == true
+            changes.value = changes.value.copy(confirming = false, error = CONFIRM_NOT_SAVED.takeIf { !saved && stillAsks })
+        }
+    }
+
+    private fun render(inputs: Inputs): TransferStatusUiState {
+        val (read, queued, waits, changes, outbox) = inputs
+        val transfer = read.status.transfer
+        // While its discard runs, the transfer is shown as it was, until the discard's outcome is known.
+        val shown = queued ?: lastQueued.takeIf { changes.discarding && transfer == null }
+        if (shown != null && !changes.discarded) return queuedState(shown, waits, changes)
+        // Deleted under the outbox's lock before any broadcast of it: nothing was sent.
+        if (changes.discarded) {
+            return TransferStatusUiState.Discarded(network.displayName, DISCARDED, changes.reopen, changes.reopenSafe)
+        }
+        // No longer queued when the discard came: sent meanwhile (its record follows), or discarded already.
+        if (changes.gone && transfer == null) {
+            return TransferStatusUiState.Discarded(network.displayName, NO_LONGER_QUEUED)
+        }
+        // Neither queued nor recorded: never drawn as handed to the network, which nothing says it was.
+        // The follower records a send before it lets the transfer go from the outbox, so one sent has its record.
+        if (transfer == null) {
+            when {
+                outbox == OutboxState.UNREADABLE ->
+                    return TransferStatusUiState.Discarded(network.displayName, OUTBOX_UNREADABLE)
+                outbox == OutboxState.LOST -> return TransferStatusUiState.Discarded(network.displayName, OUTBOX_LOST)
+                lastQueued != null -> return TransferStatusUiState.Discarded(network.displayName, LEFT_THE_OUTBOX)
+            }
+        }
+        val sent = render(read.status, read.list, read.retry)
+        // A discard that came after a peer took it: it was sent, and is never told as discarded.
+        return if (changes.gone) sent.copy(note = sent.note ?: SENT_BEFORE_DISCARD) else sent
+    }
+
+    /** [queued] as the screen shows it while it waits in the outbox. */
+    private fun queuedState(
+        queued: QueuedTransaction,
+        waits: Waits,
+        changes: Changes,
+    ): TransferStatusUiState.Queued {
+        val now = clock()
+        val name = network.displayName
+        val conflict = queued.conflict
+        val since = queued.confirmedAt ?: queued.signedAt
+        val pastItsHour = conflict == null && !queued.sending && now - since > QUEUED_UNATTENDED_SECONDS
+        val signedAgo = agoText(queued.signedAt, now)
+        val first = when {
+            conflict != null -> StatusStep(
+                "Needs your signature again",
+                StepState.FAILED,
+                "${conflictReason(conflict, queued)} Nothing was sent, and its signature was deleted.",
+            )
+            queued.sending -> StatusStep("Sending…", StepState.WAITING, BEING_SENT)
+            pastItsHour -> StatusStep(
+                "Queued",
+                StepState.UNKNOWN,
+                "Not sent by itself after an hour: it waits for you.",
+            )
+            waits == Waits.NETWORK_ON -> StatusStep(
+                "Queued",
+                StepState.UNKNOWN,
+                "$name is off, so nothing checks or sends it: turn $name on in Settings to send it.",
+            )
+            waits == Waits.NOTHING -> StatusStep(
+                "Queued",
+                StepState.WAITING,
+                "$name has caught up: it's checked on chain, and sent once it checks out.",
+            )
+            else -> StatusStep(
+                "Queued",
+                StepState.WAITING,
+                "Waits for $name to catch up. Keep Serotine open to send it sooner.",
+            )
+        }
+        val signed = if (conflict != null) {
+            StatusStep("Signed", StepState.UNKNOWN, "On this device, ${formatTime(queued.signedAt)}: deleted since")
+        } else {
+            StatusStep("Signed", StepState.DONE, "On this device, ${formatTime(queued.signedAt)}")
+        }
+        val broadcast = if (conflict != null) {
+            StatusStep("Broadcast", StepState.UNKNOWN, "Not sent", simpleLabel = "Sent", simpleDetail = "Not sent")
+        } else {
+            StatusStep(
+                "Broadcast",
+                StepState.WAITING,
+                "Once it checks out at a fresh verified head",
+                simpleLabel = "Sent",
+                simpleDetail = "Once it checks out on chain",
+            )
+        }
+        val action = if (conflict != null) "Sign again" else "Edit"
+        val safeAgain = safeAgainOf(queued)
+        return TransferStatusUiState.Queued(
+            network = name,
+            id = queued.id,
+            sent = summary(queued.action, queued.account),
+            // Signed on this device first; then it waits in the outbox; then it is sent.
+            steps = listOf(signed, first, broadcast),
+            again = sendAgainOf(queued),
+            safeAgain = safeAgain,
+            safeTx = safeTxSummary(queued.action, queued.account),
+            againLabel = action,
+            againNote = if (safeAgain != null) {
+                if (conflict != null) {
+                    "Sign again discards it and opens its Safe transaction, to approve or execute it anew."
+                } else {
+                    "Edit discards it and opens its Safe transaction. Discard deletes its signature: nothing is sent."
+                }
+            } else if (conflict != null) {
+                "Sign again discards it and opens Send with it filled in, to be reviewed and signed anew."
+            } else {
+                "Edit discards it and opens Send with it filled in. Discard deletes its signature: nothing is sent."
+            },
+            question = "Still send this? You signed it $signedAgo.".takeIf { pastItsHour },
+            confirming = changes.confirming,
+            busy = BEING_SENT.takeIf { queued.sending },
+            discarding = changes.discarding,
+            error = changes.error,
         )
+    }
+
+    /** The Safe transaction [queued] approves or executes, which Sign again and Edit open: null for anything else. */
+    private fun safeAgainOf(queued: QueuedTransaction): SafeTxAgain? {
+        val request = when (val action = queued.action) {
+            is SentAction.SafeApproval -> action.request
+            is SentAction.SafeExecution -> action.request
+            else -> return null
+        }
+        return SafeTxAgain(queued.network.chainId, request.safe.hex, "0x" + request.hash.hex)
+    }
+
+    /** What Send opens with to sign [queued] again: its account, asset, recipient, amount and fee level. */
+    private fun sendAgainOf(queued: QueuedTransaction): SendAgain? {
+        val transfer = queued.action as? SentAction.Transfer ?: return null
+        val (_, decimals, _) = shown(transfer.asset)
+        return SendAgain(
+            chainId = queued.network.chainId,
+            from = queued.account.hex,
+            asset = (transfer.asset as? TransferAsset.Erc20Token)?.token?.address?.hex,
+            to = transfer.to.hex,
+            amount = transfer.amount.formatUnits(decimals),
+            fee = queued.level,
+        )
+    }
 
     /**
      * Broadcasts the transaction maybe sent again, byte for byte: only while its record says so and
@@ -195,7 +517,7 @@ class TransferStatusViewModel(
         return TransferStatusUiState.Shown(
             network = network.displayName,
             hash = hash,
-            sent = transfer?.let(::summary),
+            sent = transfer?.let { summary(it.action, it.account) },
             steps = listOf(signed, broadcast, included, finalized),
             note = when {
                 progress is TransactionProgress.Unavailable -> unavailable(progress.reason)
@@ -427,22 +749,25 @@ class TransferStatusViewModel(
         )
     }
 
-    /** What [transfer] sent, when it is a transfer. */
-    private fun summary(transfer: SentTransfer): SentSummary? {
-        val sent = transfer.action as? SentAction.Transfer ?: return null
+    /** What [action] from [account] sends, when it is a transfer. */
+    private fun summary(action: SentAction, account: Address): SentSummary? {
+        val sent = action as? SentAction.Transfer ?: return null
         val (symbol, decimals, icon) = shown(sent.asset)
         return SentSummary(
             amount = "${sent.amount.formatUnits(decimals)} $symbol",
             symbol = symbol,
             icon = icon,
             to = Eip55.format(sent.to),
-            from = Eip55.format(transfer.account),
+            from = Eip55.format(account),
         )
     }
 
     /** What [transfer] did, when it is an approval or an execution of a Safe transaction. */
-    private fun safeTxSummary(transfer: SentTransfer): SafeTxSummary? {
-        val (title, request) = when (val action = transfer.action) {
+    private fun safeTxSummary(transfer: SentTransfer): SafeTxSummary? = safeTxSummary(transfer.action, transfer.account)
+
+    /** What [action] from [account] does, when it is an approval or an execution of a Safe transaction. */
+    private fun safeTxSummary(action: SentAction, account: Address): SafeTxSummary? {
+        val (title, request) = when (action) {
             is SentAction.SafeApproval -> "Approval of a Safe transaction" to action.request
             is SentAction.SafeExecution -> "Execution of a Safe transaction" to action.request
             is SentAction.Transfer, is SentAction.SafeDeployment, is SentAction.TokenApproval,
@@ -454,7 +779,7 @@ class TransferStatusViewModel(
             title = title,
             safe = Eip55.format(request.safe),
             nonce = "Safe nonce ${request.nonce}",
-            from = Eip55.format(transfer.account),
+            from = Eip55.format(account),
         )
     }
 
@@ -471,5 +796,24 @@ class TransferStatusViewModel(
     private companion object {
         const val NATIVE_DECIMALS = 18
         const val RETRY_FAILED = "Serotine could not finish sending it again. Try again."
+
+        /** Why Discard and Edit wait while a queued transfer's check and broadcast run. */
+        const val BEING_SENT = "It's being checked and sent."
+        const val DISCARDED = "Discarded: its signature was deleted, and nothing was sent."
+        const val SENT_BEFORE_DISCARD = "It was sent before it could be discarded."
+        const val OUTBOX_UNREADABLE = "The transactions waiting to be sent on this device cannot be read right " +
+            "now, so where this one stands is not known. Nothing is sent from this wallet until they can be read; " +
+            "Serotine keeps trying."
+        const val OUTBOX_LOST = "A transaction waiting to be sent was lost: the key that sealed it on this device " +
+            "is gone. If it was being sent when Serotine last closed, it may have gone out. Before you sign it " +
+            "again, wait until Serotine has caught up, and check the account's balance, or for a Safe, its queue."
+        const val LEFT_THE_OUTBOX = "It is no longer waiting to be sent from this device, and there is no record " +
+            "of it being sent."
+        const val NO_LONGER_QUEUED =
+            "It is no longer waiting to be sent from this device: it was sent, or discarded, meanwhile."
+        const val BEING_SENT_NOT_DISCARDED =
+            "It's being checked and sent, so it was not discarded: it may reach the network. Its status follows."
+        const val DISCARD_NOT_SAVED = "The outbox could not be changed, so it is still queued. Try again."
+        const val CONFIRM_NOT_SAVED = "Your answer could not be saved, so it still waits for you. Try again."
     }
 }

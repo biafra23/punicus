@@ -10,8 +10,8 @@ If the folder grows too much, there are two levers, both the owner's. Deleting t
 
 | Screen | Folder | States |
 |---|---|---|
-| [Account detail](#account-detail) | `account-detail/` | 42 |
-| [Accounts](#accounts) | `accounts/` | 32 |
+| [Account detail](#account-detail) | `account-detail/` | 44 |
+| [Accounts](#accounts) | `accounts/` | 35 |
 | [Activity detail](#activity-detail) | `activity-detail/` | 10 |
 | [Add on networks (dialog)](#add-on-networks-dialog) | `add-on-networks-dialog/` | 5 |
 | [Add token](#add-token) | `add-token/` | 11 |
@@ -32,34 +32,34 @@ If the folder grows too much, there are two levers, both the owner's. Deleting t
 | [Remove account (dialog)](#remove-account-dialog) | `remove-account-dialog/` | 7 |
 | [Rename account (dialog)](#rename-account-dialog) | `rename-account-dialog/` | 6 |
 | [Import Safe](#safe-import) | `safe-import/` | 7 |
-| [Propose Safe transaction](#safe-propose) | `safe-propose/` | 13 |
+| [Propose Safe transaction](#safe-propose) | `safe-propose/` | 17 |
 | [Safe settings](#safe-settings) | `safe-settings/` | 17 |
 | [Safe swap](#safe-swap) | `safe-swap/` | 13 |
-| [Safe transaction](#safe-tx) | `safe-tx/` | 34 |
+| [Safe transaction](#safe-tx) | `safe-tx/` | 45 |
 | [Screen capture warning (dialog)](#screen-capture-warning-dialog) | `screen-capture-warning-dialog/` | 3 |
 | [Security](#security) | `security/` | 15 |
-| [Send](#send) | `send/` | 23 |
-| [Settings](#settings) | `settings/` | 17 |
-| [Account detail (simple mode)](#simple-account-detail) | `simple-account-detail/` | 11 |
-| [Home (simple mode)](#simple-accounts) | `simple-accounts/` | 13 |
+| [Send](#send) | `send/` | 32 |
+| [Settings](#settings) | `settings/` | 21 |
+| [Account detail (simple mode)](#simple-account-detail) | `simple-account-detail/` | 12 |
+| [Home (simple mode)](#simple-accounts) | `simple-accounts/` | 16 |
 | [Activity detail (simple mode)](#simple-activity-detail) | `simple-activity-detail/` | 4 |
 | [Add token (simple mode)](#simple-add-token) | `simple-add-token/` | 2 |
 | [CoW order (simple mode)](#simple-cow-order) | `simple-cow-order/` | 3 |
 | [Create Safe (simple mode)](#simple-create-safe) | `simple-create-safe/` | 3 |
 | [Import Safe (simple mode)](#simple-safe-import) | `simple-safe-import/` | 3 |
-| [Propose Safe transaction (simple mode)](#simple-safe-propose) | `simple-safe-propose/` | 4 |
+| [Propose Safe transaction (simple mode)](#simple-safe-propose) | `simple-safe-propose/` | 6 |
 | [Safe settings (simple mode)](#simple-safe-settings) | `simple-safe-settings/` | 5 |
 | [Safe swap (simple mode)](#simple-safe-swap) | `simple-safe-swap/` | 4 |
-| [Safe transaction (simple mode)](#simple-safe-tx) | `simple-safe-tx/` | 7 |
-| [Send (simple mode)](#simple-send) | `simple-send/` | 5 |
-| [Settings (simple mode)](#simple-settings) | `simple-settings/` | 3 |
+| [Safe transaction (simple mode)](#simple-safe-tx) | `simple-safe-tx/` | 15 |
+| [Send (simple mode)](#simple-send) | `simple-send/` | 8 |
+| [Settings (simple mode)](#simple-settings) | `simple-settings/` | 6 |
 | [Swap (simple mode)](#simple-swap) | `simple-swap/` | 11 |
 | [Tokens (simple mode)](#simple-tokens) | `simple-tokens/` | 2 |
-| [Transfer status (simple mode)](#simple-transfer-status) | `simple-transfer-status/` | 5 |
+| [Transfer status (simple mode)](#simple-transfer-status) | `simple-transfer-status/` | 13 |
 | [Watch address (simple mode)](#simple-watch) | `simple-watch/` | 9 |
 | [Swap](#swap) | `swap/` | 38 |
 | [Tokens](#tokens) | `tokens/` | 7 |
-| [Transfer status](#transfer-status) | `transfer-status/` | 26 |
+| [Transfer status](#transfer-status) | `transfer-status/` | 36 |
 | [Update required](#update-required) | `update-required/` | 2 |
 | [Watch address](#watch) | `watch/` | 25 |
 | [Widget setup](#widget-pair) | `widget-pair/` | 9 |
@@ -67,7 +67,7 @@ If the folder grows too much, there are two levers, both the owner's. Deleting t
 <a name="account-detail"></a>
 ## Account detail
 
-`account-detail/`, 42 states: `assets`, `assets-dark`, `checking`, `head-too-old`, `by-name-with-impostor`, `safe-assets`, `safe-owners`, `safe-queue`, `safe-queue-dark`, `safe-queue-empty`, `safe-queue-unverified`, `safe-queue-unreadable`, `safe-reading`, `not-a-safe`, `loading`, `list-unavailable`, `ens-name-moved`, `activity`, `activity-dark`, `waiting-swap`, `waiting-swap-dark`, `activity-empty`, `activity-loading`, `activity-unavailable`, `activity-tokens`, `safe-activity`, `safe-activity-dark`, `narrow`, `safe-queue-reading`, `checking-dark`, `ethereum`, `network-off`, `safe-owners-network-off`, `assets-hidden`, `assets-hidden-dark`, `nfts`, `nfts-unlisted-open-dark`, `nfts-checking`, `nfts-none`, `nft-add`, `nft-add-unavailable`, `nft-adding`
+`account-detail/`, 44 states: `assets`, `assets-dark`, `checking`, `head-too-old`, `by-name-with-impostor`, `safe-assets`, `safe-owners`, `safe-queue`, `safe-queue-dark`, `safe-queue-empty`, `safe-queue-unverified`, `safe-queue-unreadable`, `safe-reading`, `not-a-safe`, `loading`, `list-unavailable`, `ens-name-moved`, `activity`, `activity-dark`, `waiting-swap`, `waiting-swap-dark`, `activity-empty`, `activity-loading`, `activity-unavailable`, `activity-tokens`, `safe-activity`, `safe-activity-dark`, `narrow`, `safe-queue-reading`, `checking-dark`, `ethereum`, `network-off`, `safe-owners-network-off`, `assets-hidden`, `assets-hidden-dark`, `nfts`, `nfts-unlisted-open-dark`, `nfts-checking`, `nfts-none`, `nft-add`, `nft-add-unavailable`, `nft-adding`, `activity-queued`, `activity-queued-conflict-dark`
 
 <a href="account-detail/assets.png"><img src="account-detail/assets.png" width="206" alt="assets"></a>
 <a href="account-detail/assets-dark.png"><img src="account-detail/assets-dark.png" width="206" alt="assets-dark"></a>
@@ -111,11 +111,13 @@ If the folder grows too much, there are two levers, both the owner's. Deleting t
 <a href="account-detail/nft-add.png"><img src="account-detail/nft-add.png" width="206" alt="nft-add"></a>
 <a href="account-detail/nft-add-unavailable.png"><img src="account-detail/nft-add-unavailable.png" width="206" alt="nft-add-unavailable"></a>
 <a href="account-detail/nft-adding.png"><img src="account-detail/nft-adding.png" width="206" alt="nft-adding"></a>
+<a href="account-detail/activity-queued.png"><img src="account-detail/activity-queued.png" width="206" alt="activity-queued"></a>
+<a href="account-detail/activity-queued-conflict-dark.png"><img src="account-detail/activity-queued-conflict-dark.png" width="206" alt="activity-queued-conflict-dark"></a>
 
 <a name="accounts"></a>
 ## Accounts
 
-`accounts/`, 32 states: `accounts`, `accounts-dark`, `catching-up`, `head-too-old`, `head-too-old-dark`, `no-accounts`, `create-safe-greyed-out`, `create-safe-reason`, `send-reason`, `loading`, `loading-create-safe-greyed-out`, `list-set-aside`, `upgrade-ahead`, `upgrade-activated-dark`, `list-unavailable`, `catching-up-dark`, `narrow`, `ens-names`, `three-networks`, `three-networks-dark`, `one-network-catching-up`, `network-off`, `network-off-dark`, `send-needs-network`, `network-blocked`, `no-rate-on-a-network`, `network-blocked-dark`, `stale-anchor`, `stale-anchor-dark`, `stale-anchor-dialog`, `hidden`, `hidden-dark`
+`accounts/`, 35 states: `accounts`, `accounts-dark`, `catching-up`, `head-too-old`, `head-too-old-dark`, `no-accounts`, `create-safe-greyed-out`, `create-safe-reason`, `send-reason`, `loading`, `loading-create-safe-greyed-out`, `list-set-aside`, `upgrade-ahead`, `upgrade-activated-dark`, `list-unavailable`, `catching-up-dark`, `narrow`, `ens-names`, `three-networks`, `three-networks-dark`, `one-network-catching-up`, `network-off`, `network-off-dark`, `send-needs-network`, `network-blocked`, `no-rate-on-a-network`, `network-blocked-dark`, `stale-anchor`, `stale-anchor-dark`, `stale-anchor-dialog`, `hidden`, `hidden-dark`, `queued`, `queued-dark`, `lost-queued`
 
 <a href="accounts/accounts.png"><img src="accounts/accounts.png" width="206" alt="accounts"></a>
 <a href="accounts/accounts-dark.png"><img src="accounts/accounts-dark.png" width="206" alt="accounts-dark"></a>
@@ -149,6 +151,9 @@ If the folder grows too much, there are two levers, both the owner's. Deleting t
 <a href="accounts/stale-anchor-dialog.png"><img src="accounts/stale-anchor-dialog.png" width="206" alt="stale-anchor-dialog"></a>
 <a href="accounts/hidden.png"><img src="accounts/hidden.png" width="206" alt="hidden"></a>
 <a href="accounts/hidden-dark.png"><img src="accounts/hidden-dark.png" width="206" alt="hidden-dark"></a>
+<a href="accounts/queued.png"><img src="accounts/queued.png" width="206" alt="queued"></a>
+<a href="accounts/queued-dark.png"><img src="accounts/queued-dark.png" width="206" alt="queued-dark"></a>
+<a href="accounts/lost-queued.png"><img src="accounts/lost-queued.png" width="206" alt="lost-queued"></a>
 
 <a name="activity-detail"></a>
 ## Activity detail
@@ -498,7 +503,7 @@ If the folder grows too much, there are two levers, both the owner's. Deleting t
 <a name="safe-propose"></a>
 ## Propose Safe transaction
 
-`safe-propose/`, 13 states: `compose`, `compose-dark`, `refused`, `proposing`, `review`, `review-dark`, `review-queued-not-simulated`, `review-not-saved`, `review-asking-to-drop`, `review-signing`, `review-checking`, `loading`, `watch-only`
+`safe-propose/`, 17 states: `compose`, `compose-dark`, `refused`, `proposing`, `review`, `review-dark`, `review-queued-not-simulated`, `review-not-saved`, `review-asking-to-drop`, `review-signing`, `review-checking`, `loading`, `watch-only`, `draft`, `draft-dark`, `draft-nonce-busy`, `never-verified`
 
 <a href="safe-propose/compose.png"><img src="safe-propose/compose.png" width="206" alt="compose"></a>
 <a href="safe-propose/compose-dark.png"><img src="safe-propose/compose-dark.png" width="206" alt="compose-dark"></a>
@@ -513,6 +518,10 @@ If the folder grows too much, there are two levers, both the owner's. Deleting t
 <a href="safe-propose/review-checking.png"><img src="safe-propose/review-checking.png" width="206" alt="review-checking"></a>
 <a href="safe-propose/loading.png"><img src="safe-propose/loading.png" width="206" alt="loading"></a>
 <a href="safe-propose/watch-only.png"><img src="safe-propose/watch-only.png" width="206" alt="watch-only"></a>
+<a href="safe-propose/draft.png"><img src="safe-propose/draft.png" width="206" alt="draft"></a>
+<a href="safe-propose/draft-dark.png"><img src="safe-propose/draft-dark.png" width="206" alt="draft-dark"></a>
+<a href="safe-propose/draft-nonce-busy.png"><img src="safe-propose/draft-nonce-busy.png" width="206" alt="draft-nonce-busy"></a>
+<a href="safe-propose/never-verified.png"><img src="safe-propose/never-verified.png" width="206" alt="never-verified"></a>
 
 <a name="safe-settings"></a>
 ## Safe settings
@@ -559,7 +568,7 @@ If the folder grows too much, there are two levers, both the owner's. Deleting t
 <a name="safe-tx"></a>
 ## Safe transaction
 
-`safe-tx/`, 34 states: `overview`, `overview-dark`, `share`, `share-as-text`, `signed`, `not-next`, `delegate-call`, `unpinned-fallback-handler`, `module-enabled`, `execute-reason`, `gas-terms`, `owners-checking`, `owners-unavailable`, `quoting`, `signing`, `signing-dark`, `signing-wrong-password`, `signing-runs`, `signing-checking`, `review-execution`, `review-execution-dark`, `review-approval`, `review-refreshing`, `review-signing`, `review-not-sent`, `loading`, `not-queued`, `swap`, `swap-minimum-behind`, `swap-expired`, `swap-not-uniswap`, `swap-approval`, `swap-propose-again-greyed`, `fallback-handler-removed`
+`safe-tx/`, 45 states: `overview`, `overview-dark`, `share`, `share-as-text`, `signed`, `not-next`, `delegate-call`, `unpinned-fallback-handler`, `module-enabled`, `execute-reason`, `gas-terms`, `owners-checking`, `owners-unavailable`, `quoting`, `signing`, `signing-dark`, `signing-wrong-password`, `signing-runs`, `signing-checking`, `review-execution`, `review-execution-dark`, `review-approval`, `review-refreshing`, `review-signing`, `review-not-sent`, `loading`, `not-queued`, `swap`, `swap-minimum-behind`, `swap-expired`, `swap-not-uniswap`, `swap-approval`, `swap-propose-again-greyed`, `fallback-handler-removed`, `lenient-overview`, `lenient-signing`, `held`, `held-dark`, `held-checking`, `held-conflict`, `held-discarded`, `held-co-signature`, `draft-approval`, `draft-execution`, `draft-dark`
 
 <a href="safe-tx/overview.png"><img src="safe-tx/overview.png" width="206" alt="overview"></a>
 <a href="safe-tx/overview-dark.png"><img src="safe-tx/overview-dark.png" width="206" alt="overview-dark"></a>
@@ -595,6 +604,17 @@ If the folder grows too much, there are two levers, both the owner's. Deleting t
 <a href="safe-tx/swap-approval.png"><img src="safe-tx/swap-approval.png" width="206" alt="swap-approval"></a>
 <a href="safe-tx/swap-propose-again-greyed.png"><img src="safe-tx/swap-propose-again-greyed.png" width="206" alt="swap-propose-again-greyed"></a>
 <a href="safe-tx/fallback-handler-removed.png"><img src="safe-tx/fallback-handler-removed.png" width="206" alt="fallback-handler-removed"></a>
+<a href="safe-tx/lenient-overview.png"><img src="safe-tx/lenient-overview.png" width="206" alt="lenient-overview"></a>
+<a href="safe-tx/lenient-signing.png"><img src="safe-tx/lenient-signing.png" width="206" alt="lenient-signing"></a>
+<a href="safe-tx/held.png"><img src="safe-tx/held.png" width="206" alt="held"></a>
+<a href="safe-tx/held-dark.png"><img src="safe-tx/held-dark.png" width="206" alt="held-dark"></a>
+<a href="safe-tx/held-checking.png"><img src="safe-tx/held-checking.png" width="206" alt="held-checking"></a>
+<a href="safe-tx/held-conflict.png"><img src="safe-tx/held-conflict.png" width="206" alt="held-conflict"></a>
+<a href="safe-tx/held-discarded.png"><img src="safe-tx/held-discarded.png" width="206" alt="held-discarded"></a>
+<a href="safe-tx/held-co-signature.png"><img src="safe-tx/held-co-signature.png" width="206" alt="held-co-signature"></a>
+<a href="safe-tx/draft-approval.png"><img src="safe-tx/draft-approval.png" width="206" alt="draft-approval"></a>
+<a href="safe-tx/draft-execution.png"><img src="safe-tx/draft-execution.png" width="206" alt="draft-execution"></a>
+<a href="safe-tx/draft-dark.png"><img src="safe-tx/draft-dark.png" width="206" alt="draft-dark"></a>
 
 <a name="screen-capture-warning-dialog"></a>
 ## Screen capture warning (dialog)
@@ -629,7 +649,7 @@ If the folder grows too much, there are two levers, both the owner's. Deleting t
 <a name="send"></a>
 ## Send
 
-`send/`, 23 states: `compose-empty`, `compose-empty-dark`, `composed-token-to-name`, `compose-resolving`, `compose-input-errors`, `compose-gnosis-no-names`, `compose-name-unavailable`, `compose-quoting`, `compose-refused`, `compose-earlier-maybe-sent`, `compose-token-not-found`, `review`, `review-dark`, `review-token-with-biometrics`, `review-wrong-password`, `review-biometrics-cancelled`, `review-signing`, `review-refreshing`, `review-not-sent`, `review-rejected`, `loading`, `watch-only`, `sent`
+`send/`, 32 states: `compose-empty`, `compose-empty-dark`, `composed-token-to-name`, `compose-resolving`, `compose-input-errors`, `compose-gnosis-no-names`, `compose-name-unavailable`, `compose-quoting`, `compose-refused`, `compose-earlier-maybe-sent`, `compose-token-not-found`, `review`, `review-dark`, `review-token-with-biometrics`, `review-wrong-password`, `review-biometrics-cancelled`, `review-signing`, `review-refreshing`, `review-not-sent`, `review-rejected`, `loading`, `watch-only`, `sent`, `compose-lenient-last-verified`, `compose-draft-waits`, `compose-queued-first`, `draft-review`, `draft-review-dark`, `draft-review-token`, `draft-review-not-kept`, `draft-review-signing`, `queued`
 
 <a href="send/compose-empty.png"><img src="send/compose-empty.png" width="206" alt="compose-empty"></a>
 <a href="send/compose-empty-dark.png"><img src="send/compose-empty-dark.png" width="206" alt="compose-empty-dark"></a>
@@ -654,11 +674,20 @@ If the folder grows too much, there are two levers, both the owner's. Deleting t
 <a href="send/loading.png"><img src="send/loading.png" width="206" alt="loading"></a>
 <a href="send/watch-only.png"><img src="send/watch-only.png" width="206" alt="watch-only"></a>
 <a href="send/sent.png"><img src="send/sent.png" width="206" alt="sent"></a>
+<a href="send/compose-lenient-last-verified.png"><img src="send/compose-lenient-last-verified.png" width="206" alt="compose-lenient-last-verified"></a>
+<a href="send/compose-draft-waits.png"><img src="send/compose-draft-waits.png" width="206" alt="compose-draft-waits"></a>
+<a href="send/compose-queued-first.png"><img src="send/compose-queued-first.png" width="206" alt="compose-queued-first"></a>
+<a href="send/draft-review.png"><img src="send/draft-review.png" width="206" alt="draft-review"></a>
+<a href="send/draft-review-dark.png"><img src="send/draft-review-dark.png" width="206" alt="draft-review-dark"></a>
+<a href="send/draft-review-token.png"><img src="send/draft-review-token.png" width="206" alt="draft-review-token"></a>
+<a href="send/draft-review-not-kept.png"><img src="send/draft-review-not-kept.png" width="206" alt="draft-review-not-kept"></a>
+<a href="send/draft-review-signing.png"><img src="send/draft-review-signing.png" width="206" alt="draft-review-signing"></a>
+<a href="send/queued.png"><img src="send/queued.png" width="206" alt="queued"></a>
 
 <a name="settings"></a>
 ## Settings
 
-`settings/`, 17 states: `synced`, `synced-dark`, `starting`, `unreadable`, `head-too-old`, `head-too-old-dark`, `debug-build`, `debug-build-capture-allowed`, `debug-screen`, `debug-screen-not-saved`, `idle`, `network-not-saved`, `turn-off`, `stale-anchor`, `detailed-view`, `detailed-view-not-saved`, `connections-off`
+`settings/`, 21 states: `synced`, `synced-dark`, `starting`, `unreadable`, `head-too-old`, `head-too-old-dark`, `debug-build`, `debug-build-capture-allowed`, `debug-screen`, `debug-screen-not-saved`, `idle`, `network-not-saved`, `turn-off`, `stale-anchor`, `detailed-view`, `detailed-view-not-saved`, `connections-off`, `sign-while-syncing`, `sign-while-syncing-dark`, `sign-while-syncing-queued`, `sign-while-syncing-not-saved`
 
 <a href="settings/synced.png"><img src="settings/synced.png" width="206" alt="synced"></a>
 <a href="settings/synced-dark.png"><img src="settings/synced-dark.png" width="206" alt="synced-dark"></a>
@@ -677,11 +706,15 @@ If the folder grows too much, there are two levers, both the owner's. Deleting t
 <a href="settings/detailed-view.png"><img src="settings/detailed-view.png" width="206" alt="detailed-view"></a>
 <a href="settings/detailed-view-not-saved.png"><img src="settings/detailed-view-not-saved.png" width="206" alt="detailed-view-not-saved"></a>
 <a href="settings/connections-off.png"><img src="settings/connections-off.png" width="206" alt="connections-off"></a>
+<a href="settings/sign-while-syncing.png"><img src="settings/sign-while-syncing.png" width="206" alt="sign-while-syncing"></a>
+<a href="settings/sign-while-syncing-dark.png"><img src="settings/sign-while-syncing-dark.png" width="206" alt="sign-while-syncing-dark"></a>
+<a href="settings/sign-while-syncing-queued.png"><img src="settings/sign-while-syncing-queued.png" width="206" alt="sign-while-syncing-queued"></a>
+<a href="settings/sign-while-syncing-not-saved.png"><img src="settings/sign-while-syncing-not-saved.png" width="206" alt="sign-while-syncing-not-saved"></a>
 
 <a name="simple-account-detail"></a>
 ## Account detail (simple mode)
 
-`simple-account-detail/`, 11 states: `assets`, `assets-dark`, `last-verified`, `syncing`, `activity`, `waiting-swap`, `safe`, `network-off`, `hidden`, `hidden-dark`, `nfts`
+`simple-account-detail/`, 12 states: `assets`, `assets-dark`, `last-verified`, `syncing`, `activity`, `waiting-swap`, `safe`, `network-off`, `hidden`, `hidden-dark`, `nfts`, `activity-queued`
 
 <a href="simple-account-detail/assets.png"><img src="simple-account-detail/assets.png" width="206" alt="assets"></a>
 <a href="simple-account-detail/assets-dark.png"><img src="simple-account-detail/assets-dark.png" width="206" alt="assets-dark"></a>
@@ -694,11 +727,12 @@ If the folder grows too much, there are two levers, both the owner's. Deleting t
 <a href="simple-account-detail/hidden.png"><img src="simple-account-detail/hidden.png" width="206" alt="hidden"></a>
 <a href="simple-account-detail/hidden-dark.png"><img src="simple-account-detail/hidden-dark.png" width="206" alt="hidden-dark"></a>
 <a href="simple-account-detail/nfts.png"><img src="simple-account-detail/nfts.png" width="206" alt="nfts"></a>
+<a href="simple-account-detail/activity-queued.png"><img src="simple-account-detail/activity-queued.png" width="206" alt="activity-queued"></a>
 
 <a name="simple-accounts"></a>
 ## Home (simple mode)
 
-`simple-accounts/`, 13 states: `everyday`, `everyday-dark`, `refreshing`, `syncing`, `unreachable`, `live`, `stale-anchor`, `empty`, `loading`, `set-aside`, `list-unavailable`, `hidden`, `hidden-dark`
+`simple-accounts/`, 16 states: `everyday`, `everyday-dark`, `refreshing`, `syncing`, `unreachable`, `live`, `stale-anchor`, `empty`, `loading`, `set-aside`, `list-unavailable`, `hidden`, `hidden-dark`, `queued`, `queued-dark`, `lost-queued`
 
 <a href="simple-accounts/everyday.png"><img src="simple-accounts/everyday.png" width="206" alt="everyday"></a>
 <a href="simple-accounts/everyday-dark.png"><img src="simple-accounts/everyday-dark.png" width="206" alt="everyday-dark"></a>
@@ -713,6 +747,9 @@ If the folder grows too much, there are two levers, both the owner's. Deleting t
 <a href="simple-accounts/list-unavailable.png"><img src="simple-accounts/list-unavailable.png" width="206" alt="list-unavailable"></a>
 <a href="simple-accounts/hidden.png"><img src="simple-accounts/hidden.png" width="206" alt="hidden"></a>
 <a href="simple-accounts/hidden-dark.png"><img src="simple-accounts/hidden-dark.png" width="206" alt="hidden-dark"></a>
+<a href="simple-accounts/queued.png"><img src="simple-accounts/queued.png" width="206" alt="queued"></a>
+<a href="simple-accounts/queued-dark.png"><img src="simple-accounts/queued-dark.png" width="206" alt="queued-dark"></a>
+<a href="simple-accounts/lost-queued.png"><img src="simple-accounts/lost-queued.png" width="206" alt="lost-queued"></a>
 
 <a name="simple-activity-detail"></a>
 ## Activity detail (simple mode)
@@ -762,12 +799,14 @@ If the folder grows too much, there are two levers, both the owner's. Deleting t
 <a name="simple-safe-propose"></a>
 ## Propose Safe transaction (simple mode)
 
-`simple-safe-propose/`, 4 states: `compose`, `refused`, `review`, `review-dark`
+`simple-safe-propose/`, 6 states: `compose`, `refused`, `review`, `review-dark`, `draft`, `draft-dark`
 
 <a href="simple-safe-propose/compose.png"><img src="simple-safe-propose/compose.png" width="206" alt="compose"></a>
 <a href="simple-safe-propose/refused.png"><img src="simple-safe-propose/refused.png" width="206" alt="refused"></a>
 <a href="simple-safe-propose/review.png"><img src="simple-safe-propose/review.png" width="206" alt="review"></a>
 <a href="simple-safe-propose/review-dark.png"><img src="simple-safe-propose/review-dark.png" width="206" alt="review-dark"></a>
+<a href="simple-safe-propose/draft.png"><img src="simple-safe-propose/draft.png" width="206" alt="draft"></a>
+<a href="simple-safe-propose/draft-dark.png"><img src="simple-safe-propose/draft-dark.png" width="206" alt="draft-dark"></a>
 
 <a name="simple-safe-settings"></a>
 ## Safe settings (simple mode)
@@ -793,7 +832,7 @@ If the folder grows too much, there are two levers, both the owner's. Deleting t
 <a name="simple-safe-tx"></a>
 ## Safe transaction (simple mode)
 
-`simple-safe-tx/`, 7 states: `overview`, `overview-dark`, `review`, `swap`, `refused`, `signing`, `approval`
+`simple-safe-tx/`, 15 states: `overview`, `overview-dark`, `review`, `swap`, `refused`, `signing`, `approval`, `lenient-overview`, `held`, `held-dark`, `held-co-signature`, `draft`, `held-conflict`, `held-discarded`, `draft-execution`
 
 <a href="simple-safe-tx/overview.png"><img src="simple-safe-tx/overview.png" width="206" alt="overview"></a>
 <a href="simple-safe-tx/overview-dark.png"><img src="simple-safe-tx/overview-dark.png" width="206" alt="overview-dark"></a>
@@ -802,26 +841,40 @@ If the folder grows too much, there are two levers, both the owner's. Deleting t
 <a href="simple-safe-tx/refused.png"><img src="simple-safe-tx/refused.png" width="206" alt="refused"></a>
 <a href="simple-safe-tx/signing.png"><img src="simple-safe-tx/signing.png" width="206" alt="signing"></a>
 <a href="simple-safe-tx/approval.png"><img src="simple-safe-tx/approval.png" width="206" alt="approval"></a>
+<a href="simple-safe-tx/lenient-overview.png"><img src="simple-safe-tx/lenient-overview.png" width="206" alt="lenient-overview"></a>
+<a href="simple-safe-tx/held.png"><img src="simple-safe-tx/held.png" width="206" alt="held"></a>
+<a href="simple-safe-tx/held-dark.png"><img src="simple-safe-tx/held-dark.png" width="206" alt="held-dark"></a>
+<a href="simple-safe-tx/held-co-signature.png"><img src="simple-safe-tx/held-co-signature.png" width="206" alt="held-co-signature"></a>
+<a href="simple-safe-tx/draft.png"><img src="simple-safe-tx/draft.png" width="206" alt="draft"></a>
+<a href="simple-safe-tx/held-conflict.png"><img src="simple-safe-tx/held-conflict.png" width="206" alt="held-conflict"></a>
+<a href="simple-safe-tx/held-discarded.png"><img src="simple-safe-tx/held-discarded.png" width="206" alt="held-discarded"></a>
+<a href="simple-safe-tx/draft-execution.png"><img src="simple-safe-tx/draft-execution.png" width="206" alt="draft-execution"></a>
 
 <a name="simple-send"></a>
 ## Send (simple mode)
 
-`simple-send/`, 5 states: `compose`, `syncing`, `review`, `review-dark`, `compose-refused`
+`simple-send/`, 8 states: `compose`, `syncing`, `review`, `review-dark`, `compose-refused`, `compose-lenient-last-verified`, `draft-review`, `draft-review-dark`
 
 <a href="simple-send/compose.png"><img src="simple-send/compose.png" width="206" alt="compose"></a>
 <a href="simple-send/syncing.png"><img src="simple-send/syncing.png" width="206" alt="syncing"></a>
 <a href="simple-send/review.png"><img src="simple-send/review.png" width="206" alt="review"></a>
 <a href="simple-send/review-dark.png"><img src="simple-send/review-dark.png" width="206" alt="review-dark"></a>
 <a href="simple-send/compose-refused.png"><img src="simple-send/compose-refused.png" width="206" alt="compose-refused"></a>
+<a href="simple-send/compose-lenient-last-verified.png"><img src="simple-send/compose-lenient-last-verified.png" width="206" alt="compose-lenient-last-verified"></a>
+<a href="simple-send/draft-review.png"><img src="simple-send/draft-review.png" width="206" alt="draft-review"></a>
+<a href="simple-send/draft-review-dark.png"><img src="simple-send/draft-review-dark.png" width="206" alt="draft-review-dark"></a>
 
 <a name="simple-settings"></a>
 ## Settings (simple mode)
 
-`simple-settings/`, 3 states: `default`, `default-dark`, `off`
+`simple-settings/`, 6 states: `default`, `default-dark`, `off`, `sign-while-syncing`, `sign-while-syncing-queued`, `sign-while-syncing-not-saved`
 
 <a href="simple-settings/default.png"><img src="simple-settings/default.png" width="206" alt="default"></a>
 <a href="simple-settings/default-dark.png"><img src="simple-settings/default-dark.png" width="206" alt="default-dark"></a>
 <a href="simple-settings/off.png"><img src="simple-settings/off.png" width="206" alt="off"></a>
+<a href="simple-settings/sign-while-syncing.png"><img src="simple-settings/sign-while-syncing.png" width="206" alt="sign-while-syncing"></a>
+<a href="simple-settings/sign-while-syncing-queued.png"><img src="simple-settings/sign-while-syncing-queued.png" width="206" alt="sign-while-syncing-queued"></a>
+<a href="simple-settings/sign-while-syncing-not-saved.png"><img src="simple-settings/sign-while-syncing-not-saved.png" width="206" alt="sign-while-syncing-not-saved"></a>
 
 <a name="simple-swap"></a>
 ## Swap (simple mode)
@@ -851,13 +904,21 @@ If the folder grows too much, there are two levers, both the owner's. Deleting t
 <a name="simple-transfer-status"></a>
 ## Transfer status (simple mode)
 
-`simple-transfer-status/`, 5 states: `confirmed`, `confirmed-dark`, `final`, `failed`, `maybe-sent`
+`simple-transfer-status/`, 13 states: `confirmed`, `confirmed-dark`, `final`, `failed`, `maybe-sent`, `queued`, `queued-dark`, `queued-past-its-hour`, `queued-conflict`, `queued-safe-approval`, `queued-sending`, `queued-discarding`, `discarded`
 
 <a href="simple-transfer-status/confirmed.png"><img src="simple-transfer-status/confirmed.png" width="206" alt="confirmed"></a>
 <a href="simple-transfer-status/confirmed-dark.png"><img src="simple-transfer-status/confirmed-dark.png" width="206" alt="confirmed-dark"></a>
 <a href="simple-transfer-status/final.png"><img src="simple-transfer-status/final.png" width="206" alt="final"></a>
 <a href="simple-transfer-status/failed.png"><img src="simple-transfer-status/failed.png" width="206" alt="failed"></a>
 <a href="simple-transfer-status/maybe-sent.png"><img src="simple-transfer-status/maybe-sent.png" width="206" alt="maybe-sent"></a>
+<a href="simple-transfer-status/queued.png"><img src="simple-transfer-status/queued.png" width="206" alt="queued"></a>
+<a href="simple-transfer-status/queued-dark.png"><img src="simple-transfer-status/queued-dark.png" width="206" alt="queued-dark"></a>
+<a href="simple-transfer-status/queued-past-its-hour.png"><img src="simple-transfer-status/queued-past-its-hour.png" width="206" alt="queued-past-its-hour"></a>
+<a href="simple-transfer-status/queued-conflict.png"><img src="simple-transfer-status/queued-conflict.png" width="206" alt="queued-conflict"></a>
+<a href="simple-transfer-status/queued-safe-approval.png"><img src="simple-transfer-status/queued-safe-approval.png" width="206" alt="queued-safe-approval"></a>
+<a href="simple-transfer-status/queued-sending.png"><img src="simple-transfer-status/queued-sending.png" width="206" alt="queued-sending"></a>
+<a href="simple-transfer-status/queued-discarding.png"><img src="simple-transfer-status/queued-discarding.png" width="206" alt="queued-discarding"></a>
+<a href="simple-transfer-status/discarded.png"><img src="simple-transfer-status/discarded.png" width="206" alt="discarded"></a>
 
 <a name="simple-watch"></a>
 ## Watch address (simple mode)
@@ -934,7 +995,7 @@ If the folder grows too much, there are two levers, both the owner's. Deleting t
 <a name="transfer-status"></a>
 ## Transfer status
 
-`transfer-status/`, 26 states: `pending`, `pending-dark`, `included`, `finalized`, `failed`, `unavailable`, `no-record`, `safe-execution`, `safe-deployment`, `safe-listed`, `safe-listed-dark`, `safe-not-listed`, `maybe-sent`, `retrying`, `turned-away`, `loading`, `swap`, `swap-failed`, `approval`, `allowance-reset`, `swap-dark`, `swap-received`, `nonce-used`, `maybe-sent-nonce-used`, `cow-cancellation`, `wrap`
+`transfer-status/`, 36 states: `pending`, `pending-dark`, `included`, `finalized`, `failed`, `unavailable`, `no-record`, `safe-execution`, `safe-deployment`, `safe-listed`, `safe-listed-dark`, `safe-not-listed`, `maybe-sent`, `retrying`, `turned-away`, `loading`, `swap`, `swap-failed`, `approval`, `allowance-reset`, `swap-dark`, `swap-received`, `nonce-used`, `maybe-sent-nonce-used`, `cow-cancellation`, `wrap`, `queued`, `queued-dark`, `queued-sending`, `queued-past-its-hour`, `queued-conflict`, `discarded`, `queued-discarding`, `queued-not-discarded`, `queued-outbox-unreadable`, `queued-safe-approval`
 
 <a href="transfer-status/pending.png"><img src="transfer-status/pending.png" width="206" alt="pending"></a>
 <a href="transfer-status/pending-dark.png"><img src="transfer-status/pending-dark.png" width="206" alt="pending-dark"></a>
@@ -962,6 +1023,16 @@ If the folder grows too much, there are two levers, both the owner's. Deleting t
 <a href="transfer-status/maybe-sent-nonce-used.png"><img src="transfer-status/maybe-sent-nonce-used.png" width="206" alt="maybe-sent-nonce-used"></a>
 <a href="transfer-status/cow-cancellation.png"><img src="transfer-status/cow-cancellation.png" width="206" alt="cow-cancellation"></a>
 <a href="transfer-status/wrap.png"><img src="transfer-status/wrap.png" width="206" alt="wrap"></a>
+<a href="transfer-status/queued.png"><img src="transfer-status/queued.png" width="206" alt="queued"></a>
+<a href="transfer-status/queued-dark.png"><img src="transfer-status/queued-dark.png" width="206" alt="queued-dark"></a>
+<a href="transfer-status/queued-sending.png"><img src="transfer-status/queued-sending.png" width="206" alt="queued-sending"></a>
+<a href="transfer-status/queued-past-its-hour.png"><img src="transfer-status/queued-past-its-hour.png" width="206" alt="queued-past-its-hour"></a>
+<a href="transfer-status/queued-conflict.png"><img src="transfer-status/queued-conflict.png" width="206" alt="queued-conflict"></a>
+<a href="transfer-status/discarded.png"><img src="transfer-status/discarded.png" width="206" alt="discarded"></a>
+<a href="transfer-status/queued-discarding.png"><img src="transfer-status/queued-discarding.png" width="206" alt="queued-discarding"></a>
+<a href="transfer-status/queued-not-discarded.png"><img src="transfer-status/queued-not-discarded.png" width="206" alt="queued-not-discarded"></a>
+<a href="transfer-status/queued-outbox-unreadable.png"><img src="transfer-status/queued-outbox-unreadable.png" width="206" alt="queued-outbox-unreadable"></a>
+<a href="transfer-status/queued-safe-approval.png"><img src="transfer-status/queued-safe-approval.png" width="206" alt="queued-safe-approval"></a>
 
 <a name="update-required"></a>
 ## Update required

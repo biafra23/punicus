@@ -160,7 +160,9 @@ internal class ProvenReads<K, T>(
         return flow {
             // Whether this subscriber has had a proof made for it: only then may it be held one
             // ([ProofSchedule]). A new subscriber, a screen opening or the one-shot read of a quote,
-            // a review or a signature, gets a fresh proof, never one held from before.
+            // a review or a signature, gets a fresh proof, never one held from before: in strict mode
+            // every quote, review and signature reads fresh state, and in lenient mode the check
+            // before sending does (owner rulings, 2026-11-06).
             var proven = false
             while (true) {
                 val snapshot = try {

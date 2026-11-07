@@ -258,6 +258,34 @@ private fun SimpleAccountsHiddenDarkPreview() = SimpleAccountsPreview(everyday.w
 @Composable
 private fun SimpleAccountsLoadingPreview() = SimpleAccountsPreview(AccountsUiState.Loading())
 
+/** Lenient mode: what each network has queued, under the freshness line. */
+private val queued = everyday.copy(
+    freshness = "Syncing Ethereum · 2 of 6 periods · updated 40 s ago",
+    queued = listOf(
+        "Ethereum: 1 waiting to send · Keep Serotine open to send it sooner",
+        "Gnosis Chain: 1 needs your signature again",
+    ),
+)
+
+@Preview
+@Composable
+private fun SimpleAccountsQueuedPreview() = SimpleAccountsPreview(queued)
+
+@Preview
+@Composable
+private fun SimpleAccountsQueuedDarkPreview() = SimpleAccountsPreview(queued, darkTheme = true)
+
+/** A queued transaction's sealed bytes could not be opened: said once, until dismissed. */
+@Preview
+@Composable
+private fun SimpleAccountsLostQueuedPreview() = SimpleAccountsPreview(
+    everyday.copy(
+        lostNotice = "A transaction waiting to be sent was lost: the key that sealed it on this device is gone " +
+            "(the key store was reset, or the app was restored on another device). If it was being sent " +
+            "when Serotine last closed, it may have gone out. Before you sign it again, wait until " +
+            "Serotine has caught up, and check the account's balance, or for a Safe, its queue.",
+    ),
+)
 /** Every preview above, which SimpleAccountsScreenPreviewsTest renders: a new preview goes in here too. */
 internal val simpleAccountsScreenPreviews: List<ScreenPreview> = listOf(
     ScreenPreview("everyday") { SimpleAccountsEverydayPreview() },
@@ -273,4 +301,7 @@ internal val simpleAccountsScreenPreviews: List<ScreenPreview> = listOf(
     ScreenPreview("list-unavailable") { SimpleAccountsListUnavailablePreview() },
     ScreenPreview("hidden") { SimpleAccountsHiddenPreview() },
     ScreenPreview("hidden-dark") { SimpleAccountsHiddenDarkPreview() },
+    ScreenPreview("queued") { SimpleAccountsQueuedPreview() },
+    ScreenPreview("queued-dark") { SimpleAccountsQueuedDarkPreview() },
+    ScreenPreview("lost-queued") { SimpleAccountsLostQueuedPreview() },
 )

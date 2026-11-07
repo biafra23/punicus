@@ -38,6 +38,7 @@ import eth.serotine.domain.repository.HistoryStartList
 import eth.serotine.domain.repository.HistoryStarts
 import eth.serotine.domain.repository.LightClientStatus
 import eth.serotine.domain.repository.NonceReading
+import eth.serotine.domain.repository.Outbox
 import eth.serotine.domain.repository.ReadUnavailable
 import eth.serotine.domain.repository.SentAction
 import eth.serotine.domain.repository.SentTransfer
@@ -98,6 +99,7 @@ class CowSwapsTest {
         starts,
         light,
         Network.SEPOLIA,
+        outbox = Outbox.None,
         clock = { headTime },
     )
 
@@ -376,6 +378,7 @@ class CowSwapsTest {
             unreadable,
             light,
             Network.SEPOLIA,
+            outbox = Outbox.None,
             clock = { headTime },
         )
         assertEquals(

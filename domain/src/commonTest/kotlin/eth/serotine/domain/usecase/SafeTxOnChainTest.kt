@@ -18,6 +18,7 @@ import eth.serotine.domain.repository.ApprovalReading
 import eth.serotine.domain.repository.FeeLevel
 import eth.serotine.domain.repository.GasEstimate
 import eth.serotine.domain.repository.KindReading
+import eth.serotine.domain.repository.Outbox
 import eth.serotine.domain.repository.ReadUnavailable
 import eth.serotine.domain.repository.SentAction
 import eth.serotine.domain.repository.SentTransfer
@@ -46,6 +47,7 @@ class SafeTxOnChainTest {
         world.inputs,
         world.sent,
         Network.SEPOLIA,
+        outbox = Outbox.None,
     ) { 1_800_000_000 }
     private val quoteExecution = QuoteSafeExecution(
         world.observeSafe,
@@ -55,6 +57,7 @@ class SafeTxOnChainTest {
         world.inputs,
         world.sent,
         Network.SEPOLIA,
+        outbox = Outbox.None,
     ) { 1_800_000_000 }
 
     private val executed = "0".repeat(63) + "1"

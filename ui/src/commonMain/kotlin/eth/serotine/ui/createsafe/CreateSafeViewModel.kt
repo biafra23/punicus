@@ -7,6 +7,7 @@ import eth.serotine.domain.model.AccountCustody
 import eth.serotine.domain.model.AccountKind
 import eth.serotine.domain.model.Address
 import eth.serotine.domain.model.Network
+import eth.serotine.domain.model.SyncPolicy
 import eth.serotine.domain.model.WalletPassword
 import eth.serotine.domain.repository.AccountList
 import eth.serotine.domain.repository.AddressKind
@@ -20,6 +21,7 @@ import eth.serotine.domain.usecase.DeploySafe
 import eth.serotine.domain.usecase.DescribeKeyStore
 import eth.serotine.domain.usecase.ObserveAccounts
 import eth.serotine.domain.usecase.ObserveEnabledNetworks
+import eth.serotine.domain.usecase.ObserveSyncPolicy
 import eth.serotine.domain.usecase.PlanSafe
 import eth.serotine.domain.usecase.PlannedOwner
 import eth.serotine.domain.usecase.QuoteSafeDeployment
@@ -38,6 +40,7 @@ import eth.serotine.domain.usecase.TransferSending
 import eth.serotine.domain.usecase.WarmFeeHistory
 import eth.serotine.ui.components.AccountChoice
 import eth.serotine.ui.components.BalanceChange
+import eth.serotine.ui.components.CREATE_SAFE_STAYS_STRICT
 import eth.serotine.ui.components.Eip55
 import eth.serotine.ui.components.NATIVE_DECIMALS
 import eth.serotine.ui.components.NetworkChip
@@ -66,6 +69,7 @@ import eth.serotine.ui.components.resolveAgain
 import eth.serotine.ui.components.retryLookupWaits
 import eth.serotine.ui.components.simpleCallRefusalText
 import eth.serotine.ui.components.unavailableText
+import eth.serotine.ui.components.whileSyncing
 import eth.serotine.ui.components.verifiedAt
 import kotlin.concurrent.Volatile
 import kotlin.time.TimeMark
@@ -118,8 +122,14 @@ class CreateSafeViewModel(
     private val warmFeeHistory: WarmFeeHistory,
     observeEnabledNetworks: ObserveEnabledNetworks,
     private val setNetworkEnabled: SetNetworkEnabled,
+    /** Whether the user chose *Sign while syncing*, which creating a Safe does not follow: its refusal says so. */
+    observeSyncPolicy: ObserveSyncPolicy,
     private val timeSource: TimeSource = TimeSource.Monotonic,
 ) : ViewModel() {
+
+    /** Whether lenient mode is chosen: a refusal while syncing then says the setting does not reach this. */
+    private val lenient = observeSyncPolicy().map { it == SyncPolicy.LENIENT }
+        .stateIn(viewModelScope, SharingStarted.Eagerly, false)
 
     /** The network the user picked; null until they pick one, the default standing until then. */
     private val picked = MutableStateFlow<Network?>(null)
@@ -936,7 +946,11 @@ class CreateSafeViewModel(
         SafePlanRefusal.NameTooLong -> "At most ${RenameAccount.MAX_LABEL_LENGTH} characters."
     }
 
-    private fun refusalText(refusal: SafeDeploymentRefusal): String = when (refusal) {
+    /** Why [refusal] stops the deployment; in lenient mode, after any refusal while syncing, that it stays strict. */
+    private fun refusalText(refusal: SafeDeploymentRefusal): String =
+        refusalReason(refusal) + if (lenient.value && refusal.whileSyncing) CREATE_SAFE_STAYS_STRICT else ""
+
+    private fun refusalReason(refusal: SafeDeploymentRefusal): String = when (refusal) {
         is SafeDeploymentRefusal.AlreadyDeployed -> if (refusal.kind is AddressKind.Safe) {
             "A Safe exists at this address already, so a deployment there would fail. Go back and continue again " +
                 "for another address."

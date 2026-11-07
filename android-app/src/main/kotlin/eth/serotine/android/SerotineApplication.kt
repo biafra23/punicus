@@ -23,6 +23,7 @@ import eth.serotine.android.widget.RateWidgetPairs
 import eth.serotine.data.account.FileAccountRepository
 import eth.serotine.data.cow.FileCowOrders
 import eth.serotine.data.cow.HttpCowApi
+import eth.serotine.data.outbox.androidOutbox
 import eth.serotine.data.walletconnect.WalletConnectDapps
 import eth.serotine.data.engine.AndroidDnsServers
 import eth.serotine.data.engine.MyotisHost
@@ -43,6 +44,7 @@ import eth.serotine.data.settings.FileDebugScreen
 import eth.serotine.data.settings.FileDisplayCurrency
 import eth.serotine.data.settings.FileAmountsHidden
 import eth.serotine.data.settings.FileInterfaceMode
+import eth.serotine.data.settings.FileSyncPolicy
 import eth.serotine.data.settings.FileSwapVenue
 import eth.serotine.data.swaps.FileWaitingSwaps
 import eth.serotine.data.tokens.BuiltInTokenCatalog
@@ -55,6 +57,11 @@ import eth.serotine.domain.model.Network
 import eth.serotine.domain.model.PriceId
 import eth.serotine.domain.model.RatePair
 import eth.serotine.domain.repository.AccountList
+import eth.serotine.domain.usecase.CheckQueued
+import eth.serotine.domain.usecase.CheckHeldSignature
+import eth.serotine.domain.usecase.ObserveSafe
+import eth.serotine.domain.usecase.QuoteSafeApproval
+import eth.serotine.domain.usecase.QuoteSafeExecution
 import eth.serotine.domain.usecase.FollowAccountLogs
 import eth.serotine.domain.usecase.AnswerDappRequestsAtOnce
 import eth.serotine.domain.usecase.FollowDappAccounts
@@ -62,7 +69,10 @@ import eth.serotine.domain.usecase.FollowDebugScreen
 import eth.serotine.domain.usecase.FollowExchangeRate
 import eth.serotine.domain.usecase.FollowInterfaceMode
 import eth.serotine.domain.usecase.FollowNetworks
+import eth.serotine.domain.usecase.FollowOutbox
 import eth.serotine.domain.usecase.FollowSafeDeployments
+import eth.serotine.domain.usecase.KeepTransactionInputs
+import eth.serotine.domain.usecase.OutboxLock
 import eth.serotine.domain.usecase.FollowSentTransactions
 import eth.serotine.domain.usecase.FollowUpgradeReports
 import eth.serotine.domain.usecase.HistoryNotingAccounts
@@ -72,6 +82,7 @@ import eth.serotine.domain.usecase.NetworkDemand
 import eth.serotine.domain.usecase.ObserveDebugTab
 import eth.serotine.domain.usecase.ObserveDisplayCurrencies
 import eth.serotine.domain.usecase.ProveCowOrderEnds
+import eth.serotine.domain.usecase.QuoteTransfer
 import eth.serotine.domain.usecase.ReadExchangeRate
 import eth.serotine.domain.usecase.RateWidgetChoices
 import eth.serotine.domain.usecase.RefreshExchangeRate
@@ -142,6 +153,8 @@ class SerotineApplication : Application() {
             lastBalances = filesDir.resolve("last-balances.json").path,
             debugLog = if (debuggable) { line -> Log.d(LOG_TAG, line) } else null,
             apiLog = debugLog,
+            keptInputs = filesDir.resolve("kept-inputs.json").path,
+            keptSafes = filesDir.resolve("kept-safes.json").path,
         ).also { host ->
             scope.launch { followNetworks(host) }
             // Values proven on demand in simple mode, at every head in Detailed view (docs/simple-ui.md).
@@ -185,6 +198,9 @@ class SerotineApplication : Application() {
 
     /** The view the user chose, simple mode or Detailed view (docs/simple-ui.md), beside the other settings. */
     private val interfaceMode by lazy { FileInterfaceMode(filesDir.resolve("ui-mode.json").path) }
+
+    /** Whether a transaction may be signed while the light client syncs (docs/lenient-mode.md), beside the other settings. */
+    private val syncPolicy by lazy { FileSyncPolicy(filesDir.resolve("sync-policy.json").path) }
     private val amountsHidden by lazy { FileAmountsHidden(filesDir.resolve("amounts-hidden.json").path) }
 
     /** eth.serotine.debug is debuggable, the release app is not: what the debug app's extras hang on. */
@@ -254,6 +270,25 @@ class SerotineApplication : Application() {
 
     /** The CoW orders signed here, each live until its end is proven (docs/swaps.md): public data only. */
     private val cowOrders by lazy { FileCowOrders(filesDir.resolve("cow-orders.json").path) }
+
+    /**
+     * Lenient mode's outbox (docs/lenient-mode.md): what is signed and waits for its check, sealed
+     * with a Keystore key of its own in the app's private files, which the manifest keeps out of
+     * backups and device transfers; in memory only where that key is in software. One instance,
+     * which the graph and the follower share, with the one lock they share too.
+     */
+    private val outbox by lazy { androidOutbox(filesDir.resolve("outbox").resolve("outbox.json").path) }
+    private val outboxLock = OutboxLock()
+
+    /**
+     * The Safe transactions waiting for their owners, with the signatures collected (public data, no
+     * key in them), beside the account list in the app's private files. One instance, which the graph
+     * and the outbox's follower share: a held Safe signature that checks out is saved to it.
+     */
+    private val safeTxQueue by lazy { FileSafeTxQueue(filesDir.resolve("safe-tx-queue.json").path) }
+
+    /** Who made a co-signer's signature, for the graph and the outbox's follower alike; no key in it. */
+    private val signatureRecovery = Secp256k1Recovery()
 
     /** The venue last chosen on Swap, compose, which the next swap starts at. */
     private val swapVenue by lazy { FileSwapVenue(filesDir.resolve("swap-venue.json").path) }
@@ -404,11 +439,10 @@ class SerotineApplication : Application() {
             ensNfts = node.ensNfts,
             // The NFTs added by contract and id, beside tokens.json (issue #246).
             addedNfts = FileAddedNfts(filesDir.resolve("nfts.json").path),
-            // The Safe transactions waiting for their owners, with the signatures collected (public
-            // data, no key in them), beside the account list in the app's private files.
-            safeTxQueue = FileSafeTxQueue(filesDir.resolve("safe-tx-queue.json").path),
+            // The Safe transactions waiting for their owners: the follower's one instance.
+            safeTxQueue = safeTxQueue,
             signingRequests = JsonSigningRequestCodec(),
-            signatureRecovery = Secp256k1Recovery(),
+            signatureRecovery = signatureRecovery,
             safeApprovals = node.safeApprovals,
             // Safe 1.4.1's singleton, factory and proxy code, pinned in code: what a new Safe is created from.
             safeReleases = PinnedSafeReleases(),
@@ -419,6 +453,12 @@ class SerotineApplication : Application() {
             cowChain = node.cow,
             cowApi = HttpCowApi.create(),
             cowOrders = cowOrders,
+            outbox = outbox,
+            // The follower's own lock, the inputs kept for a lenient draft, and Sign while syncing.
+            outboxLock = outboxLock,
+            keptTransactionInputs = node.keptTransactionInputs,
+            keptSafes = node.keptSafes,
+            syncPolicy = syncPolicy,
             swapVenue = swapVenue,
             waitingSwaps = waitingSwaps,
             debugLog = debugLog,
@@ -467,6 +507,8 @@ class SerotineApplication : Application() {
     private var cowOrderEnds: Job? = null
     private var rateFollowing: Job? = null
     private var dappRelay: Job? = null
+    private var keptInputs: Job? = null
+    private var outboxSends: Job? = null
     private val sleep = Runnable { node.pause() }
     private val stopAppWork = Runnable {
         following?.cancel()
@@ -481,6 +523,10 @@ class SerotineApplication : Application() {
         cowOrderEnds = null
         dappRelay?.cancel()
         dappRelay = null
+        keptInputs?.cancel()
+        keptInputs = null
+        outboxSends?.cancel()
+        outboxSends = null
     }
 
     /** The activity in front, for the biometric prompt. */
@@ -522,8 +568,8 @@ class SerotineApplication : Application() {
     /**
      * Keeps the engine's networking on, its upgrade reports followed into notifications, the
      * Safes this wallet deployed listed once proven, how the transactions sent from here end
-     * recorded, and the accounts followed by the engine's log index, until the matching
-     * [releaseEngine]. Main thread.
+     * recorded, the accounts followed by the engine's log index, and in lenient mode what a draft
+     * is built on kept recent, until the matching [releaseEngine]. Main thread.
      */
     fun holdEngine() {
         wakeEngine()
@@ -542,6 +588,18 @@ class SerotineApplication : Application() {
         if (sentTransactions?.isActive != true) sentTransactions = scope.launch { followSentTransactions() }
         if (accountLogs?.isActive != true) accountLogs = scope.launch { followAccountLogs() }
         if (cowOrderEnds?.isActive != true) cowOrderEnds = scope.launch { proveCowOrderEnds() }
+        // What is queued is checked at a fresh head and sent, while the app holds its work (docs/lenient-mode.md).
+        if (outboxSends?.isActive != true) {
+            outboxSends = scope.launch { reportingFailure("sending what is queued") { followOutbox()() } }
+        }
+        // What a lenient draft is built on, kept recent while the light clients verify (docs/lenient-mode.md).
+        if (keptInputs?.isActive != true) {
+            keptInputs = scope.launch {
+                reportingFailure("keeping the transaction inputs") {
+                    KeepTransactionInputs(syncPolicy, accounts, node.lightClient, node.transactionInputs)()
+                }
+            }
+        }
         // The relay connection while the app holds its work: dApp messages arrive while it is open.
         if (dappRelay?.isActive != true) dappRelay = scope.launch { runDappRelay() }
     }
@@ -926,6 +984,61 @@ class SerotineApplication : Application() {
             System.err.println("Serotine: following sent transactions stopped: ${e::class.simpleName}")
         }
     }
+
+    /**
+     * The outbox's follower: each queued transaction checked with a fresh strict quote, then sent or found in
+     * conflict; each held Safe signature checked against the Safe, then saved to its queue or found in conflict.
+     */
+    private fun followOutbox(): FollowOutbox = FollowOutbox(
+        outbox,
+        CheckQueued(
+            { network ->
+                QuoteTransfer(
+                    node.transactionInputs,
+                    node.nativeBalances,
+                    node.tokenBalances,
+                    sentTransfers,
+                    cowOrders,
+                    node.cow,
+                    node.lightClient,
+                    network,
+                    outbox,
+                )
+            },
+            // A Safe's approval on chain or its execution, queued while syncing: its strict quote again.
+            { network ->
+                QuoteSafeApproval(
+                    ObserveSafe(node.addressKinds, accounts),
+                    node.safeApprovals,
+                    node.nativeBalances,
+                    node.transactionInputs,
+                    sentTransfers,
+                    network,
+                    outbox,
+                )
+            },
+            { network ->
+                QuoteSafeExecution(
+                    ObserveSafe(node.addressKinds, accounts),
+                    signatureRecovery,
+                    node.safeApprovals,
+                    node.nativeBalances,
+                    node.transactionInputs,
+                    sentTransfers,
+                    network,
+                    outbox,
+                )
+            },
+        ),
+        node.lightClient,
+        node.broadcaster,
+        sentTransfers,
+        AndroidOutboxNotifier(this),
+        outboxLock,
+        // A Safe signature held while syncing: checked at a fresh head, then saved to the one queue.
+        CheckHeldSignature(ObserveSafe(node.addressKinds, accounts), signatureRecovery),
+        safeTxQueue,
+    )
 
     /**
      * Lists every Safe this wallet deployed once the light client proves it, whatever screen is

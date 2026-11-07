@@ -13,6 +13,8 @@ import eth.serotine.domain.repository.FeeLevel
 import eth.serotine.domain.repository.FeeReading
 import eth.serotine.domain.repository.GasEstimate
 import eth.serotine.domain.repository.NonceReading
+import eth.serotine.domain.repository.Outbox
+import eth.serotine.domain.repository.OutboxList
 import eth.serotine.domain.repository.ReadUnavailable
 import eth.serotine.domain.repository.SentAction
 import eth.serotine.domain.repository.SentTransfer
@@ -90,8 +92,12 @@ sealed interface CallRefusal {
      * no peer to answer, so it may have reached one all the same ([SentTransfer.maybeSent]), and
      * it is not mined. It is retried with its own bytes ([RebroadcastTransfer], from its status),
      * never replaced by a new one, which could take the next nonce and pay twice.
+     *
+     * [queued] when it is the sender's transaction waiting in the outbox instead (lenient mode;
+     * docs/lenient-mode.md, decision 6), [hash] its [eth.serotine.domain.repository.QueuedTransaction.id]:
+     * it is sent or discarded first, and its status says which.
      */
-    data class EarlierMaybeSent(val hash: String) : CallRefusal
+    data class EarlierMaybeSent(val hash: String, val queued: Boolean = false) : CallRefusal
 }
 
 /** Which verified figure of a quote could not be had ([CallRefusal.Unavailable], [TransferQuoting.Unavailable]). */
@@ -132,7 +138,8 @@ internal sealed interface NativeRead {
         fun of(reading: BalanceReading): NativeRead = when (reading) {
             is BalanceReading.Verified -> reading.wei.toUInt256OrNull()?.let { Before(it, reading.blockNumber) }
                 ?: NotRead(CallRefusal.Unavailable(ReadUnavailable.UNPROVEN, QuoteFigure.BALANCE))
-            // A balance last verified at an older head may have changed: nothing to quote on.
+            // A balance last verified at an older head may have changed: nothing to quote on (a
+            // lenient draft is built on it instead, and checked fresh before it is sent).
             BalanceReading.Syncing, is BalanceReading.LastKnown -> NotRead(CallRefusal.Syncing)
             is BalanceReading.Unavailable -> NotRead(CallRefusal.Unavailable(reading.reason, QuoteFigure.BALANCE))
         }
@@ -142,8 +149,12 @@ internal sealed interface NativeRead {
 /** What [CallQuoter.quote] gives. */
 internal sealed interface CallQuoting {
 
-    /** [quote], and the sender's own transactions not mined yet it was quoted behind ([unmined]). */
-    data class Quoted(val quote: CallQuote, val unmined: List<SentTransfer>) : CallQuoting
+    /**
+     * [quote], the sender's own transactions not mined yet it was quoted behind ([unmined]), and
+     * the base fee per gas the next block charges ([nextBaseFee]), which the check of a queued
+     * transaction compares its signed cap with.
+     */
+    data class Quoted(val quote: CallQuote, val unmined: List<SentTransfer>, val nextBaseFee: UInt256) : CallQuoting
 
     /** Not quoted: [refusal]. */
     data class Refused(val refusal: CallRefusal) : CallQuoting
@@ -153,8 +164,11 @@ internal sealed interface CallQuoting {
  * The quote of any transaction from an account this wallet holds, the part every kind of
  * transaction shares: the sender's next nonce, the fees at a [FeeLevel], the gas it takes, the
  * transaction run as a verified call from the sender, which must not revert, and the native
- * balance it needs. Nothing is quoted on anything less than verified state. On [network] only,
- * its chain id signed into the transaction.
+ * balance it needs. Nothing is quoted on anything less than verified state: a balance last
+ * verified ([BalanceReading.LastKnown]) is refused as syncing, in either mode. In lenient mode a
+ * draft is built on the state last verified instead ([DraftTransfer]), labelled, and is sent only
+ * after the check before sending, which is this quote made again, fresh ([CheckQueued]; owner
+ * rulings, 2026-11-06). On [network] only, its chain id signed into the transaction.
  *
  * The sender's own transactions a peer took and no block has yet ([SentTransfers]) count: the
  * nonce is never below the last of them plus one, and what they may still take of the native
@@ -177,6 +191,7 @@ internal class CallQuoter(
     private val sentTransfers: SentTransfers,
     private val network: Network,
     private val clock: () -> Long,
+    private val outbox: Outbox,
 ) {
 
     /**
@@ -186,8 +201,22 @@ internal class CallQuoter(
      * needs could not be read. Null when nothing holds it back. The record alone answers when it
      * holds no such transaction; otherwise the one read asked is the mined count. A record that
      * cannot be read holds nothing back here: the quote then goes by the engine's nonce.
+     *
+     * Before that, with [holdQueued], what [from] has queued in the [outbox] (lenient mode): one
+     * per account, so nothing new is quoted from it, in either mode, until it is sent or discarded
+     * ([CallRefusal.EarlierMaybeSent] with `queued`). The check of that very transaction quotes
+     * without it. An outbox that cannot be read holds every account back, as the nonce free next
+     * cannot be told ([CallRefusal.Unavailable] for the nonce): it may hold a transaction already
+     * broadcast whose record is not written yet.
      */
-    suspend fun heldBack(from: Address): CallRefusal? {
+    suspend fun heldBack(from: Address, holdQueued: Boolean = true): CallRefusal? {
+        if (holdQueued) {
+            when (val list = outbox.observe().first()) {
+                OutboxList.Unreadable -> return CallRefusal.Unavailable(ReadUnavailable.UNPROVEN, QuoteFigure.NONCE)
+                is OutboxList.Loaded -> list.queued.firstOrNull { it.network == network && it.account == from }
+                    ?.let { return CallRefusal.EarlierMaybeSent(it.id, queued = true) }
+            }
+        }
         val since = clock() - RECORD_LIFETIME_SECONDS
         val maybe = (sentTransfers.observe().first() as? SentTransferList.Loaded)?.transfers.orEmpty()
             .filter { it.network == network && it.account == from && it.maybeSent && it.sentAt >= since }
@@ -203,7 +232,12 @@ internal class CallQuoter(
      * [value] wei and [data] from [from] to [to] at [level]'s fees, on [native], the sender's
      * verified balance read before. [accepts] judges what the run returned: false is a revert
      * (a token's `transfer` that returns false refused as surely as one that reverts). [heldBack]
-     * is asked first, before any other read starts.
+     * is asked first, before any other read starts, [holdQueued] passed on.
+     *
+     * [testFunds] false leaves out the test of the native balance against the value and the most
+     * the fee can be at these fresh figures: the check of a queued transaction does, since a peer
+     * tests the signed figures, and it tests those itself (docs/lenient-mode.md, *The check before
+     * sending*). The least the balance can be after is then zero where it would be below.
      */
     suspend fun quote(
         from: Address,
@@ -212,13 +246,15 @@ internal class CallQuoter(
         data: ByteArray,
         level: FeeLevel,
         native: NativeRead.Before,
+        testFunds: Boolean = true,
+        holdQueued: Boolean = true,
         accepts: (returnHex: String) -> Boolean = { true },
     ): CallQuoting = cancellingReads {
         fun refused(refusal: CallRefusal) = CallQuoting.Refused(refusal)
 
         // An earlier transaction that may still be on its way stops this one before any read of
         // it starts: it is retried, not replaced.
-        heldBack(from)?.let { return@cancellingReads refused(it) }
+        heldBack(from, holdQueued)?.let { return@cancellingReads refused(it) }
 
         // The nonces, the record and the fee history, alongside the estimate and then the run.
         val nonce = async { inputs.nonce(network, from) }
@@ -288,7 +324,7 @@ internal class CallQuoter(
         val maxFeePerGas = quote.maxFeePerGasOrNull(level) ?: return@cancellingReads unproven
         val maxFee = maxFeePerGas.timesOrNull(UInt256.of(gas)) ?: return@cancellingReads unproven
         val cost = maxFee.plusOrNull(value) ?: return@cancellingReads insufficient
-        if (available < cost) return@cancellingReads insufficient
+        if (testFunds && available < cost) return@cancellingReads insufficient
         CallQuoting.Quoted(
             CallQuote(
                 from = from,
@@ -306,12 +342,13 @@ internal class CallQuoter(
                 maxFee = maxFee,
                 nativeBefore = native.wei,
                 pendingCost = pendingCost,
-                nativeAfterAtLeast = available - cost,
+                nativeAfterAtLeast = available.minusOrNull(cost) ?: UInt256.ZERO,
                 balanceBlock = native.blockNumber,
                 feeBlock = quote.blockNumber,
                 simulationBlock = simulationBlock,
             ),
             unmined,
+            quote.nextBaseFee,
         )
     }
 }

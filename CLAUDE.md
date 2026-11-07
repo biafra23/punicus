@@ -210,7 +210,10 @@ Full text: `.claude/rules/trust.md`. These rules bind every change.
   on. Past the weak-subjectivity window only on the user's word (owner's
   request, 2026-10-24). In simple mode, on a network without block access
   lists, a balance is read on demand and counts in totals with its age for
-  up to an hour (owner's decisions, 2026-10-26).
+  up to an hour (owner's decisions, 2026-10-26). In lenient mode, off by
+  default, a transaction may be signed on the state last verified; nothing
+  is sent before a check at a fresh head (owner rulings, 2026-11-06, on
+  #258; docs/lenient-mode.md).
 - A Safe transaction that sets a fallback handler other than the pinned one,
   or none (owner ruling, 2026-10-18, #63), or enables a module (owner ruling,
   2026-10-18, on #54), is shown and never signed, approved or executed.

@@ -5,6 +5,7 @@ import androidx.lifecycle.viewModelScope
 import eth.serotine.domain.model.AccountCustody
 import eth.serotine.domain.model.CowOrderUid
 import eth.serotine.domain.model.Network
+import eth.serotine.domain.model.SyncPolicy
 import eth.serotine.domain.model.TransferAsset
 import eth.serotine.domain.model.UInt256
 import eth.serotine.domain.model.WalletPassword
@@ -27,6 +28,7 @@ import eth.serotine.domain.usecase.DescribeKeyStore
 import eth.serotine.domain.usecase.ObserveAccounts
 import eth.serotine.domain.usecase.ObserveCowOrder
 import eth.serotine.domain.usecase.ObserveCowOrderLife
+import eth.serotine.domain.usecase.ObserveSyncPolicy
 import eth.serotine.domain.usecase.QuoteCowCancellation
 import eth.serotine.domain.usecase.RebroadcastTransfer
 import eth.serotine.domain.usecase.SendCowCancellation
@@ -38,6 +40,7 @@ import eth.serotine.ui.components.PROMPT_TIMED_OUT
 import eth.serotine.ui.components.PROMPT_TOO_LATE
 import eth.serotine.ui.components.QUOTE_MAX_AGE
 import eth.serotine.ui.components.STALE_QUOTE
+import eth.serotine.ui.components.SWAPS_STAY_STRICT
 import eth.serotine.ui.components.SendFrom
 import eth.serotine.ui.components.SpenderItem
 import eth.serotine.ui.components.UnlockStep
@@ -52,6 +55,8 @@ import eth.serotine.ui.components.notSentItem
 import eth.serotine.ui.components.notSignedText
 import eth.serotine.ui.components.promptDeadline
 import eth.serotine.ui.components.verifiedAt
+import eth.serotine.ui.outbox.OPEN_QUEUED
+import eth.serotine.ui.outbox.QUEUED_FIRST
 import eth.serotine.ui.platform.formatDateTime
 import kotlin.time.Duration.Companion.seconds
 import kotlin.time.TimeMark
@@ -108,10 +113,16 @@ class CowOrderViewModel(
     private val sendCowCancellation: SendCowCancellation,
     private val rebroadcastTransfer: RebroadcastTransfer,
     private val network: Network,
+    /** Whether the user chose *Sign while syncing*, which a cancellation does not follow: its refusal says so. */
+    observeSyncPolicy: ObserveSyncPolicy,
     private val timeSource: TimeSource = TimeSource.Monotonic,
     private val clock: () -> Long = ::epochSecondsNow,
     private val formatTime: (Long) -> String = ::formatDateTime,
 ) : ViewModel() {
+
+    /** Whether lenient mode is chosen: a refusal while syncing then says the setting does not reach this. */
+    private val lenient = observeSyncPolicy().map { it == SyncPolicy.LENIENT }
+        .stateIn(viewModelScope, SharingStarted.Eagerly, false)
 
     /**
      * A transaction signed but not broadcast: why ([broadcast]), and the [transfer] a retry sends;
@@ -421,7 +432,11 @@ class CowOrderViewModel(
             )
             is CowCancellationQuoting.EarlierMaybeSent -> Step.Viewing(
                 error = refusal(quoting),
-                earlier = EarlierTransaction(quoting.hash, note = null, label = "Open the earlier transaction"),
+                earlier = EarlierTransaction(
+                    quoting.hash,
+                    note = null,
+                    label = if (quoting.queued) OPEN_QUEUED else "Open the earlier transaction",
+                ),
             )
             is CowCancellationQuoting.Reverts -> Step.Viewing(
                 error = refusal(quoting),
@@ -444,19 +459,25 @@ class CowOrderViewModel(
         is CowCancellationQuoting.Reverts -> "The cancellation reverts, run as a verified call" +
             (quoting.blockNumber?.let { " at block ${grouped(it)}" }.orEmpty()) + ". Nothing was signed."
         CowCancellationQuoting.Refused -> "The light client on this device cannot quote the cancellation."
-        CowCancellationQuoting.Syncing -> "The light client is not synced yet: try again in a moment."
+        CowCancellationQuoting.Syncing -> "The light client is not synced yet: try again in a moment." +
+            if (lenient.value) SWAPS_STAY_STRICT else ""
         is CowCancellationQuoting.Unavailable -> when (quoting.reason) {
             ReadUnavailable.NO_ENGINE -> "There is no light client on this device, so nothing can be cancelled."
             ReadUnavailable.NETWORK_OFF -> "The network's light client is not running, so nothing can be cancelled."
             ReadUnavailable.STALE_ANCHOR -> "The light client refuses to sync, so nothing can be quoted."
-            ReadUnavailable.SYNCING -> "The light client is still syncing, so nothing can be quoted yet."
+            ReadUnavailable.SYNCING -> "The light client is still syncing, so nothing can be quoted yet." +
+                if (lenient.value) SWAPS_STAY_STRICT else ""
             ReadUnavailable.UNPROVEN ->
                 "${figureText(quoting.figure, "of the cancellation")} could not be verified this time: try again."
             ReadUnavailable.REFUSED -> "The light client on this device cannot quote the cancellation."
         }
-        is CowCancellationQuoting.EarlierMaybeSent -> "An earlier transaction from this account may still be on " +
-            "its way: no peer answered when it was broadcast. Try it again from its status rather than sign a " +
-            "new one."
+        // Queued in lenient mode: one per account, sent or discarded first (docs/lenient-mode.md, *The outbox*).
+        is CowCancellationQuoting.EarlierMaybeSent -> if (quoting.queued) {
+            QUEUED_FIRST
+        } else {
+            "An earlier transaction from this account may still be on its way: no peer answered when it was " +
+                "broadcast. Try it again from its status rather than sign a new one."
+        }
     }
 
     private fun render(model: Model?, step: Step): CowOrderUiState {

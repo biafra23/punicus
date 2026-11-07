@@ -9,6 +9,7 @@ import eth.serotine.domain.model.SafeTx
 import eth.serotine.domain.model.SafeTxAction
 import eth.serotine.domain.model.SigningRequest
 import eth.serotine.domain.model.UInt256
+import eth.serotine.domain.repository.Outbox
 import eth.serotine.domain.repository.SafeState
 import eth.serotine.domain.repository.SafeTxQueue
 import eth.serotine.domain.repository.Simulation
@@ -134,12 +135,15 @@ sealed interface SafeSettingsProblem {
  * built against the lists as they are now.
  *
  * Nothing is saved: signing it ([SignSafeTx]) queues it. On [network] only.
+ * Its nonce and its funds come after what is queued and what is held in lenient mode ([pendingOf]):
+ * it never lands at the nonce of a signature held until its check.
  */
 class ProposeSafeSettingsChange(
     private val observeSafe: ObserveSafe,
     private val inputs: TransactionInputs,
     private val queue: SafeTxQueue,
     private val network: Network,
+    private val outbox: Outbox,
 ) {
     /**
      * Proposes [change] of [safe]'s settings. [safeChecked] is called once the Safe is verified
@@ -163,7 +167,8 @@ class ProposeSafeSettingsChange(
         change.problem(safe, state)?.let { return@cancellingReads SafeSettingsProposing.Problem(it) }
         // problem() has found the entry removed or replaced in its list: there is a neighbour to name.
         val data = checkNotNull(change.callData(state)) { "an entry problem() found is in its list" }
-        val pending = pendingOf(queue.observe(AccountId(network, safe)).first(), state.nonce, network)
+        val id = AccountId(network, safe)
+        val pending = pendingOf(queue.observe(id).first(), outbox.observe().first(), state.nonce, id)
         val nonce = nextNonce(pending, state.nonce)
         val request = SigningRequest.of(network, safe, SafeTx.call(safe, UInt256.ZERO, data, nonce))
         request.unsignable()?.let { return@cancellingReads SafeSettingsProposing.Refused(it) }

@@ -24,18 +24,19 @@ import eth.serotine.domain.repository.FeeReading
 import eth.serotine.domain.repository.GasEstimate
 import eth.serotine.domain.repository.LightClientStatus
 import eth.serotine.domain.repository.NonceReading
+import eth.serotine.domain.repository.Outbox
 import eth.serotine.domain.repository.ReadUnavailable
 import eth.serotine.domain.repository.Simulation
 import eth.serotine.domain.repository.TokenBalanceReading
 import eth.serotine.domain.repository.TransactionInputs
 import eth.serotine.domain.repository.UniswapV3Chain
 import eth.serotine.domain.repository.VenueReading
-import kotlinx.coroutines.test.runTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertIs
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
+import kotlinx.coroutines.test.runTest
 
 class ProposeSafeSwapTest {
     private val world = SafeWorld()
@@ -72,6 +73,7 @@ class ProposeSafeSwapTest {
         world.queue,
         light,
         Network.SEPOLIA,
+        Outbox.None,
     )
 
     private fun word(value: UInt256) = value.toBytes32().toHex()

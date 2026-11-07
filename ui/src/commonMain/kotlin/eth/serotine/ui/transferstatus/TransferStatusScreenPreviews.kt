@@ -1,8 +1,10 @@
 package eth.serotine.ui.transferstatus
 
 import androidx.compose.runtime.Composable
+import eth.serotine.domain.repository.FeeLevel
 import eth.serotine.ui.components.LightClientItem
 import eth.serotine.ui.components.NotSentItem
+import eth.serotine.ui.components.catchingUpStripSample
 import eth.serotine.ui.components.verifiedStripSample
 import eth.serotine.ui.ScreenPreview
 import eth.serotine.ui.theme.SerotineTheme
@@ -67,6 +69,142 @@ private val maybeSent = pending.copy(
             "be on its way. Try again sends the same signed transfer; nothing new is sent from this account " +
             "meanwhile, since a new one could pay twice.",
         canRetry = true,
+    ),
+)
+
+// A transfer queued in lenient mode (docs/lenient-mode.md, *The outbox*): Signed, then its step, then
+// Broadcast, in each state it draws differently; the simple previews draw the same samples.
+
+private const val QUEUED_ID = "0x9a3c5e7f1b2d4f6a8c0e2b4d6f8a1c3e5b7d9f0a2c4e6b8d1f3a5c7e9b0d2f4a"
+
+internal val queuedSample = TransferStatusUiState.Queued(
+    network = "Sepolia",
+    id = QUEUED_ID,
+    sent = sent,
+    steps = listOf(
+        StatusStep("Signed", StepState.DONE, "On this device, Nov 7, 2026, 9:12 AM"),
+        StatusStep("Queued", StepState.WAITING, "Waits for Sepolia to catch up. Keep Serotine open to send it sooner."),
+        StatusStep(
+            "Broadcast",
+            StepState.WAITING,
+            "Once it checks out at a fresh verified head",
+            simpleLabel = "Sent",
+            simpleDetail = "Once it checks out on chain",
+        ),
+    ),
+    again = SendAgain(
+        chainId = 11_155_111,
+        from = "0x5aaeb6053f3e94c9b9a09f33669435e7ef1beaed",
+        asset = null,
+        to = "0xfb6916095ca1df60bb79ce92ce3ea74c37c5d359",
+        amount = "0.1",
+        fee = FeeLevel.NORMAL,
+    ),
+    againLabel = "Edit",
+    againNote = "Edit discards it and opens Send with it filled in. Discard deletes its signature: nothing is sent.",
+)
+
+internal val queuedSendingSample = queuedSample.copy(
+    steps = queuedSample.steps.take(1) + StatusStep("Sending…", StepState.WAITING, "It's being checked and sent.") +
+        queuedSample.steps.drop(2),
+    busy = "It's being checked and sent.",
+)
+
+internal val queuedPastItsHourSample = queuedSample.copy(
+    steps = queuedSample.steps.take(1) +
+        StatusStep("Queued", StepState.UNKNOWN, "Not sent by itself after an hour: it waits for you.") +
+        queuedSample.steps.drop(2),
+    question = "Still send this? You signed it 2 h ago.",
+)
+
+internal val queuedConflictSample = queuedSample.copy(
+    steps = listOf(
+        StatusStep("Signed", StepState.UNKNOWN, "On this device, Nov 7, 2026, 9:12 AM: deleted since"),
+        StatusStep(
+            "Needs your signature again",
+            StepState.FAILED,
+            "Fees rose since you signed: the most it can cost is now 0.0031 ETH. Nothing was sent, and its " +
+                "signature was deleted.",
+        ),
+        StatusStep("Broadcast", StepState.UNKNOWN, "Not sent", simpleLabel = "Sent", simpleDetail = "Not sent"),
+    ),
+    againLabel = "Sign again",
+    againNote = "Sign again discards it and opens Send with it filled in, to be reviewed and signed anew.",
+)
+
+/**
+ * A Safe transaction's approval on chain, queued in lenient mode (docs/lenient-mode.md, *Safe
+ * transactions in lenient mode*).
+ */
+internal val queuedSafeApprovalSample = queuedSample.copy(
+    sent = null,
+    safeTx = SafeTxSummary(
+        title = "Approval of a Safe transaction",
+        safe = "0xdbF03B407c01E7cD3CBea99509d93f8DDDC8C6FB",
+        nonce = "Safe nonce 12",
+        from = "0x5aAeb6053F3E94C9b9A09f33669435E7Ef1BeAed",
+    ),
+    again = null,
+    safeAgain = SafeTxAgain(
+        11_155_111,
+        "0xdbf03b407c01e7cd3cbea99509d93f8dddc8c6fb",
+        "0x3c9f1a7e5b2d8c4f6a0e9b1d3c5f7a9e2b4d6f8a0c1e3b5d7f9a2c4e6b8d0f1a",
+    ),
+    againNote = "Edit discards it and opens its Safe transaction. Discard deletes its signature: nothing is sent.",
+)
+
+internal val discardedSample =
+    TransferStatusUiState.Discarded("Sepolia", "Discarded: its signature was deleted, and nothing was sent.")
+
+@Preview
+@Composable
+private fun TransferStatusQueuedPreview() = TransferStatusPreview(queuedSample, lightClient = catchingUpStripSample)
+
+@Preview
+@Composable
+private fun TransferStatusQueuedDarkPreview() =
+    TransferStatusPreview(queuedSample, darkTheme = true, lightClient = catchingUpStripSample)
+
+@Preview
+@Composable
+private fun TransferStatusQueuedSafeApprovalPreview() =
+    TransferStatusPreview(queuedSafeApprovalSample, lightClient = catchingUpStripSample)
+
+@Preview
+@Composable
+private fun TransferStatusQueuedSendingPreview() = TransferStatusPreview(queuedSendingSample)
+
+@Preview
+@Composable
+private fun TransferStatusQueuedPastItsHourPreview() = TransferStatusPreview(queuedPastItsHourSample)
+
+@Preview
+@Composable
+private fun TransferStatusQueuedConflictPreview() = TransferStatusPreview(queuedConflictSample)
+
+@Preview
+@Composable
+private fun TransferStatusQueuedDiscardingPreview() = TransferStatusPreview(queuedSample.copy(discarding = true))
+
+@Preview
+@Composable
+private fun TransferStatusQueuedNotDiscardedPreview() = TransferStatusPreview(
+    queuedSample.copy(
+        error = "It's being checked and sent, so it was not discarded: it may reach the network. Its status follows.",
+    ),
+)
+
+@Preview
+@Composable
+private fun TransferStatusDiscardedPreview() = TransferStatusPreview(discardedSample)
+
+@Preview
+@Composable
+private fun TransferStatusFoundNowherePreview() = TransferStatusPreview(
+    TransferStatusUiState.Discarded(
+        "Sepolia",
+        "The transactions waiting to be sent on this device cannot be read right now, so where this one stands " +
+            "is not known. Nothing is sent from this wallet until they can be read; Serotine keeps trying.",
     ),
 )
 
@@ -413,4 +551,14 @@ internal val transferStatusScreenPreviews: List<ScreenPreview> = listOf(
     ScreenPreview("maybe-sent-nonce-used") { TransferStatusMaybeSentNonceUsedPreview() },
     ScreenPreview("cow-cancellation") { TransferStatusCowCancellationPreview() },
     ScreenPreview("wrap") { TransferStatusWrapPreview() },
+    ScreenPreview("queued") { TransferStatusQueuedPreview() },
+    ScreenPreview("queued-dark") { TransferStatusQueuedDarkPreview() },
+    ScreenPreview("queued-sending") { TransferStatusQueuedSendingPreview() },
+    ScreenPreview("queued-past-its-hour") { TransferStatusQueuedPastItsHourPreview() },
+    ScreenPreview("queued-conflict") { TransferStatusQueuedConflictPreview() },
+    ScreenPreview("discarded") { TransferStatusDiscardedPreview() },
+    ScreenPreview("queued-discarding") { TransferStatusQueuedDiscardingPreview() },
+    ScreenPreview("queued-not-discarded") { TransferStatusQueuedNotDiscardedPreview() },
+    ScreenPreview("queued-outbox-unreadable") { TransferStatusFoundNowherePreview() },
+    ScreenPreview("queued-safe-approval") { TransferStatusQueuedSafeApprovalPreview() },
 )

@@ -12,6 +12,7 @@ import eth.serotine.domain.model.WalletPassword
 import eth.serotine.domain.model.Wei
 import eth.serotine.domain.repository.AddressKind
 import eth.serotine.domain.repository.AddressKinds
+import eth.serotine.domain.model.SyncPolicy
 import eth.serotine.domain.repository.BalanceReading
 import eth.serotine.domain.repository.BiometricChange
 import eth.serotine.domain.repository.BiometricUnlock
@@ -26,6 +27,7 @@ import eth.serotine.domain.repository.KeyStoreDescription
 import eth.serotine.domain.repository.KindReading
 import eth.serotine.domain.repository.NameResolution
 import eth.serotine.domain.repository.NewMnemonic
+import eth.serotine.domain.repository.Outbox
 import eth.serotine.domain.repository.ReadUnavailable
 import eth.serotine.domain.repository.SentAction
 import eth.serotine.domain.repository.Signing
@@ -35,6 +37,7 @@ import eth.serotine.domain.usecase.DeploySafe
 import eth.serotine.domain.usecase.DescribeKeyStore
 import eth.serotine.domain.usecase.ObserveAccounts
 import eth.serotine.domain.usecase.ObserveEnabledNetworks
+import eth.serotine.domain.usecase.ObserveSyncPolicy
 import eth.serotine.domain.usecase.PlanSafe
 import eth.serotine.domain.usecase.QuoteSafeDeployment
 import eth.serotine.domain.usecase.RebroadcastTransfer
@@ -52,6 +55,7 @@ import eth.serotine.ui.FakeSigner
 import eth.serotine.ui.FakeTransactionInputs
 import eth.serotine.ui.MemoryNetworkSettings
 import eth.serotine.ui.MemorySentTransfers
+import eth.serotine.ui.MemorySyncPolicy
 import eth.serotine.ui.TEST_RELEASE
 import eth.serotine.ui.components.AccountChoice
 import eth.serotine.ui.components.BalanceChange
@@ -65,6 +69,7 @@ import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertIs
 import kotlin.test.assertNotEquals
+import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 import kotlin.time.Duration.Companion.seconds
@@ -159,6 +164,7 @@ class CreateSafeViewModelTest {
     fun resetMainDispatcher() = Dispatchers.resetMain()
 
     private val networks = MemoryNetworkSettings()
+    private val policy = MemorySyncPolicy()
 
     private fun TestScope.viewModel(): CreateSafeViewModel {
         Dispatchers.setMain(UnconfinedTestDispatcher(testScheduler))
@@ -167,12 +173,13 @@ class CreateSafeViewModelTest {
             DescribeKeyStore(keys),
             ResolveRecipient(names),
             PlanSafe(releases) { UInt256.of(++salts) },
-            QuoteSafeDeployment(kinds, balances, inputs, sent) { 1_800_000_000 },
+            QuoteSafeDeployment(kinds, balances, inputs, sent, Outbox.None) { 1_800_000_000 },
             DeploySafe(signer, broadcaster, sent) { 1_800_000_000 },
             RebroadcastTransfer(broadcaster, sent, receipts),
             WarmFeeHistory(inputs),
             ObserveEnabledNetworks(networks),
             SetNetworkEnabled(networks),
+            ObserveSyncPolicy(policy),
             clock,
         )
         backgroundScope.launch { viewModel.uiState.collect {} }
@@ -759,5 +766,21 @@ class CreateSafeViewModelTest {
 
         assertTrue(viewModel.review.error!!.startsWith("This address holds code already"))
         assertNull(viewModel.review.quote)
+    }
+    @Test
+    fun inLenientModeADeploymentRefusedWhileItsPayerSyncsSaysTheSettingDoesNotReachIt() = runTest {
+        for ((chosen, said) in listOf(SyncPolicy.STRICT to false, SyncPolicy.LENIENT to true)) {
+            policy.policy.value = chosen
+            // The address checked on chain; only the payer's balance is still syncing.
+            balances.of(daily.address).value = BalanceReading.Syncing
+            val viewModel = viewModel()
+            viewModel.onContinue()
+            viewModel.onContinue()
+            runCurrent()
+
+            val error = assertNotNull(viewModel.review.error)
+            assertTrue(error.startsWith("The light client is not synced yet"), error)
+            assertEquals(said, "Sign while syncing does not apply to creating a Safe" in error, error)
+        }
     }
 }

@@ -6,6 +6,7 @@ import eth.serotine.domain.model.AccountId
 import eth.serotine.domain.model.AccountKind
 import eth.serotine.domain.model.DappCallMeaning
 import eth.serotine.domain.model.Network
+import eth.serotine.domain.model.SyncPolicy
 import eth.serotine.domain.model.Token
 import eth.serotine.domain.model.UInt256
 import eth.serotine.domain.model.WalletPassword
@@ -15,9 +16,11 @@ import eth.serotine.domain.repository.DappRequestId
 import eth.serotine.domain.repository.DappSessionId
 import eth.serotine.domain.repository.Signing
 import eth.serotine.domain.repository.Unlock
+import eth.serotine.domain.usecase.CallRefusal
 import eth.serotine.domain.usecase.DappMessageReview
 import eth.serotine.domain.usecase.DappSafeProposal
 import eth.serotine.domain.usecase.DappSafeProposing
+import eth.serotine.domain.usecase.ObserveSyncPolicy
 import eth.serotine.domain.usecase.ProposeDappSafeTx
 import eth.serotine.domain.usecase.SafeCallSimulation
 import eth.serotine.domain.usecase.DappSafeSigning
@@ -39,6 +42,8 @@ import eth.serotine.domain.usecase.SignedAnswer
 import eth.serotine.domain.usecase.SignedState
 import eth.serotine.domain.usecase.TransferSending
 import eth.serotine.domain.repository.SentTransfer
+import eth.serotine.ui.components.DAPP_REQUESTS_STAY_STRICT
+import eth.serotine.ui.components.whileSyncing
 import eth.serotine.ui.components.Eip55
 import eth.serotine.ui.components.NotSentItem
 import eth.serotine.ui.components.CHECK_TOOK_THE_TIME
@@ -169,11 +174,25 @@ class DappTransactionViewModel(
     private val signDappSafeTx: SignDappSafeTx,
     private val refuseDappRequest: RefuseDappRequest,
     private val describeKeyStore: DescribeKeyStore,
+    /** Whether the user chose *Sign while syncing*, which a dApp's request does not follow: its refusal says so. */
+    observeSyncPolicy: ObserveSyncPolicy,
     private val clock: () -> Long = ::epochSecondsNow,
     private val timeSource: TimeSource = TimeSource.Monotonic,
     /** When how long the dApp waits is said again: every 15 seconds while the screen is open. */
     ticks: Flow<Unit> = DappRequestViewModel.every15Seconds(),
 ) : ViewModel() {
+
+    /** Whether lenient mode is chosen: a refusal while syncing then says the setting does not reach this. */
+    private val lenient = observeSyncPolicy().map { it == SyncPolicy.LENIENT }
+        .stateIn(viewModelScope, SharingStarted.Eagerly, false)
+
+    /** In lenient mode, that the setting does not reach a dApp's request, after a [refusal] while syncing. */
+    private fun lenientNote(refusal: CallRefusal): String =
+        if (refusal.whileSyncing && lenient.value) DAPP_REQUESTS_STAY_STRICT else ""
+
+    /** [lenientNote] of a Safe's refusal: its own syncing, the Safe's, or its quote's. */
+    private fun lenientNote(refusal: SafeTxRefusal): String =
+        if (refusal.whileSyncing && lenient.value) DAPP_REQUESTS_STAY_STRICT else ""
 
     private val id: DappRequestId? = requestKey.split('/').takeIf { it.size == 2 }?.let { (topic, number) ->
         number.toLongOrNull()?.let { DappRequestId(DappSessionId(topic), it) }
@@ -285,7 +304,7 @@ class DappTransactionViewModel(
                         current.copy(
                             quoting = false,
                             quote = null,
-                            notQuoted = callRefusalText(quoting.refusal, network),
+                            notQuoted = callRefusalText(quoting.refusal, network) + lenientNote(quoting.refusal),
                         )
                     is DappTransactionQuoting.GasTooLow -> current.copy(
                         quoting = false,
@@ -445,7 +464,9 @@ class DappTransactionViewModel(
                     base.copy(proposal = proposing.proposal, quotedAt = mark, hidden = false)
                 is DappSafeProposing.AlreadyQueued -> base.copy(queued = "0x" + proposing.request.hash.hex)
                 is DappSafeProposing.SafeRefused ->
-                    base.copy(notQuoted = safeTxRefusalText(proposing.refusal, network))
+                    base.copy(
+                        notQuoted = safeTxRefusalText(proposing.refusal, network) + lenientNote(proposing.refusal),
+                    )
                 DappSafeProposing.InsufficientFunds -> base.copy(notQuoted = SAFE_SHORT)
                 is DappSafeProposing.Reverts -> base.copy(
                     notQuoted = "The call reverts when run as a verified call from the Safe" +

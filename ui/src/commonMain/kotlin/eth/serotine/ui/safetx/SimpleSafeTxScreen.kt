@@ -41,8 +41,12 @@ private fun SafeTxUiState.simple(): SafeTxUiState = when (this) {
         swap = swap?.simple(),
         refusal = simpleRefusal ?: refusal,
         message = simpleMessage ?: message,
+        draftNote = simpleDraftNote ?: draftNote,
     )
     is SafeTxUiState.Signing -> copy(swap = swap?.simple())
+    // A draft says each figure's age; its blocks are behind Details.
+    is SafeTxUiState.DraftReview -> copy(feeDetail = "", txNonce = "", balance = balance.copy(verifiedAt = ""))
+    is SafeTxUiState.Held -> copy(safeVerifiedAt = "")
     is SafeTxUiState.Review -> copy(
         feeDetail = "",
         balance = balance.copy(verifiedAt = ""),
@@ -81,6 +85,12 @@ private fun SafeTxUiState.details(): List<String> = when (this) {
         simulation.takeIf { simpleSimulation != null },
     ) + swap?.blocks().orEmpty()
     is SafeTxUiState.Signing -> swap?.blocks().orEmpty()
+    is SafeTxUiState.DraftReview -> listOf(
+        feeDetail,
+        txNonce,
+        "${balance.what}: ${balance.before} → ${balance.after}, ${balance.verifiedAt}",
+    )
+    is SafeTxUiState.Held -> listOf(safeVerifiedAt)
     else -> emptyList()
 }
 

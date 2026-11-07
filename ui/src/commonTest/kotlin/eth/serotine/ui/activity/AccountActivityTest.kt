@@ -70,6 +70,14 @@ import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
+import eth.serotine.ui.MemoryOutbox
+import eth.serotine.domain.usecase.ObserveOutbox
+import eth.serotine.domain.repository.QueuedTransaction
+import eth.serotine.domain.repository.QueueConflict
+import eth.serotine.domain.repository.OutboxList
+import eth.serotine.domain.repository.FeeLevel
+import eth.serotine.domain.repository.DraftBasis
+import eth.serotine.domain.model.Eip1559Transaction
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class AccountActivityTest {
@@ -92,6 +100,7 @@ class AccountActivityTest {
     private val usdc = Token(Address.of("0x1c7d4b196cb0c7b01d743fbc6116a902379c7238"), "USDC", "USDC", 6, "usdc")
     private val history = MemoryTransactionHistory()
     private val cowOrders = MemoryCowOrders()
+    private val outbox = MemoryOutbox()
     private val waitingSwaps = MemoryWaitingSwaps()
     private val accounts = FakeAccounts(alice, treasury)
     private val starts = MemoryHistoryStarts()
@@ -138,6 +147,8 @@ class AccountActivityTest {
             ObserveSentToAddresses(history),
             ObserveAccountCowOrders(cowOrders),
             ObserveWaitingSwaps(waitingSwaps),
+            ObserveOutbox(outbox),
+            now = { 600 },
         ) { "at $it" }
             .of(AccountId(Network.SEPOLIA, address), hidden)
             // Unconfined, so that what a test changes is listed before it reads the value.
@@ -1011,4 +1022,67 @@ class AccountActivityTest {
         )
         assertEquals("Safe transaction 0x${request.hash.hex.take(4)}…${request.hash.hex.takeLast(4)}", rows[1].detail)
     }
+
+    @Test
+    fun whatTheAccountHasQueuedIsListedFirstAndOpensItsStatus() = runTest {
+        history.entries.value = listOf(HistoryEntry(native, SentOutcome.Finalized(9_412_118, succeeded = true)))
+        val waiting = queued("0x" + "9a".repeat(32))
+        val conflicted = queued("0x" + "9b".repeat(32), QueueConflict.InsufficientFunds)
+            .copy(account = treasury.address)
+        outbox.list.value = OutboxList.Loaded(listOf(waiting, conflicted))
+
+        val shown = assertIs<ActivityUiState.Shown>(activity().value)
+
+        assertEquals(
+            listOf(
+                ActivityRow(
+                    key = "queued:${waiting.id}",
+                    title = "Send 40.5 USDC",
+                    detail = "To 0x5aAe…eAed",
+                    about = "0x5aAeb6053F3E94C9b9A09f33669435E7Ef1BeAed",
+                    time = "Signed at 500",
+                    status = "Waiting to send",
+                    state = ActivityState.WAITING,
+                    opens = ActivityKey(waiting.id, queued = true),
+                ),
+            ),
+            shown.queued,
+            "the account's own only, first whichever way the rows run",
+        )
+        assertEquals(1, shown.rows.size, "the history's rows are as they were")
+        assertEquals(shown.queued, (shown.ordered(ActivityOrder.OLDEST_FIRST) as ActivityUiState.Shown).queued)
+    }
+
+    @Test
+    fun oneTheCheckFoundInConflictNeedsASignatureAgain() = runTest {
+        outbox.list.value = OutboxList.Loaded(listOf(queued("0x" + "9b".repeat(32), QueueConflict.InsufficientFunds)))
+
+        val row = assertIs<ActivityUiState.Shown>(activity().value).queued.single()
+
+        assertEquals("Needs your signature again", row.status)
+        assertEquals(ActivityState.FAILED, row.state)
+    }
+
+    /** 40.5 USDC from Alice to Bob, queued under [id], in conflict when [conflict] says so. */
+    private fun queued(id: String, conflict: QueueConflict? = null) = QueuedTransaction(
+        network = Network.SEPOLIA,
+        account = alice.address,
+        id = id,
+        action = token.action,
+        level = FeeLevel.NORMAL,
+        transaction = Eip1559Transaction(
+            chainId = Network.SEPOLIA.chainId,
+            nonce = 12,
+            maxPriorityFeePerGas = UInt256.of(1),
+            maxFeePerGas = UInt256.of(2),
+            gasLimit = 100_000,
+            to = usdc.address,
+            value = UInt256.ZERO,
+        ),
+        signed = SignedTransfer(byteArrayOf(2, 12)).takeIf { conflict == null },
+        maxCost = UInt256.of(200_000),
+        signedAt = 500,
+        builtOn = DraftBasis(1, null, 1, null, 1, null, 1, null),
+        conflict = conflict,
+    )
 }

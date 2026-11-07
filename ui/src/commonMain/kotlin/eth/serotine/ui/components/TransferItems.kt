@@ -54,7 +54,8 @@ data class SendFrom(val label: String, val address: String)
  * or why there is none yet), the block it was verified at ([verifiedAt], "block 9,412,118"),
  * [warning] for a token the user added whose symbol is a built-in token's, and [age], how long ago
  * the balance was proved ("updated 2 min ago"), which simple mode shows in place of the block
- * (docs/simple-ui.md); null where not known.
+ * (docs/simple-ui.md); null where not known. [lastKnown] when the balance is the one last verified
+ * at an older head, offered for a lenient draft only ("as of 12 min ago"; docs/lenient-mode.md).
  */
 data class AssetChoice(
     val symbol: String,
@@ -65,6 +66,7 @@ data class AssetChoice(
     val verifiedAt: String? = null,
     val warning: String? = null,
     val age: String? = null,
+    val lastKnown: Boolean = false,
 )
 
 /** One of the wallet's accounts, offered as the recipient: its [label] and EIP-55 [address]. */
@@ -87,7 +89,9 @@ data class RecipientItem(
 /**
  * One balance of the verified simulation: [what] ("ETH balance, which pays the fee"), [before] and
  * [after] it, and the block the balance before was verified at ([verifiedAt]); [short], what a line
- * naming its value after calls it ("ETH balance"), [what] by default.
+ * naming its value after calls it ("ETH balance"), [what] by default. In a lenient draft's review,
+ * [age] is how old the balance before is ("as of 12 min ago"), which simple mode shows in place of
+ * its block; null elsewhere.
  */
 data class BalanceChange(
     val what: String,
@@ -95,6 +99,7 @@ data class BalanceChange(
     val after: String,
     val verifiedAt: String,
     val short: String = what,
+    val age: String? = null,
 )
 
 /**

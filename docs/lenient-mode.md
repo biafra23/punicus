@@ -1,15 +1,16 @@
 # Lenient mode: prepare and sign while the light client syncs
 
-Drawn 2026-11-06 at the owner's request, and **a proposal: nothing on this
-page is a ruling yet.** It needs the owner's decisions listed in *Decisions
-for the owner*, and the rule changes listed in *The rules it changes*. Until
-the owner rules, the rules under `.claude/` stand as they are and win where
-this page differs. Once the owner rules, the rulings go into
-`.claude/rules/trust.md` with their date, and docs/wallet-ux.md and
-docs/simple-ui.md take over the screens as each part lands.
+Drawn 2026-11-06 at the owner's request, and reviewed on its PR (#258).
+**Decided the same day: the owner accepted every proposal on this page**,
+the twelve decisions and the six rule changes (owner rulings, 2026-11-06).
+The rulings are in `.claude/rules/trust.md`, *Lenient mode*, and in the
+places *The rules it changes* names; where this page and the rules under
+`.claude/` disagree, the rules win and this page is fixed. docs/wallet-ux.md
+and docs/simple-ui.md take over the screens as each part lands.
 
-This page has no mockups yet. They come with the screens' part (*Delivery*),
-once the decisions below are made.
+The screens' part (*Delivery*, part 4) drew no mockups: the previews of
+every new state, which CI renders into `docs/screenshots/`, stand in for
+them.
 
 ## The request
 
@@ -110,6 +111,11 @@ and says why. In lenient mode it also says that the setting does not apply
 to it. Where lenient mode greys a step out, a tap on it says what it waits
 for (owner ruling, 2026-10-18, #55).
 
+A network that is off is not syncing: it runs no light client, and its
+accounts' actions stay greyed out with "Turn on" as the way to get them
+(owner ruling, 2026-10-22), in either mode. Nothing is drafted on it, even
+where inputs were kept for it before it was turned off.
+
 ## What a draft is built on
 
 A draft is built on the state the light client verified last. Each figure
@@ -117,8 +123,15 @@ has its age, and the review shows it.
 
 - **Balances.** The native and token balances last verified, which the app
   already keeps across restarts (`LastBalancesFile`). The asset list offers a
-  token whose balance was last verified as held, and Max takes that balance,
-  labelled "as of 12 min ago".
+  token whose balance was last verified as held, labelled "as of 12 min
+  ago". Max on a token takes that balance.
+- **Max on the network's currency differs from strict Max.** Strict Max is
+  the whole balance, and the quote then says the fee does not fit
+  (docs/wallet-ux.md, screen 7). A draft has no quote to say it, so lenient
+  Max leaves room for the most the fee can be: the gas ceiling below times
+  the fee cap. It also leaves room for the account's transactions not mined
+  yet. A Max draft then passes the funds check of *The check before
+  sending*.
 - **The nonce.** Not kept today. New: the account's verified count of mined
   transactions, with its block, kept across restarts. The nonce signed is
   the one `CallQuoter` takes today: past that count and past the account's
@@ -130,8 +143,11 @@ has its age, and the review shows it.
 - **The gas limit.** An estimate needs fresh state, so a draft signs a
   pinned ceiling for its kind of call: one for the network's currency, one
   for a token's `transfer`. They are high enough for a Safe or another
-  contract as recipient. The PR that codes them pins the values, each
-  measured on its network. Gas not used is not paid. The ceiling shows only
+  contract as recipient. The PR that codes them pins the values. As built,
+  each is derived from the EVM's gas schedule with room, the same on every
+  network, not measured on one (`DraftGas`): a call that needs more fails
+  the check, whose fresh estimate must fit, and is signed again. Gas not
+  used is not paid. The ceiling shows only
   in the most the fee can be.
 - **No simulation.** A verified call needs a fresh head. The review says the
   transfer runs on chain before it is sent.
@@ -155,6 +171,11 @@ differences:
   transfer should go through": "Not checked yet: it runs on chain before
   it's sent."
 - The balance after says "if nothing changed".
+- No fiat values, here or in Send's form (its fiat hint beside the
+  amount). A price is never shown last known (docs/wallet-ux.md, *Rules
+  every screen follows*; owner's request, 2026-10-19), and none is fresh
+  while the light client catches up. The amounts and the fee are in token
+  units, as every signed amount is.
 - The button says "Sign and queue", in place of "Confirm and send".
 - Screen 8's minute rule applies to the check, not to the signature. A
   strict quote is never signed more than a minute old, and the biometric
@@ -171,8 +192,8 @@ differences:
   first." Why: two queued transactions take consecutive nonces, and a
   conflict on the first breaks the second as well.
 - **Where it shows.** The transfer's status screen (9 in Detailed view, S3 in
-  simple mode) gets a step before Signed: "Queued: waits for Ethereum to
-  catch up". The account's Activity lists it first. Home says "1 waiting to
+  simple mode) gets a step after Signed, before the broadcast: "Queued:
+  waits for Ethereum to catch up". The account's Activity lists it first. Home says "1 waiting to
   send" under the network's sync line.
 - **What the user can do with it:** Discard (its signature is deleted;
   nothing was sent), and Edit (discard, and open the form filled with its
@@ -182,7 +203,10 @@ differences:
   broadcast and record are today (`SendTransfer`). While they run, Discard
   and Edit are greyed out: "It's being checked and sent." A tap that comes
   after a peer took the transaction finds it sent, and says so. It is never
-  told as discarded.
+  told as discarded. As built, they are greyed out while it is being sent,
+  not while the check runs, which has no state of its own: a tap then waits
+  on the outbox's lock until the check is done (docs/wallet-ux.md,
+  screen 9).
 - **Sent by itself once it checks out** (decision 3). When the network's
   light client verifies at a fresh head, the outbox runs the check below. A
   transaction that passes is broadcast as a strict send is, and recorded in
@@ -211,28 +235,51 @@ differences:
 The check makes the strict quote again, fresh, from the draft's inputs (the
 account, the recipient, the asset, the amount, the fee level), and compares
 it with what was signed. It is `QuoteTransfer` and `CallQuoter` as they are,
-plus the comparison.
+plus the comparison, with one difference: the funds row replaces the quote's
+own test of the fee. A peer tests the signed figures, not the fresh ones.
 
 | The check | It passes when | Otherwise the user is told |
 |---|---|---|
-| The quote | It is made, not refused: enough of the asset and for the fee, the call does not revert, nothing earlier maybe sent | The refusal, in the words strict mode uses for it |
+| The quote | It is made, not refused: enough of the asset, the call does not revert, nothing earlier maybe sent | The refusal, in the words strict mode uses for it |
 | The nonce | The fresh nonce is the one signed | "Another transaction from this account came first." A higher nonce means one used it; a lower one means a gap the signed one would wait behind |
 | The gas | The fresh estimate is within the signed limit | "It needs more gas than it was signed for." |
-| The fee | The signed fee cap covers the next block's verified base fee plus the signed tip | "Fees rose since you signed: the most it can cost is now …" |
+| The fee | The signed fee cap covers the next block's verified base fee, raised by the headroom of decision 12, plus the signed tip | "Fees rose since you signed: the most it can cost is now …" |
+| The funds | The fresh balance of the network's currency covers the signed transaction's upfront cost (its value plus its gas limit times its fee cap) and the most the account's transactions not mined yet can cost | "Not enough ETH for the most this can cost." (xDAI on Gnosis Chain) |
 
+- **Why the funds row.** A peer admits a transaction only when the balance
+  covers the upfront cost of the signed bytes. The quote's own test uses the
+  fresh estimate and the fresh fee cap, and either way it tests the wrong
+  figures. The draft signed the gas ceiling and the older cap, which can
+  cost more: the quote's test would pass a transaction every peer refuses.
+  The fresh cap can be the higher one when the base fee rose within the
+  headroom: the quote's test would then refuse a transaction the signed
+  bytes cover, and ask for a signature for nothing. A token transfer has
+  the same need in the network's currency: its value is zero, its fee is
+  not.
 - **Not a conflict:** a balance that changed but still covers it, lower
   fees, a newer head. The transaction is sent.
 - **An earlier transaction maybe sent** (no peer answered its broadcast)
   holds the queued one back, as it holds a strict quote back today. The
   queued one waits until the earlier one is mined or three hours old
   (docs/wallet-ux.md, screen 7). Its hour runs meanwhile (decision 4).
+- **A broadcast the network rejects** is a conflict too. It is not
+  recorded, as in strict mode (`signAndSend`), so it holds no nonce; the
+  user is told the network's words and asked to sign again. One that no
+  peer answered may have been taken all the same: it is recorded as maybe
+  sent, as in strict mode, and its status offers to try it again.
 - **A conflict never fixes itself.** Every field is in the signature, so the
   user is asked to sign again. Sign again opens the review with the fresh
   quote, read fresh as in strict mode now that the light client verifies.
   Discard deletes it.
-- **The old signature is deleted when the conflict is found.** It was never
-  broadcast, so no copy of it exists outside the device, and nothing can
-  ever send it.
+- **The old signature is deleted when the conflict is found.** Except after
+  a rejected broadcast, it was never broadcast, so deleting the one copy is
+  what keeps it from being sent. That holds only while the copy never left
+  the device (decision 5). A rejected one was seen by the peer that rejected
+  it; what retires it is the new signature at the same nonce being mined, as
+  after a rejected broadcast in strict mode (`signAndSend`). A nonce gap
+  is the case that matters: the signed transaction becomes valid again once
+  the gap fills, and a copy kept elsewhere would then make a payment the
+  user chose not to make.
 
 ## The signed bytes kept
 
@@ -242,22 +289,48 @@ plus the comparison.
   data because they are public once broadcast. Queued bytes are not: whoever
   has them can broadcast them. They are not key material either: they sign
   nothing else, and they move only what the user signed, once.
-- Proposed (decision 5): kept across restarts in an app-private file of its
-  own, `outbox.json`, out of cloud backup and device-to-device transfer,
-  never logged, never in a UiState, and deleted with the queued
-  transaction. The other choice is memory only: a restart then asks for the
+- **Not the session secrets' profile.** WalletConnect's session secrets are
+  kept in an app-private file with no seal because they cannot move funds
+  (`.claude/rules/trust.md`, *What a dApp sends is untrusted input*; owner
+  rulings, 2026-11-03, #22). Queued bytes can, so a place alone is not
+  enough.
+- Decided (decision 5): kept across restarts in an app-private file of its
+  own, `outbox.json`, **sealed with a hardware key of its own**, out of
+  cloud backup and device-to-device transfer, never logged, never in a
+  UiState, and deleted with the queued transaction. The key is made as the
+  envelope's hardware factor is (`HardwareSecret`): in Android's Keystore,
+  or in the Secure Enclave of an iPhone or a Mac. It needs no password and
+  no biometric prompt, so the outbox still sends by itself. A copied file is
+  then useless off the device.
+- **What the seal does not stop.** Code running inside the app can open the
+  file, as it could send the transaction itself. On a Mac, so can any
+  program running as the same user: the enclave's key is bound to the Mac,
+  not to the app (docs/keys-and-signing.md, *A Mac with a Secure Enclave*).
+- **Where there is no seal, memory only.** A device with no hardware key to
+  seal with keeps the queued bytes in memory only: an Android device whose
+  Keystore is software only, Windows and Linux for now, a TPM present or not
+  (owner ruling, 2026-10-16), a Mac without a Secure Enclave, and the iOS
+  simulator.
+- **A seal key lost loses the queued transaction.** When the key store no
+  longer has the key (it was reset, or the app was restored on another
+  device), the file cannot be opened. The queued transaction is said as
+  lost, and the user is asked to sign again. A lost hardware key is said,
+  not guessed around (docs/keys-and-signing.md).
+- The other choices: memory only everywhere, so a restart asks for the
   signature again, which on a phone that stops apps in the background is
-  often.
+  often; or the file with no seal, which is simpler and leaves a copied file
+  sendable.
 
 ## Safe transactions in lenient mode
 
-This is the plan's last part. It needs one more rule changed, below.
+This is the plan's last part. It needs rule change 4 for the Safe's own
+values, below.
 
 - **Drafted on the Safe last verified.** The Safe's nonce, owners and
   threshold, last verified and kept, labelled with their age. Today no
   other value than a balance is shown last known (docs/wallet-ux.md, *Rules
-  every screen follows*), so this needs the owner's word (*The rules it
-  changes*, 4).
+  every screen follows*; owner's request, 2026-10-19), so rule change 4
+  covers them.
 - **The refusals apply when drafting, unchanged.** Setting a fallback
   handler other than the pinned one or none (owner ruling, 2026-10-18,
   #63), enabling a module (owner ruling, 2026-10-18, on #54), and a call of
@@ -309,8 +382,8 @@ This is the plan's last part. It needs one more rule changed, below.
 
 ## The rules it changes
 
-The owner's to change (`.claude/rules/instructions.md`). Each is recorded
-before its code lands:
+The owner's to change (`.claude/rules/instructions.md`). The owner accepted
+each as proposed (owner rulings, 2026-11-06), and part 1 records them:
 
 1. `.claude/rules/trust.md`, *One older answer is shown, labelled as one*
    (owner's request, 2026-10-19): a balance proved earlier is "never acted
@@ -329,20 +402,29 @@ before its code lands:
 3. docs/wallet-ux.md, screen 8: "The quote is never signed stale", with its
    minute and the biometric prompt's deadline. Proposed: strict mode only;
    in lenient mode the minute applies to the check.
-4. docs/wallet-ux.md, *Rules every screen follows*: "no other value (an
-   address's kind, a Safe's owners, a price) is shown last known".
-   Proposed, for the Safe part only: a Safe's nonce, owners and threshold
-   may be shown last known in a lenient draft, labelled, and are checked
-   before anything is shown to another owner or sent.
+4. docs/wallet-ux.md, *Rules every screen follows* (owner's request,
+   2026-10-19): "no other value (an address's kind, a Safe's owners, a
+   price) is shown last known".
+   Proposed: in a lenient draft, labelled, the values the draft is built on
+   may be shown last known, and are checked before anything is sent or shown
+   to another owner. For a send (part 4) these are the account's nonce and
+   the network's fee quote; for a Safe transaction (part 5) also the Safe's
+   nonce, owners and threshold. A price stays never shown last known, so the
+   draft's review has no fiat values (*The draft's review*).
 5. New: a queued transaction's signed bytes are kept as decision 5 says.
+   docs/keys-and-signing.md, the contract for how keys are held, records the
+   outbox's seal key beside the envelope's hardware keys: what it seals, that
+   it needs no authorization, and that a lost one is said.
 6. The code that states these rules in its KDoc follows them in the part
    that changes them: `LastBalancesFile` ("Shown only, never acted on: a
    quote and a signature read a fresh proof"), `CallQuoter` and the quote
-   use cases that refuse a balance last verified as syncing.
+   use cases that refuse a balance last verified as syncing, and
+   `ProofSchedule` and `ProvenReads`, which quote the fresh-state sentence.
 
 ## Decisions for the owner
 
-Each with the answer this page proposes:
+Each with the answer this page proposed, which the owner accepted (owner
+rulings, 2026-11-06):
 
 1. **One switch, or one per network?** One switch for the app.
 2. **The default?** Strict, in every build (the owner's request).
@@ -350,8 +432,12 @@ Each with the answer this page proposes:
    decision 4. The email outbox works this way.
 4. **How long may a queued transaction wait before it needs the user's
    tap?** An hour from its signature, as simple mode's hour.
-5. **The signed bytes across a restart?** Kept, as *The signed bytes kept*
-   says, rather than memory only.
+5. **The signed bytes across a restart?** Kept, sealed with a hardware key
+   of their own, as *The signed bytes kept* says; in memory only on a
+   device without a hardware key store Serotine uses. Not the file with no
+   seal: whoever copies it could send what it holds. After a nonce gap, the
+   user signs again at the lower nonce, and a leaked copy of the old
+   signature would then make the payment a second time.
 6. **How many queued transactions per account?** One, for now.
 7. **When does the outbox run?** While the app runs and during Android's
    grace period after it, with a notification for a send and for a
@@ -365,6 +451,53 @@ Each with the answer this page proposes:
     are checked and sent, or are discarded by the user.
 11. **The words.** "Sign while syncing" on the switch, rather than "strict"
     and "lenient", which this page uses for the two behaviours.
+12. **How much fee headroom must the signed cap still leave at the check?**
+    Two blocks' largest rise of the base fee: the signed cap covers 1.125²
+    (about 1.27) times the next base fee, plus the signed tip. Less is a
+    conflict. A strict quote signs twice the base fee, about six blocks'
+    rise. With no headroom, a transaction that only just covers the next
+    block can sit unmined when the base fee rises, and the account's next
+    transaction waits behind it. Strict's full headroom would make the check
+    a conflict whenever the base fee rose at all since signing.
+
+## Decided at delivery
+
+The owner's answers to what the parts left open, each as the final PR
+proposed (owner rulings, 2026-11-07, on #269):
+
+- **The text the parts changed is accepted as written:**
+  docs/keys-and-signing.md, *The outbox's seal key*; the `engine` and
+  `outbox` rows of `.claude/rules/architecture.md` and
+  docs/architecture.md; this page's delivery entries.
+- **The corrections to this page are accepted.** The queued step comes
+  after Signed, before the broadcast. The gas ceilings are derived from
+  the EVM's gas schedule. Discard and Edit are greyed out while a
+  transaction is being sent, and a tap during its check waits for it.
+- **A Safe in lenient mode stays as built.** A Safe's swap and its token
+  approval stay strict. A held signature has no hour. Its check does not
+  test the proposal's balance or simulation again: the execution's check
+  does. One held signature per Safe and nonce.
+- **The gas ceilings:** 50,000 for the network's currency; 100,000 for a
+  token's transfer and for a Safe's approval on chain; 300,000 for a
+  Safe's execution.
+- **An unreadable outbox holds back every send**, strict ones too. A seal
+  state damaged for good leaves it so until the outbox can be discarded in
+  the app (below).
+- **Strict mode keeps what a draft is built on** (`kept-inputs.json`,
+  `kept-safes.json`) with each verified read.
+- **Strict Safe signing takes no outbox lock.** The race it leaves can put
+  two requests at one nonce in the Safe's queue, of which only one can
+  run.
+- **Follow-ups, each work of its own:**
+  - discarding an unreadable outbox in the app, warned that its
+    transaction may already be sent;
+  - following a transaction lost while it was being sent: its hash and
+    nonce kept outside the sealed file, which hold no secret and cannot be
+    broadcast, and watched for after a loss;
+  - lenient drafts of a Safe's settings changes and of a dApp's Safe
+    transactions, and importing a request while syncing;
+  - Swap's Review greyed out before a tap while syncing, and the held
+    signatures counted in Home's "waiting to send".
 
 ## Delivery: a multi-PR plan through `feature/lenient-mode`
 
@@ -372,18 +505,38 @@ Each with the answer this page proposes:
 parts land on `feature/lenient-mode` and reach `main` together. Each part
 follows the five steps of docs/architecture.md's checklist.
 
-1. **The rulings and the kept inputs.** The rule changes above, as the owner
-   decides them. The account's verified count of mined transactions and the
-   network's fee quote, kept across restarts. No visible change.
-2. **The outbox, in the domain and in `:data`.** The port `Outbox` and its
-   file adapter. The use cases: `QueueTransfer` (the draft, signed),
-   `CheckQueued` (the check), `FollowOutbox` (run by the hosts),
-   `DiscardQueued`. Tests with fake ports, the conflicts of *The check
+1. **The rulings.** The rule changes above, recorded where they apply, and
+   this page's fixes from its review. Documents only.
+2. **The kept inputs.** The account's verified count of mined transactions
+   and the network's fee quote, kept across restarts. No visible change.
+3. **The outbox, in the domain and in `:data`, and run by the hosts.** The
+   port `Outbox`, its sealed file adapter with each platform's seal key, and
+   the memory-only adapter where there is none. The use cases:
+   `DraftTransfer` (the draft), `QueueTransfer` (the draft, signed),
+   `CheckQueued` (the check), `FollowOutbox` (run by the hosts, with each
+   host's `OutboxNotifier`), `DiscardQueued` and `ConfirmQueued` (the user's
+   tap past the hour), which share one `OutboxLock`. Every use case that
+   quotes from an account takes the outbox, so nothing new is quoted from
+   one with something queued. Nothing can be queued yet: the outbox stays
+   empty until part 4. Tests with fake ports, the conflicts of *The check
    before sending* each among them.
-3. **Send in lenient mode.** The setting, the draft's review in both views,
+4. **Send in lenient mode.** The setting, the draft's review in both views,
    the queued step on the status screen, Activity and Home, Sign again and
-   Discard, `OutboxNotifier` in the three hosts. The mockups and
+   Discard. The mockups and
    docs/wallet-ux.md's screens come first in this part.
-4. **Safe transactions in lenient mode**, once rule change 4 is decided.
+5. **Safe transactions in lenient mode**, on the rule changes part 1
+   records, rule change 4's Safe values among them. The port `KeptSafes`
+   and its file, `kept-safes.json`, which the address kinds' adapter keeps
+   each Safe it proves in, as part 2 keeps the mined counts. The use cases:
+   `DraftSafeTx` (the proposal's draft), `HoldSafeSignature` (a proposal or
+   a co-signature signed and held, in the outbox's sealed file beside what
+   is queued, one per Safe and nonce), `CheckHeldSignature` (its check, run
+   by `FollowOutbox`, which saves what passes to the Safe's queue and tells
+   the host's `OutboxNotifier`), `DiscardHeld`; `DraftSafeCall` and
+   `QueueSafeCall` (an approval on chain or an execution, queued like a
+   send), which `CheckQueued` checks with the strict quote made again. A
+   swap, and the token approval it needs, stay strict, as Swap does. The
+   screens: Send from a Safe's draft (16), the held signature and the drafts
+   of 17, the queued approval or execution on 9, in both views.
 
 The final PR, `feature/lenient-mode` → `main`, links every part.

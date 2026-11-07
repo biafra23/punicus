@@ -9,6 +9,7 @@ import eth.serotine.domain.model.SafeTxAction
 import eth.serotine.domain.model.UInt256
 import eth.serotine.domain.model.toHex
 import eth.serotine.domain.repository.KindReading
+import eth.serotine.domain.repository.Outbox
 import eth.serotine.domain.repository.ReadUnavailable
 import eth.serotine.domain.repository.Simulation
 import kotlin.test.Test
@@ -20,7 +21,8 @@ import kotlinx.coroutines.test.runTest
 class SafeSettingsChangesTest {
 
     private val world = SafeWorld()
-    private val propose = ProposeSafeSettingsChange(world.observeSafe, world.inputs, world.queue, Network.SEPOLIA)
+    private val propose =
+        ProposeSafeSettingsChange(world.observeSafe, world.inputs, world.queue, Network.SEPOLIA, Outbox.None)
     private val dave = Address.of("0x" + "dd".repeat(20))
 
     private suspend fun proposed(change: SafeSettingsChange): SafeSettingsProposal =

@@ -61,7 +61,10 @@ change what it trusts.
 - Every value is verified by the light client or shown as not available.
 - A quote, a review and a signature read fresh state, whatever the screen
   showed before: the rules of docs/wallet-ux.md for Send and Safe
-  transactions, and of docs/swaps.md for swaps, apply unchanged.
+  transactions, and of docs/swaps.md for swaps, apply unchanged. In lenient
+  mode a review and a signature may read the state last verified, labelled,
+  and the check before sending reads fresh state (docs/lenient-mode.md;
+  owner rulings, 2026-11-06).
 - Sepolia keeps every testnet warning and is never added to a total with
   real funds.
 - A network-upgrade warning says that peers report it.
@@ -111,7 +114,8 @@ change what it trusts.
   reading a value gets a fresh proof, at the current head. Only a reader
   that has had one may be held a proof across heads. So a screen shows
   fresh values as it opens, and a quote, a review and a signature always
-  read fresh state, in either view.
+  read fresh state, in either view, except a lenient draft's
+  (docs/lenient-mode.md; owner rulings, 2026-11-06).
 - **On demand.** Each network has a `ProofSchedule`, which its native
   balances, token balances and prices share. In simple mode
   (`FollowInterfaceMode`, run by the hosts), on a network that is not live,
@@ -177,7 +181,11 @@ change what it trusts.
   account says "Sepolia · test network" and "no real value", and the list
   ends with "Test networks aren't counted in the total." The add button,
   and the Wallet | Settings bar. No network sections and no status strip:
-  those are Detailed view's.
+  those are Detailed view's. In lenient mode, under the freshness line, what
+  each network has queued ("Ethereum: 1 waiting to send · Keep Serotine
+  open to send it sooner."; "1 needs your signature again"), and once, a
+  notice that a queued transaction was lost, with Dismiss, as in Detailed
+  view (docs/wallet-ux.md, screen 1; owner rulings, 2026-11-06).
 - **H2 · Home, pulled to refresh.** The spinner, and "Checking Ethereum and
   Gnosis Chain…" under the total, until a newer proof is shown (15 s at
   most). A wallet on live networks alone ("Live") needs no spinner. The
@@ -211,7 +219,9 @@ change what it trusts.
   "Filled"), never a block number. Above them "Activity since you
   added it" (or since it was deployed from this device), and "older
   activity is still being checked" while it is. The mockup's day headings
-  and amounts' values are not built yet.
+  and amounts' values are not built yet. A transaction queued in lenient
+  mode is listed first, "Waiting to send" or "Needs your signature
+  again", whichever way the rows run (docs/wallet-ux.md, screen 25).
 - **H6 · Receive.** The account's blockie and name, the QR code, the full
   address in groups of four, "Only send assets on Ethereum to this address",
   with what happens otherwise, and Copy and Share.
@@ -226,6 +236,11 @@ change what it trusts.
   25%, 50% and Max never come from an aged balance. While the form stays
   open the proof may grow old, so each balance says its age ("1,250 USDC ·
   updated 2 min ago") in place of its block.
+  In lenient mode (Settings → Advanced → *Sign while syncing*;
+  docs/lenient-mode.md; owner rulings, 2026-11-06), while the light client
+  catches up, a balance last verified is offered too, "as of 12 min ago",
+  Max leaves room for the most the fee can be, and the form shows no fiat
+  value (docs/wallet-ux.md, screen 7).
 - **S2 · Send, review.** A sheet over the form: "Send 250 USDC" and its
   value, the recipient in full with its blockie, From with its network, the
   most the fee can be in the native token and its value, and the balance
@@ -236,6 +251,15 @@ change what it trusts.
   a screen of its own, not a sheet over the form; it shows no value beside
   the amount or the fee, and its Details have no nonce, since the review's
   state carries neither yet.
+  A lenient draft's review (docs/lenient-mode.md, *The draft's review*;
+  owner rulings, 2026-11-06): "Prepared on data from 12 min ago. It's
+  checked on chain again before it's sent." on top; each figure with its age
+  ("as of 12 min ago") where Detailed view names its block, which stays
+  under *Details*; "Not checked yet: it runs on chain before it's sent." in
+  place of "Checked on chain: this transfer should go through"; the balance
+  after "if nothing changed"; no value beside any amount; and "Sign and
+  queue on ‹network›" in place of "Confirm and send". Its Details have the
+  nonce, with its age.
 - **S3 · Sent.** The amount and the recipient, then Sent → Confirmed (when,
   and the fee paid) → Final ("in about 13 min. After that it can't be
   reversed by the network."). Details (the hash, the blocks) and Done.
@@ -244,6 +268,15 @@ change what it trusts.
   in Detailed view; Confirmed says its receipt was checked on chain, without
   when or the fee paid; the waiting Final says what it means, without how
   long it takes.
+  A queued transaction (lenient mode; docs/wallet-ux.md, screen 9) shows
+  Signed, then a step "Queued: waits for Ethereum to catch up. Keep
+  Serotine open to send it sooner.", then Sent, which waits for the
+  check; "Still send this? You signed it 2 h ago." with Send now past
+  its hour; a conflict in plain words with Sign again and Discard; Edit and
+  Discard otherwise. As in Detailed view, with no block. A Safe
+  transaction's approval on chain or execution queued the same way says the
+  Safe and its nonce in place of the amount, and its Sign again or Edit
+  opens the Safe transaction (owner rulings, 2026-11-06).
 
 ### Swap
 
@@ -325,7 +358,9 @@ failed.
   fingerprint. Advanced: *Detailed view* ("Show the light client's state,
   blocks and proofs on every screen"), off by default: what Detailed view
   shows up front, since simple mode keeps the fee levels behind a row and
-  the blocks under *Details*. About, with the version.
+  the blocks under *Details*. *Sign while syncing*, off by default, the
+  same in both views (docs/wallet-ux.md, screen 18; owner rulings,
+  2026-11-06). About, with the version.
 
 ### The other screens
 
@@ -351,6 +386,29 @@ overview, signing and review. The owners' stand, a swap's quote, an
 approval's or an execution's run and every refusal are "checked on chain".
 The forms of Send from a Safe and a Safe's swap say each balance's age, as
 Send's and Swap's do.
+
+In lenient mode (Settings → Advanced → *Sign while syncing*;
+docs/lenient-mode.md, *Safe transactions in lenient mode*; owner rulings,
+2026-11-06), while the light client catches up, a Safe's screens say the
+age of what they are prepared on where Detailed view names its block, which
+stays under *Details*, as Send's draft does (S2):
+
+- **Send from a Safe**: the form offers the Safe's balance as last verified,
+  "as of 12 min ago", with no value beside it. Its draft's review says
+  "Prepared on data from 12 min ago. It's checked on chain before it's shown
+  to anyone." on top, the Safe nonce and the owners it needs "as of 12 min
+  ago", the balance after "if nothing changed", "Not checked yet" in place of
+  "Checked on chain", and "Sign and hold".
+- **A Safe transaction**: the owners "as of 12 min ago", the signatures here
+  counted and the approvals on chain read once the light client has caught
+  up; a line on top saying what Sign, Approve on chain and Execute are
+  prepared on. Sign holds its signature: Signed, then Held ("Waits for
+  Ethereum to catch up. Keep Serotine open to check it sooner."), then In the
+  queue, to share, once it checks out; no QR code or text before then;
+  Discard, or Dismiss and, for a proposal whose nonce was used, taken or
+  left behind a gap, Propose again. A co-signature's stand is shown on the
+  transaction's own screen, its other actions still offered. Approve on chain and Execute show their draft as S2 does, "Sign and
+  queue on ‹network›", and their queued transaction's status is S3's.
 
 As built in part 10, a Safe's settings follow them too (owner's request,
 2026-10-28). The owners, the threshold, the modules and the guard are

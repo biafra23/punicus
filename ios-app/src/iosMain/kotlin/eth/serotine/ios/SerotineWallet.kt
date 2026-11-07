@@ -4,6 +4,7 @@ import eth.serotine.data.account.FileAccountRepository
 import eth.serotine.data.cow.FileCowOrders
 import eth.serotine.data.cow.HttpCowApi
 import eth.serotine.data.handoff.NoWalletHandoff
+import eth.serotine.data.outbox.iosOutbox
 import eth.serotine.data.walletconnect.WalletConnectDapps
 import eth.serotine.data.engine.MyotisHost
 import eth.serotine.data.history.FileHistoryStarts
@@ -21,6 +22,7 @@ import eth.serotine.data.settings.FileDebugScreen
 import eth.serotine.data.settings.FileDisplayCurrency
 import eth.serotine.data.settings.FileAmountsHidden
 import eth.serotine.data.settings.FileInterfaceMode
+import eth.serotine.data.settings.FileSyncPolicy
 import eth.serotine.data.settings.FileSwapVenue
 import eth.serotine.data.swaps.FileWaitingSwaps
 import eth.serotine.data.tokens.BuiltInTokenCatalog
@@ -30,13 +32,21 @@ import eth.serotine.data.transfers.FileSentTransfers
 import eth.serotine.data.transfers.FileTransactionHistory
 import eth.serotine.data.upgrade.FileKnownUpgradeStore
 import eth.serotine.domain.model.Network
+import eth.serotine.domain.usecase.CheckQueued
+import eth.serotine.domain.usecase.CheckHeldSignature
+import eth.serotine.domain.usecase.ObserveSafe
+import eth.serotine.domain.usecase.QuoteSafeApproval
+import eth.serotine.domain.usecase.QuoteSafeExecution
 import eth.serotine.domain.usecase.FollowAccountLogs
 import eth.serotine.domain.usecase.AnswerDappRequestsAtOnce
 import eth.serotine.domain.usecase.FollowDappAccounts
 import eth.serotine.domain.usecase.FollowDebugScreen
 import eth.serotine.domain.usecase.FollowInterfaceMode
 import eth.serotine.domain.usecase.FollowNetworks
+import eth.serotine.domain.usecase.FollowOutbox
 import eth.serotine.domain.usecase.FollowSafeDeployments
+import eth.serotine.domain.usecase.KeepTransactionInputs
+import eth.serotine.domain.usecase.OutboxLock
 import eth.serotine.domain.usecase.FollowSentTransactions
 import eth.serotine.domain.usecase.FollowUpgradeReports
 import eth.serotine.domain.usecase.HistoryNotingAccounts
@@ -45,6 +55,7 @@ import eth.serotine.domain.usecase.ListDeployedSafe
 import eth.serotine.domain.usecase.NetworkDemand
 import eth.serotine.domain.usecase.ObserveDebugTab
 import eth.serotine.domain.usecase.ProveCowOrderEnds
+import eth.serotine.domain.usecase.QuoteTransfer
 import eth.serotine.domain.usecase.UpgradeNotices
 import eth.serotine.domain.usecase.WatchAddress
 import eth.serotine.ui.APP_VERSION
@@ -130,6 +141,9 @@ class SerotineWallet {
     private val interfaceMode = FileInterfaceMode("$dataDir/ui-mode.json")
     private val amountsHidden = FileAmountsHidden("$dataDir/amounts-hidden.json")
 
+    /** Whether a transaction may be signed while the light client syncs (docs/lenient-mode.md), beside the other settings. */
+    private val syncPolicy = FileSyncPolicy("$dataDir/sync-policy.json")
+
     // One engine, one light client per network that is on and needed: FollowNetworks starts with
     // the wallet and runs for the life of the process (docs/networks.md, *The engine host*). The
     // engine's state can be fetched again, so it stays out of backups. The balances last verified
@@ -150,6 +164,8 @@ class SerotineWallet {
             lastBalances = "$dataDir/last-balances.json",
             debugLog = debugLog,
             apiLog = this.debugLog,
+            keptInputs = "$dataDir/kept-inputs.json",
+            keptSafes = "$dataDir/kept-safes.json",
         )
     }
 
@@ -196,6 +212,21 @@ class SerotineWallet {
     /** The CoW orders signed here, each live until its end is proven (docs/swaps.md): public data only. */
     private val cowOrders = FileCowOrders("$dataDir/cow-orders.json")
     private val sentTransfers = HistoryRecordingSentTransfers(sentRecord, transactionHistory)
+
+    /**
+     * Lenient mode's outbox (docs/lenient-mode.md): sealed with a Secure Enclave key of its own, in
+     * a directory out of backups; in memory only on the simulator. One instance, which the graph and
+     * the follower share, with the one lock they share too.
+     */
+    private val outbox = iosOutbox("$dataDir/outbox")
+    private val outboxLock = OutboxLock()
+
+    /**
+     * The Safe transactions waiting for their owners, with the signatures collected (public), and who
+     * made a co-signer's signature: one instance each, which the graph and the outbox's follower share.
+     */
+    private val safeTxQueue = FileSafeTxQueue("$dataDir/safe-tx-queue.json")
+    private val signatureRecovery = Secp256k1Recovery()
 
     internal val graph: AppGraph = run {
         // This device's Secure Enclave; the password alone on a simulator without one, its Argon2id
@@ -244,10 +275,10 @@ class SerotineWallet {
             ensNfts = node.ensNfts,
             // The NFTs added by contract and id, beside tokens.json (issue #246).
             addedNfts = FileAddedNfts("$dataDir/nfts.json"),
-            // The Safe transactions waiting for their owners, with the signatures collected (public).
-            safeTxQueue = FileSafeTxQueue("$dataDir/safe-tx-queue.json"),
+            // The Safe transactions waiting for their owners: the follower's one instance.
+            safeTxQueue = safeTxQueue,
             signingRequests = JsonSigningRequestCodec(),
-            signatureRecovery = Secp256k1Recovery(),
+            signatureRecovery = signatureRecovery,
             safeApprovals = node.safeApprovals,
             // Safe 1.4.1's singleton, factory and proxy code, pinned in code: what a new Safe is created from.
             safeReleases = PinnedSafeReleases(),
@@ -260,6 +291,12 @@ class SerotineWallet {
             cowChain = node.cow,
             cowApi = HttpCowApi.create(),
             cowOrders = cowOrders,
+            outbox = outbox,
+            // The follower's own lock, the inputs kept for a lenient draft, and Sign while syncing.
+            outboxLock = outboxLock,
+            keptTransactionInputs = node.keptTransactionInputs,
+            keptSafes = node.keptSafes,
+            syncPolicy = syncPolicy,
             swapVenue = FileSwapVenue("$dataDir/swap-venue.json"),
             waitingSwaps = FileWaitingSwaps("$dataDir/waiting-swaps.json"),
             debugLog = debugLog,
@@ -401,6 +438,67 @@ class SerotineWallet {
                 }
             }
         } + listOf(
+            scope.launch {
+                // What is queued is checked at a fresh head and sent while the app is in front (docs/lenient-mode.md).
+                reportingFailure("sending what is queued") {
+                    FollowOutbox(
+                        outbox,
+                        CheckQueued(
+                            { network ->
+                                QuoteTransfer(
+                                    node.transactionInputs,
+                                    node.nativeBalances,
+                                    node.tokenBalances,
+                                    sentTransfers,
+                                    cowOrders,
+                                    node.cow,
+                                    node.lightClient,
+                                    network,
+                                    outbox,
+                                )
+                            },
+                            // A Safe's approval or execution, queued while syncing: its strict quote again.
+                            { network ->
+                                QuoteSafeApproval(
+                                    ObserveSafe(node.addressKinds, accounts),
+                                    node.safeApprovals,
+                                    node.nativeBalances,
+                                    node.transactionInputs,
+                                    sentTransfers,
+                                    network,
+                                    outbox,
+                                )
+                            },
+                            { network ->
+                                QuoteSafeExecution(
+                                    ObserveSafe(node.addressKinds, accounts),
+                                    signatureRecovery,
+                                    node.safeApprovals,
+                                    node.nativeBalances,
+                                    node.transactionInputs,
+                                    sentTransfers,
+                                    network,
+                                    outbox,
+                                )
+                            },
+                        ),
+                        node.lightClient,
+                        node.broadcaster,
+                        sentTransfers,
+                        IosOutboxNotifier(),
+                        outboxLock,
+                        // A Safe signature held while syncing: checked at a fresh head, then saved to the one queue.
+                        CheckHeldSignature(ObserveSafe(node.addressKinds, accounts), signatureRecovery),
+                        safeTxQueue,
+                    )()
+                }
+            },
+            scope.launch {
+                // What a lenient draft is built on, kept recent while the light clients verify (docs/lenient-mode.md).
+                reportingFailure("keeping the transaction inputs") {
+                    KeepTransactionInputs(syncPolicy, accounts, node.lightClient, node.transactionInputs)()
+                }
+            },
             scope.launch {
                 // The Safes this wallet deployed are listed whatever screen is open, and again after a
                 // restart (docs/wallet-ux.md, screen 15).

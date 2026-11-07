@@ -47,6 +47,27 @@ import kotlin.test.assertIs
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.Flow
+import eth.serotine.domain.repository.LightClientStatus
+import eth.serotine.domain.repository.LightClient
+import eth.serotine.ui.MemoryOutbox
+import eth.serotine.domain.usecase.OutboxLock
+import eth.serotine.domain.usecase.ConfirmQueued
+import eth.serotine.domain.usecase.DiscardQueued
+import eth.serotine.domain.usecase.ObserveLightClient
+import eth.serotine.domain.usecase.ObserveOutbox
+import eth.serotine.ui.outbox.conflictReason
+import eth.serotine.domain.repository.QueuedTransaction
+import eth.serotine.domain.repository.QueueConflict
+import eth.serotine.domain.repository.QueueRefusal
+import eth.serotine.domain.repository.OutboxList
+import eth.serotine.domain.repository.FeeLevel
+import eth.serotine.domain.repository.DraftBasis
+import eth.serotine.domain.model.Eip1559Transaction
+import eth.serotine.domain.usecase.ObserveEnabledNetworks
+import eth.serotine.ui.MemoryNetworkSettings
+import eth.serotine.domain.repository.Outbox
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class TransferStatusViewModelTest {
@@ -71,6 +92,23 @@ class TransferStatusViewModelTest {
     private val accounts = FakeAccounts()
     private val broadcaster = FakeBroadcaster()
 
+    /** Lenient mode's outbox, empty unless a test queues something, and its one lock. */
+    private val outbox = MemoryOutbox()
+    private val lock = OutboxLock()
+
+    /** The network's light client, catching up unless a test says otherwise. */
+    private val clientStatus = MutableStateFlow<LightClientStatus>(LightClientStatus.Starting)
+    private val light = object : LightClient {
+        override val datesFinalizedBlocks = true
+        override fun observeStatus(network: Network): Flow<LightClientStatus> = clientStatus
+    }
+
+    /** The networks on: Sepolia, as in every build. */
+    private val networks = MemoryNetworkSettings()
+
+    /** Now, in unix seconds, as a queued transfer's hour is dated. */
+    private var wallClock = 1_800_000_600L
+
     @AfterTest
     fun resetMainDispatcher() = Dispatchers.resetMain()
 
@@ -82,7 +120,14 @@ class TransferStatusViewModelTest {
             ObserveAccounts(accounts),
             RebroadcastTransfer(broadcaster, sent, receipts) { 1_800_000_500 },
             Network.SEPOLIA,
-        ) { "at $it" }
+            ObserveOutbox(racing),
+            ObserveLightClient(light),
+            ObserveEnabledNetworks(networks),
+            DiscardQueued(racing, lock),
+            ConfirmQueued(racing, lock, clock = { wallClock }),
+            formatTime = { "at $it" },
+            clock = { wallClock },
+        )
         backgroundScope.launch { viewModel.uiState.collect {} }
         return viewModel
     }
@@ -555,4 +600,287 @@ class TransferStatusViewModelTest {
         runCurrent()
         assertEquals(emptyList(), broadcaster.sent)
     }
+
+    // A transfer queued in lenient mode (docs/lenient-mode.md, *The outbox*; owner rulings, 2026-11-06).
+
+    private val queuedBytes = SignedTransfer(byteArrayOf(2, 7, 7))
+
+    /** 40.5 USDC to Savings, signed at [signedAt] and queued under the hash of its bytes. */
+    private fun queued(signedAt: Long = wallClock - 10 * 60, conflict: QueueConflict? = null) = QueuedTransaction(
+        network = Network.SEPOLIA,
+        account = record.account,
+        id = queuedBytes.hash,
+        action = record.action,
+        level = FeeLevel.FAST,
+        transaction = Eip1559Transaction(
+            chainId = Network.SEPOLIA.chainId,
+            nonce = 7,
+            maxPriorityFeePerGas = UInt256.of(1),
+            maxFeePerGas = UInt256.of(21),
+            gasLimit = 100_000,
+            to = usdc.address,
+            value = UInt256.ZERO,
+        ),
+        signed = queuedBytes.takeIf { conflict == null },
+        maxCost = UInt256.of(2_100_000),
+        signedAt = signedAt,
+        builtOn = DraftBasis(9_412_118, wallClock - 900, 9_412_117, wallClock - 900, 9_412_110, null, 9_412_100, null),
+        conflict = conflict,
+    )
+
+    private val TransferStatusViewModel.queuedState get() = assertIs<TransferStatusUiState.Queued>(uiState.value)
+
+    @Test
+    fun aQueuedIdFoundNowhereIsNeverShownAsHandedToTheNetwork() = runTest {
+        // Restored after a restart with the outbox unreadable: where it stands is not known.
+        outbox.list.value = OutboxList.Unreadable
+        val unreadable = viewModel(hash = queuedBytes.hash)
+        runCurrent()
+        val said = assertIs<TransferStatusUiState.Discarded>(unreadable.uiState.value).message
+        assertTrue("cannot be read right now" in said, said)
+
+        // Seen queued on this screen, then gone with no record: never drawn as sent.
+        outbox.list.value = OutboxList.Loaded(listOf(queued()))
+        val seen = viewModel(hash = queuedBytes.hash)
+        runCurrent()
+        assertIs<TransferStatusUiState.Queued>(seen.uiState.value)
+        outbox.list.value = OutboxList.Loaded(emptyList())
+        runCurrent()
+        val left = assertIs<TransferStatusUiState.Discarded>(seen.uiState.value).message
+        assertTrue("no record of it being sent" in left, left)
+
+        // The seal key lost: said as lost, not as sent.
+        outbox.list.value = OutboxList.Loaded(emptyList(), lost = true)
+        val lost = viewModel(hash = queuedBytes.hash)
+        runCurrent()
+        assertTrue("was lost" in assertIs<TransferStatusUiState.Discarded>(lost.uiState.value).message)
+    }
+
+    @Test
+    fun aQueuedTransferHasAStepAfterSignedThatWaitsForTheNetwork() = runTest {
+        outbox.list.value = OutboxList.Loaded(listOf(queued()))
+        val viewModel = viewModel(hash = queuedBytes.hash)
+        runCurrent()
+
+        val state = viewModel.queuedState
+        assertEquals("40.5 USDC", state.sent?.amount)
+        assertEquals(listOf("Signed", "Queued", "Broadcast"), state.steps.map { it.label })
+        assertEquals(
+            "Waits for Sepolia to catch up. Keep Serotine open to send it sooner.",
+            state.steps[1].detail,
+        )
+        assertEquals("Edit", state.againLabel)
+        assertNull(state.question)
+        assertNull(state.busy)
+
+        clientStatus.value =
+            LightClientStatus.Synced(headBlock = 9_412_200, headTimestamp = wallClock, finalized = null)
+        runCurrent()
+        assertEquals(
+            "Sepolia has caught up: it's checked on chain, and sent once it checks out.",
+            viewModel.queuedState.steps[1].detail,
+        )
+    }
+
+    @Test
+    fun pastItsHourItAsksStillSendThisAndSendNowConfirmsIt() = runTest {
+        outbox.list.value = OutboxList.Loaded(listOf(queued(signedAt = wallClock - 2 * 60 * 60)))
+        val viewModel = viewModel(hash = queuedBytes.hash)
+        runCurrent()
+
+        assertEquals("Still send this? You signed it 2 h ago.", viewModel.queuedState.question)
+        viewModel.confirm()
+        runCurrent()
+
+        assertEquals(wallClock, outbox.queued.single().confirmedAt, "its hour starts again at the tap")
+        assertNull(viewModel.queuedState.question)
+    }
+
+    @Test
+    fun aConflictIsSaidInTheNotificationsWordsWithSignAgainAndDiscard() = runTest {
+        val conflict = QueueConflict.NonceUsed(signed = 7, fresh = 8)
+        outbox.list.value = OutboxList.Loaded(listOf(queued(conflict = conflict)))
+        val viewModel = viewModel(hash = queuedBytes.hash)
+        runCurrent()
+
+        val state = viewModel.queuedState
+        val step = state.steps[1]
+        assertEquals("Needs your signature again", step.label)
+        assertEquals(StepState.FAILED, step.state)
+        assertTrue(step.detail!!.startsWith(conflictReason(conflict, queued(conflict = conflict))), step.detail)
+        assertEquals("Sign again", state.againLabel)
+        assertEquals(
+            SendAgain(Network.SEPOLIA.chainId, record.account.hex, usdc.address.hex, record.action.let {
+                (it as SentAction.Transfer).to.hex
+            }, "40.5", FeeLevel.FAST),
+            state.again,
+        )
+    }
+
+    @Test
+    fun signAgainDiscardsItThenOpensSendFilledIn() = runTest {
+        outbox.list.value = OutboxList.Loaded(listOf(queued(conflict = QueueConflict.InsufficientFunds)))
+        val viewModel = viewModel(hash = queuedBytes.hash)
+        runCurrent()
+        val again = viewModel.queuedState.again
+
+        viewModel.signAgain()
+        runCurrent()
+
+        assertTrue(outbox.queued.isEmpty(), "discarded first")
+        val discarded = assertIs<TransferStatusUiState.Discarded>(viewModel.uiState.value)
+        assertEquals(again, discarded.reopen)
+    }
+
+    @Test
+    fun aQueuedSafeApprovalSaysWhatItApprovesAndSignAgainOpensItsSafeTransaction() = runTest {
+        val safe = Address.of("0x" + "5a".repeat(20))
+        val request = SigningRequest.of(Network.SEPOLIA, safe, SafeTx.call(usdc.address, UInt256.ZERO, ByteArray(0), 12))
+        val approval = queued(conflict = QueueConflict.Refused(QueueRefusal.NOT_AN_OWNER))
+            .copy(action = SentAction.SafeApproval(request))
+        outbox.list.value = OutboxList.Loaded(listOf(approval))
+        val viewModel = viewModel(hash = queuedBytes.hash)
+        runCurrent()
+
+        val state = viewModel.queuedState
+        assertEquals("Approval of a Safe transaction", state.safeTx?.title)
+        assertEquals("Safe nonce 12", state.safeTx?.nonce)
+        assertEquals(null, state.again, "no Send to open for it")
+        assertEquals(SafeTxAgain(Network.SEPOLIA.chainId, safe.hex, "0x" + request.hash.hex), state.safeAgain)
+        assertEquals("This account is no longer an owner of the Safe. Nothing was sent, and its signature was deleted.", state.steps[1].detail)
+
+        viewModel.signAgain()
+        runCurrent()
+
+        assertTrue(outbox.queued.isEmpty(), "discarded first")
+        val discarded = assertIs<TransferStatusUiState.Discarded>(viewModel.uiState.value)
+        assertEquals(state.safeAgain, discarded.reopenSafe)
+    }
+
+    @Test
+    fun discardDeletesItAndSaysNothingWasSent() = runTest {
+        outbox.list.value = OutboxList.Loaded(listOf(queued()))
+        val viewModel = viewModel(hash = queuedBytes.hash)
+        runCurrent()
+
+        viewModel.discard()
+        runCurrent()
+
+        assertEquals(listOf(record.accountId), outbox.removed)
+        assertEquals(
+            TransferStatusUiState.Discarded("Sepolia", "Discarded: its signature was deleted, and nothing was sent."),
+            viewModel.uiState.value,
+        )
+    }
+
+    @Test
+    fun aDiscardThatCannotBeSavedLeavesItQueuedAndSaysSo() = runTest {
+        outbox.list.value = OutboxList.Loaded(listOf(queued()))
+        val viewModel = viewModel(hash = queuedBytes.hash)
+        runCurrent()
+        outbox.failSaves = true
+
+        viewModel.discard()
+        runCurrent()
+
+        assertEquals("The outbox could not be changed, so it is still queued. Try again.", viewModel.queuedState.error)
+    }
+
+    @Test
+    fun whileItIsBeingSentDiscardAndEditWaitAndSayWhy() = runTest {
+        outbox.list.value = OutboxList.Loaded(listOf(queued().copy(sending = true)))
+        val viewModel = viewModel(hash = queuedBytes.hash)
+        runCurrent()
+
+        val state = viewModel.queuedState
+        assertEquals("Sending…", state.steps[1].label)
+        assertEquals("It's being checked and sent.", state.busy)
+        viewModel.discard()
+        runCurrent()
+        assertTrue(outbox.removed.isEmpty(), "a check and its broadcast are not cut in half")
+    }
+
+    @Test
+    fun onceSentTheSameIdIsShownAsTheSentTransfer() = runTest {
+        outbox.list.value = OutboxList.Loaded(listOf(queued()))
+        val viewModel = viewModel(hash = queuedBytes.hash)
+        runCurrent()
+        // The follower sent it: recorded under the same hash, then gone from the outbox.
+        sent.transfers.value = listOf(record.copy(signed = queuedBytes))
+        outbox.list.value = OutboxList.Loaded(emptyList())
+        runCurrent()
+
+        val shown = assertIs<TransferStatusUiState.Shown>(viewModel.uiState.value)
+        assertEquals("40.5 USDC", shown.sent?.amount)
+        assertEquals(listOf("Signed", "Broadcast", "Included", "Finalized"), shown.steps.map { it.label })
+    }
+
+    @Test
+    fun anEditThatCameAfterThePeerTookItShowsItSentAndOpensNoSend() = runTest {
+        outbox.list.value = OutboxList.Loaded(listOf(queued()))
+        val viewModel = viewModel(hash = queuedBytes.hash)
+        runCurrent()
+        // The follower held the lock: it sent it, recorded it and let it go before the discard could look.
+        racing.beforeDiscard = {
+            sent.transfers.value = listOf(record.copy(signed = queuedBytes))
+            outbox.list.value = OutboxList.Loaded(emptyList())
+        }
+
+        viewModel.signAgain()
+        runCurrent()
+
+        val shown = assertIs<TransferStatusUiState.Shown>(viewModel.uiState.value)
+        assertEquals("It was sent before it could be discarded.", shown.note)
+        assertTrue(outbox.removed.isEmpty(), "nothing of the account's was deleted")
+    }
+
+    @Test
+    fun aDiscardWhileItsBroadcastRunsIsRefusedAndNeverToldAsDiscarded() = runTest {
+        outbox.list.value = OutboxList.Loaded(listOf(queued()))
+        val viewModel = viewModel(hash = queuedBytes.hash)
+        runCurrent()
+        // The check passed while the discard waited: its broadcast is under way, and may reach the network.
+        racing.beforeDiscard = { outbox.list.value = OutboxList.Loaded(listOf(queued().copy(sending = true))) }
+
+        viewModel.discard()
+        runCurrent()
+
+        val state = viewModel.queuedState
+        assertEquals("Sending…", state.steps[1].label)
+        assertEquals(
+            "It's being checked and sent, so it was not discarded: it may reach the network. Its status follows.",
+            state.error,
+        )
+        assertEquals(1, outbox.queued.size, "left for the outbox to record as sent, or maybe sent")
+    }
+
+    @Test
+    fun aQueuedTransferOnANetworkThatIsOffSaysHowToGetItSent() = runTest {
+        networks.on.value = emptySet()
+        outbox.list.value = OutboxList.Loaded(listOf(queued()))
+        val viewModel = viewModel(hash = queuedBytes.hash)
+        runCurrent()
+
+        assertEquals(
+            "Sepolia is off, so nothing checks or sends it: turn Sepolia on in Settings to send it.",
+            viewModel.queuedState.steps[1].detail,
+        )
+    }
+
+    /**
+     * The outbox, with a moment a test can use: [beforeDiscard] runs as a discard reads it, under the
+     * outbox's lock, as what the follower did while the discard waited for that lock.
+     */
+    private inner class RacingOutbox : Outbox by outbox {
+        var beforeDiscard: (() -> Unit)? = null
+        private var reads = 0
+
+        override fun observe(): Flow<OutboxList> {
+            // The first read is the screen's own, from the start; a later one is a discard's.
+            if (reads++ > 0) beforeDiscard?.invoke()?.also { beforeDiscard = null }
+            return outbox.observe()
+        }
+    }
+
+    private val racing = RacingOutbox()
 }

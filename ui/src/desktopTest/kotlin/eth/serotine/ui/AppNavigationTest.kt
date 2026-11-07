@@ -75,6 +75,7 @@ import eth.serotine.domain.repository.CowVenueReading
 import eth.serotine.domain.repository.HistoryEntry
 import eth.serotine.domain.repository.HistoryStart
 import eth.serotine.domain.repository.IndexedLog
+import eth.serotine.domain.repository.KeptSafes
 import eth.serotine.domain.repository.KeyDeletion
 import eth.serotine.domain.repository.KeyDerivation
 import eth.serotine.domain.repository.KeyImport
@@ -93,6 +94,7 @@ import eth.serotine.domain.repository.MetadataReading
 import eth.serotine.domain.repository.NativeBalances
 import eth.serotine.domain.repository.NetworkUpgrades
 import eth.serotine.domain.repository.NewMnemonic
+import eth.serotine.domain.repository.Outbox
 import eth.serotine.domain.repository.ReadUnavailable
 import eth.serotine.domain.repository.ReceiptLog
 import eth.serotine.domain.repository.SafeState
@@ -195,6 +197,7 @@ import eth.serotine.domain.repository.DappRequestError
 import eth.serotine.domain.repository.DappRequestId
 import eth.serotine.domain.repository.DappSessionId
 import eth.serotine.ui.dapprequest.DAPP_REQUEST_REFUSE_TAG
+import eth.serotine.domain.usecase.OutboxLock
 
 /**
  * The shared [App] end to end, over fake ports: the tabs, the account screens and their dialogs,
@@ -305,6 +308,11 @@ class AppNavigationTest {
 
     private val graph = AppGraph(
         accounts = accountRepository,
+        outbox = Outbox.None,
+        outboxLock = OutboxLock(),
+        keptTransactionInputs = FakeKeptInputs(),
+        keptSafes = KeptSafes.None,
+        syncPolicy = MemorySyncPolicy(),
         keys = object : KeyStore {
             override suspend fun newMnemonic(): NewMnemonic = NewMnemonic.Unavailable
 
@@ -979,7 +987,14 @@ class AppNavigationTest {
         rule.onNodeWithText("Daily").performClick()
         rule.onAllNodesWithTag(ACCOUNT_ASSET_TAG)[0].performClick()
         rule.onNodeWithText("Settings").assertDoesNotExist()
-        assertEquals(listOf("accounts", "account/{chain}/{address}", "send/{chain}/{address}?asset={asset}"), screens())
+        assertEquals(
+            listOf(
+                "accounts",
+                "account/{chain}/{address}",
+                "send/{chain}/{address}?asset={asset}&to={to}&amount={amount}&fee={fee}",
+            ),
+            screens(),
+        )
         rule.onNodeWithContentDescription("Back").performClick()
         rule.onNodeWithContentDescription("Back").performClick()
 
@@ -988,7 +1003,7 @@ class AppNavigationTest {
         rule.onAllNodesWithTag(ACCOUNT_ASSET_TAG)[0].performClick()
         rule.onNodeWithText("Send from a Safe").assertIsDisplayed()
         assertEquals(
-            listOf("accounts", "account/{chain}/{address}", "safe/{chain}/{address}/propose?asset={asset}"),
+            listOf("accounts", "account/{chain}/{address}", "safe/{chain}/{address}/propose?asset={asset}&to={to}&amount={amount}"),
             screens(),
         )
     }

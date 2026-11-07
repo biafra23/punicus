@@ -140,6 +140,45 @@ private fun SimpleTransferMaybeSentPreview() = SimpleTransferStatusPreview(
     ),
 )
 
+/** A transfer queued in lenient mode: Signed, then its step, in simple mode's words. */
+@Preview
+@Composable
+private fun SimpleTransferQueuedPreview() = SimpleTransferStatusPreview(queuedSample)
+
+@Preview
+@Composable
+private fun SimpleTransferQueuedDarkPreview() = SimpleTransferStatusPreview(queuedSample, darkTheme = true)
+
+/** Past its hour without a tap: Still send this?, with Send now. */
+@Preview
+@Composable
+private fun SimpleTransferQueuedPastItsHourPreview() = SimpleTransferStatusPreview(queuedPastItsHourSample)
+
+/** A conflict found by the check: its reason, Sign again and Discard. */
+@Preview
+@Composable
+private fun SimpleTransferQueuedConflictPreview() = SimpleTransferStatusPreview(queuedConflictSample)
+
+/** A Safe's approval on chain queued in lenient mode: the Safe it is of, its steps in simple mode's words. */
+@Preview
+@Composable
+private fun SimpleTransferQueuedSafeApprovalPreview() = SimpleTransferStatusPreview(queuedSafeApprovalSample)
+
+/** Its check passed and it is being sent: Discard and Edit greyed out. */
+@Preview
+@Composable
+private fun SimpleTransferQueuedSendingPreview() = SimpleTransferStatusPreview(queuedSendingSample)
+
+/** A Discard tapped, waiting on the outbox's lock. */
+@Preview
+@Composable
+private fun SimpleTransferQueuedDiscardingPreview() = SimpleTransferStatusPreview(queuedSample.copy(discarding = true))
+
+/** Discarded: its signature deleted, and nothing sent. */
+@Preview
+@Composable
+private fun SimpleTransferDiscardedPreview() = SimpleTransferStatusPreview(discardedSample)
+
 /** Every preview above, which SimpleTransferStatusScreenPreviewsTest renders: a new preview goes in here too. */
 internal val simpleTransferStatusScreenPreviews: List<ScreenPreview> = listOf(
     ScreenPreview("confirmed") { SimpleTransferConfirmedPreview() },
@@ -147,4 +186,12 @@ internal val simpleTransferStatusScreenPreviews: List<ScreenPreview> = listOf(
     ScreenPreview("final") { SimpleTransferFinalPreview() },
     ScreenPreview("failed") { SimpleTransferFailedPreview() },
     ScreenPreview("maybe-sent") { SimpleTransferMaybeSentPreview() },
+    ScreenPreview("queued") { SimpleTransferQueuedPreview() },
+    ScreenPreview("queued-dark") { SimpleTransferQueuedDarkPreview() },
+    ScreenPreview("queued-past-its-hour") { SimpleTransferQueuedPastItsHourPreview() },
+    ScreenPreview("queued-conflict") { SimpleTransferQueuedConflictPreview() },
+    ScreenPreview("queued-safe-approval") { SimpleTransferQueuedSafeApprovalPreview() },
+    ScreenPreview("queued-sending") { SimpleTransferQueuedSendingPreview() },
+    ScreenPreview("queued-discarding") { SimpleTransferQueuedDiscardingPreview() },
+    ScreenPreview("discarded") { SimpleTransferDiscardedPreview() },
 )

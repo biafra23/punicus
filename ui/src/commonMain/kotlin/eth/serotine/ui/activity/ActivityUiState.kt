@@ -15,7 +15,9 @@ sealed interface ActivityUiState {
      * and [coverage], what the list covers and what it leaves out; [simpleCoverage], the same in
      * simple mode's words, with no block number (docs/simple-ui.md, H5: "Activity since you added
      * this account"). Above them, the swaps whose next step [waiting] for the user, each with
-     * Continue, in the same place whichever way the rows run.
+     * Continue, in the same place whichever way the rows run; and first of all, what the account has
+     * [queued] in lenient mode ("Waiting to send", "Needs your signature again";
+     * docs/lenient-mode.md, *Where it shows*), each opening its status.
      */
     data class Shown(
         val rows: List<ActivityRow>,
@@ -23,6 +25,7 @@ sealed interface ActivityUiState {
         val empty: String = "Nothing sent from this device yet.",
         val simpleCoverage: String = coverage,
         val waiting: List<WaitingStep> = emptyList(),
+        val queued: List<ActivityRow> = emptyList(),
     ) : ActivityUiState
 
     /** The history cannot be read right now, for the reason [message] gives. */
@@ -60,9 +63,15 @@ data class ActivityRow(
  * Which row of an account's Activity a detail is of: the transaction [hash] (`0x` and 64 lower-case
  * hex digits), and for an event of the log index the [logIndex] of its log in the block; null for a
  * transaction sent from this device. For a CoW order signed here ([cowOrder]), [hash] is its UID,
- * and a tap opens the order's status instead.
+ * and a tap opens the order's status instead; for a transfer queued in lenient mode ([queued]), its
+ * id, and a tap opens its status (docs/wallet-ux.md, screen 9).
  */
-data class ActivityKey(val hash: String, val logIndex: Int? = null, val cowOrder: Boolean = false)
+data class ActivityKey(
+    val hash: String,
+    val logIndex: Int? = null,
+    val cowOrder: Boolean = false,
+    val queued: Boolean = false,
+)
 
 /**
  * A swap whose next step waits for the user (docs/simple-ui.md, H5): what it swaps ([title], "Swap 40
@@ -129,6 +138,7 @@ fun ActivityUiState.ordered(order: ActivityOrder): ActivityUiState = when {
 internal fun ActivityUiState.simple(): ActivityUiState = when (this) {
     is ActivityUiState.Shown -> copy(
         rows = rows.map { it.copy(time = it.simpleTime.orEmpty(), status = it.simpleStatus ?: it.status) },
+        queued = queued.map { it.copy(time = it.simpleTime.orEmpty(), status = it.simpleStatus ?: it.status) },
         coverage = simpleCoverage,
     )
     else -> this

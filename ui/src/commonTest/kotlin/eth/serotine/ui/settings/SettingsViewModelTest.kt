@@ -21,6 +21,9 @@ import eth.serotine.domain.usecase.ObserveNetworkLive
 import eth.serotine.domain.usecase.ObserveNetworkOverview
 import eth.serotine.domain.usecase.SetDebugScreen
 import eth.serotine.domain.usecase.SetInterfaceMode
+import eth.serotine.domain.usecase.SetSyncPolicy
+import eth.serotine.domain.usecase.ObserveSyncPolicy
+import eth.serotine.domain.usecase.ObserveOutbox
 import eth.serotine.domain.usecase.SetNetworkEnabled
 import eth.serotine.domain.usecase.SyncPastStaleAnchor
 import eth.serotine.ui.APP_VERSION
@@ -33,6 +36,8 @@ import eth.serotine.ui.MemoryCurrencySetting
 import eth.serotine.ui.MemoryDebugScreen
 import eth.serotine.ui.MemoryInterfaceMode
 import eth.serotine.ui.MemoryNetworkSettings
+import eth.serotine.ui.MemoryOutbox
+import eth.serotine.ui.MemorySyncPolicy
 import eth.serotine.ui.MemoryTransactionHistory
 import eth.serotine.ui.MemoryUserTokens
 import eth.serotine.ui.components.LightClientHealth
@@ -55,6 +60,16 @@ import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.test.setMain
+import eth.serotine.domain.repository.SentAction
+import eth.serotine.domain.repository.QueuedTransaction
+import eth.serotine.domain.repository.OutboxList
+import eth.serotine.domain.repository.FeeLevel
+import eth.serotine.domain.repository.DraftBasis
+import eth.serotine.domain.model.UInt256
+import eth.serotine.domain.model.TransferAsset
+import eth.serotine.domain.model.SignedTransfer
+import eth.serotine.domain.model.Eip1559Transaction
+import eth.serotine.domain.model.SyncPolicy
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class SettingsViewModelTest {
@@ -79,6 +94,8 @@ class SettingsViewModelTest {
     private val debugScreen = MemoryDebugScreen()
     private val interfaceMode = MemoryInterfaceMode()
     private val currency = MemoryCurrencySetting()
+    private val policy = MemorySyncPolicy()
+    private val outbox = MemoryOutbox()
 
     @AfterTest
     fun resetMainDispatcher() = Dispatchers.resetMain()
@@ -105,6 +122,9 @@ class SettingsViewModelTest {
             ObserveInterfaceMode(interfaceMode),
             SetInterfaceMode(interfaceMode),
             ObserveNetworkLive(FakeFreshness(live = setOf(Network.SEPOLIA))),
+            ObserveSyncPolicy(policy),
+            SetSyncPolicy(policy),
+            ObserveOutbox(outbox),
             clock = { 1_000 },
         )
         backgroundScope.launch { viewModel.uiState.collect {} }
@@ -285,6 +305,9 @@ class SettingsViewModelTest {
             ObserveInterfaceMode(interfaceMode),
             SetInterfaceMode(interfaceMode),
             ObserveNetworkLive(FakeFreshness(live = setOf(Network.SEPOLIA))),
+            ObserveSyncPolicy(policy),
+            SetSyncPolicy(policy),
+            ObserveOutbox(outbox),
             clock = { now },
         )
         backgroundScope.launch { viewModel.uiState.collect {} }
@@ -441,5 +464,77 @@ class SettingsViewModelTest {
 
         assertEquals("Test network · Can't check right now", viewModel.sepolia.simpleLine)
     }
-}
 
+    // Lenient mode's switch (docs/lenient-mode.md, *The setting*; owner rulings, 2026-11-06).
+
+    @Test
+    fun signWhileSyncingIsOffByDefaultAndTurnsLenientModeOn() = runTest {
+        val viewModel = viewModel()
+        assertFalse(viewModel.uiState.value.signWhileSyncing, "strict, the default")
+
+        viewModel.signWhileSyncing(true)
+        runCurrent()
+
+        assertEquals(SyncPolicy.LENIENT, policy.policy.value)
+        assertTrue(viewModel.uiState.value.signWhileSyncing)
+        assertFalse(viewModel.uiState.value.signWhileSyncingNotSaved)
+    }
+
+    @Test
+    fun aSwitchOfSignWhileSyncingThatCannotBeSavedIsSaid() = runTest {
+        val viewModel = viewModel()
+        policy.failSaves = true
+
+        viewModel.signWhileSyncing(true)
+        runCurrent()
+
+        assertFalse(viewModel.uiState.value.signWhileSyncing, "as it was")
+        assertTrue(viewModel.uiState.value.signWhileSyncingNotSaved)
+    }
+
+    @Test
+    fun withSomethingQueuedItSaysTurningItOffLeavesThatQueued() = runTest {
+        policy.policy.value = SyncPolicy.LENIENT
+        val viewModel = viewModel()
+        assertNull(viewModel.uiState.value.signWhileSyncingNote, "nothing queued, nothing to say")
+
+        outbox.list.value = OutboxList.Loaded(listOf(queuedSample()))
+        runCurrent()
+        assertEquals(
+            "Turning it off leaves what is queued in place: the transaction waiting to be sent stays queued, " +
+                "checked and sent, or discarded by you.",
+            viewModel.uiState.value.signWhileSyncingNote,
+        )
+
+        viewModel.signWhileSyncing(false)
+        runCurrent()
+        assertEquals(SyncPolicy.STRICT, policy.policy.value)
+        assertEquals(
+            "The transaction waiting to be sent stays queued, checked and sent, or discarded by you: only new " +
+                "transactions wait for the light client.",
+            viewModel.uiState.value.signWhileSyncingNote,
+        )
+    }
+
+    /** A transfer queued from Main, as the outbox holds one. */
+    private fun queuedSample() = QueuedTransaction(
+        network = Network.SEPOLIA,
+        account = main.address,
+        id = "0x" + "9a".repeat(32),
+        action = SentAction.Transfer(main.address, TransferAsset.Native, UInt256.of(1)),
+        level = FeeLevel.NORMAL,
+        transaction = Eip1559Transaction(
+            chainId = Network.SEPOLIA.chainId,
+            nonce = 1,
+            maxPriorityFeePerGas = UInt256.of(1),
+            maxFeePerGas = UInt256.of(2),
+            gasLimit = 50_000,
+            to = main.address,
+            value = UInt256.of(1),
+        ),
+        signed = SignedTransfer(byteArrayOf(2, 1)),
+        maxCost = UInt256.of(100_001),
+        signedAt = 900,
+        builtOn = DraftBasis(1, null, null, null, 1, null, 1, null),
+    )
+}
