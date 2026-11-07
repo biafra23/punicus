@@ -39,7 +39,7 @@ If the folder grows too much, there are two levers, both the owner's. Deleting t
 | [Screen capture warning (dialog)](#screen-capture-warning-dialog) | `screen-capture-warning-dialog/` | 3 |
 | [Security](#security) | `security/` | 15 |
 | [Send](#send) | `send/` | 32 |
-| [Settings](#settings) | `settings/` | 21 |
+| [Settings](#settings) | `settings/` | 28 |
 | [Account detail (simple mode)](#simple-account-detail) | `simple-account-detail/` | 12 |
 | [Home (simple mode)](#simple-accounts) | `simple-accounts/` | 16 |
 | [Activity detail (simple mode)](#simple-activity-detail) | `simple-activity-detail/` | 4 |
@@ -52,7 +52,7 @@ If the folder grows too much, there are two levers, both the owner's. Deleting t
 | [Safe swap (simple mode)](#simple-safe-swap) | `simple-safe-swap/` | 4 |
 | [Safe transaction (simple mode)](#simple-safe-tx) | `simple-safe-tx/` | 15 |
 | [Send (simple mode)](#simple-send) | `simple-send/` | 8 |
-| [Settings (simple mode)](#simple-settings) | `simple-settings/` | 6 |
+| [Settings (simple mode)](#simple-settings) | `simple-settings/` | 9 |
 | [Swap (simple mode)](#simple-swap) | `simple-swap/` | 11 |
 | [Tokens (simple mode)](#simple-tokens) | `simple-tokens/` | 2 |
 | [Transfer status (simple mode)](#simple-transfer-status) | `simple-transfer-status/` | 13 |
@@ -687,7 +687,7 @@ If the folder grows too much, there are two levers, both the owner's. Deleting t
 <a name="settings"></a>
 ## Settings
 
-`settings/`, 21 states: `synced`, `synced-dark`, `starting`, `unreadable`, `head-too-old`, `head-too-old-dark`, `debug-build`, `debug-build-capture-allowed`, `debug-screen`, `debug-screen-not-saved`, `idle`, `network-not-saved`, `turn-off`, `stale-anchor`, `detailed-view`, `detailed-view-not-saved`, `connections-off`, `sign-while-syncing`, `sign-while-syncing-dark`, `sign-while-syncing-queued`, `sign-while-syncing-not-saved`
+`settings/`, 28 states: `synced`, `synced-dark`, `starting`, `unreadable`, `head-too-old`, `head-too-old-dark`, `debug-build`, `debug-build-capture-allowed`, `debug-screen`, `debug-screen-not-saved`, `idle`, `network-not-saved`, `turn-off`, `stale-anchor`, `detailed-view`, `detailed-view-not-saved`, `connections-off`, `sign-while-syncing`, `sign-while-syncing-dark`, `sign-while-syncing-queued`, `sign-while-syncing-not-saved`, `metered-allowed`, `metered-paused`, `metered-not-reported`, `metered-not-reported-dark`, `metered-unreadable`, `metered-not-saved`, `metered-set-aside`
 
 <a href="settings/synced.png"><img src="settings/synced.png" width="206" alt="synced"></a>
 <a href="settings/synced-dark.png"><img src="settings/synced-dark.png" width="206" alt="synced-dark"></a>
@@ -710,6 +710,13 @@ If the folder grows too much, there are two levers, both the owner's. Deleting t
 <a href="settings/sign-while-syncing-dark.png"><img src="settings/sign-while-syncing-dark.png" width="206" alt="sign-while-syncing-dark"></a>
 <a href="settings/sign-while-syncing-queued.png"><img src="settings/sign-while-syncing-queued.png" width="206" alt="sign-while-syncing-queued"></a>
 <a href="settings/sign-while-syncing-not-saved.png"><img src="settings/sign-while-syncing-not-saved.png" width="206" alt="sign-while-syncing-not-saved"></a>
+<a href="settings/metered-allowed.png"><img src="settings/metered-allowed.png" width="206" alt="metered-allowed"></a>
+<a href="settings/metered-paused.png"><img src="settings/metered-paused.png" width="206" alt="metered-paused"></a>
+<a href="settings/metered-not-reported.png"><img src="settings/metered-not-reported.png" width="206" alt="metered-not-reported"></a>
+<a href="settings/metered-not-reported-dark.png"><img src="settings/metered-not-reported-dark.png" width="206" alt="metered-not-reported-dark"></a>
+<a href="settings/metered-unreadable.png"><img src="settings/metered-unreadable.png" width="206" alt="metered-unreadable"></a>
+<a href="settings/metered-not-saved.png"><img src="settings/metered-not-saved.png" width="206" alt="metered-not-saved"></a>
+<a href="settings/metered-set-aside.png"><img src="settings/metered-set-aside.png" width="206" alt="metered-set-aside"></a>
 
 <a name="simple-account-detail"></a>
 ## Account detail (simple mode)
@@ -867,7 +874,7 @@ If the folder grows too much, there are two levers, both the owner's. Deleting t
 <a name="simple-settings"></a>
 ## Settings (simple mode)
 
-`simple-settings/`, 6 states: `default`, `default-dark`, `off`, `sign-while-syncing`, `sign-while-syncing-queued`, `sign-while-syncing-not-saved`
+`simple-settings/`, 9 states: `default`, `default-dark`, `off`, `sign-while-syncing`, `sign-while-syncing-queued`, `sign-while-syncing-not-saved`, `metered-paused`, `metered-not-reported`, `metered-unreadable`
 
 <a href="simple-settings/default.png"><img src="simple-settings/default.png" width="206" alt="default"></a>
 <a href="simple-settings/default-dark.png"><img src="simple-settings/default-dark.png" width="206" alt="default-dark"></a>
@@ -875,6 +882,9 @@ If the folder grows too much, there are two levers, both the owner's. Deleting t
 <a href="simple-settings/sign-while-syncing.png"><img src="simple-settings/sign-while-syncing.png" width="206" alt="sign-while-syncing"></a>
 <a href="simple-settings/sign-while-syncing-queued.png"><img src="simple-settings/sign-while-syncing-queued.png" width="206" alt="sign-while-syncing-queued"></a>
 <a href="simple-settings/sign-while-syncing-not-saved.png"><img src="simple-settings/sign-while-syncing-not-saved.png" width="206" alt="sign-while-syncing-not-saved"></a>
+<a href="simple-settings/metered-paused.png"><img src="simple-settings/metered-paused.png" width="206" alt="metered-paused"></a>
+<a href="simple-settings/metered-not-reported.png"><img src="simple-settings/metered-not-reported.png" width="206" alt="metered-not-reported"></a>
+<a href="simple-settings/metered-unreadable.png"><img src="simple-settings/metered-unreadable.png" width="206" alt="metered-unreadable"></a>
 
 <a name="simple-swap"></a>
 ## Swap (simple mode)
