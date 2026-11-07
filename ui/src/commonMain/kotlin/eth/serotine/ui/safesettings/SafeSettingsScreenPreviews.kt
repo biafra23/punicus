@@ -47,7 +47,7 @@ private val overview = SafeSettingsUiState.Overview(
     changeReason = null,
     enableModuleReason = MODULE_ENABLED_REFUSAL,
     updateReason = "Updating a Safe's version runs a migration contract's code as the Safe, a delegate call, which " +
-        "Serotine does not sign. It comes once a migration contract is pinned here.",
+        "Punicus does not sign. It comes once a migration contract is pinned here.",
 )
 
 private val addOwner = SettingsForm(
@@ -159,7 +159,7 @@ private fun SafeSettingsRemoveOwnerRefusedPreview() = SafeSettingsPreview(
             subject = SettingsOwner(FRIEND, label = null, heldHere = false),
             threshold = ThresholdField(2, 2, "2 of 2 owners must sign"),
             problem = "It would leave all 2 owners needed to sign: with one of them lost, the rest could never " +
-                "reach the threshold again. That needs a recovery module, and Serotine recognises none yet (#54), " +
+                "reach the threshold again. That needs a recovery module, and Punicus recognises none yet (#54), " +
                 "so it does not sign, approve or execute it.",
         ),
     ),
@@ -234,7 +234,7 @@ private fun SafeSettingsLoadingPreview() = SafeSettingsPreview(SafeSettingsUiSta
 private fun SafeSettingsUnavailablePreview() = SafeSettingsPreview(
     SafeSettingsUiState.Unavailable(
         "Sepolia",
-        "The Safe's storage could not be verified this time. Serotine keeps trying.",
+        "The Safe's storage could not be verified this time. Punicus keeps trying.",
     ),
 )
 

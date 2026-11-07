@@ -152,10 +152,10 @@ jobs:
             --predicate 'process == "Serotine" AND messageType >= error' | tail -n 200 || true
           echo "::endgroup::"
           if ! ps -p "$pid" > /dev/null; then
-            echo "::error::Serotine exited within 30 s of its launch"
+            echo "::error::Punicus exited within 30 s of its launch"
             exit 1
           fi
-          echo "Serotine is running (pid $pid)"
+          echo "Punicus is running (pid $pid)"
           sips -s format bmp "$shot" --out "$RUNNER_TEMP/shot.bmp" > /dev/null
           python3 - "$RUNNER_TEMP/shot.bmp" <<'PY'
           import struct, sys
@@ -172,7 +172,7 @@ jobs:
                   colours.add(data[base + x * step : base + x * step + 3])
           print(f"{len(colours)} colours below the status bar")
           if len(colours) < 2:
-              print("::error::Serotine runs but its screen is blank: the Compose UI drew nothing")
+              print("::error::Punicus runs but its screen is blank: the Compose UI drew nothing")
               sys.exit(1)
           PY
       - name: Upload the simulator screenshot

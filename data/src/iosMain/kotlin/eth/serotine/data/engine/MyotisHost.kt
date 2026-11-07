@@ -274,7 +274,7 @@ class MyotisHost private constructor(
                 action()
             } catch (e: Throwable) {
                 // The calls cross the engine's C ABI; the light clients keep their last state.
-                log("Serotine: the engine could not be switched: $e")
+                log("Punicus: the engine could not be switched: $e")
             }
         }
 
@@ -300,7 +300,7 @@ class MyotisHost private constructor(
                         try {
                             created.shutdownAll()
                         } catch (e: Throwable) {
-                            log("Serotine: the engine did not shut down cleanly: $e")
+                            log("Punicus: the engine did not shut down cleanly: $e")
                         }
                     }
                     engine = EngineState.Absent
@@ -527,10 +527,10 @@ class MyotisHost private constructor(
             val accepted = try {
                 handle.acceptStaleAnchor()
             } catch (e: Throwable) {
-                log("Serotine: ${network.displayName}'s light client could not sync past its stale anchor: $e")
+                log("Punicus: ${network.displayName}'s light client could not sync past its stale anchor: $e")
                 return
             }
-            if (!accepted) log("Serotine: ${network.displayName}'s light client did not take the stale anchor")
+            if (!accepted) log("Punicus: ${network.displayName}'s light client did not take the stale anchor")
         }
 
         fun followPauseWanted() {
@@ -542,13 +542,13 @@ class MyotisHost private constructor(
             } catch (e: Throwable) {
                 // Caught here, not around the loop over the networks, so one failing does not
                 // leave the others' networking as it was.
-                log("Serotine: ${network.displayName}'s light client could not be switched: $e")
+                log("Punicus: ${network.displayName}'s light client could not be switched: $e")
                 return
             }
             if (switched) {
                 networkingPaused = wanted
             } else {
-                log("Serotine: ${network.displayName}'s light client did not ${if (wanted) "pause" else "resume"}")
+                log("Punicus: ${network.displayName}'s light client did not ${if (wanted) "pause" else "resume"}")
             }
         }
 
@@ -557,7 +557,7 @@ class MyotisHost private constructor(
                 // Stops and unregisters the chain, so that a later start creates it anew.
                 (engine as? EngineState.Created)?.engine?.stop(network.engineName())
             } catch (e: Throwable) {
-                log("Serotine: ${network.displayName}'s light client did not stop cleanly: $e")
+                log("Punicus: ${network.displayName}'s light client did not stop cleanly: $e")
             }
         }
 
@@ -816,7 +816,7 @@ class MyotisHost private constructor(
  * Why there is no light client, in the device's log: the one fact a user's "No light client"
  * cannot tell a developer. Engine state only; no key material is anywhere near this path.
  */
-private fun report(why: String) = log("Serotine: no light client: $why")
+private fun report(why: String) = log("Punicus: no light client: $why")
 
 /**
  * [line] in the device's log: NSLog, since println's stdout reaches no one unless Xcode runs the

@@ -53,7 +53,7 @@ internal data class SafeSingleton(val version: String, val l2: Boolean, val modu
  * follow the Safe; `MyotisHostGnosisTest` proves the deployments through the light client.
  *
  * A Safe older than 1.3.0 is recognised too, on Ethereum and Gnosis Chain (issue: diskordia.eth,
- * an address the user reported as "a recognised Safe" that Serotine showed as a plain contract):
+ * an address the user reported as "a recognised Safe" that Punicus showed as a plain contract):
  * 1.0.0, 1.1.1 and 1.2.0, the three Mainnet releases of `safe-global/safe-deployments` before
  * 1.3.0 introduced the `Safe` rename and the guard. Their `GnosisSafe.sol` is `MasterCopy,
  * ModuleManager, OwnerManager, ...` (1.0.0's `BaseSafe` is `ModuleManager, OwnerManager` under
@@ -95,7 +95,7 @@ internal data class SafeSingleton(val version: String, val l2: Boolean, val modu
  * singleton's own code, only that a proxy's slot 0 names a pinned address, so an attacker could
  * deploy the (public) 1.0.0 proxy runtime byte for byte at a fresh address with slot 0 set to
  * 0xb6029EA3B2c51D09a50B53CA8012FeEB05bDa35A and a constructor that writes whatever owners and
- * threshold it likes into the rest — Serotine would show it as a verified Safe, and a
+ * threshold it likes into the rest — Punicus would show it as a verified Safe, and a
  * `delegatecall` to that empty address always "succeeds" as a no-op, so nothing sent to it could
  * ever move again.
  */

@@ -1,6 +1,6 @@
 # Kotlin idiom review
 
-A snapshot review of how idiomatic Serotine's Kotlin is, taken on 2026-11-01 at
+A snapshot review of how idiomatic Punicus's Kotlin is, taken on 2026-11-01 at
 commit 7a7994c4 (`main`). It changes no code. Every finding names the files and
 lines it was read at, so each can be checked, fixed or dismissed on its own.
 Whether anything here becomes work is the owner's call.
@@ -1164,7 +1164,7 @@ callbacks. H-01 is part of X-03, H-04 of X-07, H-07 of X-10, H-09 of X-04.
   803-816, 826-846, 855-863, 870-883` and `desktop-app/.../Main.kt:186-197,
   198-207, 211-221, 223-231, 233-248, 250-259, 264-282, 288-298` each repeat `try {
   Follow...()() } catch (e: CancellationException) { throw e } catch (e:
-  Exception) { System.err.println("Serotine: ... stopped: ...") }`;
+  Exception) { System.err.println("Punicus: ... stopped: ...") }`;
   `ios-app/.../SerotineWallet.kt:380-388` defines `reportingFailure(what) { }`
   and uses it for all of them.
 - Idiomatic form: the iOS helper, shared, beside the `Follow*` use cases.

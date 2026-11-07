@@ -185,7 +185,7 @@ class SettingsScreenTest {
 
         // Exactly one node carries both strings: proof they merged, which is what a screen
         // reader announces.
-        rule.onAllNodes(hasText("Serotine") and hasText("Version $APP_VERSION")).assertCountEquals(1)
+        rule.onAllNodes(hasText("Punicus") and hasText("Version $APP_VERSION")).assertCountEquals(1)
     }
 
     @Test

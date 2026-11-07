@@ -727,7 +727,7 @@ class DappTransactionViewModel(
         const val SEND_FAILED = "Sending failed. Nothing was sent to the dApp."
         const val QUOTE_FAILED = "The transaction could not be worked out right now. Try again."
         const val NOT_QUOTED_YET = "The transaction is still being worked out from verified state."
-        const val SIGN_FAILED = "Serotine could not finish this signature. Nothing was queued: try again."
+        const val SIGN_FAILED = "Punicus could not finish this signature. Nothing was queued: try again."
         const val NOT_QUEUED = "Signed, but this device's queue cannot be saved right now, so nothing was queued: " +
             "sign it again in a moment."
         const val NOT_RECORDED = "This request could not be tied to its Safe transaction right now, so the signature " +
@@ -737,7 +737,7 @@ class DappTransactionViewModel(
         const val SAFE_SHORT = "The Safe's verified balance, less what its queued transactions may move, cannot " +
             "pay this value. Refuse, or ask the dApp again once the Safe has more."
         const val NO_OWNER_HERE = "No owner of this Safe has its key on this device, so nobody here can sign it. " +
-            "Add an owner's key to Serotine, or refuse."
+            "Add an owner's key to Punicus, or refuse."
         const val SAFE_NOTE = "From a Safe: this proposes a Safe transaction at the Safe's next nonce. Its owners " +
             "sign it, and an account here executes it from its screen; the dApp is told the hash of that execution."
         const val QUEUED_NOTE = "Queued as a Safe transaction. Collect the owners' signatures and execute it on its " +
@@ -746,7 +746,7 @@ class DappTransactionViewModel(
             "hash: it is no longer for refusing."
         const val MAYBE_SENT = "A transaction signed for this request may be on its way already. Try again, " +
             "or wait for it in Activity: refusing now would tell the dApp no while it may still be mined."
-        const val NOT_DECODED = "Serotine does not decode this call, so it cannot tell what it does: its data is " +
+        const val NOT_DECODED = "Punicus does not decode this call, so it cannot tell what it does: its data is " +
             "shown as it is. Send it only if you trust this dApp."
         const val APPROVAL_NOTE = "An approval moves nothing itself, but the spender may then take the tokens " +
             "without asking you again."

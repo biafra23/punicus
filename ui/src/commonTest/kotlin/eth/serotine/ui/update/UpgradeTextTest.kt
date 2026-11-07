@@ -24,9 +24,9 @@ class UpgradeTextTest {
     fun anUpgradeAheadIsAHeadsUpWithItsDateThatSaysPeersReportIt() {
         assertEquals(
             UpgradeBannerItem(
-                "Network upgrade ahead on Sepolia: update Serotine",
-                "Peers announce a Sepolia network upgrade on <1791294816> that this version of Serotine does not " +
-                    "support. Update the app before it activates, or Serotine stops verifying at the upgrade.",
+                "Network upgrade ahead on Sepolia: update Punicus",
+                "Peers announce a Sepolia network upgrade on <1791294816> that this version of Punicus does not " +
+                    "support. Update the app before it activates, or Punicus stops verifying at the upgrade.",
                 "Reported by peers in 5 networks, not verified · fork id 0x6c1d9423",
                 urgent = false,
             ),
@@ -38,8 +38,8 @@ class UpgradeTextTest {
     fun anActivatedUpgradeTheLightClientDoesNotContradictIsNotUrgent() {
         assertEquals(
             UpgradeBannerItem(
-                "Network upgrade reported on Sepolia: update Serotine",
-                "Peers report that Sepolia upgraded to rules this version of Serotine does not support. Update " +
+                "Network upgrade reported on Sepolia: update Punicus",
+                "Peers report that Sepolia upgraded to rules this version of Punicus does not support. Update " +
                     "the app to keep using your wallet.",
                 "Reported by peers in 1 network, not verified · fork id unknown",
                 urgent = false,
@@ -51,9 +51,9 @@ class UpgradeTextTest {
     @Test
     fun aTimeThatPassedOnTheClockIsNotSaidToBeAnUpgradePeersReport() {
         val due = banner(UpgradeWarning.Activated(glamsterdam))!!
-        assertEquals("Network upgrade due on Sepolia: update Serotine", due.title)
+        assertEquals("Network upgrade due on Sepolia: update Punicus", due.title)
         assertEquals(
-            "Peers announced a Sepolia network upgrade on <1791294816> that this version of Serotine does not " +
+            "Peers announced a Sepolia network upgrade on <1791294816> that this version of Punicus does not " +
                 "support, and that time has passed. Update the app to keep using your wallet.",
             due.text,
         )
@@ -66,7 +66,7 @@ class UpgradeTextTest {
         val item = banner(UpgradeWarning.UpdateRequired(glamsterdam.copy(phase = NetworkUpgrade.Phase.ACTIVE)))!!
         assertEquals(true, item.urgent)
         assertEquals(
-            "Peers report that Sepolia upgraded on <1791294816> to rules this version of Serotine does not " +
+            "Peers report that Sepolia upgraded on <1791294816> to rules this version of Punicus does not " +
                 "support, and its light client is not verifying the chain. Update the app to keep using your wallet.",
             item.text,
         )
@@ -77,7 +77,7 @@ class UpgradeTextTest {
         // A live report of a scheduled upgrade whose time passed, and a light client not verifying.
         val item = banner(UpgradeWarning.UpdateRequired(glamsterdam))!!
         assertEquals(
-            "Peers announced a Sepolia network upgrade on <1791294816> that this version of Serotine does not " +
+            "Peers announced a Sepolia network upgrade on <1791294816> that this version of Punicus does not " +
                 "support. That time has passed, and its light client is not verifying the chain. Update the app " +
                 "to keep using your wallet.",
             item.text,
@@ -88,11 +88,11 @@ class UpgradeTextTest {
     fun eachNoticeHasItsOwnTitle() {
         fun text(kind: UpgradeNotice.Kind, upgrade: NetworkUpgrade = glamsterdam) =
             UpgradeNotificationText.from(UpgradeNotice(kind, upgrade), Network.SEPOLIA, date)
-        val ahead = "Peers announce a Sepolia network upgrade on <1791294816> that this version of Serotine does " +
+        val ahead = "Peers announce a Sepolia network upgrade on <1791294816> that this version of Punicus does " +
             "not support. Update the app before it activates."
 
         assertEquals(
-            UpgradeNotificationText("Update Serotine before the network upgrade", ahead),
+            UpgradeNotificationText("Update Punicus before the network upgrade", ahead),
             text(UpgradeNotice.Kind.ANNOUNCED),
         )
         assertEquals(
@@ -105,8 +105,8 @@ class UpgradeTextTest {
         )
         assertEquals(
             UpgradeNotificationText(
-                "Update Serotine",
-                "Peers report that Sepolia upgraded to rules this version of Serotine does not support. Update the " +
+                "Update Punicus",
+                "Peers report that Sepolia upgraded to rules this version of Punicus does not support. Update the " +
                     "app to keep using your wallet.",
             ),
             text(UpgradeNotice.Kind.ACTIVATED, placed),

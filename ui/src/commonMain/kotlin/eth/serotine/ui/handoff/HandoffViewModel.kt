@@ -74,7 +74,7 @@ import kotlinx.coroutines.launch
  * another wallet app as a payment link ([handOffTransfer]) and followed on the chain
  * ([watchHandoff]) for [HANDOFF_WINDOW], as [timeSource] measures it.
  *
- * Serotine signs nothing and receives nothing back through the link: what the outcome says is
+ * Punicus signs nothing and receives nothing back through the link: what the outcome says is
  * what verified blocks hold. A name is resolved again before the link is made, as Send resolves
  * one again before a quote: the link names the address the name has now. A link is made once: the
  * screen never offers to open the wallet a second time for the same transfer, which could pay
@@ -376,13 +376,13 @@ class HandoffViewModel(
         val request = step.request
         val option = request.option
         val notes = listOfNotNull(
-            "Serotine signs nothing. The wallet that opens signs and sends this transfer, and its fee is that " +
+            "Punicus signs nothing. The wallet that opens signs and sends this transfer, and its fee is that " +
                 "wallet's to set.",
             "In that wallet, choose “${request.sender.label}” (${shortAddress(display)}) before you confirm: it " +
                 "sends from whichever of its accounts is chosen.",
             "That wallet sends the transfer through its own provider, which learns the transfer and this " +
                 "device's IP address.",
-            "Nothing comes back from that wallet. Serotine checks each new block for this transfer for " +
+            "Nothing comes back from that wallet. Punicus checks each new block for this transfer for " +
                 "${HANDOFF_WINDOW.inWholeMinutes} minutes after the wallet opens.",
             "${network.displayName} is a test network: its ${network.nativeSymbol} has no value."
                 .takeIf { network.testnet },
@@ -420,7 +420,7 @@ class HandoffViewModel(
             progress = when (watch) {
                 null -> "Reading the newest verified block…"
                 is HandoffWatch.Watching -> listOfNotNull(
-                    "No block up to ${grouped(watch.readUpTo)} has it from this account yet. Serotine keeps " +
+                    "No block up to ${grouped(watch.readUpTo)} has it from this account yet. Punicus keeps " +
                         "looking for ${HANDOFF_WINDOW.inWholeMinutes} minutes after the handoff.",
                     watch.nearBlock?.let {
                         "Block ${grouped(it)} has a transfer like it, of another amount or from another account."
@@ -564,7 +564,7 @@ class HandoffViewModel(
         ReadUnavailable.NETWORK_OFF -> "The network's light client is not running, so the transfer cannot be checked."
         ReadUnavailable.STALE_ANCHOR -> "The light client refuses to sync, so the transfer cannot be checked."
         ReadUnavailable.SYNCING -> "The light client is still syncing: the transfer is checked once it has caught up."
-        ReadUnavailable.UNPROVEN -> "The newest block could not be verified this time: Serotine tries again."
+        ReadUnavailable.UNPROVEN -> "The newest block could not be verified this time: Punicus tries again."
         ReadUnavailable.REFUSED ->
             "The light client on this device cannot read blocks, so the transfer cannot be checked."
     }
@@ -584,7 +584,7 @@ class HandoffViewModel(
 
     private companion object {
         const val LIST_UNAVAILABLE =
-            "Your account list cannot be read right now, so nothing can be handed over. Serotine keeps trying."
+            "Your account list cannot be read right now, so nothing can be handed over. Punicus keeps trying."
         const val NOT_IN_WALLET = "This account is not in your wallet any more."
         const val SAFE = "A payment link cannot sign a Safe transaction: Send on the Safe's own screen proposes one."
         const val KEY_HERE = "This account's key is on this device: Send signs and sends from it here."

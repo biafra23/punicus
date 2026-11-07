@@ -458,7 +458,7 @@ class AccountsViewModelTest {
 
         val warning = assertNotNull(viewModel.sepoliaSection.staleAnchor)
         assertEquals(
-            "Serotine's last trusted checkpoint for Sepolia is about 7 days old, older than the 3 days it can " +
+            "Punicus's last trusted checkpoint for Sepolia is about 7 days old, older than the 3 days it can " +
                 "safely catch up from on its own. Nothing on Sepolia is verified until you decide.",
             warning.banner,
         )
@@ -575,7 +575,7 @@ class AccountsViewModelTest {
         runCurrent()
         assertEquals(
             AccountsUiState.ListUnavailable(
-                "Your account list was saved by a newer version of Serotine. Update the app to see it.",
+                "Your account list was saved by a newer version of Punicus. Update the app to see it.",
             ),
             viewModel.uiState.value,
             "its own state, not an empty list",
@@ -636,7 +636,7 @@ class AccountsViewModelTest {
             "Sepolia's banner alone: Ethereum's peers report nothing",
         )
         assertEquals(
-            "Network upgrade ahead on Sepolia: update Serotine",
+            "Network upgrade ahead on Sepolia: update Punicus",
             viewModel.uiState.value.upgrades.single().title,
         )
     }
@@ -652,7 +652,7 @@ class AccountsViewModelTest {
 
         val state = viewModel.uiState.value
         assertIs<AccountsUiState.ListUnavailable>(state)
-        assertEquals("Network upgrade ahead on Sepolia: update Serotine", state.upgrades.single().title)
+        assertEquals("Network upgrade ahead on Sepolia: update Punicus", state.upgrades.single().title)
     }
 
     @Test
@@ -1084,8 +1084,8 @@ class AccountsViewModelTest {
         runCurrent()
 
         val ready = assertIs<AccountsUiState.Ready>(viewModel.uiState.value)
-        assertEquals("1 waiting to send · Keep Serotine open to send it sooner", ready.sections.single().queued)
-        assertEquals(listOf("Sepolia: 1 waiting to send · Keep Serotine open to send it sooner"), ready.queued)
+        assertEquals("1 waiting to send · Keep Punicus open to send it sooner", ready.sections.single().queued)
+        assertEquals(listOf("Sepolia: 1 waiting to send · Keep Punicus open to send it sooner"), ready.queued)
 
         // Its light client verifies: it is checked and sent shortly, with nothing to ask of the user.
         lightClient.status.value = LightClientStatus.Synced(headBlock = 9, headTimestamp = now, finalized = null)

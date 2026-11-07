@@ -51,7 +51,7 @@ private fun CurrencyUnreadablePreview() = CurrencyPreview(
     CurrencyUiState(
         options("USD"),
         notice = "Your choice of currency cannot be read right now, so values are in USD and nothing can be " +
-            "chosen. Serotine keeps trying.",
+            "chosen. Punicus keeps trying.",
         canChoose = false,
     ),
 )

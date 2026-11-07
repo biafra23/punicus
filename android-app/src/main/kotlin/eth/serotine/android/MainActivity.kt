@@ -25,7 +25,7 @@ class MainActivity : ComponentActivity() {
         setContent {
             App(graph)
         }
-        // A `wc:` link, or Serotine's deep link carrying one, opened the app: not again when the activity is only recreated.
+        // A `wc:` link, or Punicus's deep link carrying one, opened the app: not again when the activity is only recreated.
         if (savedInstanceState == null) offerDappLink(intent)
         if (savedInstanceState == null) askForNotifications()
     }

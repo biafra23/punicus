@@ -73,7 +73,7 @@ jobs:
     permissions:
       contents: read
     env:
-      DMG_NAME: Serotine-${{ matrix.arch }}.dmg
+      DMG_NAME: Punicus-${{ matrix.arch }}.dmg
 
     steps:
       - name: Checkout
@@ -148,7 +148,7 @@ jobs:
           GRADLE_ARGS="-Porg.gradle.java.installations.auto-detect=false -Porg.gradle.java.installations.auto-download=false -Porg.gradle.java.installations.paths=$JAVA_HOME"
           ./gradlew :ui:desktopTest --stacktrace $GRADLE_ARGS
 
-      # Compose names both arches' output the same (Serotine-<packageVersion>.dmg);
+      # Compose names both arches' output the same (Punicus-<packageVersion>.dmg);
       # rename so the downloaded file itself states the architecture. Assert exactly
       # one — two differently-versioned leftovers must not ship an arbitrary pick.
       - name: Tag .dmg with architecture
@@ -162,7 +162,7 @@ jobs:
 
       # Guard against a SILENTLY wrong-arch build: a regression (runner-image change,
       # Gradle re-enabling JDK auto-detect, a broken Rosetta) could ship an arm64 binary
-      # labelled Serotine-x64.dmg that won't launch on the Intel Macs it targets. Mount
+      # labelled Punicus-x64.dmg that won't launch on the Intel Macs it targets. Mount
       # the dmg and assert the launcher's and the bundled JVM's Mach-O architecture.
       - name: Verify .dmg architecture
         run: |
@@ -212,7 +212,7 @@ jobs:
       - name: Upload DMG
         uses: actions/upload-artifact@v4
         with:
-          name: serotine-desktop-dmg-${{ matrix.arch }}-${{ github.sha }}
+          name: punicus-desktop-dmg-${{ matrix.arch }}-${{ github.sha }}
           path: desktop-app/build/compose/binaries/main/dmg/*.dmg
           if-no-files-found: error
           retention-days: 30
@@ -245,7 +245,7 @@ jobs:
       - name: Download dmg artifacts
         uses: actions/download-artifact@v4
         with:
-          pattern: serotine-desktop-dmg-*-${{ github.sha }}
+          pattern: punicus-desktop-dmg-*-${{ github.sha }}
           path: dmg
           merge-multiple: true
 
@@ -266,36 +266,36 @@ jobs:
           # Fail loudly if either arch dmg is missing rather than shipping a
           # half release (e.g. one matrix job was cancelled).
           for arch in arm64 x64; do
-            test -f "dmg/Serotine-${arch}.dmg" \
-              || { echo "::error::missing dmg/Serotine-${arch}.dmg"; exit 1; }
+            test -f "dmg/Punicus-${arch}.dmg" \
+              || { echo "::error::missing dmg/Punicus-${arch}.dmg"; exit 1; }
           done
-          # Release assets carry the version, like the APKs: Serotine-<tag>-<arch>.dmg.
+          # Release assets carry the version, like the APKs: Punicus-<tag>-<arch>.dmg.
           # Renamed before the release is created, so a rename can never fail after
           # the release exists.
           for arch in arm64 x64; do
-            mv "dmg/Serotine-${arch}.dmg" "dmg/Serotine-${tag}-${arch}.dmg"
+            mv "dmg/Punicus-${arch}.dmg" "dmg/Punicus-${tag}-${arch}.dmg"
           done
           notes=$(mktemp)
           cat > "$notes" <<'NOTES'
-          Pre-release build of the Serotine wallet apps.
+          Pre-release build of the Punicus wallet apps.
 
-          **Android (`*-android.apk`)**, in a release that has it — the Serotine app, signed with
-          Serotine's own release key (its certificate's SHA-256 is in
+          **Android (`*-android.apk`)**, in a release that has it — the Punicus app, signed with
+          Punicus's own release key (its certificate's SHA-256 is in
           `android-app/release-signing-cert.sha256` in the repository). A release without it carries
           only the debug app below. Install via "Install unknown apps" and switch that off again afterwards;
-          only ever install Serotine, and its updates, from this releases page.
+          only ever install Punicus, and its updates, from this releases page.
 
-          **Android debug (`*-android-debug.apk`)** — a separate test app ("Serotine Debug", amber
+          **Android debug (`*-android-debug.apk`)** — a separate test app ("Punicus Debug", amber
           icon, package `eth.serotine.debug`), signed with the publicly known debug key: anyone can
           build an APK that installs over it as an update, so never keep an account you use in it.
           It installs next to the release app.
 
-          **Desktop macOS (`Serotine-v<version>-<arch>.dmg`)** — unsigned; download the dmg matching
+          **Desktop macOS (`Punicus-v<version>-<arch>.dmg`)** — unsigned; download the dmg matching
           your Mac (arm64 for Apple Silicon, x64 for Intel). First launch:
           right-click → Open to get past Gatekeeper (not notarized yet).
 
-          **Desktop Linux (`Serotine-v<version>-<arch>.deb`)** — install with
-          `sudo apt install ./Serotine-v<version>-<arch>.deb`.
+          **Desktop Linux (`Punicus-v<version>-<arch>.deb`)** — install with
+          `sudo apt install ./Punicus-v<version>-<arch>.deb`.
 
           **Desktop Windows** — not in this release: the embedded engine has no Windows build yet.
           NOTES
@@ -306,9 +306,9 @@ jobs:
           if ! gh release view "$tag" >/dev/null 2>&1; then
             gh release create "$tag" \
               --prerelease \
-              --title "Serotine $tag" \
+              --title "Punicus $tag" \
               --notes-file "$notes" \
               --target "${GITHUB_SHA}" \
             || gh release view "$tag" >/dev/null 2>&1
           fi
-          gh release upload "$tag" "dmg/Serotine-${tag}-arm64.dmg" "dmg/Serotine-${tag}-x64.dmg" --clobber
+          gh release upload "$tag" "dmg/Punicus-${tag}-arm64.dmg" "dmg/Punicus-${tag}-x64.dmg" --clobber

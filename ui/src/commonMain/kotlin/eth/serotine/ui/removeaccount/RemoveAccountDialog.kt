@@ -73,7 +73,7 @@ fun RemoveAccountDialog(state: RemoveAccountUiState, onRemove: () -> Unit, onCan
                                     "Its key is deleted from this device. Only its recovery phrase brings this " +
                                         "account back: make sure you have it."
                                 } else {
-                                    "Serotine stops watching this address. You can watch it again at any time."
+                                    "Punicus stops watching this address. You can watch it again at any time."
                                 },
                             )
                         }

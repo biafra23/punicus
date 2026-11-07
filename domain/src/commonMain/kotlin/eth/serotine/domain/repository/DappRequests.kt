@@ -71,7 +71,7 @@ data class DappRequest(
     /** The networks its session holds ([DappSession.networks]): the chains it may name, and switch to. */
     val sessionNetworks: Set<Network> = sessionAccounts.map { it.network }.toSet(),
 ) {
-    /** The network [chain] names, or null for one Serotine has no dApp sessions on. */
+    /** The network [chain] names, or null for one Punicus has no dApp sessions on. */
     val network: Network? get() = dappNetworkOf(chain)
 }
 

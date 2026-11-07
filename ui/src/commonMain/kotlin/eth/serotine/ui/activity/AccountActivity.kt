@@ -469,6 +469,6 @@ class AccountActivity(
 
         const val COVERAGE = "Transactions sent from this device. Transactions received, and those sent " +
             "from this account elsewhere, are not listed yet."
-        const val UNREADABLE = "The history of your transactions cannot be read right now. Serotine keeps trying."
+        const val UNREADABLE = "The history of your transactions cannot be read right now. Punicus keeps trying."
     }
 }

@@ -113,7 +113,7 @@ internal class MacLocalAuthentication private constructor() {
             try {
                 MacLocalAuthentication()
             } catch (e: Throwable) {
-                println("Serotine: LocalAuthentication.framework cannot be loaded (${e::class.simpleName})")
+                println("Punicus: LocalAuthentication.framework cannot be loaded (${e::class.simpleName})")
                 null
             }
         }

@@ -261,9 +261,9 @@ private fun AccountsUpgradeAheadPreview() = AccountsPreview(
     withAccounts.copy(
         upgrades = listOf(
             UpgradeBannerItem(
-                "Network upgrade ahead on Sepolia: update Serotine",
-                "Peers announce a Sepolia network upgrade on Nov 6, 2026, 3:00 PM that this version of Serotine " +
-                    "does not support. Update the app before it activates, or Serotine stops verifying at the " +
+                "Network upgrade ahead on Sepolia: update Punicus",
+                "Peers announce a Sepolia network upgrade on Nov 6, 2026, 3:00 PM that this version of Punicus " +
+                    "does not support. Update the app before it activates, or Punicus stops verifying at the " +
                     "upgrade.",
                 UPGRADE_DETAILS,
                 urgent = false,
@@ -278,8 +278,8 @@ private fun AccountsUpgradeActivatedDarkPreview() = AccountsPreview(
     withAccounts.copy(
         upgrades = listOf(
             UpgradeBannerItem(
-                "Network upgrade reported on Sepolia: update Serotine",
-                "Peers report that Sepolia upgraded on Nov 6, 2026, 3:00 PM to rules this version of Serotine " +
+                "Network upgrade reported on Sepolia: update Punicus",
+                "Peers report that Sepolia upgraded on Nov 6, 2026, 3:00 PM to rules this version of Punicus " +
                     "does not support. Update the app to keep using your wallet.",
                 UPGRADE_DETAILS,
                 urgent = false,
@@ -294,7 +294,7 @@ private fun AccountsUpgradeActivatedDarkPreview() = AccountsPreview(
 private fun AccountsListUnavailablePreview() = AccountsPreview(
     AccountsUiState.ListUnavailable(
         "Your saved account list cannot be read right now. Nothing has been changed, and no account can be " +
-            "added until it can be read. Serotine keeps trying.",
+            "added until it can be read. Punicus keeps trying.",
     ),
 )
 
@@ -465,7 +465,7 @@ private val networkBlocked =
             UpgradeBannerItem(
                 "Update required to follow Gnosis Chain",
                 "Peers report that Gnosis Chain upgraded on Nov 6, 2026, 3:00 PM to rules this version of " +
-                    "Serotine does not support, and its light client is not verifying the chain. Update the app " +
+                    "Punicus does not support, and its light client is not verifying the chain. Update the app " +
                     "to keep using your wallet.",
                 UPGRADE_DETAILS,
                 urgent = true,
@@ -481,7 +481,7 @@ private fun AccountsNetworkBlockedPreview() = AccountsPreview(networkBlocked)
 @Composable
 private fun AccountsNetworkBlockedDarkPreview() = AccountsPreview(networkBlocked, darkTheme = true)
 
-private const val GNOSIS_BLOCKED = "This version of Serotine can no longer follow Gnosis Chain: nothing can be sent " +
+private const val GNOSIS_BLOCKED = "This version of Punicus can no longer follow Gnosis Chain: nothing can be sent " +
     "from its accounts until you update the app."
 
 /**
@@ -601,7 +601,7 @@ private fun AccountsSendNeedsNetworkPreview() = SerotineTheme {
 /** Lenient mode: a transfer queued from Sepolia while it catches up, said under its line. */
 private val queuedWhileCatchingUp = catchingUp.copy(
     sections = catchingUp.sections.map {
-        it.copy(queued = "1 waiting to send · Keep Serotine open to send it sooner")
+        it.copy(queued = "1 waiting to send · Keep Punicus open to send it sooner")
     },
 )
 
@@ -620,8 +620,8 @@ private fun AccountsLostQueuedPreview() = AccountsPreview(
     withAccounts.copy(
         lostNotice = "A transaction waiting to be sent was lost: the key that sealed it on this device is gone " +
             "(the key store was reset, or the app was restored on another device). If it was being sent " +
-            "when Serotine last closed, it may have gone out. Before you sign it again, wait until " +
-            "Serotine has caught up, and check the account's balance, or for a Safe, its queue.",
+            "when Punicus last closed, it may have gone out. Before you sign it again, wait until " +
+            "Punicus has caught up, and check the account's balance, or for a Safe, its queue.",
     ),
 )
 /** Every preview above, which AccountsScreenPreviewsTest renders: a new preview goes in here too. */

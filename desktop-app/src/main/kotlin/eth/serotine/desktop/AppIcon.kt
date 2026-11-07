@@ -19,7 +19,7 @@ internal object AppIcon {
      */
     val image: BufferedImage? by lazy {
         val image = AppIcon::class.java.getResourceAsStream(RESOURCE)?.use(ImageIO::read)
-        if (image == null) println("Serotine: no app icon ($RESOURCE is not on the classpath)")
+        if (image == null) println("Punicus: no app icon ($RESOURCE is not on the classpath)")
         image
     }
 }

@@ -16,11 +16,11 @@ import kotlinx.coroutines.withContext
  * [WalletHandoff] on Android (issue #255): a payment link opened with a view intent for its
  * `ethereum:` scheme, which the system hands to the one wallet app that takes it, or shows its
  * chooser when several do. Started from the activity in front ([foreground]) so that the wallet
- * opens over Serotine and Back returns to it; from [context] in a new task when none is.
+ * opens over Punicus and Back returns to it; from [context] in a new task when none is.
  *
  * Which apps take the scheme is read from the package manager, which on Android 11 and later sees
- * them only through the manifest's `<queries>` entry for `ethereum:` view intents. Serotine's own
- * apps never count as another wallet: should Serotine take `ethereum:` links itself one day (#256),
+ * them only through the manifest's `<queries>` entry for `ethereum:` view intents. Punicus's own
+ * apps never count as another wallet: should Punicus take `ethereum:` links itself one day (#256),
  * they are left out here, and the link must then go through a chooser that excludes them.
  */
 class AndroidWalletHandoff(
@@ -54,7 +54,7 @@ class AndroidWalletHandoff(
         } catch (e: ActivityNotFoundException) {
             HandoffOpening.NO_WALLET
         } catch (e: SecurityException) {
-            // A handler guarded by a permission Serotine does not hold: there, but not to be opened.
+            // A handler guarded by a permission Punicus does not hold: there, but not to be opened.
             HandoffOpening.REFUSED
         } catch (e: RuntimeException) {
             HandoffOpening.REFUSED // the port never throws; anything else the platform throws opened nothing
@@ -67,7 +67,7 @@ class AndroidWalletHandoff(
         /** A link of the shape every handoff has, which only the apps that take `ethereum:` answer. */
         const val PROBE = "ethereum:0x0000000000000000000000000000000000000000@1?value=0"
 
-        /** The release and the debug app: Serotine, never another wallet. */
+        /** The release and the debug app: Punicus, never another wallet. */
         val SEROTINE_PACKAGES = setOf("eth.serotine", "eth.serotine.debug")
     }
 }

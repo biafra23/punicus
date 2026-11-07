@@ -1,6 +1,6 @@
 # Keys and signing
 
-Serotine holds private keys; Myotis never does. This page is the design for
+Punicus holds private keys; Myotis never does. This page is the design for
 how they are held, what the user chooses between, what a hardware-backed key
 can and cannot do for a wallet, and the recommendations that came out of the
 owner's key-storage discussion of 2026-10-15. **This page is the contract**
@@ -40,7 +40,7 @@ it is not a basis for a cross-platform wallet. Two consequences follow:
 | **Hardware-bound Safe owner** | P-256 in the Secure Enclave / StrongBox | none: it is a device credential | the OS's own gate, bound to the key and chosen at creation: current biometrics only, or biometrics or device credential. This tier has no password factor | decided (2026-10-15); the key's policy is under *A Safe owned by a hardware P-256 key*, and it needs a recovery owner, see *Backup and recovery* |
 | **Mnemonic key** | secp256k1 from a BIP-39 seed, in the envelope | the mnemonic, written down once at creation | password; biometrics if the user enables them | decided (2026-10-15); every EOA, and a Safe owner the user wants to be able to restore |
 | **Synced-passkey Safe owner** | P-256 passkey through the platform WebAuthn API | synced end-to-end encrypted by iCloud Keychain / Google Password Manager | biometrics | recommended as an option; owner's decision open |
-| **Owner key in an external wallet** | secp256k1 in another wallet (MetaMask, say), reached over WalletConnect; Serotine keeps only its address and the session | the other wallet's | the other wallet's | decided (2026-11-03, #22); Safe owners only, an EOA later or never. It is asked for `eth_signTypedData_v4` of the `SafeTx` alone, and its signature is checked here (docs/walletconnect.md, *Direction 2*) |
+| **Owner key in an external wallet** | secp256k1 in another wallet (MetaMask, say), reached over WalletConnect; Punicus keeps only its address and the session | the other wallet's | the other wallet's | decided (2026-11-03, #22); Safe owners only, an EOA later or never. It is asked for `eth_signTypedData_v4` of the `SafeTx` alone, and its signature is checked here (docs/walletconnect.md, *Direction 2*) |
 
 Which tier an account uses is the user's decision. The app explains the
 trade when the account is created and never downgrades a tier on its own.
@@ -289,7 +289,7 @@ its KDoc and returns it as a result the UI shows as state.
     decryption;
   - the simulator has no enclave, so the path is not offered there (rule 5);
     where it is not offered, the Security screen says why and how to get it:
-    no face or finger enrolled, no passcode, Face ID turned off for Serotine,
+    no face or finger enrolled, no passcode, Face ID turned off for Punicus,
     or biometrics locked out until the passcode is entered.
 - **Biometric unlock on a Mac** with Touch ID works as on iOS, with
   `MacBiometricKey` as `HW_bio`:
@@ -483,15 +483,15 @@ its KDoc and returns it as a result the UI shows as state.
   - Only a wallet without envelopes asks whether the enclave works.
   - Macs without an enclave, Windows and Linux stand on the password alone.
     Rule 9's TPM path for Windows and Linux is not built. Until it is, those
-    computers are password-only, and the seed screen says that Serotine does
+    computers are password-only, and the seed screen says that Punicus does
     not use the computer's TPM yet (`KeyProtection.PASSWORD_ONLY_TPM_NOT_USED`,
     the owner's ruling of 2026-10-16).
-- **One Serotine runs per user** on the desktop.
+- **One Punicus runs per user** on the desktop.
   - The host holds an exclusive lock on a file in its data directory, so a
     second instance does not write the account list or the envelopes. It
     says so and ends.
   - The OS drops the lock when the holder dies. A user who deletes the lock
-    file while Serotine runs defeats the guard.
+    file while Punicus runs defeats the guard.
   - On Windows the data directory is `%LOCALAPPDATA%\eth.serotine`, apart
     from the directory the per-user installer owns.
 - **A lost hardware key is said, not guessed around.** The key store asks the
@@ -513,11 +513,11 @@ its KDoc and returns it as a result the UI shows as state.
     private-key operations. The app's sandbox keeps other apps from the
     state file, which the Mac's design cannot.
   - Argon2id and AES-256-GCM are libsodium's, from the bindings'
-    `libsodium.a`. Every call goes through Serotine's own cinterop
+    `libsodium.a`. Every call goes through Punicus's own cinterop
     declarations (`sodium.def`), not the bindings': theirs are published per
     target only, which the shared iOS code cannot see, and theirs of
     `crypto_pwhash` takes a `const char *`, which Kotlin/Native makes a
-    String; Serotine's takes the password as bytes.
+    String; Punicus's takes the password as bytes.
   - The key directory is excluded from iCloud and computer backups.
   - The factor (`iosHardwareSecret`): on an iPhone it is always the
     enclave, chosen without asking whether it works, so a locked device

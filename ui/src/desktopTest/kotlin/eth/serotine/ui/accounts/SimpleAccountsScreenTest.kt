@@ -170,7 +170,7 @@ class SimpleAccountsScreenTest {
             SerotineTheme {
                 SimpleAccountsScreen(
                     state = ready(main).copy(
-                        queued = listOf("Ethereum: 1 waiting to send · Keep Serotine open to send it sooner"),
+                        queued = listOf("Ethereum: 1 waiting to send · Keep Punicus open to send it sooner"),
                         lostNotice = "A transaction waiting to be sent was lost.",
                     ),
                     onWatchAddress = {},
@@ -185,7 +185,7 @@ class SimpleAccountsScreenTest {
         }
 
         rule.onNodeWithTag(ACCOUNTS_QUEUED_TAG)
-            .assertTextEquals("Ethereum: 1 waiting to send · Keep Serotine open to send it sooner")
+            .assertTextEquals("Ethereum: 1 waiting to send · Keep Punicus open to send it sooner")
         rule.onNodeWithText("A transaction waiting to be sent was lost.").assertIsDisplayed()
         rule.onNodeWithText("Dismiss").performClick()
         assertEquals(1, dismissed)

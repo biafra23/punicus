@@ -8,7 +8,7 @@ import eth.serotine.ui.components.TransferForm
 /**
  * Everything Send from another wallet renders (issue #255; docs/wallet-ux.md, screen 7H): the
  * transfer composed as on Send, what is handed to the other wallet, then what the chain shows of
- * it. Serotine signs nothing here: the other wallet signs and sends, and nothing comes back through
+ * it. Punicus signs nothing here: the other wallet signs and sends, and nothing comes back through
  * the link, so the outcome is read from verified blocks alone. Every leaf is display-ready.
  */
 sealed interface HandoffUiState {

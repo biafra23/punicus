@@ -7,7 +7,7 @@ import kotlinx.coroutines.flow.getAndUpdate
 
 /**
  * A `wc:` link the platform opened the app with (docs/walletconnect.md, part 1.2a), directly or
- * wrapped in Serotine's own deep link `serotine://wc?uri=<the wc: link, percent-encoded>`, waiting for
+ * wrapped in Punicus's own deep link `serotine://wc?uri=<the wc: link, percent-encoded>`, waiting for
  * Connect a dApp to take it: the app opens that screen with the link filled in, and pairs only on
  * the user's Connect. Held in memory alone, never in a navigation argument, which Android keeps in
  * the saved state: the link carries its pairing's key (ruling 8). The host offers it; one link waits
@@ -21,7 +21,7 @@ class IncomingDappLink {
     val pending: StateFlow<String?> = link.asStateFlow()
 
     /**
-     * Offers [uri] when it is a `wc:` link no longer than a pairing URI can be, or Serotine's deep
+     * Offers [uri] when it is a `wc:` link no longer than a pairing URI can be, or Punicus's deep
      * link carrying one in its `uri` parameter; false for anything else, which is dropped. A deep link
      * with no `uri` (a dApp bringing the wallet to the front for a request) offers nothing.
      */
@@ -40,7 +40,7 @@ class IncomingDappLink {
         const val MAX_CHARS = 2048
 
         /**
-         * Serotine's deep link, the form a wallet picker opens: `serotine://wc?uri=` and the `wc:` link
+         * Punicus's deep link, the form a wallet picker opens: `serotine://wc?uri=` and the `wc:` link
          * percent-encoded, as WalletConnect's modals encode it (encodeURIComponent).
          */
         const val DEEP_LINK = "serotine://wc?"

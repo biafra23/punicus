@@ -213,7 +213,7 @@ class AddTokenViewModel(
                         "The network's light client is not running, so the contract cannot be read."
                     ReadUnavailable.STALE_ANCHOR -> "The light client refuses to sync, so the contract cannot be read."
                     ReadUnavailable.SYNCING -> "The light client is still syncing, so the contract cannot be read yet."
-                    ReadUnavailable.UNPROVEN -> "The contract's answers could not be verified this time. Serotine keeps trying."
+                    ReadUnavailable.UNPROVEN -> "The contract's answers could not be verified this time. Punicus keeps trying."
                     ReadUnavailable.REFUSED -> "The light client on this device cannot read this contract."
                 },
             )

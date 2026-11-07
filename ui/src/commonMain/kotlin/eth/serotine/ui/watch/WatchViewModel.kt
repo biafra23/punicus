@@ -489,7 +489,7 @@ class WatchViewModel(
                 ReadUnavailable.SYNCING ->
                     "The light client is still syncing, so what is at this address cannot be checked yet."
                 ReadUnavailable.UNPROVEN -> "What is at this address could not be verified this time: its code, or " +
-                    "for a Safe its owners and threshold. Serotine keeps trying."
+                    "for a Safe its owners and threshold. Punicus keeps trying."
                 ReadUnavailable.REFUSED -> "The light client on this device cannot check this address."
             },
         )
@@ -645,6 +645,6 @@ class WatchViewModel(
         const val NO_NETWORK = "No network is on in this wallet, so the address cannot be checked. Turn one on in " +
             "Settings → Networks."
         const val CONTRACT =
-            "This address holds a contract that is not a recognised Safe. Serotine watches accounts and Safes."
+            "This address holds a contract that is not a recognised Safe. Punicus watches accounts and Safes."
     }
 }

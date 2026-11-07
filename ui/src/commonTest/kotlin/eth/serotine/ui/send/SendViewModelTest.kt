@@ -392,7 +392,7 @@ class SendViewModelTest {
         }
 
         assertEquals(
-            "Only an off-chain gateway gives this name's address, and Serotine asks none: it cannot be resolved here.",
+            "Only an off-chain gateway gives this name's address, and Punicus asks none: it cannot be resolved here.",
             typed("dark.eth").toNote,
         )
         assertEquals("This name has no address.", typed("nobody.eth").toNote)

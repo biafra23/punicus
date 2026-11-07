@@ -56,6 +56,6 @@ class CurrencyViewModel(
         const val NOT_SAVED = "The choice could not be saved. Nothing has changed."
         const val SET_ASIDE = "Your saved choice of currency was damaged and has been set aside: values are in USD."
         const val UNREADABLE = "Your choice of currency cannot be read right now, so values are in USD and " +
-            "nothing can be chosen. Serotine keeps trying."
+            "nothing can be chosen. Punicus keeps trying."
     }
 }

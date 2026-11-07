@@ -10,11 +10,11 @@ import org.jetbrains.compose.ui.tooling.preview.Preview
 // ViewModel. UpdateRequiredScreenPreviewsTest renders each one in updateRequiredScreenPreviews.
 
 private val required = UpdateRequiredUiState.Required(
-    text = "Peers report that Sepolia upgraded on Nov 6, 2026, 3:00 PM to rules this version of Serotine " +
+    text = "Peers report that Sepolia upgraded on Nov 6, 2026, 3:00 PM to rules this version of Punicus " +
         "does not support, and its light client is not verifying the chain. Update the app to keep using " +
         "your wallet.",
     details = "Reported by peers in 5 networks, not verified · fork id 0x6c1d9423",
-    version = "This is Serotine v0.1.0.",
+    version = "This is Punicus v0.1.0.",
 )
 
 @Composable

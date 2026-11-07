@@ -110,7 +110,7 @@ class WcRequestsTest {
         // Another chain than the request's is refused, never sent there or here.
         assertEquals(malformed, on("eip155:100", """, "chainId": "0x1""""))
         assertEquals(malformed, on("eip155:1", """, "chainId": "0xaa36a7""""))
-        assertEquals(malformed, on("eip155:137", ""), "a chain Serotine does not serve")
+        assertEquals(malformed, on("eip155:137", ""), "a chain Punicus does not serve")
         // EIP-7825's cap, 2^24: below it is applied, above it refused.
         assertEquals(16_777_216L, (on("eip155:1", """, "gas": "0x1000000"""") as DappAsk.SendTransaction).transaction.gas)
         assertEquals(malformed, on("eip155:1", """, "gas": "0x1000001""""))

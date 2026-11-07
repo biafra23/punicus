@@ -172,7 +172,7 @@ fun ConnectionsScreen(
             }
             Button(onClick = onPair, modifier = Modifier.padding(16.dp).fillMaxWidth()) { Text("Connect a dApp") }
             Text(
-                "A dApp's name and address are what it says of itself: Serotine cannot check them. dApps " +
+                "A dApp's name and address are what it says of itself: Punicus cannot check them. dApps " +
                     "connect through WalletConnect's relay, a service run by Reown and a selected group of " +
                     "operators. It carries encrypted messages: it sees this device's IP address and when it " +
                     "is connected, never what you sign. A connection holds Ethereum and Gnosis Chain, or the " +

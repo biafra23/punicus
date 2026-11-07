@@ -240,7 +240,7 @@ private fun SafeSwapReviewSigningPreview() = SafeSwapPreview(
 private fun SafeSwapReviewHalfSignedPreview() = SafeSwapPreview(
     review.copy(
         error = "The approval is signed and queued; the swap is not. Refresh, and the swap is proposed after the " +
-            "approval: Serotine could not finish this signature. Nothing more was queued: try again.",
+            "approval: Punicus could not finish this signature. Nothing more was queued: try again.",
     ),
 )
 

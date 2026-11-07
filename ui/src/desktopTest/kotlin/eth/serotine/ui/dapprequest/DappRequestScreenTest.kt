@@ -57,7 +57,7 @@ class DappRequestScreenTest {
     fun theSignInIsShownFieldByFieldWithTheDappsClaimMarked() {
         show(state)
 
-        rule.onNodeWithText("Stated by the dApp, not verified: Serotine cannot check who is asking.").assertExists()
+        rule.onNodeWithText("Stated by the dApp, not verified: Punicus cannot check who is asking.").assertExists()
         rule.onNodeWithText("0x5aAeb6053F3E94C9b9A09f33669435E7Ef1BeAed").assertExists()
         rule.onNodeWithText("abcdefgh12").assertExists()
     }

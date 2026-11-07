@@ -29,7 +29,7 @@ private const val FRIEND = "0xdbF03B407c01E7cD3CBea99509d93f8DDDC8C6FB"
 private const val SAFE = "0x2Ca0226086a7C24808217F7F8707827608B17Dc5"
 
 private const val DEVICE_KEY =
-    "This device's hardware key (Secure Enclave or StrongBox) as an owner comes later: Serotine does not build " +
+    "This device's hardware key (Secure Enclave or StrongBox) as an owner comes later: Punicus does not build " +
         "its passkey signer yet."
 
 private val daily = OwnerChoice(DAILY, "Daily", "Key on this device", selected = true)
@@ -70,7 +70,7 @@ private val ownerItems = listOf(
 private val rules = listOf(
     "Each transaction of the Safe needs this many of its owners' signatures.",
     "A device's hardware key is never the only owner: it has no backup.",
-    "Every owner signing (2 of 2, 3 of 3, …) takes a recovery module beside it, which Serotine does not offer " +
+    "Every owner signing (2 of 2, 3 of 3, …) takes a recovery module beside it, which Punicus does not offer " +
         "yet: with one owner lost, the others could never reach the threshold again.",
 )
 
@@ -93,7 +93,7 @@ private val allOfThem = threshold.copy(
     explanation = null,
     canIncrease = false,
     refusal = "Not 3 of 3: with one owner lost, the others could never reach the threshold again, not even to " +
-        "replace the lost one. That takes a recovery module beside it, which Serotine does not offer yet. Lower " +
+        "replace the lost one. That takes a recovery module beside it, which Punicus does not offer yet. Lower " +
         "the threshold, or add an owner.",
     canContinue = false,
 )

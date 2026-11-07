@@ -657,7 +657,7 @@ class AccountDetailViewModel(
                     "The network's light client is not running, so the owners cannot be read."
                 ReadUnavailable.STALE_ANCHOR -> "The light client refuses to sync, so the owners cannot be read."
                 ReadUnavailable.SYNCING -> "The light client is still syncing, so the owners cannot be read yet."
-                ReadUnavailable.UNPROVEN -> "The Safe's storage could not be verified this time. Serotine keeps trying."
+                ReadUnavailable.UNPROVEN -> "The Safe's storage could not be verified this time. Punicus keeps trying."
                 ReadUnavailable.REFUSED -> "The light client on this device cannot read this Safe's storage."
             },
         )
@@ -915,9 +915,9 @@ class AccountDetailViewModel(
         /** The footnote while a value is a pool's average (owner ruling, 2026-10-29, #205). */
         const val PRICES_WITH_POOLS =
             "Prices: Chainlink feeds and Uniswap 30-min averages, read through the light client"
-        const val LIST_UNAVAILABLE = "Your account list cannot be read right now. Serotine keeps trying."
+        const val LIST_UNAVAILABLE = "Your account list cannot be read right now. Punicus keeps trying."
         const val QUEUE_UNREADABLE =
-            "This device's queue of Safe transactions cannot be read right now. Serotine keeps trying."
+            "This device's queue of Safe transactions cannot be read right now. Punicus keeps trying."
         const val QUEUE_UNVERIFIED =
             "The Safe cannot be verified right now, so neither its nonce nor these signatures are checked."
         const val SETTINGS_UNAVAILABLE =

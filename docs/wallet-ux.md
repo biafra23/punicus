@@ -1,6 +1,6 @@
 # Wallet UX: EOAs and Safe{Wallet}
 
-The screens Serotine is built towards, for externally owned accounts and Safe
+The screens Punicus is built towards, for externally owned accounts and Safe
 smart accounts, and the rules they follow. A screen PR is held to this page
 together with docs/architecture.md (how a screen is built) and
 docs/keys-and-signing.md (how a key is held and used). The rules here apply
@@ -225,7 +225,7 @@ upgrades*).
    - Under a network's status line, what its accounts have queued in
      lenient mode (docs/lenient-mode.md, *Where it shows*; owner rulings,
      2026-11-06): "1 waiting to send" (or N), and while its light client
-     catches up, "Keep Serotine open to send it sooner." (on a network that
+     catches up, "Keep Punicus open to send it sooner." (on a network that
      is off, "Ethereum is off: turn it on to send it"); "1 waits for your
      answer: still send it?" for one past its hour, which is never sent by
      itself (decision 4); "1 needs your signature again" for one the check
@@ -237,7 +237,7 @@ upgrades*).
      key is gone: the key store was reset, or the app restored on another
      device): "A transaction waiting to be sent was lost …", that one being
      sent when the app last closed may have gone out, and to wait until
-     Serotine has caught up and check the account's balance (for a Safe's
+     Punicus has caught up and check the account's balance (for a Safe's
      approval or execution, the Safe's queue) before signing it again, with
      Dismiss (`Outbox.acknowledgeLost`). Both views. Its record is written
      only after its broadcast, so Activity may not list it.
@@ -417,7 +417,7 @@ upgrades*).
        account returns to 7, which says so.
 7H. **Send from another wallet** (issue #255; owner rulings, 2026-11-05).
    For an EOA whose key is not on this device: a watched EOA, or later a
-   proxy key of #254 without a live session. Serotine signs nothing: another
+   proxy key of #254 without a live session. Punicus signs nothing: another
    wallet app on the phone signs and sends, and nothing comes back through
    the link.
    - Where: the account menu (3) and the asset menu (5) ("Send ‹symbol› from
@@ -429,9 +429,9 @@ upgrades*).
    - Compose: as Send's (7), with no fee level: the fee is the other wallet's.
      An amount above the verified balance is refused there.
    - Review: the amount, the recipient in full, the account, the network, and
-     what to know before the wallet opens: Serotine signs nothing; choose this
+     what to know before the wallet opens: Punicus signs nothing; choose this
      account in the wallet, which sends from whichever is chosen; its provider
-     learns the transfer and the IP address; Serotine checks the chain for 10
+     learns the transfer and the IP address; Punicus checks the chain for 10
      minutes. Sepolia keeps its testnet line. From 1,000 ETH up it says that
      MetaMask cannot open the link (#255's spike). A name is resolved again
      before the link is made.
@@ -470,7 +470,7 @@ upgrades*).
      outbox*; owner rulings, 2026-11-06). While the id names one in the
      outbox, the screen shows it: what it sends, then Signed (when, on this
      device), then a step "Queued: waits for ‹network› to catch up. Keep
-     Serotine open to send it sooner." (decision 7), or, once the network's
+     Punicus open to send it sooner." (decision 7), or, once the network's
      light client verifies, that it is checked on chain and sent once it
      checks out, or, on a network that is off, that nothing checks or sends
      it until it is turned on (owner ruling, 2026-10-22); "Sending…" while
@@ -726,7 +726,7 @@ upgrades*).
 17. **Safe transaction**
     - The action, decoded here from the raw transaction (`SafeTxAction`): a
       native or ERC-20 transfer, an ERC-20 approval, a swap through a router
-      exactly as Serotine builds one and paid to the Safe, a change of the
+      exactly as Punicus builds one and paid to the Safe, a change of the
       Safe's settings (an owner added, removed or swapped, the threshold, a
       module, the guard, the fallback handler), a rejection (the Safe calling
       itself with nothing: it uses up the nonce), or a contract call with its
@@ -785,7 +785,7 @@ upgrades*).
       (above it reverts anyway). Screen 17 reads it with the owners, and
       shows it as the transaction's refusal, offering nothing to sign. The
       check sees the Safe's current owners and threshold only, not changes
-      queued at earlier nonces: Serotine's own execution quote catches a
+      queued at earlier nonces: Punicus's own execution quote catches a
       combination that ends as an n-of-n, but another wallet holding the
       signatures could still execute it. Closing that fully is part of how far
       ahead of a Safe's nonce a request may be signed, the owner's open
@@ -899,7 +899,7 @@ upgrades*).
         place. The screen then shows the held signature, a proposal's on a
         screen of its own and a co-signature's on the transaction's, every
         action on the transaction still offered: Signed (when, as whom),
-        Held ("Waits for ‹network› to catch up. Keep Serotine open to check
+        Held ("Waits for ‹network› to catch up. Keep Punicus open to check
         it sooner."; once it has caught up, that it is checked and saved to the queue once
         it checks out; on a network that is off, that nothing checks it until
         it is turned on), then In the queue, to share, which waits for the

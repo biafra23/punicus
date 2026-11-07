@@ -240,7 +240,7 @@ private fun SimpleAccountsSetAsidePreview() = SimpleAccountsPreview(
 private fun SimpleAccountsListUnavailablePreview() = SimpleAccountsPreview(
     AccountsUiState.ListUnavailable(
         "Your saved account list cannot be read right now. Nothing has been changed, and no account can be " +
-            "added until it can be read. Serotine keeps trying.",
+            "added until it can be read. Punicus keeps trying.",
     ),
 )
 
@@ -262,7 +262,7 @@ private fun SimpleAccountsLoadingPreview() = SimpleAccountsPreview(AccountsUiSta
 private val queued = everyday.copy(
     freshness = "Syncing Ethereum · 2 of 6 periods · updated 40 s ago",
     queued = listOf(
-        "Ethereum: 1 waiting to send · Keep Serotine open to send it sooner",
+        "Ethereum: 1 waiting to send · Keep Punicus open to send it sooner",
         "Gnosis Chain: 1 needs your signature again",
     ),
 )
@@ -282,8 +282,8 @@ private fun SimpleAccountsLostQueuedPreview() = SimpleAccountsPreview(
     everyday.copy(
         lostNotice = "A transaction waiting to be sent was lost: the key that sealed it on this device is gone " +
             "(the key store was reset, or the app was restored on another device). If it was being sent " +
-            "when Serotine last closed, it may have gone out. Before you sign it again, wait until " +
-            "Serotine has caught up, and check the account's balance, or for a Safe, its queue.",
+            "when Punicus last closed, it may have gone out. Before you sign it again, wait until " +
+            "Punicus has caught up, and check the account's balance, or for a Safe, its queue.",
     ),
 )
 /** Every preview above, which SimpleAccountsScreenPreviewsTest renders: a new preview goes in here too. */

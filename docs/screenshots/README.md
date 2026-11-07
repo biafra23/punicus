@@ -1,10 +1,10 @@
 # Screenshots
 
-Every screen of Serotine in every state its previews draw, rendered headless from the previews (`ui/src/commonMain/kotlin/eth/serotine/ui/**/<Feature>ScreenPreviews.kt`). CI renders them on every pull request and commits the ones the PR changes, so the images come from one environment and a diff of this folder shows only real changes. The same screen is always at the same path, `<screen>/<state>.png`; the map of screens is `ui/src/desktopTest/kotlin/eth/serotine/ui/Screens.kt`, and a state's name sits beside its preview in the screen's previews list. A state's dark twin ends in `-dark`.
+Every screen of Punicus in every state its previews draw, rendered headless from the previews (`ui/src/commonMain/kotlin/eth/serotine/ui/**/<Feature>ScreenPreviews.kt`). CI renders them on every pull request and commits the ones the PR changes, so the images come from one environment and a diff of this folder shows only real changes. The same screen is always at the same path, `<screen>/<state>.png`; the map of screens is `ui/src/desktopTest/kotlin/eth/serotine/ui/Screens.kt`, and a state's name sits beside its preview in the screen's previews list. A state's dark twin ends in `-dark`.
 
 [index.html](index.html) shows them all on one page from a checkout.
 
-Clone without the images: `git clone --filter=blob:none https://github.com/biafra23/serotine.git` fetches a file only when a command needs it, so the history of this folder costs nothing until it is looked at. `git sparse-checkout set --no-cone '/*' '!/docs/screenshots/'` leaves it out of the working tree as well.
+Clone without the images: `git clone --filter=blob:none https://github.com/biafra23/punicus.git` fetches a file only when a command needs it, so the history of this folder costs nothing until it is looked at. `git sparse-checkout set --no-cone '/*' '!/docs/screenshots/'` leaves it out of the working tree as well.
 
 If the folder grows too much, there are two levers, both the owner's. Deleting the folder stops the growth and keeps every past image in the history. Rewriting the history with `git filter-repo --path docs/screenshots --invert-paths` drops them for good, but changes the SHA of every commit since the first screenshot: tags, links to commits and every existing clone must follow. CI fails a pull request once the folder, or one image, passes its size budget (`scripts/screenshots.py`).
 

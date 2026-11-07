@@ -190,8 +190,8 @@ val generateAppIcons = tasks.register<Exec>("generateAppIcons") {
     }.get().executablePath.asFile.absolutePath
     args(
         "-Djava.awt.headless=true", script.absolutePath, foreground.absolutePath, background.absolutePath,
-        "--icns", appIcons.get().file("Serotine.icns").asFile.absolutePath,
-        "--ico", appIcons.get().file("Serotine.ico").asFile.absolutePath,
+        "--icns", appIcons.get().file("Punicus.icns").asFile.absolutePath,
+        "--ico", appIcons.get().file("Punicus.ico").asFile.absolutePath,
         "--png", appIconResources.get().file("serotine-icon.png").asFile.absolutePath,
     )
 }
@@ -227,9 +227,9 @@ compose.desktop {
             // only on Linux, the .msi only on Windows (with WiX 3 on the PATH) — one
             // workflow per OS under .github/workflows.
             targetFormats(TargetFormat.Dmg, TargetFormat.Deb, TargetFormat.Msi)
-            packageName = "Serotine"
+            packageName = "Punicus"
             packageVersion = macOsPackageVersion
-            description = "Serotine — an Ethereum wallet for accounts and Safes"
+            description = "Punicus — an Ethereum wallet for accounts and Safes"
             // jpackage builds the deb's Maintainer field as "<vendor> <debMaintainer>",
             // so the human name lives here and debMaintainer stays a bare email.
             vendor = "Dirk Jäckel"
@@ -238,28 +238,32 @@ compose.desktop {
             includeAllModules = true
             macOS {
                 bundleID = "eth.serotine"
-                dockName = "Serotine"
-                iconFile.set(appIcons.map { it.file("Serotine.icns") })
+                dockName = "Punicus"
+                iconFile.set(appIcons.map { it.file("Punicus.icns") })
             }
             linux {
                 iconFile.set(appIconResources.map { it.file("serotine-icon.png") })
+                // The deb's package name keeps the app's former name, so a Punicus deb upgrades an
+                // installed Serotine in place instead of installing beside it. The app, its launcher
+                // and its menu entry are named by packageName above.
+                packageName = "serotine"
                 packageVersion = releaseVersion
                 debMaintainer = "dirk@jaeckel.com"
                 menuGroup = "Utility"
             }
             windows {
-                iconFile.set(appIcons.map { it.file("Serotine.ico") })
+                iconFile.set(appIcons.map { it.file("Punicus.ico") })
                 packageVersion = releaseVersion
                 // The msi's UpgradeCode: a newer msi with the SAME code upgrades the
                 // installed app in place; a different one installs beside it. Generated
-                // once for Serotine and never to be changed (the msi workflow pins a
+                // once for Punicus and never to be changed (the msi workflow pins a
                 // second copy so a change fails there instead of orphaning installs).
                 upgradeUuid = "a7691ec4-0334-46d8-8160-599a8dcdbd18"
-                // Per-user: installs under %LOCALAPPDATA%\Serotine with no UAC prompt.
+                // Per-user: installs under %LOCALAPPDATA%\Punicus with no UAC prompt.
                 perUserInstall = true
                 dirChooser = false
                 menu = true
-                menuGroup = "Serotine"
+                menuGroup = "Punicus"
                 shortcut = true
             }
         }

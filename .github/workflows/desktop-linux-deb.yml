@@ -15,7 +15,7 @@ on:
   workflow_dispatch:
     inputs:
       release-tag:
-        description: "Existing release tag to upload the debs to (e.g. v0.1.0). Dispatched on that same tag, the debs are named Serotine-<tag>-<arch>.deb; dispatched from any other ref (a backfill), they are built from that ref and named after the version they report, Serotine-v<version>-<arch>.deb. --clobber replaces only an identical name, so differently named debs already on the release stay."
+        description: "Existing release tag to upload the debs to (e.g. v0.1.0). Dispatched on that same tag, the debs are named Punicus-<tag>-<arch>.deb; dispatched from any other ref (a backfill), they are built from that ref and named after the version they report, Punicus-v<version>-<arch>.deb. --clobber replaces only an identical name, so differently named debs already on the release stay."
         required: true
         type: string
 
@@ -70,8 +70,8 @@ jobs:
         run: chmod +x gradlew
 
       # Compose Desktop's packageDeb wraps jpackage (jlink'd JRE + app → .deb).
-      # Unsigned — released as Serotine-v<version>-<arch>.deb and installed via
-      # `sudo apt install ./Serotine-v<version>-<arch>.deb` or dpkg -i.
+      # Unsigned — released as Punicus-v<version>-<arch>.deb and installed via
+      # `sudo apt install ./Punicus-v<version>-<arch>.deb` or dpkg -i.
       # Retry to ride out transient repo-resolution blips.
       - name: Build Linux .deb (${{ matrix.arch }})
         # The Reown project ID (docs/walletconnect.md, *Setting up the project ID*), which :data
@@ -92,7 +92,7 @@ jobs:
           exit 1
 
       # jpackage names the output serotine_<version>_<debarch>.deb; rename it to the
-      # arch-only artifact name Serotine-<arch>.deb (the publish job adds the tag for
+      # arch-only artifact name Punicus-<arch>.deb (the publish job adds the tag for
       # the release asset). Assert exactly one deb — zero or multiple should fail
       # here, not silently ship an arbitrary pick.
       - name: Tag .deb with architecture
@@ -102,7 +102,7 @@ jobs:
           debs=(desktop-app/build/compose/binaries/main/deb/*.deb)
           [ "${#debs[@]}" -eq 1 ] \
             || { echo "::error::expected exactly 1 deb, found ${#debs[@]}: ${debs[*]}"; exit 1; }
-          mv "${debs[0]}" "desktop-app/build/compose/binaries/main/deb/Serotine-${{ matrix.arch }}.deb"
+          mv "${debs[0]}" "desktop-app/build/compose/binaries/main/deb/Punicus-${{ matrix.arch }}.deb"
 
       # Guard against a SILENTLY wrong-arch build: check the declared control-field
       # architecture AND the actual ELF class of the bundled JVM, so a mislabelled
@@ -110,7 +110,7 @@ jobs:
       - name: Verify .deb architecture
         run: |
           set -eu
-          deb="desktop-app/build/compose/binaries/main/deb/Serotine-${{ matrix.arch }}.deb"
+          deb="desktop-app/build/compose/binaries/main/deb/Punicus-${{ matrix.arch }}.deb"
           case "${{ matrix.arch }}" in
             x64)   want_deb=amd64; want_elf="x86-64"  ;;
             arm64) want_deb=arm64; want_elf="aarch64" ;;
@@ -120,6 +120,12 @@ jobs:
           echo "control Architecture: $got (version: $(dpkg-deb --field "$deb" Version), maintainer: $(dpkg-deb --field "$deb" Maintainer))"
           [ "$got" = "$want_deb" ] \
             || { echo "::error::deb control arch mismatch: expected $want_deb, got $got"; exit 1; }
+          # The package keeps the app's former name, so a Punicus deb upgrades an installed
+          # Serotine in place (desktop-app/build.gradle.kts, linux { packageName }); a
+          # different name would install beside it with every other check green.
+          pkg=$(dpkg-deb --field "$deb" Package)
+          [ "$pkg" = "serotine" ] \
+            || { echo "::error::deb Package is '$pkg', expected 'serotine' (the upgrade-in-place pin, desktop-app/build.gradle.kts linux.packageName)"; exit 1; }
           # Extract and inspect the bundled runtime — the control field only states
           # intent; the ELF class proves what jlink actually emitted.
           ex=$(mktemp -d)
@@ -146,7 +152,7 @@ jobs:
       - name: Upload DEB
         uses: actions/upload-artifact@v4
         with:
-          name: serotine-desktop-deb-${{ matrix.arch }}-${{ github.sha }}
+          name: punicus-desktop-deb-${{ matrix.arch }}-${{ github.sha }}
           path: desktop-app/build/compose/binaries/main/deb/*.deb
           if-no-files-found: error
           retention-days: 30
@@ -201,7 +207,7 @@ jobs:
       - name: Download deb artifacts
         uses: actions/download-artifact@v4
         with:
-          pattern: serotine-desktop-deb-*-${{ github.sha }}
+          pattern: punicus-desktop-deb-*-${{ github.sha }}
           path: deb
           merge-multiple: true
 
@@ -242,52 +248,52 @@ jobs:
           # rather than shipping a half release (e.g. one matrix job was cancelled).
           if [ "${REPO_PRIVATE}" = "true" ]; then arches="x64"; else arches="x64 arm64"; fi
           for arch in $arches; do
-            test -f "deb/Serotine-${arch}.deb" \
-              || { echo "::error::missing deb/Serotine-${arch}.deb"; exit 1; }
+            test -f "deb/Punicus-${arch}.deb" \
+              || { echo "::error::missing deb/Punicus-${arch}.deb"; exit 1; }
           done
           # Release assets carry the version, like the APKs — but a name may only
           # claim the version the deb really is. When the version guard ran (a tag
           # push, or a republish dispatched on that same tag), the tree these debs
-          # were built from is $tag's version: Serotine-<tag>-<arch>.deb. A
+          # were built from is $tag's version: Punicus-<tag>-<arch>.deb. A
           # BACKFILL (dispatched from another ref; guard skipped) builds that ref,
           # not the tag, so its deb is named after the Version its own control file
-          # declares: Serotine-v<Version>-<arch>.deb. Renamed before the release is
+          # declares: Punicus-v<Version>-<arch>.deb. Renamed before the release is
           # created, so a rename can never fail after the release exists.
           debs=()
           for arch in $arches; do
             if [ "${GUARD_RESULT}" = "success" ]; then
               namever="$tag"
             else
-              built=$(dpkg-deb --field "deb/Serotine-${arch}.deb" Version)
+              built=$(dpkg-deb --field "deb/Punicus-${arch}.deb" Version)
               printf '%s' "$built" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+$' \
-                || { echo "::error::deb/Serotine-${arch}.deb declares Version '$built', not MAJOR.MINOR.PATCH; refusing to guess its name"; exit 1; }
+                || { echo "::error::deb/Punicus-${arch}.deb declares Version '$built', not MAJOR.MINOR.PATCH; refusing to guess its name"; exit 1; }
               namever="v$built"
               echo "::notice::backfill onto $tag: the $arch deb is named after the version it was built as ($namever), not after the tag"
             fi
-            mv "deb/Serotine-${arch}.deb" "deb/Serotine-${namever}-${arch}.deb"
-            debs+=("deb/Serotine-${namever}-${arch}.deb")
+            mv "deb/Punicus-${arch}.deb" "deb/Punicus-${namever}-${arch}.deb"
+            debs+=("deb/Punicus-${namever}-${arch}.deb")
           done
           notes=$(mktemp)
           cat > "$notes" <<'NOTES'
-          Pre-release build of the Serotine wallet apps.
+          Pre-release build of the Punicus wallet apps.
 
-          **Android (`*-android.apk`)**, in a release that has it — the Serotine app, signed with
-          Serotine's own release key (its certificate's SHA-256 is in
+          **Android (`*-android.apk`)**, in a release that has it — the Punicus app, signed with
+          Punicus's own release key (its certificate's SHA-256 is in
           `android-app/release-signing-cert.sha256` in the repository). A release without it carries
           only the debug app below. Install via "Install unknown apps" and switch that off again afterwards;
-          only ever install Serotine, and its updates, from this releases page.
+          only ever install Punicus, and its updates, from this releases page.
 
-          **Android debug (`*-android-debug.apk`)** — a separate test app ("Serotine Debug", amber
+          **Android debug (`*-android-debug.apk`)** — a separate test app ("Punicus Debug", amber
           icon, package `eth.serotine.debug`), signed with the publicly known debug key: anyone can
           build an APK that installs over it as an update, so never keep an account you use in it.
           It installs next to the release app.
 
-          **Desktop macOS (`Serotine-v<version>-<arch>.dmg`)** — unsigned; download the dmg matching
+          **Desktop macOS (`Punicus-v<version>-<arch>.dmg`)** — unsigned; download the dmg matching
           your Mac (arm64 for Apple Silicon, x64 for Intel). First launch:
           right-click → Open to get past Gatekeeper (not notarized yet).
 
-          **Desktop Linux (`Serotine-v<version>-<arch>.deb`)** — install with
-          `sudo apt install ./Serotine-v<version>-<arch>.deb`.
+          **Desktop Linux (`Punicus-v<version>-<arch>.deb`)** — install with
+          `sudo apt install ./Punicus-v<version>-<arch>.deb`.
 
           **Desktop Windows** — not in this release: the embedded engine has no Windows build yet.
           NOTES
@@ -307,7 +313,7 @@ jobs:
             fi
             gh release create "$tag" \
               --prerelease \
-              --title "Serotine $tag" \
+              --title "Punicus $tag" \
               --notes-file "$notes" \
               --target "${GITHUB_SHA}" \
             || gh release view "$tag" >/dev/null 2>&1

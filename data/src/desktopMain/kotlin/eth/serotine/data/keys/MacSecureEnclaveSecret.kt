@@ -141,7 +141,7 @@ class MacSecureEnclaveSecret(private val stateFile: String) : HardwareSecret {
                 }
             } catch (e: Throwable) {
                 // Throwable: JNA and the frameworks fail with Errors too.
-                println("Serotine: the Secure Enclave cannot be used (${e.message ?: e::class.simpleName})")
+                println("Punicus: the Secure Enclave cannot be used (${e.message ?: e::class.simpleName})")
                 false
             }
         }

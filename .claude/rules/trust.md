@@ -86,7 +86,7 @@ docs/lenient-mode.md, which has the detail.)
 - **They are sealed:** an app-private file of their own, sealed with a
   hardware key of their own that needs no authorization
   (docs/keys-and-signing.md). Never logged, never in a UiState. Where
-  Serotine has no hardware key to seal with, they are kept in memory only. A
+  Punicus has no hardware key to seal with, they are kept in memory only. A
   lost seal key loses the queued transaction, and says so.
 - **Strict in both modes:** swaps and dApp requests. Wraps and Create Safe
   stay strict for now. The Safe refusals below apply when drafting.
@@ -177,13 +177,13 @@ fails the call.
   switch to a network outside the session, from testnet to real funds above
   all, gets the unrecognized-chain error (owner ruling, 2026-11-05, on #22).
 - **`eth_sign` is refused in every case.** It signs a raw digest the dApp
-  chose, which is what phishing asks for. A digest Serotine signs for a dApp
+  chose, which is what phishing asks for. A digest Punicus signs for a dApp
   is one it computed itself: EIP-191 for `personal_sign`, EIP-712 for typed
   data.
 - A request is parsed strictly, with size limits. One that names another
   chain, or a `from` or an address that is not one of the session's accounts,
   is refused, never ignored.
-- **The review shows only what Serotine works out itself:** the calldata
+- **The review shows only what Punicus works out itself:** the calldata
   decoded for the ABIs it knows, anything else raw and marked as not
   decoded, and a simulation through the verified `call` and gas estimate.
 - **A dApp's `eth_sendTransaction` is answered only with an Ethereum
@@ -202,7 +202,7 @@ fails the call.
 (Owner rulings, 2026-11-05, #255.)
 
 - A watched EOA may hand a transfer to another wallet app as a payment link.
-  Watched still means Serotine signs nothing: the other wallet must hold the
+  Watched still means Punicus signs nothing: the other wallet must hold the
   key, and the screen says so.
 - Nothing the other wallet does is taken on its word. A transfer counts only
   when a verified block holds it: from the account, to the recipient, that
@@ -300,7 +300,7 @@ This is the summary a reviewer holds a diff against.
   asks the user to confirm the removal first (`RemoveAccountDialog`).
 - **A Safe owner's key may live in an external wallet** (owner ruling,
   2026-11-03, #22), reached over WalletConnect. Its backup and its unlock
-  are that wallet's; Serotine keeps only the address and the session. Safe
+  are that wallet's; Punicus keeps only the address and the session. Safe
   owners only; an EOA's key in another wallet comes later or never. It is
   asked for `eth_signTypedData_v4` of the `SafeTx` alone, never a bare hash
   to sign blind, and its signature is kept only when it recovers, locally,

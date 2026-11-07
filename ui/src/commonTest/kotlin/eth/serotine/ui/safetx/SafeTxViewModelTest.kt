@@ -531,7 +531,7 @@ class SafeTxViewModelTest {
         val state = viewModel.overview
         assertEquals("Set the fallback handler", state.action.title)
         assertEquals(
-            "It sets a fallback handler Serotine does not pin, ${Eip55.format(world.recipient)}: the handler answers " +
+            "It sets a fallback handler Punicus does not pin, ${Eip55.format(world.recipient)}: the handler answers " +
                 "the signature checks other contracts make for the Safe, so only the canonical " +
                 "CompatibilityFallbackHandler 1.4.1, or none, is signed, approved or executed here.",
             state.refusal,
@@ -569,7 +569,7 @@ class SafeTxViewModelTest {
         val state = viewModel.overview
         assertEquals(
             "It would leave all 3 owners needed to sign: with one of them lost, the rest could never reach the " +
-                "threshold again. That needs a recovery module, and Serotine recognises none yet (#54), so it " +
+                "threshold again. That needs a recovery module, and Punicus recognises none yet (#54), so it " +
                 "does not sign, approve or execute it.",
             state.refusal,
         )
@@ -600,7 +600,7 @@ class SafeTxViewModelTest {
         val state = viewModel.overview
         assertEquals("Delegate call", state.action.title)
         assertEquals(
-            "A delegate call: Serotine does not sign, approve or execute one yet. Batches through the pinned " +
+            "A delegate call: Punicus does not sign, approve or execute one yet. Batches through the pinned " +
                 "MultiSendCallOnly come later.",
             state.refusal,
         )
@@ -1366,7 +1366,7 @@ class SafeTxViewModelTest {
         val state = assertIs<SafeTxUiState.Overview>(viewModel.uiState.value)
         val signature = assertNotNull(state.held)
         assertEquals(listOf("Signed", "Held", "In the queue, to share"), signature.steps.map { it.label })
-        assertEquals("Waits for Sepolia to catch up. Keep Serotine open to check it sooner.", signature.steps[1].detail)
+        assertEquals("Waits for Sepolia to catch up. Keep Punicus open to check it sooner.", signature.steps[1].detail)
         assertEquals("Discard", signature.discardLabel)
         assertTrue(signature.discardNote.contains("stays in this device's queue"), signature.discardNote)
         assertFalse(state.canShare, "nothing is shared while the Safe is not verified")

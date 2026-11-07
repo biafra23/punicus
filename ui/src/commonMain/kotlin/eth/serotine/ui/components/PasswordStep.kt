@@ -72,9 +72,9 @@ internal val KeyProtection.protectionText: String
             "The seed is stored encrypted under your wallet password and this device's key store, " +
                 "which is not in secure hardware here (an emulator, or a device without it)."
         KeyProtection.PASSWORD_ONLY ->
-            "The seed is stored encrypted under your wallet password alone: Serotine uses no hardware " +
+            "The seed is stored encrypted under your wallet password alone: Punicus uses no hardware " +
                 "key store on this computer. Choose a strong password."
         KeyProtection.PASSWORD_ONLY_TPM_NOT_USED ->
-            "The seed is stored encrypted under your wallet password alone: Serotine does not use this " +
+            "The seed is stored encrypted under your wallet password alone: Punicus does not use this " +
                 "computer's TPM yet, even if it has one. Choose a strong password."
     }

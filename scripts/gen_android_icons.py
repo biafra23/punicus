@@ -15,7 +15,7 @@ diff, so the committed resources never drift from the logo (ci.yml, "Verify
 generated Android icons").
 
 Ported from Myotis's script of the same name (biafra23/myotis, scripts/), less its
-status-bar icon: Serotine runs no foreground service, and its one notification
+status-bar icon: Punicus runs no foreground service, and its one notification
 draws a warning sign (drawable/ic_notification_upgrade.xml).
 
 The SVG's <path> fills are taken as they are, path data normalised to one line

@@ -666,7 +666,7 @@ class TransferStatusViewModelTest {
         assertEquals("40.5 USDC", state.sent?.amount)
         assertEquals(listOf("Signed", "Queued", "Broadcast"), state.steps.map { it.label })
         assertEquals(
-            "Waits for Sepolia to catch up. Keep Serotine open to send it sooner.",
+            "Waits for Sepolia to catch up. Keep Punicus open to send it sooner.",
             state.steps[1].detail,
         )
         assertEquals("Edit", state.againLabel)

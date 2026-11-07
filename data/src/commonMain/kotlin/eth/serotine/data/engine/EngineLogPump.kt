@@ -43,7 +43,7 @@ internal class EngineLogPump(
     }
 
     companion object {
-        /** What each engine line is marked with, beside the adapters' own `Serotine:` lines. */
+        /** What each engine line is marked with, beside the adapters' own `Punicus:` lines. */
         const val PREFIX = "Myotis: "
 
         /** Lines taken per drain call; the ring is emptied in as many calls as it takes. */

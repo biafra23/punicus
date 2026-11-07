@@ -1064,19 +1064,19 @@ class SafeSwapViewModel(
     }
 
     private companion object {
-        const val SIGN_FAILED = "Serotine could not finish this signature. Nothing more was queued: try again."
+        const val SIGN_FAILED = "Punicus could not finish this signature. Nothing more was queued: try again."
         const val NOT_SAVED =
             "It was signed, but this device's queue cannot be saved right now, so it was not kept: sign again in " +
                 "a moment."
         const val APPROVAL_QUEUED = "The approval is signed and queued; the swap is not. Refresh, and the swap " +
             "is proposed after the approval:"
         const val LIST_UNAVAILABLE =
-            "Your account list cannot be read right now, so nothing can be proposed. Serotine keeps trying."
+            "Your account list cannot be read right now, so nothing can be proposed. Punicus keeps trying."
         const val NOT_IN_WALLET = "This Safe is not in your wallet any more."
         const val NOT_A_SAFE_ACCOUNT = "Only a Safe proposes a Safe transaction: this account swaps with Swap."
         const val NOT_A_SAFE = "This address no longer holds a recognised Safe, so nothing can be proposed from it."
         const val UNVERIFIED =
-            "The Safe's owners cannot be verified right now, so nothing can be proposed. Serotine keeps trying."
+            "The Safe's owners cannot be verified right now, so nothing can be proposed. Punicus keeps trying."
         const val WATCH_ONLY =
             "No owner of this Safe has its key on this device: it is watch-only here, and nothing can be proposed " +
                 "from it."
@@ -1095,7 +1095,7 @@ class SafeSwapViewModel(
         const val RESET_QUEUED_LEFT = "The allowance set to zero is signed and queued; the approval and the swap " +
             "are not. Review again, and they are proposed after it."
         const val QUEUE_UNREADABLE = "This device's queue cannot be read right now, so the swap to propose again " +
-            "cannot be found. Serotine keeps trying."
+            "cannot be found. Punicus keeps trying."
         const val APPROVAL_QUEUED_LEFT = "The approval is signed and queued; the swap is not. Review again, and " +
             "the swap is proposed after the approval."
         const val REPLACED_UNKNOWN_TOKEN = "The swap to propose again sells or buys a token your wallet does not " +

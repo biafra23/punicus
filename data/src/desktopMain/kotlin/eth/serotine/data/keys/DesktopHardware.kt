@@ -28,7 +28,7 @@ fun desktopHardwareSecret(keysDirectory: String): HardwareSecret? {
         // Not knowing the wallet's factor is no reason to guess one: the key store reports
         // itself unavailable, and the window still opens. Said here, where the cause is known.
         val reason = "the desktop's hardware factor cannot be determined (${e.message ?: e::class.simpleName})"
-        println("Serotine: $reason")
+        println("Punicus: $reason")
         UnavailableHardware(reason)
     }
 }
@@ -37,14 +37,14 @@ fun desktopHardwareSecret(keysDirectory: String): HardwareSecret? {
  * The biometric path's key for the desktop key store whose envelopes live in [keysDirectory]
  * (docs/keys-and-signing.md, rule 3): Touch ID in a Mac's Secure Enclave ([MacBiometricKey]),
  * whose key store then says whether this Mac can offer it; none on Windows and Linux, where the
- * key store says Serotine has no biometric unlock yet.
+ * key store says Punicus has no biometric unlock yet.
  */
 fun desktopBiometricKey(keysDirectory: String): BiometricKey? =
     if (MacSecurity.onMac) MacBiometricKey(Path(keysDirectory, MacBiometricKey.STATE_FILE_NAME).toString()) else null
 
 /**
  * What the desktop key store reports when [desktopHardwareSecret] gives it no secret: on a Mac,
- * that Serotine uses no hardware key store there; on Windows and Linux, that it does not use the
+ * that Punicus uses no hardware key store there; on Windows and Linux, that it does not use the
  * computer's TPM yet, since rule 9's TPM path is not built (the owner's ruling of 2026-10-16).
  */
 fun desktopPasswordOnlyProtection(): KeyProtection = passwordOnlyProtection(onMac = MacSecurity.onMac)

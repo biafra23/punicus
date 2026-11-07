@@ -28,7 +28,7 @@ import kotlinx.serialization.json.Json
  * directory).
  *
  * Each entry's id starts with its network's chain id (`11155111:native:0x…`): a balance is an
- * address's on one network. Format 1 wrote ids without one, when Serotine worked on Sepolia
+ * address's on one network. Format 1 wrote ids without one, when Punicus worked on Sepolia
  * alone, so they read as Sepolia's (docs/networks.md, *Files*).
  */
 internal class LastBalancesFile(

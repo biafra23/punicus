@@ -350,9 +350,9 @@ fun SettingsScreen(
             }
             Section("About")
             ListItem(
-                // One merged node: a screen reader announces "Serotine, version 0.1.0".
+                // One merged node: a screen reader announces "Punicus, version 0.1.0".
                 modifier = Modifier.semantics(mergeDescendants = true) {}.testTag(SETTINGS_VERSION_TAG),
-                headlineContent = { Text("Serotine") },
+                headlineContent = { Text("Punicus") },
                 supportingContent = { Text("Version ${state.version}") },
             )
         }

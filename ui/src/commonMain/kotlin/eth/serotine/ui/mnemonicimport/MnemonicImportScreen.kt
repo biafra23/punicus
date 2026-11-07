@@ -245,7 +245,7 @@ private fun EnteringContent(
             }
         }
         Text(
-            "Serotine adds the first account of these words (m/44'/60'/0'/0/0). " +
+            "Punicus adds the first account of these words (m/44'/60'/0'/0/0). " +
                 state.step.protection.orEmpty() + " It cannot send transactions yet.",
             style = MaterialTheme.typography.bodySmall,
         )

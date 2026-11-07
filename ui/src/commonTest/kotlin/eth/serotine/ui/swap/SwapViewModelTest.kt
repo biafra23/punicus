@@ -1335,7 +1335,7 @@ class SwapViewModelTest {
     fun anUndecodableAnswerOrARefusalIsSaidInItsOwnWords() = runTest {
         cowReady(CowQuoteReading.Unavailable(CowUnavailable.UNDECODABLE))
         assertEquals(
-            "CoW gave an answer this version does not understand: an update of Serotine brings CoW back.",
+            "CoW gave an answer this version does not understand: an update of Punicus brings CoW back.",
             assertIs<SwapUiState.Compose>(reviewed().uiState.value).form.error,
         )
         cowApi.quote = CowQuoteReading.Refused(CowRefusal.NO_LIQUIDITY, "NoLiquidity")

@@ -123,7 +123,7 @@ fun DappProposalScreen(
                 Text(state.url, style = MaterialTheme.typography.bodyMedium)
                 if (state.description.isNotEmpty()) Text(state.description, Modifier.padding(top = 4.dp))
                 Text(
-                    "Stated by the dApp, not verified: Serotine cannot check who is asking.",
+                    "Stated by the dApp, not verified: Punicus cannot check who is asking.",
                     Modifier.padding(top = 8.dp),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,

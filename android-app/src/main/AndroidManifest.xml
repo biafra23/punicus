@@ -55,7 +55,7 @@
                 <category android:name="android.intent.category.BROWSABLE" />
                 <data android:scheme="wc" />
             </intent-filter>
-            <!-- Serotine's own deep link, serotine://wc?uri=<the wc: link, percent-encoded>: what a
+            <!-- Punicus's own deep link, serotine://wc?uri=<the wc: link, percent-encoded>: what a
                  wallet picker opens for a wallet it lists (docs/walletconnect.md, *Registration*).
                  The link it carries is taken as a wc: link is; one without a link only brings the
                  app to the front. Its own filter: data elements in one filter would combine. -->

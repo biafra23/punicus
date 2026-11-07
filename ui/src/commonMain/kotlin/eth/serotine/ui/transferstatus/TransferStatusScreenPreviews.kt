@@ -83,7 +83,7 @@ internal val queuedSample = TransferStatusUiState.Queued(
     sent = sent,
     steps = listOf(
         StatusStep("Signed", StepState.DONE, "On this device, Nov 7, 2026, 9:12 AM"),
-        StatusStep("Queued", StepState.WAITING, "Waits for Sepolia to catch up. Keep Serotine open to send it sooner."),
+        StatusStep("Queued", StepState.WAITING, "Waits for Sepolia to catch up. Keep Punicus open to send it sooner."),
         StatusStep(
             "Broadcast",
             StepState.WAITING,
@@ -204,7 +204,7 @@ private fun TransferStatusFoundNowherePreview() = TransferStatusPreview(
     TransferStatusUiState.Discarded(
         "Sepolia",
         "The transactions waiting to be sent on this device cannot be read right now, so where this one stands " +
-            "is not known. Nothing is sent from this wallet until they can be read; Serotine keeps trying.",
+            "is not known. Nothing is sent from this wallet until they can be read; Punicus keeps trying.",
     ),
 )
 

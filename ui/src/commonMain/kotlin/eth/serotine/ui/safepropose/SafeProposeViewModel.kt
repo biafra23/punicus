@@ -1168,7 +1168,7 @@ class SafeProposeViewModel(
 
     private companion object {
         const val NEVER_VERIFIED = "The light client is still syncing, and this Safe's owners and nonce have " +
-            "never been verified on this device, so nothing can be prepared from it yet. Serotine keeps trying."
+            "never been verified on this device, so nothing can be prepared from it yet. Punicus keeps trying."
         const val NO_NAME_IN_A_DRAFT = "The light client is still syncing, and a name is resolved only once it " +
             "has caught up: to prepare this proposal now, enter the address, or pick one of your accounts."
         const val NO_LONGER_LENIENT = "Sign while syncing, or the network, was turned off since this was " +
@@ -1179,7 +1179,7 @@ class SafeProposeViewModel(
             "per nonce. Discard it, or wait for its check, to sign this one."
         const val NOT_HELD = "Signed, but the outbox could not keep it, so the signature was dropped: nothing is " +
             "held or shown. Try again."
-        const val SIGN_FAILED = "Serotine could not finish this signature. Nothing was queued: try again."
+        const val SIGN_FAILED = "Punicus could not finish this signature. Nothing was queued: try again."
         const val UNSAVED_REPLACED =
             "Proposed again as another transaction, so the signature made for the earlier one, which this " +
                 "device's queue could not save, was dropped: sign this one."
@@ -1187,12 +1187,12 @@ class SafeProposeViewModel(
             "Signed, but this device's queue cannot be saved right now, so the proposal is not kept here: share " +
                 "it below before you leave this screen, or sign it again in a moment."
         const val LIST_UNAVAILABLE =
-            "Your account list cannot be read right now, so nothing can be proposed. Serotine keeps trying."
+            "Your account list cannot be read right now, so nothing can be proposed. Punicus keeps trying."
         const val NOT_IN_WALLET = "This Safe is not in your wallet any more."
         const val NOT_A_SAFE_ACCOUNT = "Only a Safe proposes a Safe transaction: this account sends with Send."
         const val NOT_A_SAFE = "This address no longer holds a recognised Safe, so nothing can be proposed from it."
         const val UNVERIFIED =
-            "The Safe's owners cannot be verified right now, so nothing can be proposed. Serotine keeps trying."
+            "The Safe's owners cannot be verified right now, so nothing can be proposed. Punicus keeps trying."
         const val WATCH_ONLY =
             "No owner of this Safe has its key on this device: it is watch-only here, and nothing can be proposed " +
                 "from it."

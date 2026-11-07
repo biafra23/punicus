@@ -143,7 +143,7 @@ class WatchViewModelTest {
         assertEquals(
             Detection.Unavailable(
                 "What is at this address could not be verified this time: its code, or for a Safe its owners and " +
-                    "threshold. Serotine keeps trying.",
+                    "threshold. Punicus keeps trying.",
             ),
             viewModel.uiState.value.detection,
         )
@@ -880,7 +880,7 @@ class WatchViewModelTest {
         advanceTimeBy(1_000)
         runCurrent()
         assertEquals(
-            "Only an off-chain gateway gives this name's address, and Serotine asks none: it cannot be resolved here.",
+            "Only an off-chain gateway gives this name's address, and Punicus asks none: it cannot be resolved here.",
             viewModel.uiState.value.addressError,
         )
         assertFalse(viewModel.uiState.value.canRetryLookup, "asking again changes nothing")

@@ -454,10 +454,10 @@ private val DECIMAL = Regex("^(0|[1-9][0-9]*)(\\.[0-9]+)?$")
 
 private const val NOT_AN_ADDRESS = "Not an address: an address is 0x and 40 hexadecimal digits."
 private const val NOT_A_NAME =
-    "Not an ENS name Serotine can resolve: for now, names of letters (a–z), digits and hyphens."
+    "Not an ENS name Punicus can resolve: for now, names of letters (a–z), digits and hyphens."
 private const val CHECKSUM = "The capitals do not match this address's checksum: check it for a typo."
 private const val OFFCHAIN =
-    "Only an off-chain gateway gives this name's address, and Serotine asks none: it cannot be resolved here."
+    "Only an off-chain gateway gives this name's address, and Punicus asks none: it cannot be resolved here."
 
 /** A Uniswap fee tier's [pips] as a percentage: 3 000 is "0.3 %". */
 internal fun feeTierText(pips: Int): String = UInt256.of(pips.toLong()).formatUnits(4) + " %"

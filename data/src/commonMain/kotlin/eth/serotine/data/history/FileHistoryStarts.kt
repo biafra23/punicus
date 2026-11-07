@@ -25,7 +25,7 @@ import kotlinx.serialization.json.Json
  * nor a block damages the file.
  *
  * Format 2 records each start's network by its chain id. Every entry of a format-1 file was
- * written when Serotine worked on Sepolia alone, so it reads as a Sepolia account's
+ * written when Punicus worked on Sepolia alone, so it reads as a Sepolia account's
  * (docs/networks.md, *Files*). An entry on a network this version does not know is passed over
  * and the file kept aside as it was, so it is never lost.
  */

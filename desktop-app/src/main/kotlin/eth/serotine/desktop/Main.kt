@@ -102,12 +102,12 @@ fun main() {
         InstanceLock.acquire(dataDir.resolve("serotine.lock"))
     } catch (e: IOException) {
         tellAndExit(
-            "Serotine cannot use its data directory $dataDir: ${e.message ?: e::class.simpleName}",
+            "Punicus cannot use its data directory $dataDir: ${e.message ?: e::class.simpleName}",
             JOptionPane.ERROR_MESSAGE,
         )
     }
     if (instance == null) {
-        tellAndExit("Serotine is already running, or still closing.", JOptionPane.INFORMATION_MESSAGE)
+        tellAndExit("Punicus is already running, or still closing.", JOptionPane.INFORMATION_MESSAGE)
     }
     try {
         openWallet(dataDir)
@@ -145,7 +145,7 @@ private fun tellAndExit(message: String, kind: Int): Nothing {
     System.err.println(message)
     if (!GraphicsEnvironment.isHeadless()) {
         try {
-            SwingUtilities.invokeAndWait { JOptionPane.showMessageDialog(null, message, "Serotine", kind) }
+            SwingUtilities.invokeAndWait { JOptionPane.showMessageDialog(null, message, "Punicus", kind) }
         } catch (e: Throwable) {
             // No usable window server after all: stderr has the message, and the exit below stands.
         }
@@ -236,7 +236,7 @@ private fun openWallet(dataDir: File) {
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
-                System.err.println("Serotine: the WalletConnect relay connection stopped: ${e::class.simpleName}")
+                System.err.println("Punicus: the WalletConnect relay connection stopped: ${e::class.simpleName}")
             }
         }
         LaunchedEffect(Unit) {
@@ -247,7 +247,7 @@ private fun openWallet(dataDir: File) {
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
-                System.err.println("Serotine: following the dApp sessions' accounts stopped: ${e::class.simpleName}")
+                System.err.println("Punicus: following the dApp sessions' accounts stopped: ${e::class.simpleName}")
             }
         }
         LaunchedEffect(Unit) {
@@ -257,7 +257,7 @@ private fun openWallet(dataDir: File) {
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
-                System.err.println("Serotine: answering the dApps' requests stopped: ${e::class.simpleName}")
+                System.err.println("Punicus: answering the dApps' requests stopped: ${e::class.simpleName}")
             }
         }
         LaunchedEffect(Unit) {
@@ -269,7 +269,7 @@ private fun openWallet(dataDir: File) {
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
-                System.err.println("Serotine: following the networks stopped: ${e::class.simpleName}")
+                System.err.println("Punicus: following the networks stopped: ${e::class.simpleName}")
             }
         }
         LaunchedEffect(Unit) {
@@ -279,7 +279,7 @@ private fun openWallet(dataDir: File) {
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
-                System.err.println("Serotine: following the view stopped: ${e::class.simpleName}")
+                System.err.println("Punicus: following the view stopped: ${e::class.simpleName}")
             }
         }
         // Each network's upgrade reports, while its light client runs (a network that is off or
@@ -293,7 +293,7 @@ private fun openWallet(dataDir: File) {
                 } catch (e: CancellationException) {
                     throw e
                 } catch (e: Exception) {
-                    System.err.println("Serotine: upgrade notices of ${network.displayName} stopped: $e")
+                    System.err.println("Punicus: upgrade notices of ${network.displayName} stopped: $e")
                 }
             }
         }
@@ -304,7 +304,7 @@ private fun openWallet(dataDir: File) {
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
-                System.err.println("Serotine: following the Debug tab's switch stopped: ${e::class.simpleName}")
+                System.err.println("Punicus: following the Debug tab's switch stopped: ${e::class.simpleName}")
             }
         }
         LaunchedEffect(Unit) {
@@ -363,7 +363,7 @@ private fun openWallet(dataDir: File) {
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
-                System.err.println("Serotine: sending what is queued stopped: ${e::class.simpleName}")
+                System.err.println("Punicus: sending what is queued stopped: ${e::class.simpleName}")
             }
         }
         LaunchedEffect(Unit) {
@@ -374,7 +374,7 @@ private fun openWallet(dataDir: File) {
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
-                System.err.println("Serotine: keeping the transaction inputs stopped: ${e::class.simpleName}")
+                System.err.println("Punicus: keeping the transaction inputs stopped: ${e::class.simpleName}")
             }
         }
         LaunchedEffect(Unit) {
@@ -391,7 +391,7 @@ private fun openWallet(dataDir: File) {
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
-                System.err.println("Serotine: following Safe deployments stopped: ${e::class.simpleName}")
+                System.err.println("Punicus: following Safe deployments stopped: ${e::class.simpleName}")
             }
         }
         LaunchedEffect(Unit) {
@@ -402,7 +402,7 @@ private fun openWallet(dataDir: File) {
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
-                System.err.println("Serotine: following sent transactions stopped: ${e::class.simpleName}")
+                System.err.println("Punicus: following sent transactions stopped: ${e::class.simpleName}")
             }
         }
         // Each network's log index follows that network's accounts from where each history starts,
@@ -423,7 +423,7 @@ private fun openWallet(dataDir: File) {
                     throw e
                 } catch (e: Exception) {
                     System.err.println(
-                        "Serotine: following the accounts\' logs on ${network.displayName} stopped: " +
+                        "Punicus: following the accounts\' logs on ${network.displayName} stopped: " +
                             "${e::class.simpleName}",
                     )
                 }
@@ -440,7 +440,7 @@ private fun openWallet(dataDir: File) {
                     throw e
                 } catch (e: Exception) {
                     System.err.println(
-                        "Serotine: proving the CoW orders' ends on ${network.displayName} stopped: " +
+                        "Punicus: proving the CoW orders' ends on ${network.displayName} stopped: " +
                             "${e::class.simpleName}",
                     )
                 }
@@ -529,7 +529,7 @@ private fun openWallet(dataDir: File) {
         }
         Window(
             onCloseRequest = ::exitApplication,
-            title = "Serotine",
+            title = "Punicus",
             // The title bar's and taskbar's icon; an installed app's dock and launcher icon is
             // the installer's (iconFile, desktop-app/build.gradle.kts).
             icon = remember { AppIcon.image?.let { BitmapPainter(it.toComposeImageBitmap()) } },
@@ -575,7 +575,7 @@ private fun excludeFromBackups(directory: File) {
                 directory.mkdirs()
                 directory.resolve(".deja-dup-ignore").createNewFile()
             } catch (e: Exception) {
-                println("Serotine: could not mark $directory for Déjà Dup (${e::class.simpleName})")
+                println("Punicus: could not mark $directory for Déjà Dup (${e::class.simpleName})")
             }
         }
         return
@@ -589,9 +589,9 @@ private fun excludeFromBackups(directory: File) {
                 .start()
             process.inputStream.use { it.readBytes() }
             val exit = process.waitFor()
-            if (exit != 0) println("Serotine: Time Machine did not exclude $directory (exit $exit)")
+            if (exit != 0) println("Punicus: Time Machine did not exclude $directory (exit $exit)")
         } catch (e: Exception) {
-            println("Serotine: Time Machine did not exclude $directory (${e::class.simpleName})")
+            println("Punicus: Time Machine did not exclude $directory (${e::class.simpleName})")
         }
     }
 }
@@ -604,8 +604,10 @@ private fun appDataDir(): File {
     val os = System.getProperty("os.name").lowercase()
     val home = File(System.getProperty("user.home"))
     return when {
+        // The data directories keep the app's former name (Serotine, eth.serotine, serotine):
+        // renaming them would leave every installed wallet's accounts and keys behind.
         "mac" in os -> home.resolve("Library/Application Support/Serotine")
-        // Not %LOCALAPPDATA%\Serotine: the per-user msi installs the app there, and the keys
+        // Not %LOCALAPPDATA%\Punicus: the per-user msi installs the app there, and the keys
         // must not share a directory an uninstaller, an upgrade or a user cleaning up owns.
         "win" in os -> (System.getenv("LOCALAPPDATA")?.let(::File) ?: home.resolve("AppData/Local"))
             .resolve("eth.serotine")

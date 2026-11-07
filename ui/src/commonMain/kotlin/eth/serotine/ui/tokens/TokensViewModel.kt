@@ -118,6 +118,6 @@ class TokensViewModel(
             "Your token settings were damaged and have been set aside: the tokens you added and hid start over."
         const val SETTINGS_UNAVAILABLE =
             "Your token settings cannot be read right now, so nothing can be added, hidden or removed. " +
-                "Serotine keeps trying."
+                "Punicus keeps trying."
     }
 }

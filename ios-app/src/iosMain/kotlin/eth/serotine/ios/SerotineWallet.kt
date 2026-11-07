@@ -121,7 +121,11 @@ class SerotineWallet {
     /** When the wallet began to be built: a debug build says on the console how long the start took. */
     private val began = TimeSource.Monotonic.markNow()
 
-    /** The app's own Application Support directory: in its sandbox, never shown to the user. */
+    /**
+     * The app's own Application Support directory: in its sandbox, never shown to the user. It keeps
+     * the app's former name, Serotine: renaming it would leave an installed wallet's accounts and keys
+     * behind.
+     */
     private val dataDir: String = run {
         val base = NSSearchPathForDirectoriesInDomains(NSApplicationSupportDirectory, NSUserDomainMask, true)
             .firstOrNull() as? String ?: error("no Application Support directory")
@@ -332,7 +336,7 @@ class SerotineWallet {
      */
     private val scope = CoroutineScope(
         SupervisorJob() + Dispatchers.Default + CoroutineExceptionHandler { _, e ->
-            println("Serotine: the app's background work stopped: $e")
+            println("Punicus: the app's background work stopped: $e")
         },
     )
 
@@ -384,7 +388,7 @@ class SerotineWallet {
     /** Says on the console, in a debug build, how long after the wallet began [what] came. */
     @OptIn(ExperimentalNativeApi::class)
     internal fun startupTime(what: String) {
-        if (Platform.isDebugBinary) println("Serotine: $what ${began.elapsedNow()} after launch")
+        if (Platform.isDebugBinary) println("Punicus: $what ${began.elapsedNow()} after launch")
     }
 
     /**
@@ -580,7 +584,7 @@ class SerotineWallet {
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
-            println("Serotine: $what stopped: ${e::class.simpleName}")
+            println("Punicus: $what stopped: ${e::class.simpleName}")
         }
     }
 
@@ -612,5 +616,5 @@ private fun createDirectoryOutOfBackups(path: String) {
     )
     val excluded = created && NSURL.fileURLWithPath(path, isDirectory = true)
         .setResourceValue(true, forKey = NSURLIsExcludedFromBackupKey, error = null)
-    if (!excluded) println("Serotine: the engine's directory is not kept out of backups")
+    if (!excluded) println("Punicus: the engine's directory is not kept out of backups")
 }

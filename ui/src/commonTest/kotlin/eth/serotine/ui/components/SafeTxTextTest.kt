@@ -246,7 +246,7 @@ class SafeTxTextTest {
             ),
         )
         assertEquals(
-            "This Safe is still on version 1.1.1, from before the way Serotine checks signatures today: it is " +
+            "This Safe is still on version 1.1.1, from before the way Punicus checks signatures today: it is " +
                 "shown, but not signed, approved or executed here. Migrating it to a newer version (in Safe{Wallet} " +
                 "or another app) fixes this.",
             safeTxRefusalText(SafeTxRefusal.TooOldToSign("1.1.1"), Network.SEPOLIA),

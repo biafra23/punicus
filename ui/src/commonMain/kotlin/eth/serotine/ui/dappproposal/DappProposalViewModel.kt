@@ -252,15 +252,15 @@ class DappProposalViewModel(
         }
 
         fun refusalLine(refusal: DappRefusal): String = when (refusal) {
-            DappRefusal.OTHER_CHAIN -> "This dApp requires a network Serotine does not connect dApps on. Only " +
+            DappRefusal.OTHER_CHAIN -> "This dApp requires a network Punicus does not connect dApps on. Only " +
                 "Ethereum, Gnosis Chain and Sepolia are, so it can only be rejected."
             DappRefusal.MIXED_FUNDS -> "This dApp requires a test network and a network with real funds at once. " +
                 "A connection holds one or the other, never both, so it can only be rejected."
-            DappRefusal.NO_NETWORK -> "This dApp asks for none of the networks Serotine connects dApps on: " +
+            DappRefusal.NO_NETWORK -> "This dApp asks for none of the networks Punicus connects dApps on: " +
                 "Ethereum, Gnosis Chain and Sepolia. It can only be rejected."
-            DappRefusal.METHOD -> "This dApp requires a way of signing Serotine does not offer, such as " +
+            DappRefusal.METHOD -> "This dApp requires a way of signing Punicus does not offer, such as " +
                 "eth_sign, so it can only be rejected."
-            DappRefusal.EVENT -> "This dApp requires notices Serotine does not send, so it can only be rejected."
+            DappRefusal.EVENT -> "This dApp requires notices Punicus does not send, so it can only be rejected."
             DappRefusal.NAMESPACE ->
                 "This dApp requires a chain that is not an Ethereum one, so it can only be rejected."
         }

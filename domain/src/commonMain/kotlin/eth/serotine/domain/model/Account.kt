@@ -1,6 +1,6 @@
 package eth.serotine.domain.model
 
-/** What kind of account an [Address] is, which decides how Serotine signs for it. */
+/** What kind of account an [Address] is, which decides how Punicus signs for it. */
 enum class AccountKind {
     /** An externally owned account: a key pair signs its transactions directly. */
     EOA,
@@ -31,7 +31,7 @@ sealed interface AccountCustody {
 data class AccountId(val network: Network, val address: Address)
 
 /**
- * An account Serotine manages, as the rest of the app sees it: an [address] on one [network],
+ * An account Punicus manages, as the rest of the app sees it: an [address] on one [network],
  * identified by the two together ([id]). The immutable snapshot a repository emits; the key
  * material behind an [AccountCustody.InKeyStore] account is never part of it.
  */

@@ -109,8 +109,8 @@ class PairDappViewModel(private val pairDapp: PairDapp, incoming: IncomingDappLi
         const val PASTE_FIRST = "Paste the WalletConnect link the dApp shows first."
         const val NOT_A_LINK = "That QR code is not a WalletConnect link. Scan the one the dApp shows under " +
             "WalletConnect."
-        const val CAMERA_REFUSED = "Serotine may not use the camera. Allow it in the system's settings for " +
-            "Serotine to scan, or copy the dApp's link and paste it here."
+        const val CAMERA_REFUSED = "Punicus may not use the camera. Allow it in the system's settings for " +
+            "Punicus to scan, or copy the dApp's link and paste it here."
         const val NO_CAMERA = "The camera could not be started. Copy the dApp's link and paste it here instead."
 
         fun message(pairing: DappPairing): String? = when (pairing) {
@@ -118,9 +118,9 @@ class PairDappViewModel(private val pairDapp: PairDapp, incoming: IncomingDappLi
             DappPairing.Unreadable ->
                 "That is not a WalletConnect link. Copy the link the dApp shows under WalletConnect."
             DappPairing.UnsupportedVersion ->
-                "That link is for an older version of WalletConnect, which Serotine does not use."
+                "That link is for an older version of WalletConnect, which Punicus does not use."
             is DappPairing.UnsupportedParameter ->
-                "That link asks for something Serotine does not do (${pairing.parameter}), so it is not used."
+                "That link asks for something Punicus does not do (${pairing.parameter}), so it is not used."
             DappPairing.Expired -> "That link has expired. Ask the dApp for a new one."
             DappPairing.NoProposal -> "That link does not ask for a connection. Ask the dApp for a new one."
             DappPairing.TopicInUse -> "That link names a connection that is already open, so it is not used."

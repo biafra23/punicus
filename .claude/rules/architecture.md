@@ -16,7 +16,7 @@ Loaded when you work in `domain/`, `data/`, `ui/` or a host module.
 **docs/architecture.md is the contract.** This file is the summary a reviewer
 holds a diff against. Where the two disagree, docs/architecture.md wins.
 
-Serotine is a clean architecture with MVVM in the presentation layer.
+Punicus is a clean architecture with MVVM in the presentation layer.
 
 ## The modules
 

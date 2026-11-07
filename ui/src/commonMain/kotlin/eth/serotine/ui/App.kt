@@ -1169,7 +1169,7 @@ private fun NavController.leave(pattern: String) {
 private val AccountId.route: String
     get() = "${network.chainId}/${address.hex}"
 
-/** The network this entry's route names by its chain id, or null when it names none Serotine knows. */
+/** The network this entry's route names by its chain id, or null when it names none Punicus knows. */
 private fun NavBackStackEntry.network(): Network? =
     savedStateHandle.get<String>(CHAIN)?.toLongOrNull()?.let(Network::ofChainId)
 

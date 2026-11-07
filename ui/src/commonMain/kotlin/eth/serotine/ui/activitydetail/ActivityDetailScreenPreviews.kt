@@ -193,7 +193,7 @@ private fun ActivityDetailLoadingPreview() = ActivityDetailPreview(ActivityDetai
 private fun ActivityDetailUnavailablePreview() = ActivityDetailPreview(
     ActivityDetailUiState.Unavailable(
         "Alice",
-        "The account's history on chain cannot be read right now. Serotine keeps trying.",
+        "The account's history on chain cannot be read right now. Punicus keeps trying.",
     ),
 )
 

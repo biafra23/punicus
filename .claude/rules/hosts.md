@@ -32,7 +32,7 @@ architecture rules load beside this file.
 
 - Two apps come out of `:android-app` on purpose. The release one
   (`eth.serotine`) is signed with the release key, which never enters the
-  repository. The debug one (`eth.serotine.debug`, "Serotine Debug", amber
+  repository. The debug one (`eth.serotine.debug`, "Punicus Debug", amber
   icon) is signed with the committed, public debug keystore.
 - **Never give the release build type a `signingConfig`**
   (docs/android-release-signing.md). The release APK is signed on a tag by

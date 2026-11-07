@@ -95,7 +95,7 @@ internal class WcRelayClient(
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
-                println("Serotine: the WalletConnect relay cannot be reached (${e::class.simpleName})")
+                println("Punicus: the WalletConnect relay cannot be reached (${e::class.simpleName})")
                 null
             }
             if (connected == null) {
@@ -250,7 +250,7 @@ internal class WcRelayClient(
                     throw e
                 } catch (e: Exception) {
                     // Not acknowledged: the relay delivers it again on the next connection.
-                    println("Serotine: a WalletConnect message could not be handled (${e::class.simpleName})")
+                    println("Punicus: a WalletConnect message could not be handled (${e::class.simpleName})")
                     continue
                 }
                 acknowledge(connection, payload["id"] ?: continue)

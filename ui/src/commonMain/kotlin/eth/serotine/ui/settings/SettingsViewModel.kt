@@ -313,7 +313,7 @@ class SettingsViewModel(
                 on = allowedOnMetered,
                 text = "This device does not say whether its connection is metered: the account history is " +
                     "walked back on any connection",
-                unavailableReason = "This device does not report whether its connection is metered, so Serotine " +
+                unavailableReason = "This device does not report whether its connection is metered, so Punicus " +
                     "takes it as unmetered and walks the account history back on any connection. There is no " +
                     "metered connection here to allow it on.",
                 simpleText = "This device doesn't say whether its connection is metered: older activity is " +
@@ -343,7 +343,7 @@ class SettingsViewModel(
             unavailableReason = reason,
             simpleUnavailableReason = if (unreadable) {
                 "Your saved choice can't be read, so older activity is checked only on Wi-Fi or another " +
-                    "unmetered connection. Serotine keeps trying to read it, and the switch works again once it can."
+                    "unmetered connection. Punicus keeps trying to read it, and the switch works again once it can."
             } else {
                 null
             },

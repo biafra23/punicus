@@ -92,7 +92,7 @@ internal class ChosenOutbox(
         } catch (e: OutboxKeyGone) {
             return if (again) failed() else lose(e, sealedThere)
         } catch (e: Exception) {
-            println("Serotine: the outbox's key store is not available (${e::class.simpleName})")
+            println("Punicus: the outbox's key store is not available (${e::class.simpleName})")
             return failed()
         }
         val seal = OutboxSeal(secret)
@@ -103,7 +103,7 @@ internal class ChosenOutbox(
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
-            println("Serotine: the outbox's key store does not answer (${e::class.simpleName})")
+            println("Punicus: the outbox's key store does not answer (${e::class.simpleName})")
             return failed()
         }
         return if (protection == KeyProtection.HARDWARE) {
@@ -127,11 +127,11 @@ internal class ChosenOutbox(
                     EnvelopeCrypto.writeDurably(lostMarker, ByteArray(0))
                 }
                 SystemFileSystem.delete(Path(path), mustExist = false)
-                println("Serotine: the outbox could not be opened (${gone.message}); what it held is deleted")
+                println("Punicus: the outbox could not be opened (${gone.message}); what it held is deleted")
             }
             forgetKey()
         } catch (e: Exception) {
-            println("Serotine: the outbox's lost key could not be said (${e::class.simpleName}); it is left as it is")
+            println("Punicus: the outbox's lost key could not be said (${e::class.simpleName}); it is left as it is")
             return if (sealedThere) UnreadableOutbox else MemoryOutbox(lostMarker, dispatcher)
         }
         return choose(again = true)

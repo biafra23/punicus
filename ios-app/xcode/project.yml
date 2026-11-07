@@ -20,7 +20,7 @@ targets:
     info:
       path: Serotine/Info.plist
       properties:
-        CFBundleDisplayName: Serotine
+        CFBundleDisplayName: Punicus
         # Placeholders: the "Stamp the version" phase below writes the release version and build
         # number from the root build (the one pin, root build.gradle.kts) into the built Info.plist.
         CFBundleShortVersionString: "0.0.0"
@@ -44,7 +44,7 @@ targets:
         # The engine dials devp2p and libp2p peers directly, which on a device can include
         # peers on the local network.
         NSLocalNetworkUsageDescription: >-
-          Serotine's light client connects to Ethereum peers, which can include nodes on your
+          Punicus's light client connects to Ethereum peers, which can include nodes on your
           local network.
     settings:
       base:

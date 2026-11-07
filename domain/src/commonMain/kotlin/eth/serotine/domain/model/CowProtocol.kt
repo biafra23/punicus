@@ -15,7 +15,7 @@ import kotlin.jvm.JvmInline
 data class CowDeployment(val settlement: Address, val vaultRelayer: Address)
 
 /**
- * A CoW Protocol sell order as Serotine signs one (docs/swaps.md, *An order, step by step*):
+ * A CoW Protocol sell order as Punicus signs one (docs/swaps.md, *An order, step by step*):
  * sell exactly [sellAmount] of [sellToken] for at least [buyAmount] (never zero: an order with no
  * minimum gives the sold token away) of [buyToken], paid to [receiver], until [validTo] (unix
  * seconds, a `uint32`).
@@ -77,7 +77,7 @@ data class CowOrder(
 }
 
 /**
- * The app data every order Serotine signs carries: the document [DOCUMENT], the empty JSON
+ * The app data every order Punicus signs carries: the document [DOCUMENT], the empty JSON
  * object, with nothing beyond the required fields (owner ruling, 2026-10-22; CLAUDE.md, *Data
  * sources*), and its [HASH], the `appData` an order signs (`keccak256` of the document's UTF-8
  * bytes, which CoW's API documents as `0xb48d38f9…739d`).
@@ -143,7 +143,7 @@ value class CowOrderUid private constructor(val hex: String) {
 
 /**
  * GPv2's EIP-712 encoding (`GPv2Order.hash`, `GPv2Signing`), for every order field: the orders
- * Serotine signs fix most of them ([CowOrder]), but a test vector is any order.
+ * Punicus signs fix most of them ([CowOrder]), but a test vector is any order.
  */
 internal object GPv2Signing {
 
@@ -231,7 +231,7 @@ data class CowTrade(
 )
 
 /**
- * The calls and logs of CoW's settlement contract, `GPv2Settlement`, that Serotine uses
+ * The calls and logs of CoW's settlement contract, `GPv2Settlement`, that Punicus uses
  * (docs/swaps.md, *Proving an order's end*): its domain separator, an order's filled amount, the
  * owner's cancellation on chain, and the `Trade` and `OrderInvalidated` logs. Each decoder is
  * strict: an answer or a log of any other shape is none.

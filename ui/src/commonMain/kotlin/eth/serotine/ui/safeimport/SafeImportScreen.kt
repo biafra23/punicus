@@ -158,7 +158,7 @@ private fun Entering(state: SafeImportUiState.Entering, onTextChange: (String) -
             }
         }
         Text(
-            "Paste a signing request another owner shared for this Safe: the text its Copy text gives. Serotine " +
+            "Paste a signing request another owner shared for this Safe: the text its Copy text gives. Punicus " +
                 "decodes it here and checks it against the chain — the Safe, its nonce, every signature — before " +
                 "any of it is kept.",
             style = MaterialTheme.typography.bodyMedium,

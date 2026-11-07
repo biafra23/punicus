@@ -1,9 +1,9 @@
 # dApp connections (WalletConnect)
 
-How a dApp connects to Serotine and asks it to sign or send for one of its
-accounts, and how Serotine uses another wallet (MetaMask, say) as the signer
+How a dApp connects to Punicus and asks it to sign or send for one of its
+accounts, and how Punicus uses another wallet (MetaMask, say) as the signer
 of a Safe owner. Both go over WalletConnect v2. Direction 1, dApps connecting
-to Serotine, is built (`feature/walletconnect-wallet`, part 1 of *The plan*);
+to Punicus, is built (`feature/walletconnect-wallet`, part 1 of *The plan*);
 direction 2, an external wallet as a Safe owner's signer, is still a design.
 Issue #22 tracks both. A dApp-connection PR is held to this page
 together with docs/wallet-ux.md (the screens and their rules),
@@ -19,7 +19,7 @@ two open points, the chains and the order.
 
 1. **WalletConnect v2 is the dApp connection protocol.** Its relay is an
    off-chain service, recorded under *Data sources* (*What the relay learns*,
-   below). Serotine never takes chain state from it.
+   below). Punicus never takes chain state from it.
 2. **The Reown project ID is not committed.** A project on
    dashboard.reown.com under the owner's account. A Gradle property supplies
    it at build time, from a CI secret, with separate IDs for debug and
@@ -28,16 +28,16 @@ two open points, the chains and the order.
    now, since a free-tier account has one project. CI reads it from one
    repository secret or variable, `WALLETCONNECT_PROJECT_ID`.
 3. **A new key tier: an owner key in an external wallet.** The key lives in
-   the other wallet, and so do its backup and its unlock. Serotine keeps only
+   the other wallet, and so do its backup and its unlock. Punicus keeps only
    the address and the session. Safe owners first. An EOA whose key is in
-   another wallet comes later or never: for an EOA, Serotine would only relay
+   another wallet comes later or never: for an EOA, Punicus would only relay
    to that wallet.
 4. **Either executes a Safe transaction once it has its signatures:** the
    external wallet, through `eth_sendTransaction`, or a local EOA, through
    the engine's `sendRawTransactionDetailed`. The external wallet is the
    default when this device holds no key. Inclusion is confirmed from a
    verified receipt either way.
-5. **Serotine asks an external wallet for `eth_signTypedData_v4` of the
+5. **Punicus asks an external wallet for `eth_signTypedData_v4` of the
    `SafeTx` only**, so that the wallet shows the struct it signs.
    `personal_sign` over the `safeTxHash` is not offered: that is blind
    signing.
@@ -70,20 +70,20 @@ two open points, the chains and the order.
      first.** A dApp session names Sepolia (`eip155:11155111`) alone.
      Ethereum and Gnosis Chain come by a later ruling, once dApp connections
      have been tried against real dApps." 
-10. **dApps connecting to Serotine come first** (direction 1, below):
+10. **dApps connecting to Punicus come first** (direction 1, below):
     signing in and requests for EOAs first. An external wallet as a Safe
     owner's signer (direction 2) follows. #22 had them the other way round.
 
 ## The two directions
 
-1. **Serotine as a wallet.** A dApp connects to Serotine and asks it to sign
+1. **Punicus as a wallet.** A dApp connects to Punicus and asks it to sign
    or send for one of its accounts: to sign in (EIP-4361), to sign typed data,
    or to send a transaction.
-2. **Serotine as a dApp.** Serotine connects to another wallet and uses it as
+2. **Punicus as a dApp.** Punicus connects to another wallet and uses it as
    the signer of a Safe owner. A user who does not want to keep a key in
-   Serotine keeps it there and signs there.
+   Punicus keeps it there and signs there.
 
-They combine: a dApp asks Serotine's Safe for a transaction, Serotine gets an
+They combine: a dApp asks Punicus's Safe for a transaction, Punicus gets an
 owner's signature from the external wallet, and executes the Safe
 transaction.
 
@@ -101,7 +101,7 @@ everything on the chain side: the verified `call`, `estimateGasDetailed`,
   Reown (formerly WalletConnect Inc.), the nodes behind them by a selected
   group of operators. A permissionless network is on WalletConnect's
   roadmap, not known to be live when this was written (November 2026).
-  Serotine does not call the relay decentralised.
+  Punicus does not call the relay decentralised.
 - It sees the device's IP address, the topics it subscribes to, and the
   timing and size of its messages, and the project ID. The dApp's side
   connects to the same relay, so it can link the two ends of a session.
@@ -120,12 +120,12 @@ everything on the chain side: the verified `call`, `estimateGasDetailed`,
 - Nothing about the chain is taken from it, or from the dApp. Everything a
   request screen says about the chain is read through the light client.
 
-## Direction 1: a dApp connects to Serotine
+## Direction 1: a dApp connects to Punicus
 
 ### Pairing and the session proposal
 
 - The user pastes a `wc:` URI, opens one from a `wc:` link on Android, or
-  scans the dApp's QR code on Android. On Android, Serotine's own deep link
+  scans the dApp's QR code on Android. On Android, Punicus's own deep link
   `serotine://wc?uri=` with the `wc:` link percent-encoded, the form a
   wallet picker opens for a wallet it lists, carries one in the same way;
   such a link with no `uri`, or one not well encoded, offers nothing. Each
@@ -140,8 +140,8 @@ everything on the chain side: the verified `call`, `estimateGasDetailed`,
     parser reads it, is refused with what it is not.
   - iOS and the desktop have no scanner yet, and offer no Scan button.
 - A proposal is rejected when its required namespaces name a chain
-  Serotine does not serve, or chains of both kinds (real funds and testnet,
-  ruling 9), or when it asks for no chain Serotine serves at all.
+  Punicus does not serve, or chains of both kinds (real funds and testnet,
+  ruling 9), or when it asks for no chain Punicus serves at all.
 - The session's chains are its required chains and the chains of the
   accounts the user chooses, of those the dApp asked for. An optional
   namespace adds its methods and events only where it names one of them.
@@ -318,7 +318,7 @@ everything on the chain side: the verified `call`, `estimateGasDetailed`,
     history, as Send's), a missing `to` (no contract is created for a dApp),
     and any other field. Refused fields are answered -32602 at once.
   - A transaction to the zero address is refused, as Send refuses one.
-- **The review shows only what Serotine works out itself:**
+- **The review shows only what Punicus works out itself:**
   - the recipient, the value, and the calldata decoded for the ABIs the app
     knows (ERC-20 `transfer` and `approve`, Safe's own methods, the Uniswap
     calls it already builds). Anything else is shown raw, marked as not
@@ -430,7 +430,7 @@ everything on the chain side: the verified `call`, `estimateGasDetailed`,
 ## Direction 2: an external wallet signs for a Safe owner
 
 - **The tier** (ruling 3; docs/keys-and-signing.md, *The account tiers*).
-  Serotine starts a pairing and shows its `wc:` URI as a QR code, with "Open
+  Punicus starts a pairing and shows its `wc:` URI as a QR code, with "Open
   in wallet" for a wallet on the same device (`wc:`, `metamask://wc?uri=`).
   The wallet's accounts are matched against the Safe's owners as its verified
   storage lists them (#10). An account that is not an owner is shown, and
@@ -450,7 +450,7 @@ everything on the chain side: the verified `call`, `estimateGasDetailed`,
   expected owner.
 - **Who executes** (ruling 4): the external wallet by default when this
   device holds no key. Its `eth_sendTransaction` goes out through the
-  wallet's own RPC provider: that is a write, not a chain read. Serotine
+  wallet's own RPC provider: that is a write, not a chain read. Punicus
   confirms inclusion from a verified receipt and an `ExecutionSuccess` or
   `ExecutionFailure` log.
 - **The independent second view.** On another device, the external wallet is
@@ -506,8 +506,8 @@ everything on the chain side: the verified `call`, `estimateGasDetailed`,
   the signer port. Nothing is imported from an external wallet, and nothing
   about it is kept but its address and its session.
 - **The hosts own the relay connection's lifecycle**, like the engine's. On
-  Android, opening another wallet sends Serotine to the background, where the
-  socket may drop and the engine pauses after 60 s. On resume Serotine
+  Android, opening another wallet sends Punicus to the background, where the
+  socket may drop and the engine pauses after 60 s. On resume Punicus
   resubscribes and picks up the answer, which the relay holds for its TTL.
   The relay connection runs while the app is in front (Android, iOS) or open
   (the desktop), beside `FollowDappAccounts`, which keeps each session's
@@ -534,12 +534,12 @@ the first thing that does.
    debug and a release property, so a second project, on a paid plan, needs
    only the workflows to pass two names again.
 3. **No App ID or Domain allowlist, for now.** An empty list lets every app
-   use the ID. Serotine sends the relay its project ID and its signed login,
+   use the ID. Punicus sends the relay its project ID and its signed login,
    and no app ID, so a list could keep it out. Whether one does is for the
    live relay test to show (`WalletConnectRelayLiveTest`). If it passes with
    a list set, the list holds the Android package names `eth.serotine` and
    `eth.serotine.debug` and the iOS bundle ID `eth.serotine`. With a list
-   set, another app cannot use the ID to pass itself off as Serotine. A
+   set, another app cannot use the ID to pass itself off as Punicus. A
    change to the list takes about 15 minutes to apply.
 4. **The ID as one GitHub Actions secret or variable** on the repository,
    named `WALLETCONNECT_PROJECT_ID` (Settings → Secrets and variables →
@@ -575,10 +575,10 @@ the first thing that does.
    number of sessions, and reads the terms (*Risks to check early*).
 
 Not needed, since rulings 7 and 9 leave them out: the Verify API, push and
-Link Mode need no registration. The `wc:` scheme and Serotine's deep link
+Link Mode need no registration. The `wc:` scheme and Punicus's deep link
 `serotine://wc` on Android are manifest entries, with no domain to verify.
 The deep link is the native link a WalletGuide listing names. A listing in WalletGuide, WalletConnect's
-directory of wallets, is what puts Serotine in the wallet pickers dApps
+directory of wallets, is what puts Punicus in the wallet pickers dApps
 show. It is optional, reviewed by WalletConnect, and asked for by the owner
 when the time comes, likely not before dApp sessions reach Ethereum. Until
 then a user connects with a `wc:` link.
@@ -655,7 +655,7 @@ merge part PRs into the feature branch itself.
       request (1.5) then takes the external wallet's signature too.
 3. **Later, each its own issue:** QR scanning on iOS (Android's is built); a
    `wc:` URL scheme
-   registered by the desktop installers; requests delivered while Serotine is
+   registered by the desktop installers; requests delivered while Punicus is
    in the background; `wallet_sendCalls` (EIP-5792) through MultiSend for a
    Safe; Safe messages (EIP-1271), which `personal_sign` and typed data on a
    Safe wait for; and the Verify API. Each needs the owner's ruling where it
@@ -674,7 +674,7 @@ The owner's, each recorded here and in the rules before its code lands:
   MetaMask Connect (CAIP-25). Part 2.1 checks that it still takes `wc:`
   pairings and approves an optional `eip155:11155111` namespace, whether it
   needs the typed data's `domain.chainId` to match the session's chain, and
-  how the user gets back to Serotine after signing on the same phone.
+  how the user gets back to Punicus after signing on the same phone.
 - **One-click sign-in.** dApps built on Reown's AppKit may ask for
   `wc_sessionAuthenticate` first. Part 1.1's spike checks that they fall back
   to a session and a `personal_sign`.
@@ -688,14 +688,14 @@ The owner's, each recorded here and in the rules before its code lands:
 
 ## Done when
 
-- A dApp connects to Serotine on Sepolia, or on Ethereum and Gnosis Chain,
+- A dApp connects to Punicus on Sepolia, or on Ethereum and Gnosis Chain,
   and the user signs in to it with an EOA whose key is on this device. Its
   transaction request, for an EOA or a Safe, is reviewed, signed, sent and
   answered with the transaction hash. Anything outside the closed method
   list, or off the session's networks, is refused with an error.
-- A user with no key in Serotine connects an external wallet, which is
+- A user with no key in Punicus connects an external wallet, which is
   recognised as a verified owner of a watched Safe, sends ETH from that Safe
-  with the signature made in that wallet, and Serotine shows the execution,
+  with the signature made in that wallet, and Punicus shows the execution,
   verified.
 - Sessions survive a restart. No key and no session secret appears in a
   UiState, a log or a `toString()`.

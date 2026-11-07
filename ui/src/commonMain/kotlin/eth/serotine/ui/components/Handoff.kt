@@ -32,4 +32,4 @@ const val NO_WALLET = "No wallet app on this device opens payment links. Install
     "account's key, such as MetaMask or Rainbow, then try again."
 
 private fun networkOffHandoff(network: String): String =
-    "$network is off, so Serotine cannot check what the other wallet sends. Turn $network on first."
+    "$network is off, so Punicus cannot check what the other wallet sends. Turn $network on first."

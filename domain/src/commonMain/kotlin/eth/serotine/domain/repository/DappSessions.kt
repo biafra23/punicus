@@ -8,7 +8,7 @@ import kotlinx.coroutines.flow.Flow
 val Network.caip2: String get() = "eip155:$chainId"
 
 /**
- * The network whose chain [chain] names, as CAIP-2 (`eip155:1`), or null for one Serotine has no dApp
+ * The network whose chain [chain] names, as CAIP-2 (`eip155:1`), or null for one Punicus has no dApp
  * sessions on (docs/walletconnect.md, ruling 9 as amended, 2026-11-05). Strict: the chain id in decimal,
  * with no sign or leading zero.
  */
@@ -33,7 +33,7 @@ data class DappSessionId(val topic: String)
 
 /** Why a proposal can only be rejected (docs/walletconnect.md, *Pairing and the session proposal*). */
 enum class DappRefusal {
-    /** It requires a chain Serotine has no dApp sessions on: none but Ethereum, Gnosis Chain and Sepolia. */
+    /** It requires a chain Punicus has no dApp sessions on: none but Ethereum, Gnosis Chain and Sepolia. */
     OTHER_CHAIN,
 
     /**
@@ -42,7 +42,7 @@ enum class DappRefusal {
      */
     MIXED_FUNDS,
 
-    /** It asks for no chain Serotine has dApp sessions on at all. */
+    /** It asks for no chain Punicus has dApp sessions on at all. */
     NO_NETWORK,
 
     /** It requires a method outside the closed list (ruling 6), `eth_sign` among them. */
@@ -74,7 +74,7 @@ data class DappProposal(
 
     /**
      * The networks a session with it may hold, so the networks of the accounts it may be offered: those it
-     * asks for, required or optional, that Serotine serves; of the kind of funds its required ones are, when
+     * asks for, required or optional, that Punicus serves; of the kind of funds its required ones are, when
      * it requires any.
      */
     val networks: Set<Network>
@@ -83,7 +83,7 @@ data class DappProposal(
             return askedNetworks.filter { it.testnet == kind }.toSet()
         }
 
-    /** Every network it asks for, required or optional, that Serotine serves, of either kind of funds. */
+    /** Every network it asks for, required or optional, that Punicus serves, of either kind of funds. */
     val askedNetworks: Set<Network> get() = (requiredChains + optionalChains).mapNotNull(::dappNetworkOf).toSet()
 }
 

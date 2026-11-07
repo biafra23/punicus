@@ -65,6 +65,6 @@ class RenameAccountViewModel(
     }
 
     private companion object {
-        const val LIST_UNAVAILABLE = "Your account list cannot be read right now. Serotine keeps trying."
+        const val LIST_UNAVAILABLE = "Your account list cannot be read right now. Punicus keeps trying."
     }
 }

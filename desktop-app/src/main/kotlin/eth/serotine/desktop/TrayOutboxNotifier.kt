@@ -42,7 +42,7 @@ class TrayOutboxNotifier : OutboxNotifier {
                 if (GraphicsEnvironment.isHeadless() || !SystemTray.isSupported()) return@invokeLater
                 val image = AppIcon.image ?: return@invokeLater
                 val size = SystemTray.getSystemTray().trayIconSize
-                val tray = icon ?: TrayIcon(image.getScaledInstance(size.width, size.height, Image.SCALE_SMOOTH), "Serotine").also {
+                val tray = icon ?: TrayIcon(image.getScaledInstance(size.width, size.height, Image.SCALE_SMOOTH), "Punicus").also {
                     it.isImageAutoSize = true
                     SystemTray.getSystemTray().add(it)
                     icon = it
@@ -50,7 +50,7 @@ class TrayOutboxNotifier : OutboxNotifier {
                 tray.displayMessage(text.title, text.text, type)
             } catch (e: Exception) {
                 // A tray that refuses the icon: the window still says it.
-                println("Serotine: no tray notice of the outbox (${e::class.simpleName})")
+                println("Punicus: no tray notice of the outbox (${e::class.simpleName})")
             }
         }
     }

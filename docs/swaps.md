@@ -1,6 +1,6 @@
 # Swaps
 
-How Serotine swaps one token for another without a server it has to trust:
+How Punicus swaps one token for another without a server it has to trust:
 on Uniswap's contracts directly, and through CoW Protocol. This page is a
 design. Its Uniswap plan is built, its eight parts merged through
 `feature/swaps-uniswap` (*The plan*). Its CoW plan is issue #144, on
@@ -865,7 +865,7 @@ route being unavailable, never to a wrong swap:
   - It is not gasless.
   - The order's validity has to cover the co-signing, as *A Safe's swap*
     says for its deadline.
-  - An EIP-1271 signature would need a fallback handler, which Serotine's
+  - An EIP-1271 signature would need a fallback handler, which Punicus's
     Safes do not have (docs/wallet-ux.md, *Safes*). Only the pinned
     `CompatibilityFallbackHandler` may be set (2026-10-18, issue #63), and
     no screen sets it yet (issue #72).

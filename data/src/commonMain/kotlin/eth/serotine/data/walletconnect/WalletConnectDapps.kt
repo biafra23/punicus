@@ -217,7 +217,7 @@ class WalletConnectDapps internal constructor(
         optionalChains = view.optionalChains,
         methods = view.methods,
         refusal = view.refusal?.let { why ->
-            // One error code for all three: a chain Serotine does not serve required, both kinds of funds
+            // One error code for all three: a chain Punicus does not serve required, both kinds of funds
             // required, or no chain it serves asked for at all.
             when (view.chainRefusal) {
                 WcProtocol.ChainRefusal.MIXED -> DappRefusal.MIXED_FUNDS
@@ -249,11 +249,11 @@ class WalletConnectDapps internal constructor(
         fun projectIdFor(debug: Boolean): String =
             if (debug) WALLETCONNECT_PROJECT_ID_DEBUG else WALLETCONNECT_PROJECT_ID_RELEASE
 
-        /** How Serotine names itself to a dApp: no icon, so a dApp fetches nothing of ours. */
+        /** How Punicus names itself to a dApp: no icon, so a dApp fetches nothing of ours. */
         internal val SEROTINE = WcMetadata(
-            name = "Serotine",
+            name = "Punicus",
             description = "A wallet that verifies what it shows with an embedded light client.",
-            url = "https://github.com/biafra23/serotine",
+            url = "https://github.com/biafra23/punicus",
         )
 
         internal fun isProjectId(text: String): Boolean =
@@ -264,7 +264,7 @@ class WalletConnectDapps internal constructor(
         /** [account] as CAIP-10, `eip155:1:0x…`, the address in lower case. */
         private fun caip10(account: AccountId): String = "${account.network.caip2}:${account.address.hex.lowercase()}"
 
-        /** The account CAIP-10 [account] names, or null for one out of shape or on a chain Serotine does not serve. */
+        /** The account CAIP-10 [account] names, or null for one out of shape or on a chain Punicus does not serve. */
         private fun accountId(account: String): AccountId? {
             val (chain, address) = WcProtocol.accountOf(account) ?: return null
             return AccountId(dappNetworkOf(chain) ?: return null, Address.parse(address) ?: return null)

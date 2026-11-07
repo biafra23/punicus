@@ -1661,7 +1661,7 @@ class SafeTxViewModel(
             else -> HeldStep(
                 "Held",
                 HeldStepState.WAITING,
-                "Waits for $name to catch up. Keep Serotine open to check it sooner.",
+                "Waits for $name to catch up. Keep Punicus open to check it sooner.",
             )
         }
         val shared = HeldStep(
@@ -2073,17 +2073,17 @@ class SafeTxViewModel(
             "prepared, so it was not signed."
         const val CAUGHT_UP = "The light client has caught up since this was prepared, so it was not signed: it is " +
             "checked on chain now, and signed from here."
-        const val QUEUE_FAILED = "Serotine could not finish signing this transaction. Nothing was queued or sent."
+        const val QUEUE_FAILED = "Punicus could not finish signing this transaction. Nothing was queued or sent."
         const val NOT_KEPT = "Signed, but the outbox could not keep it, so the signature was dropped: nothing was " +
             "queued or sent. Try again."
         const val NO_OWNER_TO_PROPOSE = "No owner of this Safe has its key on this device, so the swap cannot be " +
             "proposed again from here. Import an owner's recovery phrase to propose and sign its transactions."
         const val SWAP_EXPIRED = "Its deadline has passed: the router refuses it, so it can never run as signed."
-        const val SIGN_FAILED = "Serotine could not finish this signature. Nothing was queued: try again."
+        const val SIGN_FAILED = "Punicus could not finish this signature. Nothing was queued: try again."
         const val SEND_FAILED =
-            "Serotine could not finish this transaction. Check the account's balance before you send again."
+            "Punicus could not finish this transaction. Check the account's balance before you send again."
         const val QUEUE_UNREADABLE =
-            "This device's queue of Safe transactions cannot be read right now. Serotine keeps trying."
+            "This device's queue of Safe transactions cannot be read right now. Punicus keeps trying."
         const val NOT_QUEUED = "This transaction is not in this device's queue."
         const val PASSED =
             "No longer pending: the Safe's nonce has passed it, so it ran, or another transaction used its nonce."

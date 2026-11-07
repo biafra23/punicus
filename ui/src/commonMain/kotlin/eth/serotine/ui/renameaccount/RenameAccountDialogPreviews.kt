@@ -38,7 +38,7 @@ private fun RenameAccountSavingPreview() = RenameAccountPreview(editing.copy(sav
 @Preview
 @Composable
 private fun RenameAccountListUnavailablePreview() = RenameAccountPreview(
-    RenameAccountUiState.Unavailable("Your account list cannot be read right now. Serotine keeps trying."),
+    RenameAccountUiState.Unavailable("Your account list cannot be read right now. Punicus keeps trying."),
 )
 
 @Preview

@@ -442,7 +442,7 @@ private fun ThresholdContent(state: CreateSafeUiState.Threshold, actions: Create
         Text(state.shape, style = MaterialTheme.typography.bodyLarge)
         state.explanation?.let { Text(it, style = MaterialTheme.typography.bodyMedium) }
         state.refusal?.let { Text(it, color = MaterialTheme.colorScheme.error) }
-        Heading("The shapes Serotine creates")
+        Heading("The shapes Punicus creates")
         state.rules.forEach { rule -> Text("• $rule", style = MaterialTheme.typography.bodySmall) }
         Heading("Owners")
         Column { state.owners.forEach { OwnerRow(it, full = false) } }

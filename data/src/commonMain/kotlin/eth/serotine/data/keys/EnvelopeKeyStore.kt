@@ -851,6 +851,6 @@ class EnvelopeKeyStore internal constructor(
          */
         const val MAX_PASSWORD_CHECKS = 3
 
-        fun report(what: String) = println("Serotine: $what")
+        fun report(what: String) = println("Punicus: $what")
     }
 }

@@ -194,7 +194,7 @@ fun CreateAccountScreen(
 private fun ShowingContent(state: CreateAccountUiState.Showing, onWrittenDown: () -> Unit) {
     Text(
         "Write these ${state.words.size} words down, in order, on paper. They are the only way to restore " +
-            "this account: whoever has them controls it. Serotine shows them only while this account " +
+            "this account: whoever has them controls it. Punicus shows them only while this account " +
             "is being created.",
         style = MaterialTheme.typography.bodyMedium,
     )

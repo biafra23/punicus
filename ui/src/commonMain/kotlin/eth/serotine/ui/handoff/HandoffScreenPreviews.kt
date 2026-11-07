@@ -49,11 +49,11 @@ private val compose = HandoffUiState.Compose(
 )
 
 private val notes = listOf(
-    "Serotine signs nothing. The wallet that opens signs and sends this transfer, and its fee is that wallet's to set.",
+    "Punicus signs nothing. The wallet that opens signs and sends this transfer, and its fee is that wallet's to set.",
     "In that wallet, choose “Hardware wallet” (0x5aAe…eAed) before you confirm: it sends from whichever of its " +
         "accounts is chosen.",
     "That wallet sends the transfer through its own provider, which learns the transfer and this device's IP address.",
-    "Nothing comes back from that wallet. Serotine checks each new block for this transfer for 10 minutes after the " +
+    "Nothing comes back from that wallet. Punicus checks each new block for this transfer for 10 minutes after the " +
         "wallet opens.",
     "Sepolia is a test network: its ETH has no value.",
 )
@@ -71,7 +71,7 @@ private val waiting = HandoffUiState.Waiting(
     network = "Sepolia",
     from = from,
     summary = "25 USDC to $FRIEND, from “Hardware wallet”, as handed over.",
-    progress = "No block up to 8,412,311 has it yet. Serotine keeps looking for 10 minutes after the handoff.",
+    progress = "No block up to 8,412,311 has it yet. Punicus keeps looking for 10 minutes after the handoff.",
 )
 
 @Composable

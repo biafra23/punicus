@@ -53,7 +53,7 @@ class DappProposalScreenTest {
     fun theDappsClaimIsMarkedAsSuch() {
         show(state)
 
-        rule.onNodeWithText("Stated by the dApp, not verified: Serotine cannot check who is asking.").assertExists()
+        rule.onNodeWithText("Stated by the dApp, not verified: Punicus cannot check who is asking.").assertExists()
     }
 
     @Test

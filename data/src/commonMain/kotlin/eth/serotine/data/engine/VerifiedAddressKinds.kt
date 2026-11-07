@@ -177,7 +177,7 @@ class VerifiedAddressKinds internal constructor(
 
     /** [message] to [debugLog], made only when there is one. */
     private inline fun log(message: () -> String) {
-        debugLog?.invoke("Serotine: " + message())
+        debugLog?.invoke("Punicus: " + message())
     }
 
     /**

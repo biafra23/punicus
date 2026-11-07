@@ -223,7 +223,7 @@ private fun SafeProposeNeverVerifiedPreview() = SafeProposePreview(
     SafeProposeUiState.CannotPropose(
         "Sepolia",
         "The light client is still syncing, and this Safe's owners and nonce have never been verified on this " +
-            "device, so nothing can be prepared from it yet. Serotine keeps trying.",
+            "device, so nothing can be prepared from it yet. Punicus keeps trying.",
     ),
     lightClient = catchingUpStripSample,
 )

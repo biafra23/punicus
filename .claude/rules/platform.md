@@ -30,7 +30,7 @@ Loaded for every Kotlin and Gradle file.
 
 ## Android compatibility is a first-class concern
 
-Serotine runs inside an Android app (`:android-app`, minSdk 29). Every change
+Punicus runs inside an Android app (`:android-app`, minSdk 29). Every change
 must keep it working:
 
 - Avoid JVM-only APIs that the Android runtime or `coreLibraryDesugaring`

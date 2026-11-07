@@ -108,7 +108,7 @@ private fun SecurityDesktopPreview() = SecurityPreview(
     off.copy(
         protection = KeyProtection.PASSWORD_ONLY.protectionText,
         biometrics = BiometricRow(
-            "Not on this device yet: Serotine has no biometric unlock here, so signing asks for the wallet password.",
+            "Not on this device yet: Punicus has no biometric unlock here, so signing asks for the wallet password.",
             on = false,
             canChange = false,
         ),

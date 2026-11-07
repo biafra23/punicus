@@ -18,21 +18,21 @@ class UpdateRequiredScreenTest {
     val rule = createComposeRule()
 
     private val state = UpdateRequiredUiState.Required(
-        text = "Peers report that Sepolia upgraded to rules this version of Serotine does not support.",
+        text = "Peers report that Sepolia upgraded to rules this version of Punicus does not support.",
         details = "Reported by peers in 3 networks, not verified · fork id unknown",
-        version = "This is Serotine v0.1.0.",
+        version = "This is Punicus v0.1.0.",
     )
 
     @Test
     fun saysWhyWhereTheUpdateIsAndThatTheWalletStays() {
         rule.setContent { SerotineTheme { UpdateRequiredScreen(state, onGetUpdate = {}) } }
 
-        rule.onNodeWithText("Update Serotine").assertIsDisplayed()
+        rule.onNodeWithText("Update Punicus").assertIsDisplayed()
         rule.onNodeWithText(state.text).assertIsDisplayed()
         rule.onNodeWithText(state.keepsData).assertIsDisplayed()
         rule.onNodeWithText(RELEASES_URL).performScrollTo().assertIsDisplayed()
         rule.onNodeWithText(state.details).performScrollTo().assertIsDisplayed()
-        rule.onNodeWithText("This is Serotine v0.1.0.").performScrollTo().assertIsDisplayed()
+        rule.onNodeWithText("This is Punicus v0.1.0.").performScrollTo().assertIsDisplayed()
     }
 
     @Test

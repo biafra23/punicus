@@ -30,14 +30,14 @@ class TrayUpgradeNotifier(private val network: Network) : UpgradeNotifier {
                 val image = AppIcon.image
                 if (image == null) {
                     // No icon to show in the tray (AppIcon): the window still says it.
-                    println("Serotine: no tray notice (no app icon)")
+                    println("Punicus: no tray notice (no app icon)")
                     return@invokeLater
                 }
                 // Scaled smoothly to the tray's own size: the icon is 512 px, and auto-sizing
                 // scales it down with a coarse filter on some platforms.
                 val size = SystemTray.getSystemTray().trayIconSize
                 val mark = image.getScaledInstance(size.width, size.height, Image.SCALE_SMOOTH)
-                val tray = icon ?: TrayIcon(mark, "Serotine").also {
+                val tray = icon ?: TrayIcon(mark, "Punicus").also {
                     it.isImageAutoSize = true
                     SystemTray.getSystemTray().add(it)
                     icon = it
@@ -46,7 +46,7 @@ class TrayUpgradeNotifier(private val network: Network) : UpgradeNotifier {
             } catch (e: Exception) {
                 // A tray that refuses the icon, or a notice that cannot be put into words: the
                 // window still says it.
-                println("Serotine: no tray notice (${e::class.simpleName})")
+                println("Punicus: no tray notice (${e::class.simpleName})")
             }
         }
     }

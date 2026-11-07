@@ -74,7 +74,7 @@ class LenientSafeTxScreenTest {
         rule.onNodeWithTag(SAFE_TX_PREPARED_ON_TAG)
             .assertTextEquals("Signed on data from 12 min ago. It's checked on chain before it's shown to anyone.")
         assertEquals(3, rule.onAllNodesWithTag(SAFE_TX_HELD_STEP_TAG).fetchSemanticsNodes().size)
-        rule.onNodeWithText("Waits for Sepolia to catch up. Keep Serotine open to check it sooner.")
+        rule.onNodeWithText("Waits for Sepolia to catch up. Keep Punicus open to check it sooner.")
             .performScrollTo()
             .assertIsDisplayed()
         assertEquals(0, rule.onAllNodesWithText("Share request").fetchSemanticsNodes().size, "no QR code or text")

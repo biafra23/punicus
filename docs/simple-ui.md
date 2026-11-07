@@ -182,7 +182,7 @@ change what it trusts.
   ends with "Test networks aren't counted in the total." The add button,
   and the Wallet | Settings bar. No network sections and no status strip:
   those are Detailed view's. In lenient mode, under the freshness line, what
-  each network has queued ("Ethereum: 1 waiting to send · Keep Serotine
+  each network has queued ("Ethereum: 1 waiting to send · Keep Punicus
   open to send it sooner."; "1 needs your signature again"), and once, a
   notice that a queued transaction was lost, with Dismiss, as in Detailed
   view (docs/wallet-ux.md, screen 1; owner rulings, 2026-11-06).
@@ -270,7 +270,7 @@ change what it trusts.
   long it takes.
   A queued transaction (lenient mode; docs/wallet-ux.md, screen 9) shows
   Signed, then a step "Queued: waits for Ethereum to catch up. Keep
-  Serotine open to send it sooner.", then Sent, which waits for the
+  Punicus open to send it sooner.", then Sent, which waits for the
   check; "Still send this? You signed it 2 h ago." with Send now past
   its hour; a conflict in plain words with Sign again and Discard; Edit and
   Discard otherwise. As in Detailed view, with no block. A Safe
@@ -406,7 +406,7 @@ stays under *Details*, as Send's draft does (S2):
   counted and the approvals on chain read once the light client has caught
   up; a line on top saying what Sign, Approve on chain and Execute are
   prepared on. Sign holds its signature: Signed, then Held ("Waits for
-  Ethereum to catch up. Keep Serotine open to check it sooner."), then In the
+  Ethereum to catch up. Keep Punicus open to check it sooner."), then In the
   queue, to share, once it checks out; no QR code or text before then;
   Discard, or Dismiss and, for a proposal whose nonce was used, taken or
   left behind a gap, Propose again. A co-signature's stand is shown on the

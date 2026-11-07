@@ -1020,7 +1020,7 @@ class SwapViewModel(
         val approval = review.quoted is Quoted.Approval
         val failed = when (val quoted = review.quoted) {
             is Quoted.Approval -> APPROVAL_FAILED
-            is Quoted.Wrap -> "Serotine could not finish this ${verbOf(quoted.quote.direction).lowercase()}. Check " +
+            is Quoted.Wrap -> "Punicus could not finish this ${verbOf(quoted.quote.direction).lowercase()}. Check " +
                 "the account's balances before you try again."
             is Quoted.Swap, is Quoted.Cow -> SWAP_FAILED
         }
@@ -1896,7 +1896,7 @@ class SwapViewModel(
         } + " (CoW's word: ${quoting.errorType})."
         is CowSwapQuoting.CowNoAnswer -> when (quoting.why) {
             CowUnavailable.UNDECODABLE ->
-                "CoW gave an answer this version does not understand: an update of Serotine brings CoW back."
+                "CoW gave an answer this version does not understand: an update of Punicus brings CoW back."
             CowUnavailable.NOT_PINNED -> "No CoW API is pinned for ${network.displayName}."
             CowUnavailable.TIMEOUT, CowUnavailable.NO_CONNECTION, CowUnavailable.SERVER_ERROR -> "CoW did not answer."
         }
@@ -2000,8 +2000,8 @@ class SwapViewModel(
             "answered when it was broadcast, and no block has it yet. Try it again from its status rather than " +
             "sign a new one, which could pay twice."
         const val SWAP_FAILED =
-            "Serotine could not finish this swap. Check the account's balances before you swap again."
-        const val ORDER_FAILED = "Serotine could not finish this order. If it reached CoW, it is held back until it " +
+            "Punicus could not finish this swap. Check the account's balances before you swap again."
+        const val ORDER_FAILED = "Punicus could not finish this order. If it reached CoW, it is held back until it " +
             "fills or can no longer fill: check the account's balances before you swap again."
         const val FLOOR_ROSE = "The verified Uniswap net rose above this order's floor since it was quoted: it was " +
             "quoted again. Check it."
@@ -2012,9 +2012,9 @@ class SwapViewModel(
         const val VAULT_RELAYER_NAME = "CoW's vault relayer"
         const val WETH9_NAME = "WETH9, the wrapped ether contract"
         const val SETTLEMENT_NAME = "CoW's settlement contract"
-        const val APPROVAL_FAILED = "Serotine could not finish this approval. Try again."
+        const val APPROVAL_FAILED = "Punicus could not finish this approval. Try again."
         const val LIST_UNAVAILABLE =
-            "Your account list cannot be read right now, so nothing can be swapped. Serotine keeps trying."
+            "Your account list cannot be read right now, so nothing can be swapped. Punicus keeps trying."
         const val NOT_IN_WALLET = "This account is not in your wallet any more."
         const val SAFE = "A Safe's swap is proposed as Safe transactions its owners sign: Swap on the Safe's " +
             "own screen proposes one."

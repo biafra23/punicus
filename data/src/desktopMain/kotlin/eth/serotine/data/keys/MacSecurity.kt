@@ -253,7 +253,7 @@ internal class MacSecurity private constructor() {
             }
     } catch (e: Throwable) {
         // Throwable: JNA fails with Errors too.
-        println("Serotine: IOKit does not say which Mac this is (${e::class.simpleName})")
+        println("Punicus: IOKit does not say which Mac this is (${e::class.simpleName})")
         null
     }
 
@@ -384,7 +384,7 @@ internal class MacSecurity private constructor() {
             try {
                 MacSecurity()
             } catch (e: Throwable) {
-                println("Serotine: Security.framework cannot be loaded (${e::class.simpleName})")
+                println("Punicus: Security.framework cannot be loaded (${e::class.simpleName})")
                 null
             }
         }
