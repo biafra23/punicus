@@ -25,7 +25,6 @@ private val gnosis =
     NetworkRow(100, "Gnosis Chain", true, "1 account · Verified at block 42,511,906 · 3 s ago", VERIFIED)
 private val sepoliaOff = NetworkRow(11_155_111, "Sepolia", false, "1 account · Off", NOT_RUNNING, testnet = true)
 
-/** Docs/networks.md's N16: a release build updated from the Sepolia-only release, Sepolia off. */
 /** The heavy downloads not allowed on a metered connection, the default, on one that is not. */
 internal val meteredNotAllowed = MeteredDownloadsItem(
     on = false,
@@ -33,6 +32,7 @@ internal val meteredNotAllowed = MeteredDownloadsItem(
     simpleText = METERED_DOWNLOADS_OFF_SIMPLE,
 )
 
+/** Docs/networks.md's N16: a release build updated from the Sepolia-only release, Sepolia off. */
 private val synced = SettingsUiState(
     listOf(ethereum, gnosis, sepoliaOff),
     VERSION,
@@ -281,6 +281,30 @@ private fun SettingsMeteredUnreadablePreview() = SettingsPreview(
     ),
 )
 
+/** A choice that could not be saved: the row says so, the switch as it was. */
+@Preview
+@Composable
+private fun SettingsMeteredNotSavedPreview() = SettingsPreview(
+    synced.copy(
+        meteredDownloads = MeteredDownloadsItem(
+            on = false,
+            text = "$METERED_DOWNLOADS_OFF · Your choice could not be saved",
+        ),
+    ),
+)
+
+/** A saved choice found damaged and set aside: not allowed, said until a choice is made again. */
+@Preview
+@Composable
+private fun SettingsMeteredSetAsidePreview() = SettingsPreview(
+    synced.copy(
+        meteredDownloads = MeteredDownloadsItem(
+            on = false,
+            text = "$METERED_DOWNLOADS_OFF (your saved choice was damaged and set aside)",
+        ),
+    ),
+)
+
 /** Every preview above, which SettingsScreenPreviewsTest renders: a new preview goes in here too. */
 internal val settingsScreenPreviews: List<ScreenPreview> = listOf(
     ScreenPreview("synced") { SettingsSyncedPreview() },
@@ -309,6 +333,8 @@ internal val settingsScreenPreviews: List<ScreenPreview> = listOf(
     ScreenPreview("metered-not-reported") { SettingsMeteredNotReportedPreview() },
     ScreenPreview("metered-not-reported-dark") { SettingsMeteredNotReportedDarkPreview() },
     ScreenPreview("metered-unreadable") { SettingsMeteredUnreadablePreview() },
+    ScreenPreview("metered-not-saved") { SettingsMeteredNotSavedPreview() },
+    ScreenPreview("metered-set-aside") { SettingsMeteredSetAsidePreview() },
 )
 
 /** Not allowed, on a metered connection now, for this file's previews and simple mode's. */

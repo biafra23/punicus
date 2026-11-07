@@ -30,7 +30,9 @@ fun SimpleSettingsScreen(
 ) = SettingsScreen(
     state.copy(
         networks = state.networks.map { it.copy(line = it.simpleLine) },
-        meteredDownloads = state.meteredDownloads?.let { it.copy(text = it.simpleText) },
+        meteredDownloads = state.meteredDownloads?.let {
+            it.copy(text = it.simpleText, unavailableReason = it.simpleUnavailableReason)
+        },
     ),
     onCurrency,
     onTokens,

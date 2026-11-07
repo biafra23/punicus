@@ -618,7 +618,11 @@ answered with an empty list.
   left out as "walk" and re-applies the last one after a pause; a change of
   it alone is a push with nothing to watch or unwatch, which the engine
   unions with what it holds. Each network's index is paused alike, and a
-  light client started again is told the bit with everything else. Paused,
+  light client started again is told the bit with everything else. Until
+  the first push the walk does not run: the engine activates an index from
+  disk with its walk paused (`set_backfill_paused(true)` in
+  `activate_log_index_from_disk`, Myotis's `el/reader.rs`), which a restart
+  relies on. Paused,
   the index still follows the new blocks (the engine's head-follow), and
   coverage below where the walk stood waits for it.
 - **What the walk tells a peer.** Receipts are fetched only for the blocks

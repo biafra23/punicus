@@ -48,13 +48,14 @@ data class SettingsUiState(
  * a metered connection (owner ruling, 2026-10-20): [on] when allowed, [text] what that means now
  * ("Off: … · Waiting now"), [simpleText] the same in simple mode's words (docs/simple-ui.md), and
  * [unavailableReason] when it cannot be changed (on this device, or while the choice cannot be
- * read), said on a tap of the greyed row.
+ * read), said on a tap of the greyed row; [simpleUnavailableReason] that in simple mode's words.
  */
 data class MeteredDownloadsItem(
     val on: Boolean,
     val text: String,
     val unavailableReason: String? = null,
     val simpleText: String = text,
+    val simpleUnavailableReason: String? = unavailableReason,
 )
 
 /** What the switch says while the heavy downloads are not allowed on a metered connection. */

@@ -318,6 +318,8 @@ class SettingsViewModel(
                     "metered connection here to allow it on.",
                 simpleText = "This device doesn't say whether its connection is metered: older activity is " +
                     "checked on any connection",
+                simpleUnavailableReason = "This device doesn't say whether its connection is metered, so older " +
+                    "activity is checked on any connection. There's nothing here to allow.",
             )
         }
         val unreadable = choice is MeteredDownloadsChoice.Unreadable
@@ -339,6 +341,12 @@ class SettingsViewModel(
             on = allowedOnMetered,
             text = (if (allowedOnMetered) METERED_DOWNLOADS_ON else METERED_DOWNLOADS_OFF) + remark + waiting,
             unavailableReason = reason,
+            simpleUnavailableReason = if (unreadable) {
+                "Your saved choice can't be read, so older activity is checked only on Wi-Fi or another " +
+                    "unmetered connection. Serotine keeps trying to read it, and the switch works again once it can."
+            } else {
+                null
+            },
             simpleText = (if (allowedOnMetered) METERED_DOWNLOADS_ON_SIMPLE else METERED_DOWNLOADS_OFF_SIMPLE) +
                 remark + if (mayRun) "" else " · Waiting now for Wi-Fi or another unmetered connection",
         )

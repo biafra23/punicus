@@ -27,7 +27,8 @@ interface LogIndex {
      * and coverage below where the walk stood waits until a change asks with it false. Every change
      * says it, as the engine keeps the one asked last; a change with nothing to [watch] or
      * [unwatch] only sets it, and is taken whenever the engine runs, before its reads can be
-     * verified too.
+     * verified too. Until the first change after a start, the walk does not run: the engine starts
+     * an index kept on disk with its walk paused.
      */
     suspend fun configure(
         network: Network,

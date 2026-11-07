@@ -111,6 +111,35 @@ private fun SimpleSettingsSignWhileSyncingNotSavedPreview() =
 private fun SimpleSettingsMeteredPausedPreview() =
     SimpleSettingsPreview(simple.copy(meteredDownloads = meteredPausedSample))
 
+/** A desktop, which does not report metering: the switch greyed out, in simple mode's words. */
+@Preview
+@Composable
+private fun SimpleSettingsMeteredNotReportedPreview() = SimpleSettingsPreview(
+    simple.copy(
+        meteredDownloads = MeteredDownloadsItem(
+            on = false,
+            text = "This device does not say whether its connection is metered",
+            unavailableReason = "This device does not report whether its connection is metered.",
+            simpleText = "This device doesn't say whether its connection is metered: older activity is checked " +
+                "on any connection",
+        ),
+    ),
+)
+
+/** A choice that cannot be read: greyed out until it can be read. */
+@Preview
+@Composable
+private fun SimpleSettingsMeteredUnreadablePreview() = SimpleSettingsPreview(
+    simple.copy(
+        meteredDownloads = MeteredDownloadsItem(
+            on = false,
+            text = "$METERED_DOWNLOADS_OFF (your choice cannot be read)",
+            unavailableReason = "Your saved choice cannot be read.",
+            simpleText = "$METERED_DOWNLOADS_OFF_SIMPLE (your choice cannot be read)",
+        ),
+    ),
+)
+
 /** Every preview above, which SimpleSettingsScreenPreviewsTest renders: a new preview goes in here too. */
 internal val simpleSettingsScreenPreviews: List<ScreenPreview> = listOf(
     ScreenPreview("default") { SimpleSettingsPreviewDefault() },
@@ -120,4 +149,6 @@ internal val simpleSettingsScreenPreviews: List<ScreenPreview> = listOf(
     ScreenPreview("sign-while-syncing-queued") { SimpleSettingsSignWhileSyncingQueuedPreview() },
     ScreenPreview("sign-while-syncing-not-saved") { SimpleSettingsSignWhileSyncingNotSavedPreview() },
     ScreenPreview("metered-paused") { SimpleSettingsMeteredPausedPreview() },
+    ScreenPreview("metered-not-reported") { SimpleSettingsMeteredNotReportedPreview() },
+    ScreenPreview("metered-unreadable") { SimpleSettingsMeteredUnreadablePreview() },
 )
