@@ -1,5 +1,6 @@
 package eth.serotine.data.outbox
 
+import eth.serotine.data.files.fileThere
 import eth.serotine.data.files.syncDirectoryOf
 import eth.serotine.data.keys.EnvelopeCrypto
 import eth.serotine.domain.model.AccountId
@@ -36,7 +37,8 @@ import kotlinx.io.readByteArray
  * reset, a copy restored on another device), and a file sealed under another key or damaged (its tag
  * does not verify). A file that cannot be read right now (the key store would not say whether its
  * key exists, the hardware failed, a version of Serotine wrote what this one cannot read, an I/O
- * error) is [OutboxList.Unreadable], untouched,
+ * error, a file system that cannot say whether the file or its marker is there) is
+ * [OutboxList.Unreadable], untouched,
  * read again by the next subscriber, and nothing changes until it can be read. File work runs on
  * [dispatcher].
  */
@@ -74,7 +76,9 @@ internal class SealedOutboxFile(
         val loaded = loadedOrNull() ?: return@withLock false
         withContext(NonCancellable + dispatcher) {
             try {
-                if (SystemFileSystem.exists(lostMarker)) SystemFileSystem.delete(lostMarker)
+                SystemFileSystem.delete(lostMarker, mustExist = false)
+                // Dismissed only once the file system says the marker is gone.
+                if (fileThere(lostMarker.toString()) != false) return@withContext false
                 state.value = loaded.copy(lost = false)
                 true
             } catch (e: Exception) {
@@ -97,8 +101,15 @@ internal class SealedOutboxFile(
 
     private suspend fun load(): OutboxList = withContext(dispatcher) {
         try {
-            val lost = SystemFileSystem.exists(lostMarker)
-            if (!SystemFileSystem.exists(file)) return@withContext OutboxList.Loaded(emptyList(), lost)
+            // Asked of the file system, never guessed: a file it cannot tell about is taken as there, so
+            // what it holds is never read as nothing, nor written over (kotlinx-io's `exists` says absent).
+            val lost = fileThere(lostMarker.toString())
+                ?: return@withContext unreadable("whether it was lost cannot be told")
+            when (fileThere(path)) {
+                false -> return@withContext OutboxList.Loaded(emptyList(), lost)
+                null -> return@withContext unreadable("whether its file is there cannot be told")
+                true -> Unit
+            }
             // Whether the key existed before anything could make one: asked of the first read only.
             if (!keyChecked) {
                 when (seal.keyExistedAtStart) {
