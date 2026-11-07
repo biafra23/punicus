@@ -60,6 +60,7 @@ import eth.serotine.domain.usecase.ObserveOutbox
 import eth.serotine.ui.outbox.conflictReason
 import eth.serotine.domain.repository.QueuedTransaction
 import eth.serotine.domain.repository.QueueConflict
+import eth.serotine.domain.repository.QueueRefusal
 import eth.serotine.domain.repository.OutboxList
 import eth.serotine.domain.repository.FeeLevel
 import eth.serotine.domain.repository.DraftBasis
@@ -729,6 +730,31 @@ class TransferStatusViewModelTest {
         assertTrue(outbox.queued.isEmpty(), "discarded first")
         val discarded = assertIs<TransferStatusUiState.Discarded>(viewModel.uiState.value)
         assertEquals(again, discarded.reopen)
+    }
+
+    @Test
+    fun aQueuedSafeApprovalSaysWhatItApprovesAndSignAgainOpensItsSafeTransaction() = runTest {
+        val safe = Address.of("0x" + "5a".repeat(20))
+        val request = SigningRequest.of(Network.SEPOLIA, safe, SafeTx.call(usdc.address, UInt256.ZERO, ByteArray(0), 12))
+        val approval = queued(conflict = QueueConflict.Refused(QueueRefusal.NOT_AN_OWNER))
+            .copy(action = SentAction.SafeApproval(request))
+        outbox.list.value = OutboxList.Loaded(listOf(approval))
+        val viewModel = viewModel(hash = queuedBytes.hash)
+        runCurrent()
+
+        val state = viewModel.queuedState
+        assertEquals("Approval of a Safe transaction", state.safeTx?.title)
+        assertEquals("Safe nonce 12", state.safeTx?.nonce)
+        assertEquals(null, state.again, "no Send to open for it")
+        assertEquals(SafeTxAgain(Network.SEPOLIA.chainId, safe.hex, "0x" + request.hash.hex), state.safeAgain)
+        assertEquals("This account is no longer an owner of the Safe. Nothing was sent, and its signature was deleted.", state.steps[1].detail)
+
+        viewModel.signAgain()
+        runCurrent()
+
+        assertTrue(outbox.queued.isEmpty(), "discarded first")
+        val discarded = assertIs<TransferStatusUiState.Discarded>(viewModel.uiState.value)
+        assertEquals(state.safeAgain, discarded.reopenSafe)
     }
 
     @Test

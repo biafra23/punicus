@@ -89,11 +89,19 @@ class LenientTransfersTest {
     private val unlock = Unlock.WithPassword(WalletPassword("correct horse battery"))
     private val queueLock = OutboxLock()
 
+    /** No Safe here: what the follower checks held signatures with, which none are. */
+    private val safes = NoSafes()
+
+    private class NoSafes {
+        val world = SafeWorld()
+        val checkHeld = CheckHeldSignature(world.observeSafe, world.recovery)
+    }
+
     // The check's fresh state: the head verifies, the same balance, count and fees.
     private val inputs = FakeInputs()
     private val light = FakeLightClient().also { it.status.value = LightClientStatus.Synced(100, 1_800_000_090, null) }
     private val quotes = QuoteTransfer(inputs, freshBalances(), freshTokens(), sent, orders, cowChain, light, network, outbox) { now }
-    private val check = CheckQueued { quotes }
+    private val check = CheckQueued({ quotes }, { error("no Safe here") }, { error("no Safe here") })
 
     private var freshNative = BalanceReading.Verified(Wei.of(eth.toString()), 100) as BalanceReading
     private fun freshBalances() = object : NativeBalances {
@@ -502,7 +510,7 @@ class LenientTransfersTest {
     private suspend fun queuedTenth() = queued(UInt256.of(eth / 10))
 
     private fun follower(broadcaster: Broadcaster, notifier: OutboxNotifier, lock: OutboxLock = OutboxLock()) =
-        FollowOutbox(outbox, check, light, broadcaster, sent, notifier, lock, { now })
+        FollowOutbox(outbox, check, light, broadcaster, sent, notifier, lock, safes.checkHeld, safes.world.queue, { now })
 
     private fun feeQuote(base: Long, block: Long) = FeeQuote(
         nextBaseFee = UInt256.of(base),
@@ -569,25 +577,6 @@ class LenientTransfersTest {
         }
     }
 
-    private class ListOutbox : Outbox {
-        val queued = MutableStateFlow<List<QueuedTransaction>>(emptyList())
-        var unreadable = false
-
-        override fun observe(): Flow<OutboxList> = queued.map { if (unreadable) OutboxList.Unreadable else OutboxList.Loaded(it) }
-
-        override suspend fun put(queued: QueuedTransaction): Boolean {
-            this.queued.value = this.queued.value.filterNot { it.accountId == queued.accountId } + queued
-            return true
-        }
-
-        override suspend fun remove(account: AccountId): Boolean {
-            queued.value = queued.value.filterNot { it.accountId == account }
-            return true
-        }
-
-        override suspend fun acknowledgeLost(): Boolean = true
-    }
-
     private class FakeSigner(private val answer: Signing) : Signer {
         val asked = mutableListOf<Triple<Address, Digest, Unlock>>()
 
@@ -603,20 +592,6 @@ class LenientTransfersTest {
         override suspend fun send(network: Network, raw: ByteArray): Broadcast {
             sent += raw
             return answer
-        }
-    }
-
-    private class RecordingNotifier : OutboxNotifier {
-        val told = mutableListOf<String>()
-
-        override fun sent(queued: QueuedTransaction, hash: String) {
-            told += "sent $hash"
-        }
-
-        override fun conflict(queued: QueuedTransaction, conflict: QueueConflict) {
-            // Never the bytes of a transaction not sent.
-            assertNull(queued.signed)
-            told += "conflict"
         }
     }
 }

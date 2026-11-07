@@ -8,7 +8,9 @@ places *The rules it changes* names; where this page and the rules under
 `.claude/` disagree, the rules win and this page is fixed. docs/wallet-ux.md
 and docs/simple-ui.md take over the screens as each part lands.
 
-This page has no mockups yet. They come with the screens' part (*Delivery*).
+The screens' part (*Delivery*, part 4) drew no mockups: the previews of
+every new state, which CI renders into `docs/screenshots/`, stand in for
+them.
 
 ## The request
 
@@ -141,8 +143,11 @@ has its age, and the review shows it.
 - **The gas limit.** An estimate needs fresh state, so a draft signs a
   pinned ceiling for its kind of call: one for the network's currency, one
   for a token's `transfer`. They are high enough for a Safe or another
-  contract as recipient. The PR that codes them pins the values, each
-  measured on its network. Gas not used is not paid. The ceiling shows only
+  contract as recipient. The PR that codes them pins the values. As built,
+  each is derived from the EVM's gas schedule with room, the same on every
+  network, not measured on one (`DraftGas`): a call that needs more fails
+  the check, whose fresh estimate must fit, and is signed again. Gas not
+  used is not paid. The ceiling shows only
   in the most the fee can be.
 - **No simulation.** A verified call needs a fresh head. The review says the
   transfer runs on chain before it is sent.
@@ -478,6 +483,18 @@ follows the five steps of docs/architecture.md's checklist.
    Discard. The mockups and
    docs/wallet-ux.md's screens come first in this part.
 5. **Safe transactions in lenient mode**, on the rule changes part 1
-   records, rule change 4's Safe values among them.
+   records, rule change 4's Safe values among them. The port `KeptSafes`
+   and its file, `kept-safes.json`, which the address kinds' adapter keeps
+   each Safe it proves in, as part 2 keeps the mined counts. The use cases:
+   `DraftSafeTx` (the proposal's draft), `HoldSafeSignature` (a proposal or
+   a co-signature signed and held, in the outbox's sealed file beside what
+   is queued, one per Safe and nonce), `CheckHeldSignature` (its check, run
+   by `FollowOutbox`, which saves what passes to the Safe's queue and tells
+   the host's `OutboxNotifier`), `DiscardHeld`; `DraftSafeCall` and
+   `QueueSafeCall` (an approval on chain or an execution, queued like a
+   send), which `CheckQueued` checks with the strict quote made again. A
+   swap, and the token approval it needs, stay strict, as Swap does. The
+   screens: Send from a Safe's draft (16), the held signature and the drafts
+   of 17, the queued approval or execution on 9, in both views.
 
 The final PR, `feature/lenient-mode` → `main`, links every part.

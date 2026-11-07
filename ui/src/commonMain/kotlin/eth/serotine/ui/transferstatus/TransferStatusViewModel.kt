@@ -107,6 +107,7 @@ class TransferStatusViewModel(
         val discarded: Boolean = false,
         val gone: Boolean = false,
         val reopen: SendAgain? = null,
+        val reopenSafe: SafeTxAgain? = null,
         val error: String? = null,
     )
 
@@ -214,7 +215,9 @@ class TransferStatusViewModel(
         val queued = queuedNow ?: return
         val current = changes.value
         if (queued.sending || current.discarding || current.discarded || current.gone) return
-        val again = if (reopen) sendAgainOf(queued) ?: return else null
+        val again = if (reopen) sendAgainOf(queued) else null
+        val safeAgain = if (reopen) safeAgainOf(queued) else null
+        if (reopen && again == null && safeAgain == null) return
         changes.value = current.copy(discarding = true, error = null)
         viewModelScope.launch {
             // To its end even when the screen is left meanwhile: a discard is made or not, never half.
@@ -228,7 +231,7 @@ class TransferStatusViewModel(
             val latest = changes.value.copy(discarding = false)
             changes.value = when (outcome) {
                 // Only a transfer this discard deleted is told as discarded, and only then is Send reopened.
-                QueuedDiscard.Discarded -> latest.copy(discarded = true, reopen = again)
+                QueuedDiscard.Discarded -> latest.copy(discarded = true, reopen = again, reopenSafe = safeAgain)
                 QueuedDiscard.Gone -> latest.copy(gone = true)
                 QueuedDiscard.BeingSent -> latest.copy(error = BEING_SENT_NOT_DISCARDED)
                 QueuedDiscard.NotSaved -> latest.copy(error = DISCARD_NOT_SAVED)
@@ -266,7 +269,9 @@ class TransferStatusViewModel(
         val shown = queued ?: lastQueued.takeIf { changes.discarding && transfer == null }
         if (shown != null && !changes.discarded) return queuedState(shown, waits, changes)
         // Deleted under the outbox's lock before any broadcast of it: nothing was sent.
-        if (changes.discarded) return TransferStatusUiState.Discarded(network.displayName, DISCARDED, changes.reopen)
+        if (changes.discarded) {
+            return TransferStatusUiState.Discarded(network.displayName, DISCARDED, changes.reopen, changes.reopenSafe)
+        }
         // No longer queued when the discard came: sent meanwhile (its record follows), or discarded already.
         if (changes.gone && transfer == null) {
             return TransferStatusUiState.Discarded(network.displayName, NO_LONGER_QUEUED)
@@ -343,6 +348,7 @@ class TransferStatusViewModel(
             )
         }
         val action = if (conflict != null) "Sign again" else "Edit"
+        val safeAgain = safeAgainOf(queued)
         return TransferStatusUiState.Queued(
             network = name,
             id = queued.id,
@@ -350,8 +356,16 @@ class TransferStatusViewModel(
             // Signed on this device first; then it waits in the outbox; then it is sent.
             steps = listOf(signed, first, broadcast),
             again = sendAgainOf(queued),
+            safeAgain = safeAgain,
+            safeTx = safeTxSummary(queued.action, queued.account),
             againLabel = action,
-            againNote = if (conflict != null) {
+            againNote = if (safeAgain != null) {
+                if (conflict != null) {
+                    "Sign again discards it and opens its Safe transaction, to approve or execute it anew."
+                } else {
+                    "Edit discards it and opens its Safe transaction. Discard deletes its signature: nothing is sent."
+                }
+            } else if (conflict != null) {
                 "Sign again discards it and opens Send with it filled in, to be reviewed and signed anew."
             } else {
                 "Edit discards it and opens Send with it filled in. Discard deletes its signature: nothing is sent."
@@ -362,6 +376,16 @@ class TransferStatusViewModel(
             discarding = changes.discarding,
             error = changes.error,
         )
+    }
+
+    /** The Safe transaction [queued] approves or executes, which Sign again and Edit open: null for anything else. */
+    private fun safeAgainOf(queued: QueuedTransaction): SafeTxAgain? {
+        val request = when (val action = queued.action) {
+            is SentAction.SafeApproval -> action.request
+            is SentAction.SafeExecution -> action.request
+            else -> return null
+        }
+        return SafeTxAgain(queued.network.chainId, request.safe.hex, "0x" + request.hash.hex)
     }
 
     /** What Send opens with to sign [queued] again: its account, asset, recipient, amount and fee level. */
@@ -739,8 +763,11 @@ class TransferStatusViewModel(
     }
 
     /** What [transfer] did, when it is an approval or an execution of a Safe transaction. */
-    private fun safeTxSummary(transfer: SentTransfer): SafeTxSummary? {
-        val (title, request) = when (val action = transfer.action) {
+    private fun safeTxSummary(transfer: SentTransfer): SafeTxSummary? = safeTxSummary(transfer.action, transfer.account)
+
+    /** What [action] from [account] does, when it is an approval or an execution of a Safe transaction. */
+    private fun safeTxSummary(action: SentAction, account: Address): SafeTxSummary? {
+        val (title, request) = when (action) {
             is SentAction.SafeApproval -> "Approval of a Safe transaction" to action.request
             is SentAction.SafeExecution -> "Execution of a Safe transaction" to action.request
             is SentAction.Transfer, is SentAction.SafeDeployment, is SentAction.TokenApproval,
@@ -752,7 +779,7 @@ class TransferStatusViewModel(
             title = title,
             safe = Eip55.format(request.safe),
             nonce = "Safe nonce ${request.nonce}",
-            from = Eip55.format(transfer.account),
+            from = Eip55.format(account),
         )
     }
 

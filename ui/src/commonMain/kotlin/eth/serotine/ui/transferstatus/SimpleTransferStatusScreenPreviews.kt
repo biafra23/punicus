@@ -159,6 +159,11 @@ private fun SimpleTransferQueuedPastItsHourPreview() = SimpleTransferStatusPrevi
 @Composable
 private fun SimpleTransferQueuedConflictPreview() = SimpleTransferStatusPreview(queuedConflictSample)
 
+/** A Safe's approval on chain queued in lenient mode: the Safe it is of, its steps in simple mode's words. */
+@Preview
+@Composable
+private fun SimpleTransferQueuedSafeApprovalPreview() = SimpleTransferStatusPreview(queuedSafeApprovalSample)
+
 /** Every preview above, which SimpleTransferStatusScreenPreviewsTest renders: a new preview goes in here too. */
 internal val simpleTransferStatusScreenPreviews: List<ScreenPreview> = listOf(
     ScreenPreview("confirmed") { SimpleTransferConfirmedPreview() },
@@ -170,4 +175,5 @@ internal val simpleTransferStatusScreenPreviews: List<ScreenPreview> = listOf(
     ScreenPreview("queued-dark") { SimpleTransferQueuedDarkPreview() },
     ScreenPreview("queued-past-its-hour") { SimpleTransferQueuedPastItsHourPreview() },
     ScreenPreview("queued-conflict") { SimpleTransferQueuedConflictPreview() },
+    ScreenPreview("queued-safe-approval") { SimpleTransferQueuedSafeApprovalPreview() },
 )

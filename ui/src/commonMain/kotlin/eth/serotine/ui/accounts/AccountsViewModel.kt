@@ -546,12 +546,13 @@ class AccountsViewModel(
         const val REFRESH_SHOWN_SECONDS = 15L
 
         /**
-         * What Home says once queued signed bytes could not be opened (docs/lenient-mode.md, *The
-         * signed bytes kept*).
+         * What Home says once queued signed bytes, or a Safe signature held until its check, could not
+         * be opened (docs/lenient-mode.md, *The signed bytes kept*, *Safe transactions in lenient mode*).
          */
         const val LOST = "A transaction waiting to be sent was lost: the key that sealed it on this device is gone " +
             "(the key store was reset, or the app was restored on another device). Nothing was sent. Sign it again " +
-            "from Send if you still want to send it."
+            "from Send if you still want to send it. A Safe signature waiting for its check is lost the same way, " +
+            "never shown: sign it again on its Safe transaction."
 
         const val LOST_NOT_DISMISSED = "The notice could not be dismissed: it is shown again next time."
 

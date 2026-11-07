@@ -93,7 +93,7 @@ class DappSafeTransactionViewModelTest {
             ),
             ProposeDappSafeTx(
                 requests, world.accounts, networks, world.catalog, world.observeSafe, world.balances, world.inputs,
-                world.queue, clock = { now },
+                world.queue, Outbox.None, clock = { now },
             ),
             SignDappSafeTx(requests) { SignSafeTx(world.signer, world.observeSafe, world.recovery, world.queue, it) },
             RefuseDappRequest(requests, world.accounts, networks, clock = { now }),
@@ -139,7 +139,7 @@ class DappSafeTransactionViewModelTest {
             ),
             ProposeDappSafeTx(
                 requests, gnosis.accounts, on, gnosis.catalog, gnosis.observeSafe, gnosis.balances, gnosis.inputs,
-                gnosis.queue, clock = { now },
+                gnosis.queue, Outbox.None, clock = { now },
             ),
             SignDappSafeTx(requests) { SignSafeTx(gnosis.signer, gnosis.observeSafe, gnosis.recovery, gnosis.queue, it) },
             RefuseDappRequest(requests, gnosis.accounts, on, clock = { now }),

@@ -29,7 +29,8 @@ fun SimpleSafeProposeScreen(
     onCopy = onCopy,
     onShareText = onShareText,
     modifier = modifier,
-    details = (state as? SafeProposeUiState.Review)?.details().orEmpty(),
+    details = (state as? SafeProposeUiState.Review)?.details()
+        ?: (state as? SafeProposeUiState.DraftReview)?.details().orEmpty(),
     syncLine = syncLine,
 )
 
@@ -49,8 +50,22 @@ private fun SafeProposeUiState.simple(): SafeProposeUiState = when (this) {
         simulation = simpleSimulation ?: simulation,
         error = simpleError ?: error,
     )
+    // A draft says each figure's age; its blocks are behind Details.
+    is SafeProposeUiState.DraftReview -> copy(
+        recipient = recipient.copy(resolvedAt = null),
+        nonce = nonceAge,
+        threshold = thresholdAge,
+        balance = balance.copy(verifiedAt = ""),
+    )
     else -> this
 }
+
+/** What a draft's review keeps behind *Details* in simple mode: the blocks Detailed view names. */
+private fun SafeProposeUiState.DraftReview.details(): List<String> = listOf(
+    nonce,
+    threshold,
+    "${balance.what}: ${balance.verifiedAt}",
+)
 
 /** What the review keeps behind *Details* in simple mode: the blocks Detailed view names. */
 private fun SafeProposeUiState.Review.details(): List<String> = listOfNotNull(

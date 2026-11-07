@@ -17,6 +17,8 @@ import eth.serotine.domain.model.TransferAsset
 import eth.serotine.domain.model.UInt256
 import eth.serotine.domain.repository.BalanceReading
 import eth.serotine.domain.repository.NativeBalances
+import eth.serotine.domain.repository.Outbox
+import eth.serotine.domain.repository.OutboxList
 import eth.serotine.domain.repository.ReadUnavailable
 import eth.serotine.domain.repository.SafeState
 import eth.serotine.domain.repository.SafeTxQueue
@@ -40,6 +42,7 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.firstOrNull
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
 
@@ -161,6 +164,15 @@ sealed interface SafeTxRefusal {
 
     /** The light client has no verified head yet. */
     data object Syncing : SafeTxRefusal
+
+    /**
+     * A swap, or the token approval a swap needs, while the light client catches up: neither is
+     * drafted on what was verified last, also with *Sign while syncing* on (docs/lenient-mode.md,
+     * *What stays strict*): a swap's minimum is judged against a fresh quote, and an approval's
+     * spender against the router's code proven now, which the review shows before anything is
+     * signed. It waits for the light client.
+     */
+    data object SwapNeedsFreshCheck : SafeTxRefusal
 
     /** A verified figure could not be had right now, for [reason]. */
     data class Unavailable(val reason: ReadUnavailable) : SafeTxRefusal
@@ -613,6 +625,11 @@ sealed interface SafeTxSigning {
  * An engine that will not run a call from a contract's address leaves it not simulated, and the
  * proposal says so. No state override is used.
  *
+ * The signatures held in lenient mode until their check ([Outbox]; docs/lenient-mode.md, *Safe
+ * transactions in lenient mode*) take their nonces and their moves as the queued ones do: a held
+ * proposal is in no queue until it checks out, and a proposal made meanwhile never takes its nonce
+ * (one per Safe and nonce). An outbox that cannot be read holds none, as an unreadable queue does.
+ *
  * Nothing is saved: signing it ([SignSafeTx]) queues it. On [network] only.
  */
 class ProposeSafeTx(
@@ -622,6 +639,7 @@ class ProposeSafeTx(
     private val inputs: TransactionInputs,
     private val queue: SafeTxQueue,
     private val network: Network,
+    private val outbox: Outbox,
 ) {
     /**
      * Proposes [amount] of [asset] from [safe] to [to]. [safeChecked] is called once the Safe is
@@ -653,6 +671,7 @@ class ProposeSafeTx(
             safeChecked()
             val balance = async { safeBalanceOf(network, nativeBalances, tokenBalances, safe, token?.address) }
             val queued = async { queue.observe(AccountId(network, safe)).first() }
+            val held = async { outbox.observe().first() }
 
             val (before, balanceBlock) = when (val read = balance.await()) {
                 is SafeBalanceRead.Read -> read.amount to read.blockNumber
@@ -661,7 +680,7 @@ class ProposeSafeTx(
             }
             if (before < amount) return@cancellingReads insufficient(token != null)
             val safeNonce = reading.state.nonce
-            val pending = pendingOf(queued.await(), safeNonce, network)
+            val pending = pendingOf(queued.await(), held.await(), safeNonce, AccountId(network, safe))
             val nonce = nextNonce(pending, safeNonce)
             val ahead = pending.filter { it.nonce < nonce }
             val queuedAmount = ahead.queuedMoves(token?.address) ?: return@cancellingReads insufficient(token != null)
@@ -706,6 +725,29 @@ class ProposeSafeTx(
 internal fun pendingOf(queued: SafeTxQueueList, safeNonce: Long, network: Network): List<SigningRequest> =
     (queued as? SafeTxQueueList.Loaded)?.requests.orEmpty()
         .filter { it.network == network && it.nonce >= safeNonce }
+
+/**
+ * The requests of the signatures [list] holds for the Safe [safe] in lenient mode, each without its
+ * signature: what takes a nonce and moves funds before a new proposal. Not a conflicted one: its
+ * signature is deleted already, so it takes no nonce, and a signature held at its nonce takes its
+ * place. None from an outbox that cannot be read.
+ */
+internal fun heldOf(list: OutboxList, safe: AccountId): List<SigningRequest> =
+    (list as? OutboxList.Loaded)?.held.orEmpty().filter { it.safe == safe && it.signature != null }.map { it.request }
+
+/**
+ * The requests that run before a new proposal from the Safe [safe] at its nonce [safeNonce]: those
+ * of its queue ([pendingOf]) and those of the signatures held for it in lenient mode ([heldOf]), each
+ * at a nonce the Safe has not passed. Every proposer takes its nonce and its funds after them, so a
+ * proposal never lands at the nonce of one held.
+ */
+internal fun pendingOf(
+    queued: SafeTxQueueList,
+    held: OutboxList,
+    safeNonce: Long,
+    safe: AccountId,
+): List<SigningRequest> =
+    pendingOf(queued, safeNonce, safe.network) + heldOf(held, safe).filter { it.nonce >= safeNonce }
 
 /**
  * A Safe's next nonce: its own, or the first after the requests [pending] from it without a gap.
@@ -912,7 +954,20 @@ sealed interface SafeTxQueueReading {
 /**
  * Takes the transaction whose hash is [hash] out of this device's queue: a proposal given up.
  * Only here: a signature already shared stays valid elsewhere until the Safe's nonce passes it.
+ * A signature of it held in lenient mode ([Outbox]) goes with it, both under [lock], so a check
+ * running meanwhile never saves it back into the queue: it waits, and what it saved is removed.
  */
-class RemoveQueuedSafeTx(private val queue: SafeTxQueue) {
-    suspend operator fun invoke(hash: Digest): Boolean = queue.remove(hash)
+class RemoveQueuedSafeTx(
+    private val queue: SafeTxQueue,
+    private val outbox: Outbox,
+    private val lock: OutboxLock,
+) {
+    suspend operator fun invoke(hash: Digest): Boolean = lock.mutex.withLock {
+        if (!queue.remove(hash)) return@withLock false
+        // A held one that cannot be released now is released by its check, which finds its request gone.
+        (outbox.observe().first() as? OutboxList.Loaded)?.held
+            ?.filter { it.hash == hash }
+            ?.forEach { outbox.release(it.safe, hash) }
+        true
+    }
 }

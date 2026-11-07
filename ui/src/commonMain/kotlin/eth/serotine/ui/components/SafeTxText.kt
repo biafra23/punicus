@@ -488,6 +488,7 @@ internal fun safeTxRefusalText(refusal: SafeTxRefusal, network: Network): String
         "of them lost, the rest could never reach the threshold again. That needs a recovery module, and Serotine " +
         "recognises none yet (#54), so it does not sign, approve or execute it."
     SafeTxRefusal.Syncing -> "The light client is not synced yet: try again in a moment."
+    SafeTxRefusal.SwapNeedsFreshCheck -> SWAP_NEEDS_FRESH_CHECK
     is SafeTxRefusal.Unavailable -> unavailableText(refusal.reason)
     is SafeTxRefusal.SafeUnavailable ->
         if (refusal.reason == ReadUnavailable.UNPROVEN) SAFE_UNPROVEN else unavailableText(refusal.reason)
@@ -496,6 +497,15 @@ internal fun safeTxRefusalText(refusal: SafeTxRefusal, network: Network): String
         "Serotine checks signatures today: it is shown, but not signed, approved or executed here. Migrating it " +
         "to a newer version (in Safe{Wallet} or another app) fixes this."
 }
+
+/**
+ * Why a swap, or the token approval it needs, is not prepared on what was verified last
+ * (docs/lenient-mode.md, *What stays strict*): it waits for the light client, also with *Sign while
+ * syncing* on.
+ */
+internal const val SWAP_NEEDS_FRESH_CHECK = "A swap, and the token approval it needs, are checked against the " +
+    "market and the router's code at a fresh head, so this waits for the light client to catch up, also with " +
+    "Sign while syncing on."
 
 /**
  * What a step says while it checks the Safe on chain (Import, Sign, Propose's signature, and

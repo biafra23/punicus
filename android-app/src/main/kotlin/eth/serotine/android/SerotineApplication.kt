@@ -58,6 +58,10 @@ import eth.serotine.domain.model.PriceId
 import eth.serotine.domain.model.RatePair
 import eth.serotine.domain.repository.AccountList
 import eth.serotine.domain.usecase.CheckQueued
+import eth.serotine.domain.usecase.CheckHeldSignature
+import eth.serotine.domain.usecase.ObserveSafe
+import eth.serotine.domain.usecase.QuoteSafeApproval
+import eth.serotine.domain.usecase.QuoteSafeExecution
 import eth.serotine.domain.usecase.FollowAccountLogs
 import eth.serotine.domain.usecase.AnswerDappRequestsAtOnce
 import eth.serotine.domain.usecase.FollowDappAccounts
@@ -150,6 +154,7 @@ class SerotineApplication : Application() {
             debugLog = if (debuggable) { line -> Log.d(LOG_TAG, line) } else null,
             apiLog = debugLog,
             keptInputs = filesDir.resolve("kept-inputs.json").path,
+            keptSafes = filesDir.resolve("kept-safes.json").path,
         ).also { host ->
             scope.launch { followNetworks(host) }
             // Values proven on demand in simple mode, at every head in Detailed view (docs/simple-ui.md).
@@ -274,6 +279,16 @@ class SerotineApplication : Application() {
      */
     private val outbox by lazy { androidOutbox(filesDir.resolve("outbox").resolve("outbox.json").path) }
     private val outboxLock = OutboxLock()
+
+    /**
+     * The Safe transactions waiting for their owners, with the signatures collected (public data, no
+     * key in them), beside the account list in the app's private files. One instance, which the graph
+     * and the outbox's follower share: a held Safe signature that checks out is saved to it.
+     */
+    private val safeTxQueue by lazy { FileSafeTxQueue(filesDir.resolve("safe-tx-queue.json").path) }
+
+    /** Who made a co-signer's signature, for the graph and the outbox's follower alike; no key in it. */
+    private val signatureRecovery = Secp256k1Recovery()
 
     /** The venue last chosen on Swap, compose, which the next swap starts at. */
     private val swapVenue by lazy { FileSwapVenue(filesDir.resolve("swap-venue.json").path) }
@@ -424,11 +439,10 @@ class SerotineApplication : Application() {
             ensNfts = node.ensNfts,
             // The NFTs added by contract and id, beside tokens.json (issue #246).
             addedNfts = FileAddedNfts(filesDir.resolve("nfts.json").path),
-            // The Safe transactions waiting for their owners, with the signatures collected (public
-            // data, no key in them), beside the account list in the app's private files.
-            safeTxQueue = FileSafeTxQueue(filesDir.resolve("safe-tx-queue.json").path),
+            // The Safe transactions waiting for their owners: the follower's one instance.
+            safeTxQueue = safeTxQueue,
             signingRequests = JsonSigningRequestCodec(),
-            signatureRecovery = Secp256k1Recovery(),
+            signatureRecovery = signatureRecovery,
             safeApprovals = node.safeApprovals,
             // Safe 1.4.1's singleton, factory and proxy code, pinned in code: what a new Safe is created from.
             safeReleases = PinnedSafeReleases(),
@@ -443,6 +457,7 @@ class SerotineApplication : Application() {
             // The follower's own lock, the inputs kept for a lenient draft, and Sign while syncing.
             outboxLock = outboxLock,
             keptTransactionInputs = node.keptTransactionInputs,
+            keptSafes = node.keptSafes,
             syncPolicy = syncPolicy,
             swapVenue = swapVenue,
             waitingSwaps = waitingSwaps,
@@ -970,27 +985,59 @@ class SerotineApplication : Application() {
         }
     }
 
-    /** The outbox's follower: each queued transfer checked with a fresh strict quote, then sent or found in conflict. */
+    /**
+     * The outbox's follower: each queued transaction checked with a fresh strict quote, then sent or found in
+     * conflict; each held Safe signature checked against the Safe, then saved to its queue or found in conflict.
+     */
     private fun followOutbox(): FollowOutbox = FollowOutbox(
         outbox,
-        CheckQueued { network ->
-            QuoteTransfer(
-                node.transactionInputs,
-                node.nativeBalances,
-                node.tokenBalances,
-                sentTransfers,
-                cowOrders,
-                node.cow,
-                node.lightClient,
-                network,
-                outbox,
-            )
-        },
+        CheckQueued(
+            { network ->
+                QuoteTransfer(
+                    node.transactionInputs,
+                    node.nativeBalances,
+                    node.tokenBalances,
+                    sentTransfers,
+                    cowOrders,
+                    node.cow,
+                    node.lightClient,
+                    network,
+                    outbox,
+                )
+            },
+            // A Safe's approval on chain or its execution, queued while syncing: its strict quote again.
+            { network ->
+                QuoteSafeApproval(
+                    ObserveSafe(node.addressKinds, accounts),
+                    node.safeApprovals,
+                    node.nativeBalances,
+                    node.transactionInputs,
+                    sentTransfers,
+                    network,
+                    outbox,
+                )
+            },
+            { network ->
+                QuoteSafeExecution(
+                    ObserveSafe(node.addressKinds, accounts),
+                    signatureRecovery,
+                    node.safeApprovals,
+                    node.nativeBalances,
+                    node.transactionInputs,
+                    sentTransfers,
+                    network,
+                    outbox,
+                )
+            },
+        ),
         node.lightClient,
         node.broadcaster,
         sentTransfers,
         AndroidOutboxNotifier(this),
         outboxLock,
+        // A Safe signature held while syncing: checked at a fresh head, then saved to the one queue.
+        CheckHeldSignature(ObserveSafe(node.addressKinds, accounts), signatureRecovery),
+        safeTxQueue,
     )
 
     /**

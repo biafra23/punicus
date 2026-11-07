@@ -98,10 +98,21 @@ private fun SimpleSafeProposeRefusedPreview() = SimpleSafeProposePreview(
     ),
 )
 
+/** A draft in lenient mode: each figure's age, the blocks behind Details. */
+@Preview
+@Composable
+private fun SimpleSafeProposeDraftPreview() = SimpleSafeProposePreview(draftReviewSample)
+
+@Preview
+@Composable
+private fun SimpleSafeProposeDraftDarkPreview() = SimpleSafeProposePreview(draftReviewSample, darkTheme = true)
+
 /** Every preview above, which SimpleSafeProposeScreenPreviewsTest renders: a new preview goes in here too. */
 internal val simpleSafeProposeScreenPreviews: List<ScreenPreview> = listOf(
     ScreenPreview("compose") { SimpleSafeProposeComposePreview() },
     ScreenPreview("refused") { SimpleSafeProposeRefusedPreview() },
     ScreenPreview("review") { SimpleSafeProposeReviewPreview() },
     ScreenPreview("review-dark") { SimpleSafeProposeReviewDarkPreview() },
+    ScreenPreview("draft") { SimpleSafeProposeDraftPreview() },
+    ScreenPreview("draft-dark") { SimpleSafeProposeDraftDarkPreview() },
 )

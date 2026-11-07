@@ -16,6 +16,7 @@ import eth.serotine.domain.repository.KeyProtection
 import eth.serotine.domain.repository.KeyStore
 import eth.serotine.domain.repository.KeyStoreDescription
 import eth.serotine.domain.repository.NewMnemonic
+import eth.serotine.domain.repository.Outbox
 import eth.serotine.domain.repository.Simulation
 import eth.serotine.domain.usecase.DescribeKeyStore
 import eth.serotine.domain.usecase.EncodeSigningRequest
@@ -84,7 +85,7 @@ class SafeSettingsViewModelTest {
             ObserveAccounts(world.accounts),
             world.observeSafe,
             DescribeKeyStore(keys),
-            ProposeSafeSettingsChange(world.observeSafe, world.inputs, world.queue, Network.SEPOLIA),
+            ProposeSafeSettingsChange(world.observeSafe, world.inputs, world.queue, Network.SEPOLIA, Outbox.None),
             SignSafeTx(world.signer, world.observeSafe, world.recovery, world.queue, Network.SEPOLIA),
             EncodeSigningRequest(world.codec),
             clock,

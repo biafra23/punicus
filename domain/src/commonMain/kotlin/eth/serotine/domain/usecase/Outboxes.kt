@@ -1,11 +1,17 @@
 package eth.serotine.domain.usecase
 
 import eth.serotine.domain.model.AccountId
+import eth.serotine.domain.model.Digest
+import eth.serotine.domain.model.Eip1559Transaction
 import eth.serotine.domain.model.Network
+import eth.serotine.domain.model.SafeCalls
 import eth.serotine.domain.model.SignedTransfer
+import eth.serotine.domain.model.SigningRequest
 import eth.serotine.domain.model.UInt256
 import eth.serotine.domain.repository.Broadcast
 import eth.serotine.domain.repository.Broadcaster
+import eth.serotine.domain.repository.HeldConflict
+import eth.serotine.domain.repository.HeldSafeSignature
 import eth.serotine.domain.repository.LightClient
 import eth.serotine.domain.repository.LightClientStatus
 import eth.serotine.domain.repository.Outbox
@@ -15,6 +21,8 @@ import eth.serotine.domain.repository.QueueConflict
 import eth.serotine.domain.repository.QueueRefusal
 import eth.serotine.domain.repository.QueuedTransaction
 import eth.serotine.domain.repository.ReadUnavailable
+import eth.serotine.domain.repository.SafeTxQueue
+import eth.serotine.domain.repository.SafeTxQueueList
 import eth.serotine.domain.repository.SentAction
 import eth.serotine.domain.repository.SentTransfer
 import eth.serotine.domain.repository.SentTransferList
@@ -65,10 +73,14 @@ sealed interface QueuedCheck {
 
 /**
  * The check before sending (docs/lenient-mode.md, *The check before sending*; owner rulings,
- * 2026-11-06): the strict quote made again, fresh, from the queued transfer's own inputs (its
- * account, recipient, asset, amount and fee level), and compared with what was signed. The quote
- * is [QuoteTransfer] as it is, but for its own test of the fee: a peer tests the signed figures,
- * so the funds row tests those. It passes when:
+ * 2026-11-06): the strict quote made again, fresh, from the queued transaction's own inputs, and
+ * compared with what was signed. For a transfer, its account, recipient, asset, amount and fee level,
+ * quoted as [QuoteTransfer] quotes it; for a Safe's approval on chain or its execution
+ * (*Safe transactions in lenient mode*), its Safe transaction, account and fee level, quoted as
+ * [QuoteSafeApproval] and [QuoteSafeExecution] quote them, with every Safe check made against the
+ * Safe as it stands now (an execution runs with the confirmations it was signed with). Every quote is
+ * as it is, but for its own test of the fee: a peer tests the signed figures, so the funds row tests
+ * those. It passes when:
  *
  * - the quote is made, not refused;
  * - the fresh nonce is the one signed (a higher one: another transaction took it; a lower one: a
@@ -78,17 +90,38 @@ sealed interface QueuedCheck {
  * - the fresh native balance covers the signed transaction's upfront cost (its value plus its gas
  *   limit times its fee cap) and what the account's transactions not mined yet may take.
  *
- * Not verifiable now (the light client catching up, a figure unavailable) or held back by an
- * earlier transaction maybe sent: it waits. Only a transfer is checked here; any other action is a
+ * Not verifiable now (the light client catching up, a figure unavailable, the Safe not verifiable
+ * this time) or held back by an earlier transaction maybe sent: it waits. Any other action is a
  * conflict, never sent unchecked.
  */
-class CheckQueued(private val quotes: (Network) -> QuoteTransfer) {
+class CheckQueued(
+    private val quotes: (Network) -> QuoteTransfer,
+    private val approvals: (Network) -> QuoteSafeApproval,
+    private val executions: (Network) -> QuoteSafeExecution,
+) {
 
     /** Checks [queued] against fresh verified state. */
-    suspend operator fun invoke(queued: QueuedTransaction): QueuedCheck {
-        val signed = queued.transaction
-        val action = queued.action as? SentAction.Transfer
-            ?: return QueuedCheck.Conflicts(QueueConflict.Refused(QueueRefusal.ENGINE_REFUSED))
+    suspend operator fun invoke(queued: QueuedTransaction): QueuedCheck = when (val action = queued.action) {
+        is SentAction.Transfer -> transfer(queued, action)
+        is SentAction.SafeApproval ->
+            safeCall(queued, approvals(queued.network).quoteForCheck(action.request, queued.account, queued.level))
+        is SentAction.SafeExecution -> if (executes(queued.transaction, action.request)) {
+            safeCall(
+                queued,
+                executions(queued.network).quoteForCheck(
+                    action.request,
+                    queued.account,
+                    queued.level,
+                    queued.transaction.data,
+                ),
+            )
+        } else {
+            QueuedCheck.Conflicts(QueueConflict.Refused(QueueRefusal.ENGINE_REFUSED))
+        }
+        else -> QueuedCheck.Conflicts(QueueConflict.Refused(QueueRefusal.ENGINE_REFUSED))
+    }
+
+    private suspend fun transfer(queued: QueuedTransaction, action: SentAction.Transfer): QueuedCheck {
         val checked = quotes(queued.network).quoteForCheck(
             queued.account,
             action.to,
@@ -100,7 +133,38 @@ class CheckQueued(private val quotes: (Network) -> QuoteTransfer) {
             is TransferQuoting.Quoted -> quoting.quote
             else -> return conflictOrWait(quoting)
         }
-        val fresh = quote.transaction
+        return judge(
+            queued,
+            quote.transaction,
+            quote.maxFee,
+            quote.nativeBefore,
+            quote.pendingCost,
+            checked.nextBaseFee,
+        )
+    }
+
+    private fun safeCall(queued: QueuedTransaction, checked: SafeCallQuoting): QueuedCheck = when (checked) {
+        is SafeCallQuoting.Quoted -> {
+            val call = checked.call
+            judge(queued, call.transaction, call.maxFee, call.nativeBefore, call.pendingCost, checked.nextBaseFee)
+        }
+        is SafeCallQuoting.Refused -> conflictOrWait(checked.refusal)
+    }
+
+    /**
+     * [queued], signed, against [fresh], the same transaction quoted again now: the quote's most fee
+     * ([nowAtMost]), the account's fresh native balance ([nativeBefore]) and what its transactions not
+     * mined yet may take of it ([pendingCost]), and the base fee the next block charges ([nextBaseFee]).
+     */
+    private fun judge(
+        queued: QueuedTransaction,
+        fresh: Eip1559Transaction,
+        nowAtMost: UInt256,
+        nativeBefore: UInt256,
+        pendingCost: UInt256,
+        nextBaseFee: UInt256?,
+    ): QueuedCheck {
+        val signed = queued.transaction
         // The same transaction, quoted again: what the check judges is what was signed.
         if (fresh.chainId != signed.chainId || fresh.to != signed.to || fresh.value != signed.value ||
             !fresh.data.contentEquals(signed.data)
@@ -112,21 +176,32 @@ class CheckQueued(private val quotes: (Network) -> QuoteTransfer) {
         if (fresh.gasLimit > signed.gasLimit) {
             return conflict(QueueConflict.NeedsMoreGas(signed.gasLimit, fresh.gasLimit))
         }
-        val nextBaseFee = checked.nextBaseFee ?: return QueuedCheck.Waits(FEES_UNPROVEN)
-        val needed = nextBaseFee.withHeadroom()?.plusOrNull(signed.maxPriorityFeePerGas)
+        val baseFee = nextBaseFee ?: return QueuedCheck.Waits(FEES_UNPROVEN)
+        val needed = baseFee.withHeadroom()?.plusOrNull(signed.maxPriorityFeePerGas)
             ?: return QueuedCheck.Waits(FEES_UNPROVEN)
-        if (signed.maxFeePerGas < needed) {
-            val nowAtMost = quote.maxFee
-            return conflict(QueueConflict.FeesRose(nowAtMost))
-        }
+        if (signed.maxFeePerGas < needed) return conflict(QueueConflict.FeesRose(nowAtMost))
         val upfront = signed.maxFeePerGas.timesOrNull(UInt256.of(signed.gasLimit))?.plusOrNull(signed.value)
             ?: return conflict(QueueConflict.InsufficientFunds)
-        val available = quote.nativeBefore.minusOrNull(quote.pendingCost)
+        val available = nativeBefore.minusOrNull(pendingCost)
         if (available == null || available < upfront) return conflict(QueueConflict.InsufficientFunds)
         return QueuedCheck.Passes
     }
 
     private fun conflict(conflict: QueueConflict) = QueuedCheck.Conflicts(conflict)
+
+    /**
+     * Whether [signed] is an `execTransaction` of [request]'s own Safe transaction, sent to its Safe
+     * with no value: its call data is that transaction's fields and data, then the signatures, which
+     * the check's run proves the Safe accepts now.
+     */
+    private fun executes(signed: Eip1559Transaction, request: SigningRequest): Boolean {
+        val unsigned = SafeCalls.execTransaction(request.tx, emptyList())
+        // Everything but the empty signatures' length word: the same for any signatures.
+        val head = unsigned.copyOf(unsigned.size - ABI_WORD)
+        val data = signed.data
+        return signed.to == request.safe && signed.value.isZero && data.size > head.size &&
+            data.copyOf(head.size).contentEquals(head)
+    }
 
     /** A strict refusal at the check: a conflict where it is about the transfer, a wait where it is about now. */
     private fun conflictOrWait(quoting: TransferQuoting): QueuedCheck = when (quoting) {
@@ -144,8 +219,39 @@ class CheckQueued(private val quotes: (Network) -> QuoteTransfer) {
             QueuedCheck.Waits(quoting)
     }
 
+    /**
+     * A strict refusal of a Safe's approval or execution at the check: a wait where it is about now
+     * (the light client, a figure or the Safe not verifiable this time, an earlier transaction maybe
+     * sent), a conflict where it is about the transaction or the Safe as it stands.
+     */
+    private fun conflictOrWait(refusal: SafeTxRefusal): QueuedCheck = when (refusal) {
+        SafeTxRefusal.Syncing -> QueuedCheck.Waits(TransferQuoting.Syncing)
+        is SafeTxRefusal.Unavailable -> QueuedCheck.Waits(TransferQuoting.Unavailable(refusal.reason))
+        is SafeTxRefusal.SafeUnavailable -> QueuedCheck.Waits(TransferQuoting.Unavailable(refusal.reason))
+        is SafeTxRefusal.NotQuoted -> when (val call = refusal.refusal) {
+            CallRefusal.Syncing -> QueuedCheck.Waits(TransferQuoting.Syncing)
+            is CallRefusal.Unavailable -> QueuedCheck.Waits(TransferQuoting.Unavailable(call.reason, call.figure))
+            is CallRefusal.EarlierMaybeSent ->
+                QueuedCheck.Waits(TransferQuoting.EarlierMaybeSent(call.hash, call.queued))
+            CallRefusal.InsufficientFunds -> conflict(QueueConflict.InsufficientFunds)
+            is CallRefusal.Reverts -> conflict(QueueConflict.Refused(QueueRefusal.REVERTS))
+            is CallRefusal.Infeasible -> conflict(QueueConflict.Refused(QueueRefusal.INFEASIBLE, call.detail))
+            CallRefusal.Refused -> conflict(QueueConflict.Refused(QueueRefusal.ENGINE_REFUSED))
+        }
+        is SafeTxRefusal.NonceUsed -> conflict(QueueConflict.Refused(QueueRefusal.SAFE_NONCE_USED))
+        is SafeTxRefusal.NotAnOwner -> conflict(QueueConflict.Refused(QueueRefusal.NOT_AN_OWNER))
+        SafeTxRefusal.AlreadyApproved -> conflict(QueueConflict.Refused(QueueRefusal.ALREADY_APPROVED))
+        SafeTxRefusal.AlreadySent -> conflict(QueueConflict.Refused(QueueRefusal.ALREADY_SENT))
+        SafeTxRefusal.NotASafe -> conflict(QueueConflict.Refused(QueueRefusal.NOT_A_SAFE))
+        // Every other refusal: the Safe as it stands, or the transaction itself, refuses it.
+        else -> conflict(QueueConflict.Refused(QueueRefusal.SAFE_REFUSED))
+    }
+
     private companion object {
         val FEES_UNPROVEN = TransferQuoting.Unavailable(ReadUnavailable.UNPROVEN, QuoteFigure.FEES)
+
+        /** One ABI word's bytes. */
+        const val ABI_WORD = 32
     }
 }
 
@@ -173,6 +279,21 @@ class OutboxLock {
  * taken its nonce. A conflict deletes the signed bytes and keeps the rest, so the user can sign
  * again or discard it. Each send and each conflict is told through [notifier].
  *
+ * Each Safe signature held there ([HeldSafeSignature]; *Safe transactions in lenient mode*) whose
+ * network's light client verifies is checked too ([checkHeld]): passing, it is saved to the Safe's
+ * queue ([safeTxQueue], pruned to the Safe's nonce first), where its QR code and text are offered,
+ * and only once saved is it released from the outbox; one that could not be saved stays held and is
+ * checked again, and one found saved already (its release could not be saved) is only released. A
+ * transfer proposed here that finds another transaction at its nonce in the queue is a conflict
+ * ([HeldConflict.NonceTaken]): only one of the two could ever run. So is one that finds the queue
+ * short of it, a nonce before it taken by nothing queued or held ([HeldConflict.NonceGap]), as
+ * strict mode never proposes past a gap; held ones are checked in their nonces' order, so one
+ * held before it is saved first. A co-signature whose request was removed from the queue meanwhile
+ * is released, never saved back. A conflict deletes its signature,
+ * never shown, and keeps the rest so the user is told and can sign again or discard it. Each is
+ * told through [notifier]. A held signature has no hour: passing its check shows it to nobody, and
+ * sends nothing.
+ *
  * Run for as long as the app runs (the hosts start it, never `App`): the check needs a verified
  * head, which only a light client that is awake has. [clock] is in unix seconds. Runs until
  * cancelled; a port that breaks its promise not to throw costs that round only.
@@ -185,6 +306,8 @@ class FollowOutbox(
     private val sentTransfers: SentTransfers,
     private val notifier: OutboxNotifier,
     private val lock: OutboxLock,
+    private val checkHeld: CheckHeldSignature,
+    private val safeTxQueue: SafeTxQueue,
     private val clock: () -> Long = ::epochSecondsNow,
     private val interval: Duration = 15.seconds,
 ) {
@@ -203,19 +326,86 @@ class FollowOutbox(
     }
 
     /**
-     * One pass over what is queued; each transaction under [lock], read again inside it. One still
-     * marked as sending is resolved whatever the light client does: it reads nothing from the
-     * chain, and until it is resolved its bytes are in no record. The rest wait for a verified head.
+     * One pass over what is queued and held; each transaction and each held signature under [lock],
+     * read again inside it. One still marked as sending is resolved whatever the light client does:
+     * it reads nothing from the chain, and until it is resolved its bytes are in no record. The rest
+     * wait for a verified head.
      */
     internal suspend fun round() {
-        val queued = (outbox.observe().first() as? OutboxList.Loaded)?.queued.orEmpty()
-        for (entry in queued) {
+        val list = outbox.observe().first() as? OutboxList.Loaded ?: return
+        for (entry in list.queued) {
             if (entry.signed == null) continue
             if (!entry.sending && lightClient.observeStatus(entry.network).first() !is LightClientStatus.Synced) {
                 continue
             }
             lock.mutex.withLock { follow(entry.accountId) }
         }
+        // In their nonces' order: a proposal is saved only after those held before it.
+        for (held in list.held.sortedBy { it.nonce }) {
+            if (held.signature == null) continue
+            if (lightClient.observeStatus(held.network).first() !is LightClientStatus.Synced) continue
+            lock.mutex.withLock { followHeld(held.safe, held.hash) }
+        }
+    }
+
+    private suspend fun followHeld(safe: AccountId, hash: Digest) {
+        // Read again under the lock: it may have been discarded, or signed again, meanwhile.
+        val entry = (outbox.observe().first() as? OutboxList.Loaded)?.held
+            ?.firstOrNull { it.safe == safe && it.hash == hash }
+            ?: return
+        val signed = entry.signed() ?: return
+        val queue = safeTxQueue.observe(safe).first() as? SafeTxQueueList.Loaded ?: return
+        // Saved by a round whose release could not be saved: it passed its check then, so it only goes.
+        val saved = queue.requests.firstOrNull { it.hash == hash }?.signatures.orEmpty()
+        if (signed.signatures.all { it in saved }) {
+            if (outbox.release(safe, hash)) notifier.heldChecked(entry)
+            return
+        }
+        when (val result = checkHeld(entry)) {
+            is HeldCheck.Passes -> withContext(NonCancellable) {
+                // A transfer proposed here never lands beside another transaction at its nonce: the queue
+                // read again, as it is after the check, which may have waited a while.
+                val after = safeTxQueue.observe(safe).first() as? SafeTxQueueList.Loaded ?: return@withContext
+                val taken = entry.proposed && after.requests.any { it.nonce == entry.nonce && it.hash != hash }
+                val safeNonce = result.state.nonce
+                // Nor past a gap: the first nonce nothing in the queue takes, and nothing held before it.
+                val queuedUpTo = nextNonce(pendingOf(after, safeNonce, safe.network), safeNonce)
+                val heldUpTo = nextNonce(
+                    pendingOf(after, safeNonce, safe.network) +
+                        heldOf(outbox.observe().first(), safe).filter { it.hash != hash },
+                    safeNonce,
+                )
+                when {
+                    taken -> heldConflicted(entry, HeldConflict.NonceTaken)
+                    // A co-signature whose request was removed from this device meanwhile: the removal
+                    // stands, and the signature goes, never saved back into the queue.
+                    !entry.proposed && after.requests.none { it.hash == hash } -> outbox.release(safe, hash)
+                    !entry.proposed || entry.nonce <= queuedUpTo -> checked(entry, signed, safeNonce)
+                    // One held before it fills the gap once it is checked: this one waits for it.
+                    entry.nonce <= heldUpTo -> Unit
+                    else -> heldConflicted(entry, HeldConflict.NonceGap(queuedUpTo))
+                }
+            }
+            HeldCheck.Waits -> Unit
+            is HeldCheck.Conflicts -> heldConflicted(entry, result.conflict)
+        }
+    }
+
+    /**
+     * [entry], checked against the Safe at [safeNonce]: saved to the Safe's queue as [signed], and
+     * only then released from the outbox. One not saved stays held, and is checked again.
+     */
+    private suspend fun checked(entry: HeldSafeSignature, signed: SigningRequest, safeNonce: Long) {
+        safeTxQueue.prune(entry.safe, safeNonce)
+        safeTxQueue.save(signed) ?: return
+        if (outbox.release(entry.safe, entry.hash)) notifier.heldChecked(entry)
+    }
+
+    private suspend fun heldConflicted(entry: HeldSafeSignature, conflict: HeldConflict) {
+        // The signature goes first: nothing can show it once the conflict is found.
+        val stripped = entry.copy(signature = null, conflict = conflict)
+        // The notifier is told the copy kept, never the signature.
+        if (outbox.hold(stripped)) notifier.heldConflict(stripped, conflict)
     }
 
     private suspend fun follow(account: AccountId) {

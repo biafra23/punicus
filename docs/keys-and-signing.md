@@ -592,7 +592,13 @@ only what the user signed, once. They are not public data either, since
 nothing has broadcast them, and whoever has them can. So they are sealed.
 
 - **What it seals.** `outbox.json`, the outbox's file, and nothing else. It
-  never touches an envelope, and no envelope's key touches it.
+  never touches an envelope, and no envelope's key touches it. The file
+  holds the queued transactions' signed bytes and, beside them, the Safe
+  signatures held in lenient mode until their check (docs/lenient-mode.md,
+  *Safe transactions in lenient mode*): an owner's signature of a Safe
+  transaction nobody has checked against the chain yet, which no other
+  owner may see before it is. They are sealed, lost and kept in memory
+  only exactly as the queued bytes are.
 - **A hardware key of its own** (rule 4's spirit: each use its own key).
   Android: a Keystore key that `KeyInfo` reports as hardware-backed (rule
   5). iOS and a Mac with a Secure Enclave: an enclave key, made as the
@@ -618,8 +624,14 @@ nothing has broadcast them, and whoever has them can. So they are sealed.
 - **A lost key is said, not guessed around.** When the file is there and
   its key is not (the key store reset, or a copy restored on another
   device), the queued transaction is said as lost, the file is deleted, and
-  the user is asked to sign again. A new key is made only for the next
-  queued transaction.
+  the user is asked to sign again. So it is on a Mac whose enclave works but
+  does not open the outbox's enclave state (copied from another Mac by a
+  migration or a restore, or damaged), or that has no enclave left to open
+  it: the state is deleted with the file. A new key is made at the
+  outbox's next use: on Android when it is next read, on a Mac and iOS when
+  the next transaction is queued. A key store that only fails this time is
+  no lost key: the file is left as it is, unreadable, and asked about again
+  a minute later.
 
 ## A Safe owned by a hardware P-256 key
 

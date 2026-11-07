@@ -273,7 +273,10 @@ change what it trusts.
   Serotine open to send it sooner.", then Sent, which waits for the
   check; "Still send this? You signed it 2 h ago." with Send now past
   its hour; a conflict in plain words with Sign again and Discard; Edit and
-  Discard otherwise. As in Detailed view, with no block.
+  Discard otherwise. As in Detailed view, with no block. A Safe
+  transaction's approval on chain or execution queued the same way says the
+  Safe and its nonce in place of the amount, and its Sign again or Edit
+  opens the Safe transaction (owner rulings, 2026-11-06).
 
 ### Swap
 
@@ -383,6 +386,29 @@ overview, signing and review. The owners' stand, a swap's quote, an
 approval's or an execution's run and every refusal are "checked on chain".
 The forms of Send from a Safe and a Safe's swap say each balance's age, as
 Send's and Swap's do.
+
+In lenient mode (Settings → Advanced → *Sign while syncing*;
+docs/lenient-mode.md, *Safe transactions in lenient mode*; owner rulings,
+2026-11-06), while the light client catches up, a Safe's screens say the
+age of what they are prepared on where Detailed view names its block, which
+stays under *Details*, as Send's draft does (S2):
+
+- **Send from a Safe**: the form offers the Safe's balance as last verified,
+  "as of 12 min ago", with no value beside it. Its draft's review says
+  "Prepared on data from 12 min ago. It's checked on chain before it's shown
+  to anyone." on top, the Safe nonce and the owners it needs "as of 12 min
+  ago", the balance after "if nothing changed", "Not checked yet" in place of
+  "Checked on chain", and "Sign and hold".
+- **A Safe transaction**: the owners "as of 12 min ago", the signatures here
+  counted and the approvals on chain read once the light client has caught
+  up; a line on top saying what Sign, Approve on chain and Execute are
+  prepared on. Sign holds its signature: Signed, then Held ("Waits for
+  Ethereum to catch up. Keep Serotine open to check it sooner."), then In the
+  queue, to share, once it checks out; no QR code or text before then;
+  Discard, or Dismiss and, for a proposal whose nonce was used, taken or
+  left behind a gap, Propose again. A co-signature's stand is shown on the
+  transaction's own screen, its other actions still offered. Approve on chain and Execute show their draft as S2 does, "Sign and
+  queue on ‹network›", and their queued transaction's status is S3's.
 
 As built in part 10, a Safe's settings follow them too (owner's request,
 2026-10-28). The owners, the threshold, the modules and the guard are

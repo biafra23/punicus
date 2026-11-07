@@ -769,6 +769,8 @@ class SendViewModel(
             DraftInput.BALANCE -> "this account's balance"
             DraftInput.NONCE -> "this account's count of transactions, which its next nonce comes from,"
             DraftInput.FEES -> "${network.displayName}'s fees"
+            // No Safe is drafted here.
+            DraftInput.SAFE -> "this Safe's owners and nonce"
         }
         return "The light client is still syncing, and $what has never been verified on this device, so nothing " +
             "can be prepared from it yet. The review waits for the light client to catch up."

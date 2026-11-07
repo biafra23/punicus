@@ -99,6 +99,9 @@ enum class DraftInput {
 
     /** The network's fees. */
     FEES,
+
+    /** A Safe's nonce, owners and threshold ([eth.serotine.domain.repository.KeptSafes]). */
+    SAFE,
 }
 
 /**
@@ -119,6 +122,26 @@ object DraftGas {
 
     /** For a token's `transfer`: room for a new holder's balance slot and a proxied token. */
     const val TOKEN: Long = 100_000
+
+    /**
+     * For a Safe owner's `approveHash`, from the gas schedule: 21000, the call data (36 bytes, about
+     * 600), the proxy's delegate call to its singleton (a cold storage read and a cold call, 2100 +
+     * 2600), the owner's slot read (2100), the approval's slot set from zero (22100) and its
+     * `ApproveHash` log (about 1500): about 52000, so twice that leaves room for a guard-free Safe on
+     * any of its versions.
+     */
+    const val SAFE_APPROVAL: Long = 100_000
+
+    /**
+     * For a Safe's `execTransaction`, from the gas schedule: 21000, its call data (the transaction's
+     * fields, its data and 65 bytes per confirmation: about 13000 for a token transfer with five), the
+     * proxy (about 5000), each confirmation's `ecrecover` and owner read (about 6000 each), the nonce's
+     * slot (5000), the Safe's call itself (a token transfer to a new holder, about 65000, the costliest
+     * a lenient draft proposes) and its events, an L2 Safe's whole transaction among them (about
+     * 10000): about 150000, with a guard's checks on top. Twice that leaves room for both; a call that
+     * needs more is caught by the check, whose fresh estimate must fit, and signed again.
+     */
+    const val SAFE_EXECUTION: Long = 300_000
 
     /** The ceiling for [asset]. */
     fun ceiling(asset: TransferAsset): Long = if (asset is TransferAsset.Erc20Token) TOKEN else NATIVE

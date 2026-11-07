@@ -21,12 +21,18 @@ import eth.serotine.domain.repository.AddressKind
 import eth.serotine.domain.repository.AddressKinds
 import eth.serotine.domain.repository.BalanceReading
 import eth.serotine.domain.repository.KindReading
+import eth.serotine.domain.repository.Outbox
 import eth.serotine.domain.repository.ReadUnavailable
 import eth.serotine.domain.repository.Signing
 import eth.serotine.domain.repository.SigningRequestDecoding
 import eth.serotine.domain.repository.Simulation
 import eth.serotine.domain.repository.TokenBalanceReading
 import eth.serotine.domain.repository.Unlock
+import kotlin.test.Test
+import kotlin.test.assertEquals
+import kotlin.test.assertIs
+import kotlin.test.assertTrue
+import kotlin.time.Duration.Companion.seconds
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
@@ -34,11 +40,6 @@ import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.currentTime
 import kotlinx.coroutines.test.runTest
-import kotlin.test.Test
-import kotlin.test.assertEquals
-import kotlin.test.assertIs
-import kotlin.test.assertTrue
-import kotlin.time.Duration.Companion.seconds
 
 class SafeTxSigningTest {
 
@@ -58,6 +59,7 @@ class SafeTxSigningTest {
         world.inputs,
         world.queue,
         Network.SEPOLIA,
+        Outbox.None,
     )
 
     @Test
@@ -587,7 +589,7 @@ class SafeTxSigningTest {
         assertEquals(4, reading.safeNonce)
         assertEquals(listOf(4L, 6L), reading.transactions.map { it.request.nonce })
 
-        assertTrue(RemoveQueuedSafeTx(world.queue)(world.request(usdcTransfer(6)).hash))
+        assertTrue(RemoveQueuedSafeTx(world.queue, Outbox.None, OutboxLock())(world.request(usdcTransfer(6)).hash))
         assertEquals(listOf(4L, 3L), world.queue.requests.value.map { it.nonce }, "6 removed; 3 left to a prune")
     }
 

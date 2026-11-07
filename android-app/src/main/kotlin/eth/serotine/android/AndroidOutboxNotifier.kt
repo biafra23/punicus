@@ -8,6 +8,8 @@ import android.app.PendingIntent
 import android.content.Context
 import android.content.pm.PackageManager
 import android.os.Build
+import eth.serotine.domain.repository.HeldConflict
+import eth.serotine.domain.repository.HeldSafeSignature
 import eth.serotine.domain.repository.OutboxNotifier
 import eth.serotine.domain.repository.QueueConflict
 import eth.serotine.domain.repository.QueuedTransaction
@@ -15,19 +17,26 @@ import eth.serotine.ui.outbox.OutboxNotificationText
 
 /**
  * [OutboxNotifier] on Android (docs/lenient-mode.md, *The outbox*): a notification on the "Queued
- * transactions" channel, one per queued transaction (its send or its conflict replaces the one
- * before), which opens the app. It says the transfer in token units and its recipient, never the
- * signed bytes. Without the notification permission (Android 13 and later), it is dropped: the
+ * transactions" channel, one per queued transaction or held Safe signature (its send, check or
+ * conflict replaces the one before), which opens the app. It says the transfer in token units and its
+ * recipient, or the Safe transaction and its Safe, never the signed bytes nor a signature. Without
+ * the notification permission (Android 13 and later), it is dropped: the
  * app's own screens still say it.
  */
 class AndroidOutboxNotifier(private val context: Context) : OutboxNotifier {
 
-    override fun sent(queued: QueuedTransaction, hash: String) = show(queued, OutboxNotificationText.sent(queued))
+    override fun sent(queued: QueuedTransaction, hash: String) = show(queued.id, OutboxNotificationText.sent(queued))
 
     override fun conflict(queued: QueuedTransaction, conflict: QueueConflict) =
-        show(queued, OutboxNotificationText.conflict(queued, conflict))
+        show(queued.id, OutboxNotificationText.conflict(queued, conflict))
 
-    private fun show(queued: QueuedTransaction, text: OutboxNotificationText) {
+    override fun heldChecked(held: HeldSafeSignature) = show(held.hash.hex, OutboxNotificationText.heldChecked(held))
+
+    override fun heldConflict(held: HeldSafeSignature, conflict: HeldConflict) =
+        show(held.hash.hex, OutboxNotificationText.heldConflict(held, conflict))
+
+    /** Shows [text] under [id], a queued transaction's or a held signature's: what is said of it next replaces it. */
+    private fun show(id: String, text: OutboxNotificationText) {
         try {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
                 context.checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
@@ -54,8 +63,8 @@ class AndroidOutboxNotifier(private val context: Context) : OutboxNotifier {
                 .setContentIntent(open)
                 .setAutoCancel(true)
                 .build()
-            // One id per queued transaction: its send or its conflict replaces what was said of it before.
-            manager.notify(NOTIFICATION_BASE + (queued.id.hashCode() and 0xffff), notification)
+            // One id per queued transaction or held signature: what is said of it replaces what was before.
+            manager.notify(NOTIFICATION_BASE + (id.hashCode() and 0xffff), notification)
         } catch (e: Exception) {
             // The permission revoked in between, or a notification that cannot be put into words:
             // the app's screens still say it.

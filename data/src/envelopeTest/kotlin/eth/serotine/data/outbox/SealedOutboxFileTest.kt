@@ -4,14 +4,19 @@ import eth.serotine.data.keys.FakeHardware
 import eth.serotine.domain.model.Address
 import eth.serotine.domain.model.Eip1559Transaction
 import eth.serotine.domain.model.Network
+import eth.serotine.domain.model.SafeTx
+import eth.serotine.domain.model.Signature
 import eth.serotine.domain.model.SignedTransfer
+import eth.serotine.domain.model.SigningRequest
 import eth.serotine.domain.model.TransferAsset
 import eth.serotine.domain.model.UInt256
 import eth.serotine.domain.repository.DraftBasis
 import eth.serotine.domain.repository.FeeLevel
+import eth.serotine.domain.repository.HeldSafeSignature
 import eth.serotine.domain.repository.KeyProtection
 import eth.serotine.domain.repository.OutboxList
 import eth.serotine.domain.repository.QueuedTransaction
+import eth.serotine.domain.repository.SafeDraftBasis
 import eth.serotine.domain.repository.SentAction
 import kotlin.random.Random
 import kotlin.test.AfterTest
@@ -20,10 +25,14 @@ import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertIs
 import kotlin.test.assertTrue
+import kotlin.time.Duration.Companion.seconds
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.TestScope
+import kotlinx.coroutines.test.advanceTimeBy
+import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import kotlinx.io.buffered
 import kotlinx.io.files.Path
@@ -40,6 +49,7 @@ class SealedOutboxFileTest {
     private val alice = Address.of("0x" + "aa".repeat(20))
     private val bob = Address.of("0x" + "bb".repeat(20))
     private val raw = ByteArray(40) { (it * 7 + 1).toByte() }
+    private val safe = Address.of("0x" + "5a".repeat(20))
 
     private fun TestScope.outbox(hardware: FakeHardware = FakeHardware()) =
         SealedOutboxFile(file.toString(), OutboxSeal(hardware), StandardTestDispatcher(testScheduler))
@@ -91,6 +101,45 @@ class SealedOutboxFileTest {
         outbox.remove(queued().accountId)
         outbox.remove(queued(account = bob).accountId)
         assertFalse(SystemFileSystem.exists(file))
+    }
+
+    private fun held(nonce: Long = 12): HeldSafeSignature = HeldSafeSignature(
+        request = SigningRequest.of(Network.SEPOLIA, safe, SafeTx.call(bob, UInt256.of(5), ByteArray(0), nonce)),
+        owner = alice,
+        signature = Signature("1" + "0".repeat(62) + "7", "2".padStart(64, '0'), recoveryId = 1),
+        proposed = false,
+        signedAt = 1_800_000_000,
+        builtOn = SafeDraftBasis(90, 1_799_999_000),
+    )
+
+    @Test
+    fun aHeldSafeSignatureIsSealedBesideWhatIsQueuedOnePerSafeAndNonce() = runTest {
+        val outbox = outbox()
+        assertTrue(outbox.hold(held()))
+        val bytes = SystemFileSystem.source(file).buffered().use { it.readByteArray() }
+        assertFalse(bytes.decodeToString().contains("1" + "0".repeat(62) + "7"), "the signature is not in the clear")
+        outbox.put(queued())
+        // Another at the same Safe and nonce takes its place; one at the next nonce does not.
+        val other = held().copy(request = SigningRequest.of(Network.SEPOLIA, safe, SafeTx.call(alice, UInt256.ONE, ByteArray(0), 12)))
+        outbox.hold(other)
+        outbox.hold(held(nonce = 13))
+
+        val after = assertIs<OutboxList.Loaded>(outbox().observe().first())
+        assertEquals(listOf(other, held(nonce = 13)), after.held)
+        assertEquals(1, after.queued.size, "a held signature takes no account's place")
+
+        outbox.release(other.safe, other.hash)
+        outbox.release(held(nonce = 13).safe, held(nonce = 13).hash)
+        outbox.remove(queued().accountId)
+        assertFalse(SystemFileSystem.exists(file), "an outbox with nothing queued or held has no file")
+    }
+
+    @Test
+    fun aHeldSignatureIsLostWithItsSealKey() = runTest {
+        outbox().hold(held())
+        val read = assertIs<OutboxList.Loaded>(outbox(FakeHardware(key = 9)).observe().first())
+        assertEquals(emptyList(), read.held)
+        assertTrue(read.lost)
     }
 
     @Test
@@ -194,5 +243,82 @@ class SealedOutboxFileTest {
         val none = ChosenOutbox(file.toString(), null, StandardTestDispatcher(testScheduler))
         assertTrue(none.put(queued()))
         assertFalse(SystemFileSystem.exists(file))
+    }
+
+    @Test
+    fun aKeyThatNeverOpensTheFileHereIsSaidAsLostAndANewOneIsMade() = runTest {
+        outbox().put(queued())
+        var copied = true
+        var forgotten = 0
+        val chosen = ChosenOutbox(
+            file.toString(),
+            // A Mac's enclave state copied from another Mac: never opens here, until it is forgotten.
+            { if (copied) throw OutboxKeyGone("copied from another Mac") else FakeHardware(provisioned = { false }) },
+            StandardTestDispatcher(testScheduler),
+            forgetKey = { forgotten++; copied = false },
+        )
+
+        val read = assertIs<OutboxList.Loaded>(chosen.observe().first())
+        assertEquals(emptyList(), read.queued)
+        assertTrue(read.lost, "said as lost, never unreadable for good")
+        assertFalse(SystemFileSystem.exists(file))
+        assertEquals(1, forgotten)
+
+        // A new key seals what is queued next, and the loss is said until acknowledged.
+        assertTrue(chosen.put(queued(account = bob)))
+        assertTrue(chosen.acknowledgeLost())
+        assertFalse((chosen.observe().first() as OutboxList.Loaded).lost)
+    }
+
+    @Test
+    fun aLossFoundWhereNoHardwareIsLeftIsSaidInMemory() = runTest {
+        outbox().put(queued())
+        var stateThere = true
+        val chosen = ChosenOutbox(
+            file.toString(),
+            // No enclave usable on this Mac: its state is gone for good, and nothing seals here after it.
+            { if (stateThere) throw OutboxKeyGone("no Secure Enclave opens it") else error("no Secure Enclave") },
+            StandardTestDispatcher(testScheduler),
+            forgetKey = { stateThere = false },
+        )
+
+        assertTrue((chosen.observe().first() as OutboxList.Loaded).lost)
+        assertFalse(SystemFileSystem.exists(file))
+        assertTrue(chosen.put(queued(account = bob)), "in memory only")
+        assertFalse(SystemFileSystem.exists(file))
+        assertTrue(chosen.acknowledgeLost())
+        assertFalse((chosen.observe().first() as OutboxList.Loaded).lost)
+        assertFalse(SystemFileSystem.exists(Path("$file.lost")), "acknowledged for good")
+    }
+
+    @Test
+    fun anUnreadableOutboxIsSaidToItsObserverOnceItOpens() = runTest {
+        outbox().put(queued())
+        var asks = 0
+        val chosen = ChosenOutbox(
+            file.toString(),
+            // Busy, then a key store that would not say whether its key exists, then one that answers.
+            {
+                when (++asks) {
+                    1 -> error("the key store is busy")
+                    2 -> FakeHardware(provisioned = { error("the key store will not say") })
+                    else -> FakeHardware()
+                }
+            },
+            StandardTestDispatcher(testScheduler),
+        )
+        val seen = mutableListOf<OutboxList>()
+        val watching = backgroundScope.launch { chosen.observe().collect { seen += it } }
+
+        runCurrent()
+        assertEquals(listOf<OutboxList>(OutboxList.Unreadable), seen)
+        advanceTimeBy(UNREADABLE_RETRY + 1.seconds)
+        runCurrent()
+        assertEquals(OutboxList.Unreadable, seen.last(), "nothing concluded from a key store that will not say")
+        advanceTimeBy(UNREADABLE_RETRY + 1.seconds)
+        runCurrent()
+        assertEquals(1, (seen.last() as OutboxList.Loaded).queued.size)
+        assertTrue(SystemFileSystem.exists(file))
+        watching.cancel()
     }
 }

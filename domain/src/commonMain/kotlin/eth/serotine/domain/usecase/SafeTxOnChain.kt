@@ -7,9 +7,11 @@ import eth.serotine.domain.model.SafeCalls
 import eth.serotine.domain.model.SafeSignature
 import eth.serotine.domain.model.SigningRequest
 import eth.serotine.domain.model.UInt256
+import eth.serotine.domain.repository.AccountRepository
 import eth.serotine.domain.repository.ApprovalReading
 import eth.serotine.domain.repository.Broadcaster
 import eth.serotine.domain.repository.FeeLevel
+import eth.serotine.domain.repository.KeptSafes
 import eth.serotine.domain.repository.NativeBalances
 import eth.serotine.domain.repository.NonceReading
 import eth.serotine.domain.repository.Outbox
@@ -132,6 +134,76 @@ sealed interface SafeTxOwnersReading {
 
     /** Not read: [refusal] (the Safe is none, or cannot be verified now). */
     data class Refused(val refusal: SafeTxRefusal) : SafeTxOwnersReading
+
+    /**
+     * Not verifiable now, the light client catching up, and read in lenient mode from the Safe as
+     * last verified instead ([ReadKeptSafeTxOwners]; docs/lenient-mode.md, *Safe transactions in
+     * lenient mode*): its [owners] then, each [OwnerConfirmation.Signed] by a signature in the request
+     * that recovers to it, the rest [OwnerConfirmation.Unknown] (approvals on chain need a fresh
+     * head); its [threshold] and [safeNonce], verified at [blockNumber], a head of [asOf] (unix
+     * seconds, null when unknown). [refusal] is what this wallet will not draft against it (the
+     * threshold it would leave, a version before 1.3.0, a swap, which stays strict). Never a stand
+     * of now: nothing is shown to another owner, approved or executed on it before the check.
+     */
+    data class LastVerified(
+        val owners: List<SafeTxOwner>,
+        val threshold: Int,
+        val safeNonce: Long,
+        val blockNumber: Long,
+        val asOf: Long?,
+        val refusal: SafeTxRefusal? = null,
+    ) : SafeTxOwnersReading {
+        /** How many owners' signatures in the request confirm it. */
+        val signatures: Int
+            get() = owners.count { it.confirmation == OwnerConfirmation.Signed }
+
+        /** How many confirm it when [executor] executes it: its signatures, and the executor's own when an owner. */
+        fun confirmationsExecutedBy(executor: Address): Int =
+            owners.count { it.confirmation == OwnerConfirmation.Signed || it.owner == executor }
+    }
+}
+
+/**
+ * Where the Safe's owners stood on a transaction when the Safe was last verified, for lenient mode
+ * while the light client catches up (docs/lenient-mode.md, *Safe transactions in lenient mode*):
+ * the owners, threshold and nonce kept ([KeptSafes]), each owner's signature in [request] checked to
+ * recover to it over the hash computed here ([SignatureRecovery]), the owners held here as
+ * [ObserveSafe] finds them. An approval on chain cannot be read without a fresh head, so an owner
+ * with no signature is [OwnerConfirmation.Unknown]. With no Safe kept, the light client is syncing.
+ * On [network] only.
+ */
+class ReadKeptSafeTxOwners(
+    private val kept: KeptSafes,
+    private val accounts: AccountRepository,
+    private val recovery: SignatureRecovery,
+    private val network: Network,
+) {
+    suspend operator fun invoke(request: SigningRequest): SafeTxOwnersReading {
+        if (request.network != network) {
+            return SafeTxOwnersReading.Refused(SafeTxRefusal.WrongChain(request.network.chainId))
+        }
+        val safe = kept.observe(AccountId(request.network, request.safe)).first()
+            ?: return SafeTxOwnersReading.Refused(SafeTxRefusal.Syncing)
+        val state = safe.state
+        val signed = recovery.valid(request, state.owners).map { it.owner }.toSet()
+        val held = accounts.ownersHeldOf(state).toSet()
+        val owners = state.owners.map { owner ->
+            val confirmation = if (owner in signed) {
+                OwnerConfirmation.Signed
+            } else {
+                OwnerConfirmation.Unknown(ReadUnavailable.SYNCING)
+            }
+            SafeTxOwner(owner, owner in held, confirmation)
+        }
+        return SafeTxOwnersReading.LastVerified(
+            owners,
+            state.threshold,
+            state.nonce,
+            safe.blockNumber,
+            safe.asOf,
+            refusal = state.tooOldToSign() ?: request.withoutRecovery(state) ?: request.undraftable(),
+        )
+    }
 }
 
 /**
@@ -183,12 +255,34 @@ class QuoteSafeApproval(
         owner: Address,
         level: FeeLevel,
         safeChecked: () -> Unit = {},
-    ): SafeApprovalQuoting {
-        fun refused(refusal: SafeTxRefusal) = SafeApprovalQuoting.Refused(refusal)
+    ): SafeApprovalQuoting = when (val quoted = quote(request, owner, level, safeChecked, forCheck = false)) {
+        is SafeCallQuoting.Quoted -> SafeApprovalQuoting.Quoted(SafeApprovalQuote(request, owner, quoted.call))
+        is SafeCallQuoting.Refused -> SafeApprovalQuoting.Refused(quoted.refusal)
+    }
+
+    /**
+     * The quote of [owner]'s approval of [request] at [level] again, fresh, for the check of the
+     * approval queued in lenient mode ([CheckQueued]; docs/lenient-mode.md, *The check before
+     * sending*): every check above, the Safe's among them, but for the two that would judge the
+     * queued transaction against itself or against the fresh figures: what the owner has queued does
+     * not hold it back, and the native balance is not tested against the fresh fee (the check tests
+     * the signed figures). With the base fee the next block charges.
+     */
+    internal suspend fun quoteForCheck(request: SigningRequest, owner: Address, level: FeeLevel): SafeCallQuoting =
+        quote(request, owner, level, safeChecked = {}, forCheck = true)
+
+    private suspend fun quote(
+        request: SigningRequest,
+        owner: Address,
+        level: FeeLevel,
+        safeChecked: () -> Unit,
+        forCheck: Boolean,
+    ): SafeCallQuoting {
+        fun refused(refusal: SafeTxRefusal) = SafeCallQuoting.Refused(refusal)
         if (request.network != network) return refused(SafeTxRefusal.WrongChain(request.network.chainId))
         request.unsignable()?.let { return refused(it) }
         // An earlier transaction of the owner's maybe still on its way: refused before the Safe is read.
-        quoter.heldBack(owner)?.let { return refused(SafeTxRefusal.NotQuoted(it)) }
+        quoter.heldBack(owner, holdQueued = !forCheck)?.let { return refused(SafeTxRefusal.NotQuoted(it)) }
         val state = when (val check = observeSafe.check(AccountId(request.network, request.safe))) {
             is SafeCheck.Verified -> check.reading.state
             is SafeCheck.Refused -> return refused(check.refusal)
@@ -207,15 +301,34 @@ class QuoteSafeApproval(
             is NativeRead.NotRead -> return refused(SafeTxRefusal.NotQuoted(read.refusal))
         }
         val data = SafeCalls.approveHash(request.hash)
-        return when (val quoting = quoter.quote(owner, request.safe, UInt256.ZERO, data, level, native)) {
+        val quoting = quoter.quote(
+            owner,
+            request.safe,
+            UInt256.ZERO,
+            data,
+            level,
+            native,
+            testFunds = !forCheck,
+            holdQueued = !forCheck,
+        )
+        return when (quoting) {
             is CallQuoting.Quoted -> if (quoting.unmined.any { it.approves(request) }) {
                 refused(SafeTxRefusal.AlreadySent)
             } else {
-                SafeApprovalQuoting.Quoted(SafeApprovalQuote(request, owner, quoting.quote))
+                SafeCallQuoting.Quoted(quoting.quote, quoting.nextBaseFee)
             }
             is CallQuoting.Refused -> refused(SafeTxRefusal.NotQuoted(quoting.refusal))
         }
     }
+}
+
+/**
+ * What a Safe call's quote came to, for its review or for the check of one queued in lenient mode:
+ * the [call] and the base fee per gas the next block charges ([nextBaseFee]), or a [refusal].
+ */
+internal sealed interface SafeCallQuoting {
+    data class Quoted(val call: CallQuote, val nextBaseFee: UInt256) : SafeCallQuoting
+    data class Refused(val refusal: SafeTxRefusal) : SafeCallQuoting
 }
 
 /** The outcome of [QuoteSafeApproval]. */
@@ -316,12 +429,52 @@ class QuoteSafeExecution(
         executor: Address,
         level: FeeLevel,
         safeChecked: () -> Unit = {},
-    ): SafeExecutionQuoting {
-        fun refused(refusal: SafeTxRefusal) = SafeExecutionQuoting.Refused(refusal)
+    ): SafeExecutionQuoting = when (val quoted = quote(request, executor, level, safeChecked, signed = null)) {
+        is ExecutionQuoted.Quoted ->
+            SafeExecutionQuoting.Quoted(SafeExecutionQuote(request, executor, quoted.signatures, quoted.call))
+        is ExecutionQuoted.Refused -> SafeExecutionQuoting.Refused(quoted.refusal)
+    }
+
+    /**
+     * The quote of [executor]'s execution of [request] at [level] again, fresh, for the check of the
+     * execution queued in lenient mode ([CheckQueued]; docs/lenient-mode.md, *The check before
+     * sending*), with [signedData], the call data that was signed: every check above, the Safe's
+     * among them, and the whole execution run as a verified call at the head, but with the
+     * confirmations that were signed rather than counted anew: the run is what proves the Safe
+     * accepts them now (its `checkSignatures`), and a request that gathered other signatures since
+     * still runs as signed. What the executor has queued does not hold it back, and the native
+     * balance is not tested against the fresh fee (the check tests the signed figures). With the
+     * base fee the next block charges.
+     */
+    internal suspend fun quoteForCheck(
+        request: SigningRequest,
+        executor: Address,
+        level: FeeLevel,
+        signedData: ByteArray,
+    ): SafeCallQuoting = when (val quoted = quote(request, executor, level, safeChecked = {}, signed = signedData)) {
+        is ExecutionQuoted.Quoted -> SafeCallQuoting.Quoted(quoted.call, quoted.nextBaseFee)
+        is ExecutionQuoted.Refused -> SafeCallQuoting.Refused(quoted.refusal)
+    }
+
+    private sealed interface ExecutionQuoted {
+        data class Quoted(val call: CallQuote, val signatures: List<SafeSignature>, val nextBaseFee: UInt256) :
+            ExecutionQuoted
+        data class Refused(val refusal: SafeTxRefusal) : ExecutionQuoted
+    }
+
+    private suspend fun quote(
+        request: SigningRequest,
+        executor: Address,
+        level: FeeLevel,
+        safeChecked: () -> Unit,
+        signed: ByteArray?,
+    ): ExecutionQuoted {
+        val forCheck = signed != null
+        fun refused(refusal: SafeTxRefusal) = ExecutionQuoted.Refused(refusal)
         if (request.network != network) return refused(SafeTxRefusal.WrongChain(request.network.chainId))
         request.unsignable()?.let { return refused(it) }
         // An earlier transaction of the executor's maybe still on its way: refused before the Safe is read.
-        quoter.heldBack(executor)?.let { return refused(SafeTxRefusal.NotQuoted(it)) }
+        quoter.heldBack(executor, holdQueued = !forCheck)?.let { return refused(SafeTxRefusal.NotQuoted(it)) }
         val state = when (val check = observeSafe.check(AccountId(request.network, request.safe))) {
             is SafeCheck.Verified -> check.reading.state
             is SafeCheck.Refused -> return refused(check.refusal)
@@ -333,19 +486,31 @@ class QuoteSafeExecution(
         request.withoutRecovery(state)?.let { return refused(it) }
         // Sent already from any account here, and in no block yet: the nonce is the Safe's, not the sender's.
         sentAndUnmined(request)?.let { return refused(it) }
-        val signatures = when (val confirmed = confirmations(request, state, executor)) {
-            is Confirmed.Enough -> confirmed.signatures
-            is Confirmed.Refused -> return refused(confirmed.refusal)
+        val signatures = if (signed != null) {
+            emptyList()
+        } else {
+            when (val confirmed = confirmations(request, state, executor)) {
+                is Confirmed.Enough -> confirmed.signatures
+                is Confirmed.Refused -> return refused(confirmed.refusal)
+            }
         }
         val native = when (val read = NativeRead.of(nativeBalances.observeBalance(request.network, executor).first())) {
             is NativeRead.Before -> read
             is NativeRead.NotRead -> return refused(SafeTxRefusal.NotQuoted(read.refusal))
         }
-        val data = SafeCalls.execTransaction(request.tx, signatures)
-        val quoting = quoter.quote(executor, request.safe, UInt256.ZERO, data, level, native) { it == TRUE }
+        val data = signed ?: SafeCalls.execTransaction(request.tx, signatures)
+        val quoting = quoter.quote(
+            executor,
+            request.safe,
+            UInt256.ZERO,
+            data,
+            level,
+            native,
+            testFunds = !forCheck,
+            holdQueued = !forCheck,
+        ) { it == TRUE }
         return when (quoting) {
-            is CallQuoting.Quoted ->
-                SafeExecutionQuoting.Quoted(SafeExecutionQuote(request, executor, signatures, quoting.quote))
+            is CallQuoting.Quoted -> ExecutionQuoted.Quoted(quoting.quote, signatures, quoting.nextBaseFee)
             is CallQuoting.Refused -> refused(SafeTxRefusal.NotQuoted(quoting.refusal))
         }
     }
@@ -409,11 +574,11 @@ class QuoteSafeExecution(
 }
 
 /** Whether this transaction is an on-chain approval of [request]'s Safe transaction. */
-private fun SentTransfer.approves(request: SigningRequest): Boolean =
+internal fun SentTransfer.approves(request: SigningRequest): Boolean =
     (action as? SentAction.SafeApproval)?.request?.hash == request.hash
 
 /** Whether this transaction is an execution of [request]'s Safe transaction. */
-private fun SentTransfer.executes(request: SigningRequest): Boolean =
+internal fun SentTransfer.executes(request: SigningRequest): Boolean =
     (action as? SentAction.SafeExecution)?.request?.hash == request.hash
 
 /** The outcome of [QuoteSafeExecution]. */

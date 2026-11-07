@@ -220,6 +220,8 @@ data class QueueRow(
     val signatures: String,
     val refusal: String? = null,
     val warning: String? = null,
+    /** Where the row goes among the others: its Safe nonce. */
+    val order: Long = 0,
 )
 
 /** A Safe's owners and what else acts on it, display-ready (docs/wallet-ux.md, screen 16). */

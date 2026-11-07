@@ -1,5 +1,7 @@
 package eth.serotine.desktop
 
+import eth.serotine.domain.repository.HeldConflict
+import eth.serotine.domain.repository.HeldSafeSignature
 import eth.serotine.domain.repository.OutboxNotifier
 import eth.serotine.domain.repository.QueueConflict
 import eth.serotine.domain.repository.QueuedTransaction
@@ -14,7 +16,8 @@ import java.awt.TrayIcon
  * [OutboxNotifier] on the desktop (docs/lenient-mode.md, *The outbox*): a message from the system
  * tray, while the app runs, on a desktop that has a tray, as [TrayUpgradeNotifier] shows upgrade
  * notices. The outbox runs only while the app runs, so nothing is missed by a closed app: the
- * window says the rest. It says the transfer and its recipient, never the signed bytes.
+ * window says the rest. It says the transfer and its recipient, or a held Safe signature's Safe
+ * transaction and its Safe, never the signed bytes nor a signature.
  */
 class TrayOutboxNotifier : OutboxNotifier {
 
@@ -26,6 +29,12 @@ class TrayOutboxNotifier : OutboxNotifier {
 
     override fun conflict(queued: QueuedTransaction, conflict: QueueConflict) =
         show(OutboxNotificationText.conflict(queued, conflict), TrayIcon.MessageType.WARNING)
+
+    override fun heldChecked(held: HeldSafeSignature) =
+        show(OutboxNotificationText.heldChecked(held), TrayIcon.MessageType.INFO)
+
+    override fun heldConflict(held: HeldSafeSignature, conflict: HeldConflict) =
+        show(OutboxNotificationText.heldConflict(held, conflict), TrayIcon.MessageType.WARNING)
 
     private fun show(text: OutboxNotificationText, type: TrayIcon.MessageType) {
         EventQueue.invokeLater {
