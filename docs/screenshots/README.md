@@ -50,12 +50,12 @@ If the folder grows too much, there are two levers, both the owner's. Deleting t
 | [Propose Safe transaction (simple mode)](#simple-safe-propose) | `simple-safe-propose/` | 6 |
 | [Safe settings (simple mode)](#simple-safe-settings) | `simple-safe-settings/` | 5 |
 | [Safe swap (simple mode)](#simple-safe-swap) | `simple-safe-swap/` | 4 |
-| [Safe transaction (simple mode)](#simple-safe-tx) | `simple-safe-tx/` | 12 |
+| [Safe transaction (simple mode)](#simple-safe-tx) | `simple-safe-tx/` | 15 |
 | [Send (simple mode)](#simple-send) | `simple-send/` | 8 |
-| [Settings (simple mode)](#simple-settings) | `simple-settings/` | 4 |
+| [Settings (simple mode)](#simple-settings) | `simple-settings/` | 6 |
 | [Swap (simple mode)](#simple-swap) | `simple-swap/` | 11 |
 | [Tokens (simple mode)](#simple-tokens) | `simple-tokens/` | 2 |
-| [Transfer status (simple mode)](#simple-transfer-status) | `simple-transfer-status/` | 10 |
+| [Transfer status (simple mode)](#simple-transfer-status) | `simple-transfer-status/` | 13 |
 | [Watch address (simple mode)](#simple-watch) | `simple-watch/` | 9 |
 | [Swap](#swap) | `swap/` | 38 |
 | [Tokens](#tokens) | `tokens/` | 7 |
@@ -832,7 +832,7 @@ If the folder grows too much, there are two levers, both the owner's. Deleting t
 <a name="simple-safe-tx"></a>
 ## Safe transaction (simple mode)
 
-`simple-safe-tx/`, 12 states: `overview`, `overview-dark`, `review`, `swap`, `refused`, `signing`, `approval`, `lenient-overview`, `held`, `held-dark`, `held-co-signature`, `draft`
+`simple-safe-tx/`, 15 states: `overview`, `overview-dark`, `review`, `swap`, `refused`, `signing`, `approval`, `lenient-overview`, `held`, `held-dark`, `held-co-signature`, `draft`, `held-conflict`, `held-discarded`, `draft-execution`
 
 <a href="simple-safe-tx/overview.png"><img src="simple-safe-tx/overview.png" width="206" alt="overview"></a>
 <a href="simple-safe-tx/overview-dark.png"><img src="simple-safe-tx/overview-dark.png" width="206" alt="overview-dark"></a>
@@ -846,6 +846,9 @@ If the folder grows too much, there are two levers, both the owner's. Deleting t
 <a href="simple-safe-tx/held-dark.png"><img src="simple-safe-tx/held-dark.png" width="206" alt="held-dark"></a>
 <a href="simple-safe-tx/held-co-signature.png"><img src="simple-safe-tx/held-co-signature.png" width="206" alt="held-co-signature"></a>
 <a href="simple-safe-tx/draft.png"><img src="simple-safe-tx/draft.png" width="206" alt="draft"></a>
+<a href="simple-safe-tx/held-conflict.png"><img src="simple-safe-tx/held-conflict.png" width="206" alt="held-conflict"></a>
+<a href="simple-safe-tx/held-discarded.png"><img src="simple-safe-tx/held-discarded.png" width="206" alt="held-discarded"></a>
+<a href="simple-safe-tx/draft-execution.png"><img src="simple-safe-tx/draft-execution.png" width="206" alt="draft-execution"></a>
 
 <a name="simple-send"></a>
 ## Send (simple mode)
@@ -864,12 +867,14 @@ If the folder grows too much, there are two levers, both the owner's. Deleting t
 <a name="simple-settings"></a>
 ## Settings (simple mode)
 
-`simple-settings/`, 4 states: `default`, `default-dark`, `off`, `sign-while-syncing`
+`simple-settings/`, 6 states: `default`, `default-dark`, `off`, `sign-while-syncing`, `sign-while-syncing-queued`, `sign-while-syncing-not-saved`
 
 <a href="simple-settings/default.png"><img src="simple-settings/default.png" width="206" alt="default"></a>
 <a href="simple-settings/default-dark.png"><img src="simple-settings/default-dark.png" width="206" alt="default-dark"></a>
 <a href="simple-settings/off.png"><img src="simple-settings/off.png" width="206" alt="off"></a>
 <a href="simple-settings/sign-while-syncing.png"><img src="simple-settings/sign-while-syncing.png" width="206" alt="sign-while-syncing"></a>
+<a href="simple-settings/sign-while-syncing-queued.png"><img src="simple-settings/sign-while-syncing-queued.png" width="206" alt="sign-while-syncing-queued"></a>
+<a href="simple-settings/sign-while-syncing-not-saved.png"><img src="simple-settings/sign-while-syncing-not-saved.png" width="206" alt="sign-while-syncing-not-saved"></a>
 
 <a name="simple-swap"></a>
 ## Swap (simple mode)
@@ -899,7 +904,7 @@ If the folder grows too much, there are two levers, both the owner's. Deleting t
 <a name="simple-transfer-status"></a>
 ## Transfer status (simple mode)
 
-`simple-transfer-status/`, 10 states: `confirmed`, `confirmed-dark`, `final`, `failed`, `maybe-sent`, `queued`, `queued-dark`, `queued-past-its-hour`, `queued-conflict`, `queued-safe-approval`
+`simple-transfer-status/`, 13 states: `confirmed`, `confirmed-dark`, `final`, `failed`, `maybe-sent`, `queued`, `queued-dark`, `queued-past-its-hour`, `queued-conflict`, `queued-safe-approval`, `queued-sending`, `queued-discarding`, `discarded`
 
 <a href="simple-transfer-status/confirmed.png"><img src="simple-transfer-status/confirmed.png" width="206" alt="confirmed"></a>
 <a href="simple-transfer-status/confirmed-dark.png"><img src="simple-transfer-status/confirmed-dark.png" width="206" alt="confirmed-dark"></a>
@@ -911,6 +916,9 @@ If the folder grows too much, there are two levers, both the owner's. Deleting t
 <a href="simple-transfer-status/queued-past-its-hour.png"><img src="simple-transfer-status/queued-past-its-hour.png" width="206" alt="queued-past-its-hour"></a>
 <a href="simple-transfer-status/queued-conflict.png"><img src="simple-transfer-status/queued-conflict.png" width="206" alt="queued-conflict"></a>
 <a href="simple-transfer-status/queued-safe-approval.png"><img src="simple-transfer-status/queued-safe-approval.png" width="206" alt="queued-safe-approval"></a>
+<a href="simple-transfer-status/queued-sending.png"><img src="simple-transfer-status/queued-sending.png" width="206" alt="queued-sending"></a>
+<a href="simple-transfer-status/queued-discarding.png"><img src="simple-transfer-status/queued-discarding.png" width="206" alt="queued-discarding"></a>
+<a href="simple-transfer-status/discarded.png"><img src="simple-transfer-status/discarded.png" width="206" alt="discarded"></a>
 
 <a name="simple-watch"></a>
 ## Watch address (simple mode)
