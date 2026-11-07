@@ -1,11 +1,16 @@
 package eth.serotine.domain.usecase
 
 import eth.serotine.domain.model.Address
+import eth.serotine.domain.model.FeeTier
 import eth.serotine.domain.model.Network
 import eth.serotine.domain.model.SafeTx
 import eth.serotine.domain.model.SignedTransfer
+import eth.serotine.domain.model.SwapRoute
+import eth.serotine.domain.model.SwapRouter02
+import eth.serotine.domain.model.Token
 import eth.serotine.domain.model.TransferAsset
 import eth.serotine.domain.model.UInt256
+import eth.serotine.domain.model.UniswapV3Deployment
 import eth.serotine.domain.repository.HistoryEntry
 import eth.serotine.domain.repository.HistoryList
 import eth.serotine.domain.repository.ReadUnavailable
@@ -212,18 +217,48 @@ class TransactionHistoriesTest {
     }
 
     @Test
-    fun theAddressesSentToAreTheRecipientsOfTransfersAndOfSafeTransactionsAndNoneWhileUnreadable() = runTest {
-        val carol = Address.of("0x" + "bb".repeat(20))
-        val transferred = transfer(5)
-        val payment = SafeTx.call(carol, UInt256.of(5), ByteArray(0), nonce = 4)
-        val executed = transfer(6).copy(action = SentAction.SafeExecution(world.request(payment)))
-        val deployed = transfer(7)
-            .copy(action = SentAction.SafeDeployment(world.safe, listOf(world.alice.address), 1, "1.4.1", "Vault"))
-        listOf(transferred, executed, deployed).forEach { history.record(it) }
+    fun whatWasSentIsTheRecipientsOfTransfersAndOfSafeTransactionsAndWhatSwapsBoughtAndNothingWhileUnreadable() =
+        runTest {
+            val carol = Address.of("0x" + "bb".repeat(20))
+            val router = Address.of("0x" + "50".repeat(20))
+            val transferred = transfer(5)
+            val payment = SafeTx.call(carol, UInt256.of(5), ByteArray(0), nonce = 4)
+            val executed = transfer(6).copy(action = SentAction.SafeExecution(world.request(payment)))
+            val deployed = transfer(7)
+                .copy(action = SentAction.SafeDeployment(world.safe, listOf(world.alice.address), 1, "1.4.1", "Vault"))
+            val swapped = transfer(8).copy(
+                action = SentAction.Swap(
+                    router,
+                    TransferAsset.Native,
+                    UInt256.of(5),
+                    TransferAsset.Native,
+                    UInt256.ONE,
+                ),
+            )
+            listOf(transferred, executed, deployed, swapped).forEach { history.record(it) }
 
-        assertEquals(setOf(bob, carol), ObserveSentToAddresses(history)().first())
-        history.readable.value = false
-        assertEquals(emptySet(), ObserveSentToAddresses(history)().first())
+            val sent = ObserveSentTo(history)().first()
+            assertEquals(setOf(bob, carol), sent.addresses, "a swap's router is no recipient")
+            assertEquals(mapOf(swapped.hash to Bought(null, UInt256.ONE)), sent.bought, "only what a swap bought")
+            history.readable.value = false
+            assertEquals(SentTo(emptySet(), emptyMap()), ObserveSentTo(history)().first())
+        }
+
+    @Test
+    fun whatASafesSwapExecutedFromHereBoughtIsItsDecodedRouterCallsBuyAndMinimum() = runTest {
+        val router = Address.of("0x" + "50".repeat(20))
+        val usdc = Address.of("0x" + "1c".repeat(20))
+        val link = Address.of("0x" + "77".repeat(20))
+        val deployment = UniswapV3Deployment(bob, bob, router, Address.of("0x" + "ff".repeat(20)))
+        val token = { address: Address -> TransferAsset.Erc20Token(Token(address, "T", "Token", 6, icon = null)) }
+        val route = SwapRoute.direct(usdc, link, FeeTier.MEDIUM)
+        val call =
+            SwapRouter02.swap(deployment, token(usdc), token(link), route, UInt256.of(100), UInt256.of(90), world.safe, 7)
+        val swapTx = SafeTx.call(router, call.value, call.data, nonce = 4)
+        val executed = transfer(6).copy(action = SentAction.SafeExecution(world.request(swapTx)))
+        history.record(executed)
+
+        assertEquals(mapOf(executed.hash to Bought(link, UInt256.of(90))), ObserveSentTo(history)().first().bought)
     }
 
     @Test

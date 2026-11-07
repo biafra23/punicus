@@ -18,6 +18,7 @@ private const val BOB = "0x5aAeb6053F3E94C9b9A09f33669435E7Ef1BeAed"
 private const val TREASURY = "0xfB6916095ca1df60bB79Ce92cE3Ea74c37c5d359"
 private const val USDC = "0x1c7D4B196Cb0C7B01d743Fbc6116a902379C7238"
 private const val UNLISTED = "0x8617E340B3D01FA5F11F306F4090FD50E238070D"
+private const val ROUTER = "0x3bFA4769FB09eefC5a80d6E87c3B9C650f7Ae48E"
 private const val STRANGER = "0x52908400098527886E0F7030069857D2E4169EE7"
 
 private val sent = ActivityDetailUiState.Shown(
@@ -92,6 +93,25 @@ private val unfamiliarSender = ActivityDetailUiState.Shown(
         "your history later: compare every character before you send anything to it.",
 )
 
+/** The network's own log of an ETH transfer (EIP-7708): both sides and the ETH, no contract. */
+private val ethLogged = ActivityDetailUiState.Shown(
+    title = "Treasury",
+    headline = "Sent 0.5 ETH",
+    about = ROUTER,
+    status = "On chain, from the network's own verified log of ETH transfers",
+    state = ActivityState.DONE,
+    fields = listOf(
+        DetailField("From", TREASURY, DetailKind.ADDRESS, "Treasury"),
+        DetailField("To", ROUTER, DetailKind.ADDRESS),
+        DetailField("Amount", "0.5 ETH"),
+        DetailField("Transaction hash", "0x" + "2f".repeat(32), DetailKind.HASH),
+        DetailField("Time", "Oct 19, 2026, 5:12 PM"),
+        DetailField("Block", "9,417,600", DetailKind.BLOCK),
+    ),
+    note = "A plain ETH transfer, which the network itself logs since its upgrade with EIP-7708: no token is " +
+        "involved, whatever explorers list it under.",
+)
+
 private val safeEvent = ActivityDetailUiState.Shown(
     title = "Treasury",
     headline = "Module enabled",
@@ -158,6 +178,10 @@ private fun ActivityDetailUnfamiliarSenderPreview() = ActivityDetailPreview(unfa
 
 @Preview
 @Composable
+private fun ActivityDetailEthPreview() = ActivityDetailPreview(ethLogged)
+
+@Preview
+@Composable
 private fun ActivityDetailSafeEventPreview() = ActivityDetailPreview(safeEvent)
 
 @Preview
@@ -185,4 +209,5 @@ internal val activityDetailScreenPreviews: List<ScreenPreview> = listOf(
     ScreenPreview("unfamiliar-sender") { ActivityDetailUnfamiliarSenderPreview() },
     ScreenPreview("hidden") { ActivityDetailHiddenPreview() },
     ScreenPreview("hidden-dark") { ActivityDetailHiddenDarkPreview() },
+    ScreenPreview("eth-logged") { ActivityDetailEthPreview() },
 )

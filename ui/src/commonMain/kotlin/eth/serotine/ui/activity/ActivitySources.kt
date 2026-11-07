@@ -12,9 +12,10 @@ import eth.serotine.domain.usecase.KnownTokenList
 import eth.serotine.domain.usecase.ObserveAccounts
 import eth.serotine.domain.usecase.ObserveKnownTokens
 import eth.serotine.domain.usecase.ObserveSafeHistory
-import eth.serotine.domain.usecase.ObserveSentToAddresses
+import eth.serotine.domain.usecase.ObserveSentTo
 import eth.serotine.domain.usecase.ObserveTokenTransfers
 import eth.serotine.domain.usecase.SafeChainEvent
+import eth.serotine.domain.usecase.SentTo
 import eth.serotine.domain.usecase.TokenTransferEvent
 import eth.serotine.ui.components.Eip55
 import eth.serotine.ui.components.shortAddress
@@ -30,8 +31,8 @@ import kotlinx.coroutines.flow.onStart
 /**
  * What the Activity of the account at [address] and the detail of its rows are read from, besides
  * its sent transactions (docs/wallet-ux.md, screens 25 and 26): one place, so a row and its detail
- * are read alike. Cold flows: each collector reads them anew. [observeSentTo] gives the addresses
- * the wallet sent to ([Parties.familiar]).
+ * are read alike. Cold flows: each collector reads them anew. [observeSentTo] gives what the wallet
+ * sent ([Parties.familiar]).
  */
 internal class ActivitySources(
     private val account: AccountId,
@@ -39,17 +40,17 @@ internal class ActivitySources(
     observeSafeHistory: ObserveSafeHistory,
     observeTokenTransfers: ObserveTokenTransfers,
     observeKnownTokens: ObserveKnownTokens,
-    observeSentTo: ObserveSentToAddresses,
+    observeSentTo: ObserveSentTo,
 ) {
     private val address: Address = account.address
 
     private val accounts: Flow<AccountList> = observeAccounts()
 
-    /** The wallet's accounts and the addresses it sent to: whom the rows name, and which senders they caution about. */
+    /** The wallet's accounts and what it sent: whom the rows name, and which senders they caution about. */
     val parties: Flow<Parties> = combine(
         accounts,
         observeSentTo(),
-    ) { list, sentTo -> Parties(list, sentTo, account.network) }
+    ) { list, sent -> Parties(list, sent, account.network) }
 
     /** The account's kind while it is in the wallet; null while it is not. */
     private val kind = accounts
@@ -92,11 +93,10 @@ internal class ActivitySources(
 internal fun TokenTransfer.movesNothing(): Boolean = this is TokenTransfer.Fungible && amount.isZero
 
 /**
- * The wallet's accounts as [list] holds them, and the addresses it has sent to ([sentTo],
- * `ObserveSentToAddresses`): the names rows of an account on [network] give addresses, and the
- * senders they trust.
+ * The wallet's accounts as [list] holds them, and what it sent ([sent], `ObserveSentTo`): the
+ * names rows of an account on [network] give addresses, and the senders they trust.
  */
-internal class Parties(val list: AccountList, private val sentTo: Set<Address>, network: Network) {
+internal class Parties(val list: AccountList, private val sent: SentTo, network: Network) {
 
     /**
      * The wallet's names for addresses on [network], by address: an address is named by its
@@ -110,9 +110,25 @@ internal class Parties(val list: AccountList, private val sentTo: Set<Address>, 
 
     /**
      * Whether a transfer from [sender] is from someone the user deals with: one of the wallet's
-     * accounts, an address it sent to, or none (the zero address, a mint). Any other sender may be a
-     * look-alike of an address the user uses, sending a little so that it is copied from the history
-     * later (owner's request on #136, 2026-10-21): its rows and detail caution about it.
+     * accounts, an address it sent to, or none (the zero address, a mint). Any other sender may be
+     * a look-alike of an address the user uses, sending a little so that it is copied from the
+     * history later (owner's request on #136, 2026-10-21): its rows and detail caution about it,
+     * unless it is what a swap sent from here bought ([boughtHere]).
      */
-    fun familiar(sender: Address): Boolean = sender == Address.ZERO || sender in names || sender in sentTo
+    fun familiar(sender: Address): Boolean =
+        sender == Address.ZERO || sender in names || sender in sent.addresses
+
+    /**
+     * Whether [transfer], logged by the transaction [transaction], is what a swap this wallet sent
+     * there bought: its ETH (the network's log of it) or its token, at least the minimum it was
+     * signed for. Its sender is the swap's pool, which the user asked for, not a stranger; dust of
+     * the same asset, which code the swap ran could move from anyone, is not. The caller says
+     * whether the token is one whose logs can be trusted for that (built in, its contract not
+     * contradicting it): an added one's contract could log any sender.
+     */
+    fun boughtHere(transaction: String, transfer: TokenTransfer): Boolean {
+        val bought = sent.bought[transaction] ?: return false
+        if (transfer !is TokenTransfer.Fungible || transfer.amount < bought.minimum) return false
+        return if (bought.token == null) transfer.isEth else transfer.token == bought.token
+    }
 }

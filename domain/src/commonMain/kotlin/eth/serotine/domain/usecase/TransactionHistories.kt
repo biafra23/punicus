@@ -5,6 +5,8 @@ import eth.serotine.domain.model.Address
 import eth.serotine.domain.model.Network
 import eth.serotine.domain.model.SafeTxAction
 import eth.serotine.domain.model.SigningRequest
+import eth.serotine.domain.model.TransferAsset
+import eth.serotine.domain.model.UInt256
 import eth.serotine.domain.repository.HistoryEntry
 import eth.serotine.domain.repository.HistoryList
 import eth.serotine.domain.repository.NonceReading
@@ -194,17 +196,45 @@ class ObserveAccountHistory(private val history: TransactionHistory) {
 }
 
 /**
- * The addresses this wallet has sent to, as this device's history of its transactions holds them
- * (owner's request on #136, 2026-10-21: incoming transfers from any other address are cautioned):
- * the recipient of each transfer any of its accounts sent, and of each Safe transaction one of them
- * approved or executed (its ETH or token transfer, decoded as the Safe transaction screen decodes
- * it; a call of anything else names no recipient). Empty while the history cannot be read, so that
- * no sender passes for one sent to.
+ * What this wallet sent, as this device's history of its transactions holds it (owner's request on
+ * #136, 2026-10-21: incoming transfers from anyone else are cautioned): the [addresses] it sent
+ * to, and what each swap it sent bought ([bought], by the swap's transaction hash). A swap's
+ * proceeds come from a pool it never sent to; one transfer of the asset it bought, of at least
+ * its signed minimum, arriving in that transaction, is what the user asked for, whoever the pool
+ * is. Nothing else in a transaction sent from here vouches for its sender: a dApp's call, a
+ * contract paid or an added token's code can run anyone's code, and move dust from anyone.
  */
-class ObserveSentToAddresses(private val history: TransactionHistory) {
-    operator fun invoke(): Flow<Set<Address>> = history.observe()
-        .map { list -> (list as? HistoryList.Loaded)?.entries.orEmpty().mapNotNullTo(HashSet()) { it.recipient() } }
+data class SentTo(val addresses: Set<Address>, val bought: Map<String, Bought>)
+
+/** What a swap bought: the [token] (null for the network's own currency) and the [minimum] it was signed for. */
+data class Bought(val token: Address?, val minimum: UInt256)
+
+/**
+ * What this wallet sent ([SentTo]): the recipient of each transfer any of its accounts sent, and
+ * of each Safe transaction one of them approved or executed (its ETH or token transfer, decoded as
+ * the Safe transaction screen decodes it; a call of anything else names no recipient), and what
+ * each swap bought: an account's own, and a Safe's executed from here, decoded as its router call.
+ * Nothing while the history cannot be read, so that no sender passes for one sent to.
+ */
+class ObserveSentTo(private val history: TransactionHistory) {
+    operator fun invoke(): Flow<SentTo> = history.observe()
+        .map { list ->
+            val entries = (list as? HistoryList.Loaded)?.entries.orEmpty()
+            SentTo(
+                addresses = entries.mapNotNullTo(HashSet()) { it.recipient() },
+                bought = entries.mapNotNull { entry -> entry.bought()?.let { entry.transfer.hash to it } }.toMap(),
+            )
+        }
         .distinctUntilChanged()
+
+    /** What this transaction's swap bought, when it is one: an account's, or a Safe's execution of one. */
+    private fun HistoryEntry.bought(): Bought? = when (val action = transfer.action) {
+        is SentAction.Swap -> Bought((action.buy as? TransferAsset.Erc20Token)?.token?.address, action.minimumOut)
+        is SentAction.SafeExecution -> (SafeTxAction.of(action.request.safe, action.request.tx) as? SafeTxAction.Swap)
+            ?.swap
+            ?.let { Bought(if (it.buysEther) null else it.route.tokenOut, it.minimumOut) }
+        else -> null
+    }
 
     /** Whom this transaction sent value to, when it is a transfer: the account's own or its Safe's. */
     private fun HistoryEntry.recipient(): Address? = when (val action = transfer.action) {

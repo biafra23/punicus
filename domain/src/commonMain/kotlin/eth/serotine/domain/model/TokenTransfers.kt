@@ -12,6 +12,13 @@ sealed interface TokenTransfer {
     /** Whom it reached. The zero address for a burn. */
     val to: Address
 
+    /**
+     * Whether this is no token's transfer but the protocol's log of an ETH transfer (EIP-7708,
+     * [TokenTransfers.ETH]): [Fungible], its amount in wei.
+     */
+    val isEth: Boolean
+        get() = this is Fungible && token == TokenTransfers.ETH
+
     /** [amount] of an ERC-20 token, in its smallest units. */
     data class Fungible(
         override val token: Address,
@@ -38,6 +45,15 @@ object TokenTransfers {
 
     /** `keccak256("Transfer(address,address,uint256)")`. */
     const val TRANSFER: String = "0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef"
+
+    /**
+     * The address the protocol logs every ETH transfer from (EIP-7708, on Sepolia's chain: seen in
+     * block 11,958,655's receipts): a `Transfer` in the ERC-20 shape, the amount in wei, for each
+     * transfer of a nonzero value to another account (a transaction's value, a call's, a `CREATE`'s
+     * endowment, a `SELFDESTRUCT`'s balance). It is EIP-4788's system address, which holds no code
+     * and whose key no one has, so no contract can log from it: such a log is the chain's own word.
+     */
+    val ETH: Address = Address.of("0xfffffffffffffffffffffffffffffffffffffffe")
 
     /**
      * What a log the contract [token] emitted with [topics] (each `0x` and 64 lower-case hex digits,

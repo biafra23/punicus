@@ -38,7 +38,7 @@ import eth.serotine.domain.usecase.ObserveAccountHistory
 import eth.serotine.domain.usecase.ObserveAccounts
 import eth.serotine.domain.usecase.ObserveKnownTokens
 import eth.serotine.domain.usecase.ObserveSafeHistory
-import eth.serotine.domain.usecase.ObserveSentToAddresses
+import eth.serotine.domain.usecase.ObserveSentTo
 import eth.serotine.domain.usecase.ObserveTokenTransfers
 import eth.serotine.domain.usecase.ObserveWaitingSwaps
 import eth.serotine.ui.FakeAccounts
@@ -58,6 +58,7 @@ import eth.serotine.ui.topicOf
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertIs
+import kotlin.test.assertTrue
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -144,7 +145,7 @@ class AccountActivityTest {
             ObserveSafeHistory(index, starts),
             ObserveTokenTransfers(index, starts),
             ObserveKnownTokens(ListCatalog(usdc), userTokens, FakeMetadata()),
-            ObserveSentToAddresses(history),
+            ObserveSentTo(history),
             ObserveAccountCowOrders(cowOrders),
             ObserveWaitingSwaps(waitingSwaps),
             ObserveOutbox(outbox),
@@ -825,9 +826,242 @@ class AccountActivityTest {
         assertEquals("From 0x5aAe…eAed", shown.rows[2].detail)
         assertEquals(
             "Transactions sent from this device. On chain from block 9,400,000 on, when it was added here: " +
-                "its token transfers. ETH it received, and transactions sent from it elsewhere, are not listed yet.",
+                "its token transfers. Its ETH transfers are listed only where the network logs them, and " +
+                "transactions sent from it elsewhere are not listed yet.",
             shown.coverage,
         )
+    }
+
+    @Test
+    fun theNetworksLogOfEthTransfersIsListedAsEthAndWhatASentRowSaysIsItsAlone() = runTest {
+        starts.starts.value = mapOf(alice.address to HistoryStart.Fixed(9_400_000))
+        index.coverage.value = LogCoverageReading.Read(
+            mapOf(LogWatchKey.Mention(alice.address) to LogCoverage(9_400_000, 9_400_000L..9_420_000L)),
+        )
+        val router = Address.of("0x3bfa4769fb09eefc5a80d6e87c3b9c650f7ae48e")
+        val pool = Address.of("0x6418eec70f50913ff0d756b48d32ce7c02b47c47")
+        val eth = TokenTransfers.ETH
+        val stranger = Address.of("0x" + "ab".repeat(20))
+        val swap = sent(
+            12,
+            SentAction.Swap(
+                router,
+                TransferAsset.Native,
+                UInt256.of("100000000000000000"),
+                TransferAsset.Erc20Token(usdc),
+                UInt256.of(900_000),
+            ),
+            350,
+        )
+        history.entries.value = listOf(
+            HistoryEntry(native, SentOutcome.Included(9_410_000, succeeded = true)),
+            HistoryEntry(swap, SentOutcome.Included(9_404_000, succeeded = true)),
+        )
+        index.logs = listOf(
+            tokenLog(eth, 9_401_000, stranger, alice.address, word("de0b6b3a7640000"), "0x" + "e1".repeat(32)),
+            tokenLog(eth, 9_402_000, alice.address, router, word("6f05b59d3b20000"), "0x" + "e2".repeat(32)),
+            // Sent from here: the ETH its row says, a swap's sale, and what the swap bought from its pool.
+            tokenLog(eth, 9_410_000, alice.address, treasury.address, word("3782dace9d90000"), native.hash),
+            tokenLog(eth, 9_404_000, alice.address, router, word("16345785d8a0000"), swap.hash),
+            tokenLog(usdc.address, 9_404_000, pool, alice.address, word("f4240"), swap.hash, index = 1),
+        )
+
+        val rows = assertIs<ActivityUiState.Shown>(activity().value).rows
+
+        assertEquals(5, rows.size, rows.map { it.title }.toString())
+        assertEquals("Sent 0.25 ETH", rows.first().title, "the transfer's own row, not also its log")
+        assertTrue(rows[1].title.startsWith("Swapped"), rows[1].title)
+        val bought = rows.single { it.title == "Received 1 USDC" }
+        assertEquals(ActivityState.DONE, bought.state, "what a swap sent from here bought, from its pool")
+        val sentElsewhere = rows.single { it.title == "Sent 0.5 ETH" }
+        assertEquals("To 0x3bFA…e48E", sentElsewhere.detail)
+        assertEquals("On chain, from the network's own verified log of ETH transfers", sentElsewhere.status)
+        assertEquals(ActivityState.CAUTION, rows.single { it.title == "Received 1 ETH" }.state, "never sent to")
+    }
+
+    @Test
+    fun aStrangersTransferInATransactionSentFromHereThatBoughtNothingIsStillCautioned() = runTest {
+        starts.starts.value = mapOf(alice.address to HistoryStart.Fixed(9_400_000))
+        index.coverage.value = LogCoverageReading.Read(
+            mapOf(LogWatchKey.Mention(alice.address) to LogCoverage(9_400_000, 9_400_000L..9_420_000L)),
+        )
+        val lookalike = Address.of("0x5aae000000000000000000000000000000000ead")
+        // A call sent from here runs code the wallet does not know: it vouches for no sender it logs.
+        history.entries.value = listOf(HistoryEntry(token, SentOutcome.Included(9_405_000, succeeded = true)))
+        index.logs = listOf(
+            tokenLog(TokenTransfers.ETH, 9_405_000, lookalike, alice.address, word("1"), token.hash, index = 1),
+            tokenLog(usdc.address, 9_405_000, lookalike, alice.address, word("2710"), token.hash, index = 2),
+        )
+
+        val rows = assertIs<ActivityUiState.Shown>(activity().value).rows
+
+        val planted = rows.filter { it.title.startsWith("Received") }
+        assertEquals(2, planted.size, rows.map { it.title }.toString())
+        assertTrue(planted.all { it.state == ActivityState.CAUTION }, planted.toString())
+    }
+
+    @Test
+    fun whatASwapBoughtOfAnAddedTokenVouchesForNoSender() = runTest {
+        starts.starts.value = mapOf(alice.address to HistoryStart.Fixed(9_400_000))
+        index.coverage.value = LogCoverageReading.Read(
+            mapOf(LogWatchKey.Mention(alice.address) to LogCoverage(9_400_000, 9_400_000L..9_420_000L)),
+        )
+        // An added token's contract can log any sender, a look-alike of one the user uses too.
+        val added = Token(Address.of("0x" + "ad".repeat(20)), "ADD", "Added", 18, null)
+        userTokens.settings.value = TokenSettings.Loaded(listOf(added), emptySet())
+        val lookalike = Address.of("0x5aae000000000000000000000000000000000ead")
+        val swap = sent(
+            12,
+            SentAction.Swap(
+                Address.of("0x" + "50".repeat(20)),
+                TransferAsset.Native,
+                UInt256.of("100000000000000000"),
+                TransferAsset.Erc20Token(added),
+                UInt256.ONE,
+            ),
+            350,
+        )
+        history.entries.value = listOf(HistoryEntry(swap, SentOutcome.Included(9_404_000, succeeded = true)))
+        index.logs = listOf(
+            tokenLog(added.address, 9_404_000, lookalike, alice.address, word("de0b6b3a7640000"), swap.hash, index = 1),
+        )
+
+        val rows = assertIs<ActivityUiState.Shown>(activity().value).rows
+
+        assertEquals(ActivityState.CAUTION, rows.single { it.title == "Received 1 ADD" }.state)
+    }
+
+    @Test
+    fun dustOfWhatASwapBoughtBelowItsSignedMinimumIsStillCautioned() = runTest {
+        starts.starts.value = mapOf(alice.address to HistoryStart.Fixed(9_400_000))
+        index.coverage.value = LogCoverageReading.Read(
+            mapOf(LogWatchKey.Mention(alice.address) to LogCoverage(9_400_000, 9_400_000L..9_420_000L)),
+        )
+        val pool = Address.of("0x6418eec70f50913ff0d756b48d32ce7c02b47c47")
+        val lookalike = Address.of("0x5aae000000000000000000000000000000000ead")
+        val swap = sent(
+            12,
+            SentAction.Swap(
+                Address.of("0x" + "50".repeat(20)),
+                TransferAsset.Native,
+                UInt256.of("100000000000000000"),
+                TransferAsset.Erc20Token(usdc),
+                UInt256.of(900_000),
+            ),
+            350,
+        )
+        history.entries.value = listOf(HistoryEntry(swap, SentOutcome.Included(9_404_000, succeeded = true)))
+        index.logs = listOf(
+            tokenLog(usdc.address, 9_404_000, pool, alice.address, word("f4240"), swap.hash, index = 1),
+            // A swap's code moving dust of the same token from a look-alike: not its proceeds.
+            tokenLog(usdc.address, 9_404_000, lookalike, alice.address, word("1"), swap.hash, index = 2),
+        )
+
+        val rows = assertIs<ActivityUiState.Shown>(activity().value).rows
+
+        assertEquals(ActivityState.DONE, rows.single { it.title == "Received 1 USDC" }.state)
+        assertEquals(ActivityState.CAUTION, rows.single { it.title == "Received 0.000001 USDC" }.state)
+    }
+
+    @Test
+    fun anEthLogItsSentRowDoesNotSayIsListedBesideIt() = runTest {
+        starts.starts.value = mapOf(alice.address to HistoryStart.Fixed(9_400_000))
+        index.coverage.value = LogCoverageReading.Read(
+            mapOf(LogWatchKey.Mention(alice.address) to LogCoverage(9_400_000, 9_400_000L..9_420_000L)),
+        )
+        val other = sent(13, SentAction.Transfer(bob, TransferAsset.Native, UInt256.of("250000000000000000")), 360)
+        history.entries.value = listOf(
+            // Another amount than its row says: a second movement in the same transaction.
+            HistoryEntry(native, SentOutcome.Included(9_410_000, succeeded = true)),
+            // No block seen for it yet: its row names none, so it says nothing its log does.
+            HistoryEntry(other),
+        )
+        index.logs = listOf(
+            tokenLog(TokenTransfers.ETH, 9_410_000, alice.address, treasury.address, word("1"), native.hash),
+            tokenLog(TokenTransfers.ETH, 9_409_000, alice.address, bob, word("3782dace9d90000"), other.hash),
+        )
+
+        val rows = assertIs<ActivityUiState.Shown>(activity().value).rows
+
+        assertEquals(2, rows.count { it.status == "On chain, from the network's own verified log of ETH transfers" })
+    }
+
+    @Test
+    fun ethASafeReceivedIsItsOwnEventAloneNotAlsoTheNetworksLogOfIt() = runTest {
+        treasuryIndexed(9_400_000L..9_420_000L)
+        val tx = "0x" + "dd".repeat(32)
+        index.logs = listOf(
+            safeLog(9_415_000, listOf(received, bobsTopic), word("de0b6b3a7640000"), tx = tx),
+            tokenLog(TokenTransfers.ETH, 9_415_000, bob, treasury.address, word("de0b6b3a7640000"), tx, index = 1),
+        )
+
+        val rows = assertIs<ActivityUiState.Shown>(activity(treasury.address).value).rows
+
+        assertEquals(listOf("Received 1 ETH"), rows.map { it.title })
+        assertEquals(ActivityKey(tx, 0), rows.single().opens, "the Safe's own event, not the network's log")
+    }
+
+    @Test
+    fun aCowFillOfEthIsSaidByItsOrdersRowNotAsAnEthReceiptFromAnUnfamiliarSender() = runTest {
+        starts.starts.value = mapOf(alice.address to HistoryStart.Fixed(9_400_000))
+        index.coverage.value = LogCoverageReading.Read(
+            mapOf(LogWatchKey.Mention(alice.address) to LogCoverage(9_400_000, 9_400_000L..9_420_000L)),
+        )
+        val fillTx = "0x" + "f4".repeat(32)
+        val record = order(320)
+        cowOrders.orders.value = listOf(
+            record.copy(
+                end = CowOrderEnd.Filled(
+                    CowTrade(
+                        alice.address,
+                        usdc.address,
+                        CowOrder.NATIVE_BUY_TOKEN,
+                        UInt256.of(40_000_000),
+                        UInt256.of("15900000000000000"),
+                        UInt256.ZERO,
+                        record.uid,
+                    ),
+                    9_401_005,
+                    fillTx,
+                ),
+            ),
+        )
+        index.logs = listOf(
+            tokenLog(usdc.address, 9_401_005, alice.address, settlement, word("2625a00"), fillTx, index = 0),
+            // The settlement pays native ETH, which the network logs under its own address.
+            tokenLog(
+                TokenTransfers.ETH, 9_401_005, settlement, alice.address, word("387cf73bedc000"), fillTx, index = 1,
+            ),
+        )
+
+        val rows = assertIs<ActivityUiState.Shown>(activity().value).rows
+
+        assertEquals(listOf("Swapped 40 USDC for 0.0159 ETH on CoW"), rows.map { it.title })
+    }
+
+    @Test
+    fun theEthAWrapSentAndAnUnwrapGotBackIsSaidByTheirRowsAlone() = runTest {
+        starts.starts.value = mapOf(alice.address to HistoryStart.Fixed(9_400_000))
+        index.coverage.value = LogCoverageReading.Read(
+            mapOf(LogWatchKey.Mention(alice.address) to LogCoverage(9_400_000, 9_400_000L..9_420_000L)),
+        )
+        val weth = Token(Address.of("0x" + "7e".repeat(20)), "WETH", "Wrapped Ether", 18, "weth")
+        val half = UInt256.of("500000000000000000")
+        val wrap = sent(10, SentAction.Wrap(weth, half), 450)
+        val unwrap = sent(11, SentAction.Unwrap(weth, half), 460)
+        history.entries.value = listOf(
+            HistoryEntry(wrap, SentOutcome.Included(9_406_000, succeeded = true)),
+            HistoryEntry(unwrap, SentOutcome.Included(9_407_000, succeeded = true)),
+        )
+        index.logs = listOf(
+            tokenLog(TokenTransfers.ETH, 9_406_000, alice.address, weth.address, word("6f05b59d3b20000"), wrap.hash),
+            tokenLog(TokenTransfers.ETH, 9_407_000, weth.address, alice.address, word("6f05b59d3b20000"), unwrap.hash),
+        )
+
+        val rows = assertIs<ActivityUiState.Shown>(activity().value).rows
+
+        assertEquals(2, rows.size, rows.map { it.title }.toString())
+        assertTrue(rows.none { it.status == "On chain, from the network's own verified log of ETH transfers" })
     }
 
     @Test
