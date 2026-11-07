@@ -287,9 +287,11 @@ internal fun SigningRequest.withoutRecovery(owners: Int): SafeTxRefusal? =
  * for a pinned ≥1.3.0 singleton, migrated to or deployed on.
  *
  * Fail-closed: only the versions [SafeTx.hash] computes the digest of
- * ([EIP712_CHAIN_ID_DOMAIN_VERSIONS]) may be signed; every other version a Safe is recognised on is refused, so pinning another old
- * singleton for display (0.0.2, 0.1.0 and 1.1.0 were, after 1.0.0, 1.1.1 and 1.2.0) can never let
- * a digest be signed that the Safe does not check.
+ * ([EIP712_CHAIN_ID_DOMAIN_VERSIONS]) may be signed; every other version a Safe is recognised
+ * on is refused, so pinning another old singleton for display (0.0.2, 0.1.0 and 1.1.0 were,
+ * after 1.0.0, 1.1.1 and 1.2.0) can never let a digest be signed that the Safe does not check.
+ * A release after 1.5.0 is refused too until it is added there, once [SafeTx.hash] is checked
+ * against it: pinning it in `SafeDeployments` alone shows it and signs nothing.
  */
 internal fun SafeState.tooOldToSign(): SafeTxRefusal? =
     SafeTxRefusal.TooOldToSign(version).takeIf { version !in EIP712_CHAIN_ID_DOMAIN_VERSIONS }

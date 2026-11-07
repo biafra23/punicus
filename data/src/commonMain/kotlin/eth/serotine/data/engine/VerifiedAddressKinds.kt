@@ -253,11 +253,16 @@ class VerifiedAddressKinds internal constructor(
                 is Walk.Entries -> walked.addresses
             }
             // Head reads: their slots are hashes no storage proof names. Only a version that
-            // consults a module guard has one: a word in that slot of an older Safe is nothing.
-            val guard = when (val read = guardAt(GUARD_SLOT)) {
-                Guard.Unproven -> return null
-                Guard.Broken -> return proven(AddressKind.Contract)
-                is Guard.At -> read.address
+            // consults a guard (1.3.0 on) or a module guard (1.5.0 on) has one: a word in that
+            // slot of an older Safe is nothing.
+            val guard = if (!singleton.guard) {
+                null
+            } else {
+                when (val read = guardAt(GUARD_SLOT)) {
+                    Guard.Unproven -> return null
+                    Guard.Broken -> return proven(AddressKind.Contract)
+                    is Guard.At -> read.address
+                }
             }
             val moduleGuard = if (!singleton.moduleGuard) {
                 null

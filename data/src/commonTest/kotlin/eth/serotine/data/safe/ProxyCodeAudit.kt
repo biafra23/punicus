@@ -33,7 +33,9 @@ internal fun auditProxyCode(code: ByteArray): List<String> {
     val work = ArrayDeque<Pair<Int, List<Value>>>().apply { add(0 to emptyList()) }
     while (work.isNotEmpty()) {
         val (start, initial) = work.removeLast()
-        if (!seen.add(start to initial) || seen.size > 20_000) continue
+        if (!seen.add(start to initial)) continue
+        // Fail closed: a walk too large to finish is no proxy this audit can vouch for.
+        if (seen.size > MAX_STATES) { problems += "more than $MAX_STATES states: not walked to the end"; break }
         val stack = initial.toMutableList()
         var pc = start
         walk@ while (pc < code.size) {
@@ -132,10 +134,13 @@ private fun fold(op: Int, args: List<Value>): Value = when (op) {
     // SHL and SUB of constants: solc ≥ 0.5.12 builds the address mask as `(1 << 160) - 1`.
     0x1b -> constants(args) { (shift, value) -> value.shl(shift) }
     0x03 -> constants(args) { (a, b) -> a.minus(b) }
-    // ISZERO and EQ of constants (`if eq(success, 0)` stays opaque: success is opaque).
+    // ISZERO of a constant; anything else stays opaque, so both of its branches are walked.
     0x15 -> (args[0] as? Value.Const)?.let { if (it.isZero) Value.Const.ONE else Value.Const.ZERO } ?: Value.Opaque
     else -> Value.Opaque
 }
+
+/** Proxies are a few hundred bytes: a walk this large is no proxy's. */
+private const val MAX_STATES = 20_000
 
 private fun ByteArray.toBigNat(): Value.Const = Value.Const(dropWhile { it == 0.toByte() })
 

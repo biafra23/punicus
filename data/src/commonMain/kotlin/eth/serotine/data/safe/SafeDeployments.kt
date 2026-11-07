@@ -7,9 +7,15 @@ import eth.serotine.domain.model.SafeRelease
 
 /**
  * A canonical Safe singleton: its [version] ("1.4.1"), whether it is the L2 variant ([l2]),
- * and whether it consults a module guard ([moduleGuard]: 1.5.0 on; older ones never read it).
+ * whether it consults a guard ([guard]: 1.3.0 on; older ones never read it, so a word in that
+ * slot is nothing) and a module guard ([moduleGuard]: 1.5.0 on).
  */
-internal data class SafeSingleton(val version: String, val l2: Boolean, val moduleGuard: Boolean = false)
+internal data class SafeSingleton(
+    val version: String,
+    val l2: Boolean,
+    val moduleGuard: Boolean = false,
+    val guard: Boolean = true,
+)
 
 /**
  * The Safe deployments a Safe is recognised by, per network (docs/wallet-ux.md, *Safes*): the
@@ -55,8 +61,9 @@ internal data class SafeSingleton(val version: String, val l2: Boolean, val modu
  *   one line added, an `AddedOwner` event in `setupOwners`; its `VERSION()` is "1.1.1".
  * - Every release from 0.0.2 on keeps `MasterCopy`, the modules, the owners, their count, the
  *   threshold and the nonce in slots 0 to 5, each list behind the sentinel `0x1` (read in each
- *   tag's source), which is what `readSafe` reads; before 1.3.0 there is no guard (read as none,
- *   since nothing was ever written at its hashed slot) and before 1.5.0 no module guard.
+ *   tag's source), which is what `readSafe` reads; before 1.3.0 there is no guard and before
+ *   1.5.0 no module guard, so neither slot is read ([SafeSingleton.guard], [SafeSingleton.moduleGuard]):
+ *   a word an old Safe's own delegatecall wrote there protects nothing.
  *
  * **Recognised is not signable.** A Safe left on a release before 1.3.0 checks a different
  * EIP-712 domain than `SafeTx.hash` computes (0.0.2 and 0.1.0 another `SafeTx` type besides), so
@@ -254,7 +261,10 @@ internal object SafeDeployments {
     private const val SINGLETON_L2_1_4_1 = "0x29fcb43b46531bca003ddc8fcb67ffe91900c762"
 
     private fun singleton(address: String, version: String, l2: Boolean, moduleGuard: Boolean = false) =
-        Address.of(address) to SafeSingleton(version, l2, moduleGuard)
+        Address.of(address) to SafeSingleton(version, l2, moduleGuard, guard = version in GUARDED_VERSIONS)
+
+    /** The releases that consult a guard: 1.3.0 introduced it. */
+    private val GUARDED_VERSIONS = setOf("1.3.0", "1.4.1", "1.5.0")
 }
 
 /**
