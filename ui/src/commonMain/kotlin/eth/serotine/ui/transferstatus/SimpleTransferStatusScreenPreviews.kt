@@ -164,6 +164,21 @@ private fun SimpleTransferQueuedConflictPreview() = SimpleTransferStatusPreview(
 @Composable
 private fun SimpleTransferQueuedSafeApprovalPreview() = SimpleTransferStatusPreview(queuedSafeApprovalSample)
 
+/** Its check passed and it is being sent: Discard and Edit greyed out. */
+@Preview
+@Composable
+private fun SimpleTransferQueuedSendingPreview() = SimpleTransferStatusPreview(queuedSendingSample)
+
+/** A Discard tapped, waiting on the outbox's lock. */
+@Preview
+@Composable
+private fun SimpleTransferQueuedDiscardingPreview() = SimpleTransferStatusPreview(queuedSample.copy(discarding = true))
+
+/** Discarded: its signature deleted, and nothing sent. */
+@Preview
+@Composable
+private fun SimpleTransferDiscardedPreview() = SimpleTransferStatusPreview(discardedSample)
+
 /** Every preview above, which SimpleTransferStatusScreenPreviewsTest renders: a new preview goes in here too. */
 internal val simpleTransferStatusScreenPreviews: List<ScreenPreview> = listOf(
     ScreenPreview("confirmed") { SimpleTransferConfirmedPreview() },
@@ -176,4 +191,7 @@ internal val simpleTransferStatusScreenPreviews: List<ScreenPreview> = listOf(
     ScreenPreview("queued-past-its-hour") { SimpleTransferQueuedPastItsHourPreview() },
     ScreenPreview("queued-conflict") { SimpleTransferQueuedConflictPreview() },
     ScreenPreview("queued-safe-approval") { SimpleTransferQueuedSafeApprovalPreview() },
+    ScreenPreview("queued-sending") { SimpleTransferQueuedSendingPreview() },
+    ScreenPreview("queued-discarding") { SimpleTransferQueuedDiscardingPreview() },
+    ScreenPreview("discarded") { SimpleTransferDiscardedPreview() },
 )

@@ -465,7 +465,8 @@ class CowOrderViewModel(
             ReadUnavailable.NO_ENGINE -> "There is no light client on this device, so nothing can be cancelled."
             ReadUnavailable.NETWORK_OFF -> "The network's light client is not running, so nothing can be cancelled."
             ReadUnavailable.STALE_ANCHOR -> "The light client refuses to sync, so nothing can be quoted."
-            ReadUnavailable.SYNCING -> "The light client is still syncing, so nothing can be quoted yet."
+            ReadUnavailable.SYNCING -> "The light client is still syncing, so nothing can be quoted yet." +
+                if (lenient.value) SWAPS_STAY_STRICT else ""
             ReadUnavailable.UNPROVEN ->
                 "${figureText(quoting.figure, "of the cancellation")} could not be verified this time: try again."
             ReadUnavailable.REFUSED -> "The light client on this device cannot quote the cancellation."

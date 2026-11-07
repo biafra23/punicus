@@ -220,7 +220,9 @@ fun AccountsScreen(
     ) { padding ->
         Column(Modifier.padding(padding).fillMaxSize()) {
             state.upgrades.forEach { UpgradeBanner(it) }
-            (state as? AccountsUiState.Ready)?.lostNotice?.let { LostQueuedNotice(it, onDismissLost) }
+            // With accounts listed, the notice scrolls with them: a long one never squeezes them out.
+            (state as? AccountsUiState.Ready)?.takeIf { it.accounts.isEmpty() }?.lostNotice
+                ?.let { LostQueuedNotice(it, onDismissLost) }
             (state as? AccountsUiState.Ready)?.let { ready ->
                 ready.total?.let { PortfolioTotal(it, ready.totalLabel, ready.totalNote) }
             }
@@ -233,7 +235,7 @@ fun AccountsScreen(
                 )
             }
             Box(Modifier.weight(1f).fillMaxWidth()) {
-                Rows(state, act, onTurnOnNetwork, onCatchUp = { asking = it }) { unavailable = it }
+                Rows(state, act, onTurnOnNetwork, onDismissLost, onCatchUp = { asking = it }) { unavailable = it }
             }
         }
     }
@@ -309,6 +311,7 @@ private fun BoxScope.Rows(
     state: AccountsUiState,
     onAccountAction: (AccountAction) -> Unit,
     onTurnOnNetwork: (Long) -> Unit,
+    onDismissLost: () -> Unit,
     onCatchUp: (StaleAnchorWarning) -> Unit,
     onUnavailable: (UnavailableNotice) -> Unit,
 ) {
@@ -325,7 +328,15 @@ private fun BoxScope.Rows(
             if (state.accounts.isEmpty()) {
                 NoAccounts(Modifier.align(Alignment.Center))
             } else {
-                AccountList(state.sections, onAccountAction, onTurnOnNetwork, onCatchUp, onUnavailable)
+                AccountList(
+                    state.sections,
+                    state.lostNotice,
+                    onAccountAction,
+                    onTurnOnNetwork,
+                    onDismissLost,
+                    onCatchUp,
+                    onUnavailable,
+                )
             }
     }
 }
@@ -354,13 +365,16 @@ internal fun NoAccounts(modifier: Modifier = Modifier) {
 @Composable
 private fun AccountList(
     sections: List<NetworkSection>,
+    lostNotice: String?,
     onAccountAction: (AccountAction) -> Unit,
     onTurnOnNetwork: (Long) -> Unit,
+    onDismissLost: () -> Unit,
     onCatchUp: (StaleAnchorWarning) -> Unit,
     onUnavailable: (UnavailableNotice) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     LazyColumn(modifier.fillMaxSize().testTag(ACCOUNTS_LIST_TAG)) {
+        lostNotice?.let { lost -> item(key = "lost") { LostQueuedNotice(lost, onDismissLost) } }
         sections.forEach { section ->
             item(key = "section/${section.chainId}") { SectionHeader(section, onCatchUp) }
             items(section.accounts, key = { "${it.chainId}/${it.address}" }) { account ->

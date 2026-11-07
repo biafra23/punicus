@@ -12,6 +12,7 @@ import eth.serotine.domain.model.WalletPassword
 import eth.serotine.domain.model.Wei
 import eth.serotine.domain.repository.AddressKind
 import eth.serotine.domain.repository.AddressKinds
+import eth.serotine.domain.model.SyncPolicy
 import eth.serotine.domain.repository.BalanceReading
 import eth.serotine.domain.repository.BiometricChange
 import eth.serotine.domain.repository.BiometricUnlock
@@ -68,6 +69,7 @@ import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertIs
 import kotlin.test.assertNotEquals
+import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 import kotlin.time.Duration.Companion.seconds
@@ -162,6 +164,7 @@ class CreateSafeViewModelTest {
     fun resetMainDispatcher() = Dispatchers.resetMain()
 
     private val networks = MemoryNetworkSettings()
+    private val policy = MemorySyncPolicy()
 
     private fun TestScope.viewModel(): CreateSafeViewModel {
         Dispatchers.setMain(UnconfinedTestDispatcher(testScheduler))
@@ -176,7 +179,7 @@ class CreateSafeViewModelTest {
             WarmFeeHistory(inputs),
             ObserveEnabledNetworks(networks),
             SetNetworkEnabled(networks),
-            ObserveSyncPolicy(MemorySyncPolicy()),
+            ObserveSyncPolicy(policy),
             clock,
         )
         backgroundScope.launch { viewModel.uiState.collect {} }
@@ -763,5 +766,21 @@ class CreateSafeViewModelTest {
 
         assertTrue(viewModel.review.error!!.startsWith("This address holds code already"))
         assertNull(viewModel.review.quote)
+    }
+    @Test
+    fun inLenientModeADeploymentRefusedWhileItsPayerSyncsSaysTheSettingDoesNotReachIt() = runTest {
+        for ((chosen, said) in listOf(SyncPolicy.STRICT to false, SyncPolicy.LENIENT to true)) {
+            policy.policy.value = chosen
+            // The address checked on chain; only the payer's balance is still syncing.
+            balances.of(daily.address).value = BalanceReading.Syncing
+            val viewModel = viewModel()
+            viewModel.onContinue()
+            viewModel.onContinue()
+            runCurrent()
+
+            val error = assertNotNull(viewModel.review.error)
+            assertTrue(error.startsWith("The light client is not synced yet"), error)
+            assertEquals(said, "Sign while syncing does not apply to creating a Safe" in error, error)
+        }
     }
 }

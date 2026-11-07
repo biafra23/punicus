@@ -211,7 +211,8 @@ internal val heldCoSignatureSample = lenientOverviewSample.copy(
     ),
 )
 
-private val heldConflict = heldSample.copy(
+/** A held proposal whose nonce another transaction used, for this file's previews and simple mode's. */
+internal val heldConflictSample = heldSample.copy(
     steps = listOf(
         HeldStep("Signed", HeldStepState.UNKNOWN, "As Daily on this device, 6 Nov 2026, 14:02: deleted since"),
         HeldStep(
@@ -659,7 +660,7 @@ private fun SafeTxHeldCheckingPreview() = SafeTxPreview(
 
 @Preview
 @Composable
-private fun SafeTxHeldConflictPreview() = SafeTxPreview(heldConflict)
+private fun SafeTxHeldConflictPreview() = SafeTxPreview(heldConflictSample)
 
 @Preview
 @Composable
@@ -668,9 +669,11 @@ private fun SafeTxHeldCoSignaturePreview() =
 
 @Preview
 @Composable
-private fun SafeTxHeldDiscardedPreview() = SafeTxPreview(
-    SafeTxUiState.Discarded("Sepolia", "Discarded: your signature was deleted, and it was never shown to anyone."),
-)
+private fun SafeTxHeldDiscardedPreview() = SafeTxPreview(heldDiscardedSample)
+
+/** A held signature discarded, for this file's previews and simple mode's. */
+internal val heldDiscardedSample =
+    SafeTxUiState.Discarded("Sepolia", "Discarded: your signature was deleted, and it was never shown to anyone.")
 
 @Preview
 @Composable
@@ -678,16 +681,16 @@ private fun SafeTxDraftApprovalPreview() = SafeTxPreview(draftApprovalSample, li
 
 @Preview
 @Composable
-private fun SafeTxDraftExecutionPreview() = SafeTxPreview(
-    draftApprovalSample.copy(
-        kind = ReviewKind.EXECUTION,
-        maxFee = "0.0066 ETH",
-        feeDetail = "300,000 gas, the most it is signed for, × at most 22 gwei, from the fee history last verified " +
-            "up to block 8,412,306. Only the gas used, at what the block charges, is paid.",
-        balance = draftApprovalSample.balance.copy(after = "at least 1.2434 ETH, if nothing changed"),
-        confirmations = "Executed with: Daily, by sending the execution; Savings's signature",
-    ),
-    lightClient = catchingUpStripSample,
+private fun SafeTxDraftExecutionPreview() = SafeTxPreview(draftExecutionSample, lightClient = catchingUpStripSample)
+
+/** An execution drafted in lenient mode, for this file's previews and simple mode's. */
+internal val draftExecutionSample = draftApprovalSample.copy(
+    kind = ReviewKind.EXECUTION,
+    maxFee = "0.0066 ETH",
+    feeDetail = "300,000 gas, the most it is signed for, × at most 22 gwei, from the fee history last verified " +
+        "up to block 8,412,306. Only the gas used, at what the block charges, is paid.",
+    balance = draftApprovalSample.balance.copy(after = "at least 1.2434 ETH, if nothing changed"),
+    confirmations = "Executed with: Daily, by sending the execution; Savings's signature",
 )
 
 @Preview

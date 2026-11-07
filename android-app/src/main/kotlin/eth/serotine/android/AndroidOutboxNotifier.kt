@@ -63,8 +63,9 @@ class AndroidOutboxNotifier(private val context: Context) : OutboxNotifier {
                 .setContentIntent(open)
                 .setAutoCancel(true)
                 .build()
-            // One id per queued transaction or held signature: what is said of it replaces what was before.
-            manager.notify(NOTIFICATION_BASE + (id.hashCode() and 0xffff), notification)
+            // Tagged with the whole hash of the queued transaction or held signature, under one id: what is
+            // said of it replaces what was before, and nothing said of another one ever does.
+            manager.notify(id, NOTIFICATION_ID, notification)
         } catch (e: Exception) {
             // The permission revoked in between, or a notification that cannot be put into words:
             // the app's screens still say it.
@@ -74,7 +75,7 @@ class AndroidOutboxNotifier(private val context: Context) : OutboxNotifier {
     private companion object {
         const val CHANNEL_ID = "outbox"
 
-        /** Above the upgrade notices' ids (1 to 3), so neither ever replaces the other. */
-        const val NOTIFICATION_BASE = 0x10000
+        /** Every outbox notice's id, told apart by its tag; the upgrade notices (ids 1 to 3) have none. */
+        const val NOTIFICATION_ID = 0x10000
     }
 }

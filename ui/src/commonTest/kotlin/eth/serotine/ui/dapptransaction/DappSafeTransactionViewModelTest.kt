@@ -1,5 +1,7 @@
 package eth.serotine.ui.dapptransaction
 
+import eth.serotine.domain.repository.ReadUnavailable
+import eth.serotine.domain.model.SyncPolicy
 import eth.serotine.domain.model.DappTransactionRequest
 import eth.serotine.domain.repository.Outbox
 import eth.serotine.domain.repository.SafeState
@@ -64,6 +66,7 @@ class DappSafeTransactionViewModelTest {
     private val networks = MemoryNetworkSettings(setOf(Network.SEPOLIA))
     private val requests = FakeDappRequests()
     private val clock = TestTimeSource()
+    private val policy = MemorySyncPolicy()
     private val payment =
         DappTransactionRequest(world.safe, world.recipient, UInt256.of("500000000000000000"), ByteArray(0), null)
 
@@ -98,7 +101,7 @@ class DappSafeTransactionViewModelTest {
             SignDappSafeTx(requests) { SignSafeTx(world.signer, world.observeSafe, world.recovery, world.queue, it) },
             RefuseDappRequest(requests, world.accounts, networks, clock = { now }),
             DescribeKeyStore(FakeKeys()),
-            observeSyncPolicy = ObserveSyncPolicy(MemorySyncPolicy()),
+            observeSyncPolicy = ObserveSyncPolicy(policy),
             clock = { now },
             timeSource = clock,
             ticks = kotlinx.coroutines.flow.flowOf(Unit),
@@ -288,5 +291,18 @@ class DappSafeTransactionViewModelTest {
         vm.refuse()
         runCurrent()
         assertEquals(listOf(request(1).id to DappRequestError.INVALID_PARAMS), requests.refusals)
+    }
+    @Test
+    fun inLenientModeASafeCallWhoseRunWaitsForTheSyncSaysTheSettingDoesNotReachIt() = runTest {
+        // The Safe checked; only its call's verified run waits for the light client to catch up.
+        world.inputs.simulation = Simulation.Unavailable(ReadUnavailable.SYNCING)
+        requests.waiting.value = listOf(request(1))
+        for ((chosen, said) in listOf(SyncPolicy.STRICT to false, SyncPolicy.LENIENT to true)) {
+            policy.policy.value = chosen
+            val vm = viewModel()
+
+            val notQuoted = assertNotNull(vm.uiState.value.notQuoted)
+            assertEquals(said, "Sign while syncing does not apply to a dApp's requests" in notQuoted, notQuoted)
+        }
     }
 }

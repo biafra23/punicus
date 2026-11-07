@@ -69,6 +69,7 @@ import eth.serotine.ui.components.resolveAgain
 import eth.serotine.ui.components.retryLookupWaits
 import eth.serotine.ui.components.simpleCallRefusalText
 import eth.serotine.ui.components.unavailableText
+import eth.serotine.ui.components.whileSyncing
 import eth.serotine.ui.components.verifiedAt
 import kotlin.concurrent.Volatile
 import kotlin.time.TimeMark
@@ -945,7 +946,11 @@ class CreateSafeViewModel(
         SafePlanRefusal.NameTooLong -> "At most ${RenameAccount.MAX_LABEL_LENGTH} characters."
     }
 
-    private fun refusalText(refusal: SafeDeploymentRefusal): String = when (refusal) {
+    /** Why [refusal] stops the deployment; in lenient mode, after any refusal while syncing, that it stays strict. */
+    private fun refusalText(refusal: SafeDeploymentRefusal): String =
+        refusalReason(refusal) + if (lenient.value && refusal.whileSyncing) CREATE_SAFE_STAYS_STRICT else ""
+
+    private fun refusalReason(refusal: SafeDeploymentRefusal): String = when (refusal) {
         is SafeDeploymentRefusal.AlreadyDeployed -> if (refusal.kind is AddressKind.Safe) {
             "A Safe exists at this address already, so a deployment there would fail. Go back and continue again " +
                 "for another address."
@@ -965,8 +970,7 @@ class CreateSafeViewModel(
             "The factory's verified run $returned, not the address computed here: the Safe release Serotine " +
                 "pins does not match the chain, so nothing is deployed."
         }
-        SafeDeploymentRefusal.Syncing -> "The light client is not synced yet: try again in a moment." +
-            if (lenient.value) CREATE_SAFE_STAYS_STRICT else ""
+        SafeDeploymentRefusal.Syncing -> "The light client is not synced yet: try again in a moment."
         is SafeDeploymentRefusal.Unavailable -> unavailableText(refusal.reason)
         is SafeDeploymentRefusal.NotQuoted -> callRefusalText(refusal.refusal, network)
     }

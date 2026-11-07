@@ -192,6 +192,21 @@ private fun SimpleSafeTxHeldCoSignaturePreview() = SimpleSafeTxPreview(heldCoSig
 @Composable
 private fun SimpleSafeTxDraftPreview() = SimpleSafeTxPreview(draftApprovalSample)
 
+/** A held proposal whose nonce was used meanwhile: its signature deleted, Dismiss and Propose again. */
+@Preview
+@Composable
+private fun SimpleSafeTxHeldConflictPreview() = SimpleSafeTxPreview(heldConflictSample)
+
+/** A held signature discarded: deleted, never shown to anyone. */
+@Preview
+@Composable
+private fun SimpleSafeTxHeldDiscardedPreview() = SimpleSafeTxPreview(heldDiscardedSample)
+
+/** An execution drafted on what was verified last: its gas ceiling, each figure's age. */
+@Preview
+@Composable
+private fun SimpleSafeTxDraftExecutionPreview() = SimpleSafeTxPreview(draftExecutionSample)
+
 /** Every preview above, which SimpleSafeTxScreenPreviewsTest renders: a new preview goes in here too. */
 internal val simpleSafeTxScreenPreviews: List<ScreenPreview> = listOf(
     ScreenPreview("overview") { SimpleSafeTxOverviewPreview() },
@@ -206,4 +221,7 @@ internal val simpleSafeTxScreenPreviews: List<ScreenPreview> = listOf(
     ScreenPreview("held-dark") { SimpleSafeTxHeldDarkPreview() },
     ScreenPreview("held-co-signature") { SimpleSafeTxHeldCoSignaturePreview() },
     ScreenPreview("draft") { SimpleSafeTxDraftPreview() },
+    ScreenPreview("held-conflict") { SimpleSafeTxHeldConflictPreview() },
+    ScreenPreview("held-discarded") { SimpleSafeTxHeldDiscardedPreview() },
+    ScreenPreview("draft-execution") { SimpleSafeTxDraftExecutionPreview() },
 )

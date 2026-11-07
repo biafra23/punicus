@@ -1,5 +1,8 @@
 package eth.serotine.ui.coworder
 
+import kotlin.test.assertNotNull
+import eth.serotine.domain.repository.ReadUnavailable
+import eth.serotine.domain.model.SyncPolicy
 import eth.serotine.domain.model.Account
 import eth.serotine.domain.model.AccountCustody
 import eth.serotine.domain.model.AccountKind
@@ -111,6 +114,7 @@ class CowOrderViewModelTest {
     private val sent = MemorySentTransfers()
     private val signer = FakeSigner()
     private val broadcaster = FakeBroadcaster()
+    private val policy = MemorySyncPolicy()
     private val status = MutableStateFlow<LightClientStatus>(
         LightClientStatus.Synced(9_412_118, validTo - 200, FinalizedBlock(9_412_050, validTo - 1_000)),
     )
@@ -143,7 +147,7 @@ class CowOrderViewModelTest {
             SendCowCancellation(signer, broadcaster, sent) { now },
             RebroadcastTransfer(broadcaster, sent, FakeReceipts()),
             Network.SEPOLIA,
-            ObserveSyncPolicy(MemorySyncPolicy()),
+            ObserveSyncPolicy(policy),
             clock = { now },
             formatTime = { "at $it" },
         )
@@ -343,4 +347,20 @@ class CowOrderViewModelTest {
     }
 
     private fun ByteArray.hex(): String = joinToString("") { (it.toInt() and 0xff).toString(16).padStart(2, '0') }
+    @Test
+    fun inLenientModeACancellationWhoseReadWaitsForTheSyncSaysTheSettingDoesNotReachIt() = runTest {
+        // The settlement's count of the order filled waits for the light client to catch up.
+        cowChain.answers[settlement to GPv2Settlement.filledAmount(record.uid).hex()] =
+            Simulation.Unavailable(ReadUnavailable.SYNCING)
+        for ((chosen, said) in listOf(SyncPolicy.STRICT to false, SyncPolicy.LENIENT to true)) {
+            policy.policy.value = chosen
+            val viewModel = viewModel()
+            viewModel.cancel()
+            runCurrent()
+
+            val error = assertNotNull(viewModel.shown.error)
+            assertTrue(error.startsWith("The light client is still syncing"), error)
+            assertEquals(said, "Sign while syncing does not apply to swaps" in error, error)
+        }
+    }
 }
