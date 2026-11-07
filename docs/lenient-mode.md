@@ -460,6 +460,45 @@ rulings, 2026-11-06):
     transaction waits behind it. Strict's full headroom would make the check
     a conflict whenever the base fee rose at all since signing.
 
+## Decided at delivery
+
+The owner's answers to what the parts left open, each as the final PR
+proposed (owner rulings, 2026-11-07, on #269):
+
+- **The text the parts changed is accepted as written:**
+  docs/keys-and-signing.md, *The outbox's seal key*; the `engine` and
+  `outbox` rows of `.claude/rules/architecture.md` and
+  docs/architecture.md; this page's delivery entries.
+- **The corrections to this page are accepted.** The queued step comes
+  after Signed, before the broadcast. The gas ceilings are derived from
+  the EVM's gas schedule. Discard and Edit are greyed out while a
+  transaction is being sent, and a tap during its check waits for it.
+- **A Safe in lenient mode stays as built.** A Safe's swap and its token
+  approval stay strict. A held signature has no hour. Its check does not
+  test the proposal's balance or simulation again: the execution's check
+  does. One held signature per Safe and nonce.
+- **The gas ceilings:** 50,000 for the network's currency; 100,000 for a
+  token's transfer and for a Safe's approval on chain; 300,000 for a
+  Safe's execution.
+- **An unreadable outbox holds back every send**, strict ones too. A seal
+  state damaged for good leaves it so until the outbox can be discarded in
+  the app (below).
+- **Strict mode keeps what a draft is built on** (`kept-inputs.json`,
+  `kept-safes.json`) with each verified read.
+- **Strict Safe signing takes no outbox lock.** The race it leaves can put
+  two requests at one nonce in the Safe's queue, of which only one can
+  run.
+- **Follow-ups, each work of its own:**
+  - discarding an unreadable outbox in the app, warned that its
+    transaction may already be sent;
+  - following a transaction lost while it was being sent: its hash and
+    nonce kept outside the sealed file, which hold no secret and cannot be
+    broadcast, and watched for after a loss;
+  - lenient drafts of a Safe's settings changes and of a dApp's Safe
+    transactions, and importing a request while syncing;
+  - Swap's Review greyed out before a tap while syncing, and the held
+    signatures counted in Home's "waiting to send".
+
 ## Delivery: a multi-PR plan through `feature/lenient-mode`
 
 `main` stays releasable at every commit (owner ruling, 2026-09-30), so the
