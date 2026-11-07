@@ -606,6 +606,21 @@ answered with an empty list.
   top of what it covers; again as that moves, only the blocks it grew by
   and the top 64 read before (coverage is polled, so a reorganisation can
   look like growth); all again when it shrank.
+- **Only on a connection it may use.** The walk back is a heavy download
+  (`HeavyDownloads`; `.claude/rules/data-sources.md`, owner ruling,
+  2026-10-20): `FollowAccountLogs` pauses it (`backfillPaused`, since engine
+  0.1.17: `parse_log_index_config` in Myotis's
+  `rust/myotis-engine/src/host.rs`, a strict boolean, absent meaning walk)
+  while the connection is metered and the user has not allowed heavy
+  downloads there in Settings, and resumes it when either changes, whatever
+  the light client's state: a pause alone is pushed whenever the engine runs,
+  verified reads or not. Every push says the bit, since the engine reads one
+  left out as "walk" and re-applies the last one after a pause; a change of
+  it alone is a push with nothing to watch or unwatch, which the engine
+  unions with what it holds. Each network's index is paused alike, and a
+  light client started again is told the bit with everything else. Paused,
+  the index still follows the new blocks (the engine's head-follow), and
+  coverage below where the walk stood waits for it.
 - **What the walk tells a peer.** Receipts are fetched only for the blocks
   whose bloom flags an entry, so the serving peer learns which blocks matter
   to this device. That is the trade-off the log index makes for any

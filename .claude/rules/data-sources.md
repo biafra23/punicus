@@ -208,6 +208,27 @@ of a stale feed.)
   That tells the serving peer which blocks matter to this device. Accepted
   as is: the log index makes that trade-off for any watch-list.
 
+## Heavy downloads stay off a metered connection unless the user allows them
+
+(Owner ruling, 2026-10-20, with #85's history.)
+
+- A heavy download is network work that can run to hundreds of megabytes and
+  that nobody is waiting on: the log index's walk back over the account
+  history first. A read the user waits on (a balance, a send's review) never
+  is one.
+- On a connection the platform reports as metered, or one whose cost cannot
+  be read, it waits for an unmetered one. As built: Android's metered
+  networks, and iOS's expensive paths (cellular, a hotspot) and Low Data
+  Mode.
+- Settings has the opt-in switch that lets it run there
+  (`MeteredDownloadsSetting`, off by default). A choice that cannot be read
+  is off.
+- A platform that reports no metering (the desktop) runs it on any
+  connection, as Myotis's desktop host does. The switch is greyed out there,
+  and says why.
+- Paused, the log index still follows the new blocks. Each network's index
+  is paused and resumed alike.
+
 ## Swaps: Uniswap first, then CoW Protocol; the user chooses the venue
 
 (Owner's directions, 2026-10-18 and 2026-10-22; docs/swaps.md, issues #69

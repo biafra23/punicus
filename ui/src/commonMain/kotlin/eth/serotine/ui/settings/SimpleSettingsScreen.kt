@@ -26,8 +26,12 @@ fun SimpleSettingsScreen(
     onConnections: () -> Unit = {},
     connectionsOff: Boolean = false,
     onSignWhileSyncingChange: (Boolean) -> Unit = {},
+    onMeteredDownloadsChange: (Boolean) -> Unit = {},
 ) = SettingsScreen(
-    state.copy(networks = state.networks.map { it.copy(line = it.simpleLine) }),
+    state.copy(
+        networks = state.networks.map { it.copy(line = it.simpleLine) },
+        meteredDownloads = state.meteredDownloads?.let { it.copy(text = it.simpleText) },
+    ),
     onCurrency,
     onTokens,
     onSecurity,
@@ -42,4 +46,5 @@ fun SimpleSettingsScreen(
     onConnections,
     connectionsOff,
     onSignWhileSyncingChange,
+    onMeteredDownloadsChange,
 )

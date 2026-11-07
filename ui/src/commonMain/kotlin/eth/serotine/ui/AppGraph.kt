@@ -6,48 +6,37 @@ import eth.serotine.domain.model.CowOrderUid
 import eth.serotine.domain.model.Digest
 import eth.serotine.domain.model.Network
 import eth.serotine.domain.repository.AccountRepository
+import eth.serotine.domain.repository.AddedNfts
 import eth.serotine.domain.repository.AddressKinds
 import eth.serotine.domain.repository.AmountsHiddenSetting
+import eth.serotine.domain.repository.BlockTransactions
 import eth.serotine.domain.repository.Broadcaster
+import eth.serotine.domain.repository.ConnectionMeter
 import eth.serotine.domain.repository.CowApi
 import eth.serotine.domain.repository.CowChain
 import eth.serotine.domain.repository.CowOrders
-import eth.serotine.domain.repository.DebugLog
-import eth.serotine.domain.repository.DebugScreenSetting
 import eth.serotine.domain.repository.DappRequests
 import eth.serotine.domain.repository.DappSessions
+import eth.serotine.domain.repository.DebugLog
+import eth.serotine.domain.repository.DebugScreenSetting
 import eth.serotine.domain.repository.DisplayCurrencySetting
-import eth.serotine.domain.repository.Outbox
-import eth.serotine.domain.usecase.ApproveDappProposal
-import eth.serotine.domain.usecase.DisconnectDapp
-import eth.serotine.domain.usecase.ExtendDappSession
-import eth.serotine.domain.usecase.ObserveDappConnections
-import eth.serotine.domain.usecase.ObserveDappMessages
-import eth.serotine.domain.usecase.PairDapp
-import eth.serotine.domain.usecase.ProposeDappSafeTx
-import eth.serotine.domain.usecase.SignDappSafeTx
-import eth.serotine.domain.usecase.QuoteDappTransaction
-import eth.serotine.domain.usecase.RefuseDappRequest
-import eth.serotine.domain.usecase.SendDappTransaction
-import eth.serotine.domain.usecase.RejectDappProposal
-import eth.serotine.domain.usecase.SignDappMessage
+import eth.serotine.domain.repository.EnsNfts
 import eth.serotine.domain.repository.HistoryStarts
 import eth.serotine.domain.repository.InterfaceModeSetting
+import eth.serotine.domain.repository.KeptSafes
+import eth.serotine.domain.repository.KeptTransactionInputs
 import eth.serotine.domain.repository.KeyStore
 import eth.serotine.domain.repository.KnownUpgradeStore
 import eth.serotine.domain.repository.LightClient
-import eth.serotine.domain.repository.AddedNfts
-import eth.serotine.domain.repository.EnsNfts
 import eth.serotine.domain.repository.LogIndex
-import eth.serotine.domain.repository.NftContracts
+import eth.serotine.domain.repository.MeteredDownloadsSetting
 import eth.serotine.domain.repository.NameResolver
 import eth.serotine.domain.repository.NativeBalances
-import eth.serotine.domain.repository.KeptSafes
-import eth.serotine.domain.repository.KeptTransactionInputs
-import eth.serotine.domain.repository.SyncPolicySetting
 import eth.serotine.domain.repository.NetworkFreshness
 import eth.serotine.domain.repository.NetworkSettings
 import eth.serotine.domain.repository.NetworkUpgrades
+import eth.serotine.domain.repository.NftContracts
+import eth.serotine.domain.repository.Outbox
 import eth.serotine.domain.repository.PriceFeeds
 import eth.serotine.domain.repository.ReceiptTracker
 import eth.serotine.domain.repository.SafeApprovals
@@ -59,7 +48,7 @@ import eth.serotine.domain.repository.Signer
 import eth.serotine.domain.repository.SigningRequestCodec
 import eth.serotine.domain.repository.StaleAnchorConsent
 import eth.serotine.domain.repository.SwapVenueSetting
-import eth.serotine.domain.repository.WaitingSwaps
+import eth.serotine.domain.repository.SyncPolicySetting
 import eth.serotine.domain.repository.TokenBalances
 import eth.serotine.domain.repository.TokenCatalog
 import eth.serotine.domain.repository.TokenMetadata
@@ -67,11 +56,14 @@ import eth.serotine.domain.repository.TransactionHistory
 import eth.serotine.domain.repository.TransactionInputs
 import eth.serotine.domain.repository.UniswapV3Chain
 import eth.serotine.domain.repository.UserTokens
-import eth.serotine.domain.repository.BlockTransactions
+import eth.serotine.domain.repository.WaitingSwaps
 import eth.serotine.domain.repository.WalletHandoff
 import eth.serotine.domain.usecase.AcknowledgeLostOutbox
+import eth.serotine.domain.usecase.AddNft
 import eth.serotine.domain.usecase.AddOnNetworks
 import eth.serotine.domain.usecase.AddToken
+import eth.serotine.domain.usecase.AllowHeavyDownloadsOnMetered
+import eth.serotine.domain.usecase.ApproveDappProposal
 import eth.serotine.domain.usecase.ApproveSafeTxOnChain
 import eth.serotine.domain.usecase.CheckSafeSwap
 import eth.serotine.domain.usecase.ChooseSwapVenue
@@ -84,22 +76,22 @@ import eth.serotine.domain.usecase.DescribeKeyStore
 import eth.serotine.domain.usecase.DisableBiometricUnlock
 import eth.serotine.domain.usecase.DiscardHeld
 import eth.serotine.domain.usecase.DiscardQueued
+import eth.serotine.domain.usecase.DisconnectDapp
 import eth.serotine.domain.usecase.DraftSafeCall
 import eth.serotine.domain.usecase.DraftSafeTx
-import eth.serotine.domain.usecase.HoldSafeSignature
-import eth.serotine.domain.usecase.ObserveKeptSafe
-import eth.serotine.domain.usecase.QueueSafeCall
-import eth.serotine.domain.usecase.ReadKeptSafeTxOwners
 import eth.serotine.domain.usecase.DraftTransfer
 import eth.serotine.domain.usecase.DropWaitingSwap
 import eth.serotine.domain.usecase.EnableBiometricUnlock
 import eth.serotine.domain.usecase.EncodeSigningRequest
-import eth.serotine.domain.usecase.ExecuteSafeTx
 import eth.serotine.domain.usecase.EstimateSwap
+import eth.serotine.domain.usecase.ExecuteSafeTx
+import eth.serotine.domain.usecase.ExtendDappSession
 import eth.serotine.domain.usecase.FindUniswapRoute
 import eth.serotine.domain.usecase.FindWaitingSwap
+import eth.serotine.domain.usecase.HandOffTransfer
 import eth.serotine.domain.usecase.HasSwapVenue
 import eth.serotine.domain.usecase.HoldNetwork
+import eth.serotine.domain.usecase.HoldSafeSignature
 import eth.serotine.domain.usecase.ImportMnemonicAccount
 import eth.serotine.domain.usecase.ImportSigningRequest
 import eth.serotine.domain.usecase.KeepWaitingSwap
@@ -114,18 +106,23 @@ import eth.serotine.domain.usecase.ObserveAddressKind
 import eth.serotine.domain.usecase.ObserveAmountsHidden
 import eth.serotine.domain.usecase.ObserveCowOrder
 import eth.serotine.domain.usecase.ObserveCowOrderLife
+import eth.serotine.domain.usecase.ObserveDappConnections
+import eth.serotine.domain.usecase.ObserveDappMessages
 import eth.serotine.domain.usecase.ObserveDebugLog
 import eth.serotine.domain.usecase.ObserveDebugScreen
 import eth.serotine.domain.usecase.ObserveDebugTab
 import eth.serotine.domain.usecase.ObserveDisplayCurrencies
 import eth.serotine.domain.usecase.ObserveEnabledNetworks
 import eth.serotine.domain.usecase.ObserveEnsNames
+import eth.serotine.domain.usecase.ObserveHeavyDownloads
 import eth.serotine.domain.usecase.ObserveInterfaceMode
+import eth.serotine.domain.usecase.ObserveKeptSafe
 import eth.serotine.domain.usecase.ObserveKnownTokens
 import eth.serotine.domain.usecase.ObserveLightClient
 import eth.serotine.domain.usecase.ObserveNativeBalance
 import eth.serotine.domain.usecase.ObserveNetworkLive
 import eth.serotine.domain.usecase.ObserveNetworkOverview
+import eth.serotine.domain.usecase.ObserveNfts
 import eth.serotine.domain.usecase.ObserveOutbox
 import eth.serotine.domain.usecase.ObservePortfolio
 import eth.serotine.domain.usecase.ObserveSafe
@@ -138,43 +135,50 @@ import eth.serotine.domain.usecase.ObserveSwapVenue
 import eth.serotine.domain.usecase.ObserveSyncPolicy
 import eth.serotine.domain.usecase.ObserveTokenHoldings
 import eth.serotine.domain.usecase.ObserveTokenMetadata
-import eth.serotine.domain.usecase.AddNft
-import eth.serotine.domain.usecase.ObserveNfts
-import eth.serotine.domain.usecase.RemoveAddedNft
 import eth.serotine.domain.usecase.ObserveTokenTransfers
 import eth.serotine.domain.usecase.ObserveUpgradeWarnings
 import eth.serotine.domain.usecase.ObserveUsdPrice
 import eth.serotine.domain.usecase.ObserveWaitingSwaps
+import eth.serotine.domain.usecase.OfferHandoff
+import eth.serotine.domain.usecase.OutboxLock
+import eth.serotine.domain.usecase.PairDapp
 import eth.serotine.domain.usecase.PlaceCowOrder
 import eth.serotine.domain.usecase.PlanSafe
+import eth.serotine.domain.usecase.ProposeDappSafeTx
 import eth.serotine.domain.usecase.ProposeSafeSettingsChange
 import eth.serotine.domain.usecase.ProposeSafeSwap
-import eth.serotine.domain.usecase.OutboxLock
 import eth.serotine.domain.usecase.ProposeSafeTx
+import eth.serotine.domain.usecase.QueueSafeCall
 import eth.serotine.domain.usecase.QueueTransfer
 import eth.serotine.domain.usecase.QuoteCowCancellation
 import eth.serotine.domain.usecase.QuoteCowSwap
+import eth.serotine.domain.usecase.QuoteDappTransaction
 import eth.serotine.domain.usecase.QuoteSafeApproval
 import eth.serotine.domain.usecase.QuoteSafeDeployment
 import eth.serotine.domain.usecase.QuoteSafeExecution
 import eth.serotine.domain.usecase.QuoteSwap
 import eth.serotine.domain.usecase.QuoteTokenApproval
-import eth.serotine.domain.usecase.QuoteWrap
 import eth.serotine.domain.usecase.QuoteTransfer
+import eth.serotine.domain.usecase.QuoteWrap
+import eth.serotine.domain.usecase.ReadKeptSafeTxOwners
 import eth.serotine.domain.usecase.ReadSafeTxOwners
 import eth.serotine.domain.usecase.RebroadcastTransfer
 import eth.serotine.domain.usecase.RefreshNetworkData
+import eth.serotine.domain.usecase.RefuseDappRequest
+import eth.serotine.domain.usecase.RejectDappProposal
 import eth.serotine.domain.usecase.RemoveAccount
+import eth.serotine.domain.usecase.RemoveAddedNft
 import eth.serotine.domain.usecase.RemoveQueuedSafeTx
 import eth.serotine.domain.usecase.RemoveToken
 import eth.serotine.domain.usecase.RenameAccount
-import eth.serotine.domain.usecase.RouteRanking
 import eth.serotine.domain.usecase.ResolveRecipient
+import eth.serotine.domain.usecase.RouteRanking
 import eth.serotine.domain.usecase.SendCowCancellation
+import eth.serotine.domain.usecase.SendDappTransaction
 import eth.serotine.domain.usecase.SendSwap
 import eth.serotine.domain.usecase.SendTokenApproval
-import eth.serotine.domain.usecase.SendWrap
 import eth.serotine.domain.usecase.SendTransfer
+import eth.serotine.domain.usecase.SendWrap
 import eth.serotine.domain.usecase.SetDebugLogLevel
 import eth.serotine.domain.usecase.SetDebugScreen
 import eth.serotine.domain.usecase.SetDisplayCurrency
@@ -182,14 +186,14 @@ import eth.serotine.domain.usecase.SetInterfaceMode
 import eth.serotine.domain.usecase.SetNetworkEnabled
 import eth.serotine.domain.usecase.SetSyncPolicy
 import eth.serotine.domain.usecase.SetTokenHidden
+import eth.serotine.domain.usecase.SignDappMessage
+import eth.serotine.domain.usecase.SignDappSafeTx
 import eth.serotine.domain.usecase.SignSafeTx
 import eth.serotine.domain.usecase.SyncPastStaleAnchor
 import eth.serotine.domain.usecase.ToggleAmountsHidden
 import eth.serotine.domain.usecase.WalletChanges
 import eth.serotine.domain.usecase.WarmFeeHistory
 import eth.serotine.domain.usecase.WatchAddress
-import eth.serotine.domain.usecase.HandOffTransfer
-import eth.serotine.domain.usecase.OfferHandoff
 import eth.serotine.domain.usecase.WatchHandoff
 import eth.serotine.ui.accountdetail.AccountDetailViewModel
 import eth.serotine.ui.accounts.AccountsViewModel
@@ -198,24 +202,24 @@ import eth.serotine.ui.activity.ActivityKey
 import eth.serotine.ui.activitydetail.ActivityDetailViewModel
 import eth.serotine.ui.addnetwork.AddOnNetworksViewModel
 import eth.serotine.ui.addtoken.AddTokenViewModel
+import eth.serotine.ui.connections.ConnectionsViewModel
 import eth.serotine.ui.coworder.CowOrderViewModel
 import eth.serotine.ui.createaccount.CreateAccountViewModel
 import eth.serotine.ui.createsafe.CreateSafeViewModel
-import eth.serotine.ui.connections.ConnectionsViewModel
 import eth.serotine.ui.currency.CurrencyViewModel
 import eth.serotine.ui.dappproposal.DappProposalViewModel
 import eth.serotine.ui.dapprequest.DappRequestViewModel
-import eth.serotine.ui.dapptransaction.DappTransactionViewModel
 import eth.serotine.ui.dapprequest.DappRequestsWaitingViewModel
-import eth.serotine.ui.handoff.HandoffViewModel
-import eth.serotine.ui.pairdapp.IncomingDappLink
-import eth.serotine.ui.pairdapp.PairDappViewModel
+import eth.serotine.ui.dapptransaction.DappTransactionViewModel
 import eth.serotine.ui.debug.DebugTabViewModel
 import eth.serotine.ui.debug.DebugViewModel
 import eth.serotine.ui.deriveaccount.DeriveAccountViewModel
+import eth.serotine.ui.handoff.HandoffViewModel
 import eth.serotine.ui.lightclient.LightClientViewModel
 import eth.serotine.ui.mnemonicimport.MnemonicImportViewModel
 import eth.serotine.ui.mode.InterfaceModeViewModel
+import eth.serotine.ui.pairdapp.IncomingDappLink
+import eth.serotine.ui.pairdapp.PairDappViewModel
 import eth.serotine.ui.platform.ScreenCaptureDebugSwitch
 import eth.serotine.ui.receive.ReceiveViewModel
 import eth.serotine.ui.removeaccount.RemoveAccountViewModel
@@ -360,6 +364,13 @@ class AppGraph(
     private val keptSafes: KeptSafes,
     /** The policy the user chose in Settings → Advanced → *Sign while syncing*: strict by default. */
     private val syncPolicy: SyncPolicySetting,
+    /** Whether the device's connection is metered now. */
+    private val connectionMeter: ConnectionMeter,
+    /**
+     * The user's choice whether the heavy downloads may use a metered connection. The host's own
+     * work reads it too (`FollowAccountLogs`), so it is one instance per process, shared with it.
+     */
+    private val meteredDownloads: MeteredDownloadsSetting,
     /** The venue the user last chose on Swap, compose, which the next swap starts at. */
     private val swapVenue: SwapVenueSetting,
     /** The swaps whose next step waits for the user, which the account's Activity offers with Continue. */
@@ -890,6 +901,8 @@ class AppGraph(
             ObserveSyncPolicy(syncPolicy),
             SetSyncPolicy(syncPolicy),
             ObserveOutbox(outbox),
+            ObserveHeavyDownloads(connectionMeter, meteredDownloads),
+            AllowHeavyDownloadsOnMetered(meteredDownloads),
         )
 
     /** Whether the bottom bar shows the Debug tab: one for the app, in the host's scope. */

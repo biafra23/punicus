@@ -61,6 +61,9 @@ class HistoryNotingAccounts(
  *   transfers to and from it), and a Safe also as a [LogWatchKey.Emitter] (its own events).
  * - **What is dropped.** An account that left the wallet is unwatched, with what the index held
  *   of it, whatever its start, and its start forgotten once the engine took that.
+ * - **When it walks back.** The walk back to each start is a heavy download ([HeavyDownloads]):
+ *   it is paused while [downloads] says they may not run (a metered connection the user did not
+ *   allow them on), and resumed when they may. The new blocks are followed either way.
  *
  * What the engine took is not asked of it again while this runs; what it did not take is asked
  * again at the next change of the light client's state (a new head, about every slot). Each
@@ -74,30 +77,37 @@ class FollowAccountLogs(
     private val history: TransactionHistory,
     private val lightClient: LightClient,
     private val index: LogIndex,
+    private val downloads: ObserveHeavyDownloads,
     private val network: Network,
 ) {
     /** Runs until cancelled. */
     suspend operator fun invoke() {
-        var taken = emptySet<LogWatch>()
+        var taken = NOTHING_TAKEN
         combine(
             accounts.observeAccounts(),
             starts.observe(),
             history.observe(),
             lightClient.observeStatus(network),
+            downloads(),
             ::Round,
         ).conflate().collect { round -> taken = follow(round, taken) }
     }
 
-    /** One look at the wallet: fixes what starts it can, then asks the engine for what it has not [taken] yet. */
-    private suspend fun follow(round: Round, taken: Set<LogWatch>): Set<LogWatch> {
+    /**
+     * One look at the wallet: fixes what starts it can, then asks the engine for what it has not
+     * [taken] yet, the walk paused or not as the round's downloads say.
+     */
+    private suspend fun follow(round: Round, taken: Taken): Taken {
         // A stopped light client's chain is unregistered, and a later start creates it anew:
-        // nothing is taken for granted of it then, and everything is asked again.
-        if (round.status == LightClientStatus.Off || round.status == LightClientStatus.Idle) return emptySet()
+        // nothing is taken for granted of it then, its walk's pause neither, and everything is asked again.
+        if (round.status == LightClientStatus.Off || round.status == LightClientStatus.Idle) return NOTHING_TAKEN
+        val walkPaused = !round.downloads.mayRun
         // Only this network's accounts: its index, its starts, its light client (docs/networks.md).
-        val listed = (round.accounts as? AccountList.Loaded)?.accounts?.filter { it.network == network } ?: return taken
-        val allStarts = (round.starts as? HistoryStartList.Loaded)?.starts ?: return taken
+        val listed = (round.accounts as? AccountList.Loaded)?.accounts?.filter { it.network == network }
+            ?: return pauseOnly(taken, walkPaused)
+        val allStarts = (round.starts as? HistoryStartList.Loaded)?.starts ?: return pauseOnly(taken, walkPaused)
         val held = allStarts.filterKeys { it.network == network }.mapKeys { (id, _) -> id.address }
-        val synced = round.status as? LightClientStatus.Synced ?: return taken
+        val synced = round.status as? LightClientStatus.Synced ?: return pauseOnly(taken, walkPaused)
         val listedAddresses = listed.map { it.address }.toSet()
         val fixed = held.mapNotNull { (address, start) -> (start as? HistoryStart.Fixed)?.let { address to it.block } }
             .toMap(mutableMapOf())
@@ -123,12 +133,26 @@ class FollowAccountLogs(
         // Whatever its start, a noted one included: a start fixed and watched may have been
         // replaced by the note of an add that raced it. Unwatching an entry never held is nothing.
         val gone = held.filterKeys { it !in listedAddresses }
-        val asked = watch - taken
-        if (asked.isEmpty() && gone.isEmpty()) return taken
+        val asked = watch - taken.watches
+        // A pause or a resume alone is asked only while there is something to walk.
+        val pauseChanged = walkPaused != taken.walkPaused && watch.isNotEmpty()
+        if (asked.isEmpty() && gone.isEmpty() && !pauseChanged) return taken
         val unwatch = gone.keys.flatMap { listOf(LogWatchKey.Mention(it), LogWatchKey.Emitter(it)) }
-        if (!index.configure(network, asked.toList(), unwatch)) return taken
+        if (!index.configure(network, asked.toList(), unwatch, walkPaused)) return taken
         gone.forEach { (address, start) -> starts.forget(AccountId(network, address), start) }
-        return (taken + asked).filterTo(HashSet()) { it.key.address !in gone }
+        return Taken((taken.watches + asked).filterTo(HashSet()) { it.key.address !in gone }, walkPaused)
+    }
+
+    /**
+     * Asks the engine only to pause or resume the walk as [walkPaused] says, for a round that can
+     * ask nothing else (the light client not synced, a list not read): a metered connection must
+     * pause a walk the engine already holds whatever the light client's state. Nothing is asked
+     * while nothing was [taken], or the walk already is so.
+     */
+    private suspend fun pauseOnly(taken: Taken, walkPaused: Boolean): Taken {
+        if (taken.watches.isEmpty() || walkPaused == taken.walkPaused) return taken
+        val asked = index.configure(network, emptyList(), emptyList(), walkPaused)
+        return if (asked) Taken(taken.watches, walkPaused) else taken
     }
 
     /**
@@ -161,9 +185,16 @@ class FollowAccountLogs(
         val starts: HistoryStartList,
         val history: HistoryList,
         val status: LightClientStatus,
+        val downloads: HeavyDownloads,
     )
 
+    /** What the engine took: the [watches], and whether the walk was paused (null before it took any change). */
+    private class Taken(val watches: Set<LogWatch>, val walkPaused: Boolean?)
+
     private companion object {
+        /** Nothing taken yet, at the start or once the light client's chain is gone. */
+        val NOTHING_TAKEN = Taken(emptySet(), walkPaused = null)
+
         /** How far the device's clock may be off from the chain's and the start still be early enough. */
         const val CLOCK_MARGIN_SECONDS = 60L * 60
     }

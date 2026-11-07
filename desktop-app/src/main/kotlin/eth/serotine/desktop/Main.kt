@@ -20,49 +20,52 @@ import eth.serotine.data.keys.desktopBiometricKey
 import eth.serotine.data.keys.desktopHardwareSecret
 import eth.serotine.data.keys.desktopPasswordOnlyProtection
 import eth.serotine.data.logs.MemoryDebugLog
+import eth.serotine.data.network.UnreportedConnectionMeter
 import eth.serotine.data.networks.FileNetworkSettings
+import eth.serotine.data.nfts.FileAddedNfts
 import eth.serotine.data.outbox.desktopOutbox
 import eth.serotine.data.safe.FileSafeTxQueue
 import eth.serotine.data.safe.JsonSigningRequestCodec
 import eth.serotine.data.safe.PinnedSafeReleases
+import eth.serotine.data.settings.FileAmountsHidden
 import eth.serotine.data.settings.FileDebugScreen
 import eth.serotine.data.settings.FileDisplayCurrency
-import eth.serotine.data.settings.FileAmountsHidden
 import eth.serotine.data.settings.FileInterfaceMode
-import eth.serotine.data.settings.FileSyncPolicy
+import eth.serotine.data.settings.FileMeteredDownloads
 import eth.serotine.data.settings.FileSwapVenue
+import eth.serotine.data.settings.FileSyncPolicy
 import eth.serotine.data.swaps.FileWaitingSwaps
-import eth.serotine.data.walletconnect.WalletConnectDapps
 import eth.serotine.data.tokens.BuiltInTokenCatalog
-import eth.serotine.data.nfts.FileAddedNfts
 import eth.serotine.data.tokens.FileUserTokens
 import eth.serotine.data.transfers.FileSentTransfers
 import eth.serotine.data.transfers.FileTransactionHistory
 import eth.serotine.data.upgrade.FileKnownUpgradeStore
+import eth.serotine.data.walletconnect.WalletConnectDapps
 import eth.serotine.domain.model.Network
-import eth.serotine.domain.usecase.CheckQueued
-import eth.serotine.domain.usecase.CheckHeldSignature
-import eth.serotine.domain.usecase.ObserveSafe
-import eth.serotine.domain.usecase.QuoteSafeApproval
-import eth.serotine.domain.usecase.QuoteSafeExecution
-import eth.serotine.domain.usecase.FollowAccountLogs
 import eth.serotine.domain.usecase.AnswerDappRequestsAtOnce
+import eth.serotine.domain.usecase.CheckHeldSignature
+import eth.serotine.domain.usecase.CheckQueued
+import eth.serotine.domain.usecase.FollowAccountLogs
 import eth.serotine.domain.usecase.FollowDappAccounts
 import eth.serotine.domain.usecase.FollowDebugScreen
 import eth.serotine.domain.usecase.FollowInterfaceMode
 import eth.serotine.domain.usecase.FollowNetworks
 import eth.serotine.domain.usecase.FollowOutbox
 import eth.serotine.domain.usecase.FollowSafeDeployments
-import eth.serotine.domain.usecase.KeepTransactionInputs
-import eth.serotine.domain.usecase.OutboxLock
 import eth.serotine.domain.usecase.FollowSentTransactions
 import eth.serotine.domain.usecase.FollowUpgradeReports
 import eth.serotine.domain.usecase.HistoryNotingAccounts
 import eth.serotine.domain.usecase.HistoryRecordingSentTransfers
+import eth.serotine.domain.usecase.KeepTransactionInputs
 import eth.serotine.domain.usecase.ListDeployedSafe
 import eth.serotine.domain.usecase.NetworkDemand
 import eth.serotine.domain.usecase.ObserveDebugTab
+import eth.serotine.domain.usecase.ObserveHeavyDownloads
+import eth.serotine.domain.usecase.ObserveSafe
+import eth.serotine.domain.usecase.OutboxLock
 import eth.serotine.domain.usecase.ProveCowOrderEnds
+import eth.serotine.domain.usecase.QuoteSafeApproval
+import eth.serotine.domain.usecase.QuoteSafeExecution
 import eth.serotine.domain.usecase.QuoteTransfer
 import eth.serotine.domain.usecase.UpgradeNotices
 import eth.serotine.domain.usecase.WatchAddress
@@ -171,6 +174,11 @@ private fun openWallet(dataDir: File) {
     val amountsHidden = FileAmountsHidden(dataDir.resolve("amounts-hidden.json").path)
     // Whether a transaction may be signed while the light client syncs (docs/lenient-mode.md).
     val syncPolicy = FileSyncPolicy(dataDir.resolve("sync-policy.json").path)
+    // The JVM does not say whether the connection is metered: the heavy downloads run on any, and
+    // Settings greys their switch out saying so (owner ruling, 2026-10-20). One of each, shared by
+    // the graph and the accounts' log followers.
+    val connectionMeter = UnreportedConnectionMeter()
+    val meteredDownloads = FileMeteredDownloads(dataDir.resolve("metered-downloads.json").path)
     // One engine, one light client per network that is on and needed (FollowNetworks, below).
     val node = MyotisHost.start(
         dataDir.resolve("myotis"),
@@ -408,6 +416,7 @@ private fun openWallet(dataDir: File) {
                         transactionHistory,
                         node.lightClient,
                         node.logIndex,
+                        ObserveHeavyDownloads(connectionMeter, meteredDownloads),
                         network,
                     )()
                 } catch (e: CancellationException) {
@@ -501,6 +510,8 @@ private fun openWallet(dataDir: File) {
                 keptTransactionInputs = node.keptTransactionInputs,
                 keptSafes = node.keptSafes,
                 syncPolicy = syncPolicy,
+                connectionMeter = connectionMeter,
+                meteredDownloads = meteredDownloads,
                 swapVenue = FileSwapVenue(dataDir.resolve("swap-venue.json").path),
                 waitingSwaps = FileWaitingSwaps(dataDir.resolve("waiting-swaps.json").path),
                 debugLog = apiLog,

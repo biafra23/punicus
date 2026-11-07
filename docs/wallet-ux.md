@@ -1142,10 +1142,16 @@ Screens 22 to 24 are the swap screens (docs/swaps.md).
     (wallet password, biometric unlock; 21) · Network (Sepolia, the only one
     for now) · Light client (status) · Debug build (the debug Android app
     only: *Allow screen recording*, rule 8 of docs/keys-and-signing.md) ·
+    *Heavy downloads on metered connections*, under the networks (owner
+    ruling, 2026-10-20; a file of its own, `metered-downloads.json`) ·
     Advanced (*Detailed view*, off by default, docs/simple-ui.md; and under
     it, only while it is on, *Debug tab*, a switch in every build: 27;
     turning it off empties the log; then *Sign while syncing*, below) ·
-    About. While Detailed view is off,
+    About. The heavy downloads' switch is off by default, in both views. It
+    says when the walk back over the account history is paused because the
+    connection is metered ("Waiting now"), and is greyed out on a device
+    that does not report metering (the desktop) or while the choice cannot
+    be read, a tap saying why. While Detailed view is off,
     the screens are simple mode's and the Debug tab is hidden, its switch
     kept. *Sign while syncing* (decision 11; docs/lenient-mode.md, *The
     setting*; owner rulings, 2026-11-06) is lenient mode's switch, one for

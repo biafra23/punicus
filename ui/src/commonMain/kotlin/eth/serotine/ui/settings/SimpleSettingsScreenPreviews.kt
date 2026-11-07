@@ -44,6 +44,7 @@ private val simple = SettingsUiState(
     "0.4.0",
     tokens = "18 built in · 0 added",
     currency = "EUR",
+    meteredDownloads = meteredNotAllowed,
 )
 
 @Composable
@@ -104,6 +105,12 @@ private fun SimpleSettingsSignWhileSyncingQueuedPreview() = SimpleSettingsPrevie
 private fun SimpleSettingsSignWhileSyncingNotSavedPreview() =
     SimpleSettingsPreview(simple.copy(signWhileSyncingNotSaved = true))
 
+/** On a metered connection, the heavy downloads not allowed: in simple mode's words, waiting for Wi-Fi. */
+@Preview
+@Composable
+private fun SimpleSettingsMeteredPausedPreview() =
+    SimpleSettingsPreview(simple.copy(meteredDownloads = meteredPausedSample))
+
 /** Every preview above, which SimpleSettingsScreenPreviewsTest renders: a new preview goes in here too. */
 internal val simpleSettingsScreenPreviews: List<ScreenPreview> = listOf(
     ScreenPreview("default") { SimpleSettingsPreviewDefault() },
@@ -112,4 +119,5 @@ internal val simpleSettingsScreenPreviews: List<ScreenPreview> = listOf(
     ScreenPreview("sign-while-syncing") { SimpleSettingsSignWhileSyncingPreview() },
     ScreenPreview("sign-while-syncing-queued") { SimpleSettingsSignWhileSyncingQueuedPreview() },
     ScreenPreview("sign-while-syncing-not-saved") { SimpleSettingsSignWhileSyncingNotSavedPreview() },
+    ScreenPreview("metered-paused") { SimpleSettingsMeteredPausedPreview() },
 )

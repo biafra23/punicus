@@ -3,10 +3,8 @@ package eth.serotine.ios
 import eth.serotine.data.account.FileAccountRepository
 import eth.serotine.data.cow.FileCowOrders
 import eth.serotine.data.cow.HttpCowApi
-import eth.serotine.data.handoff.NoWalletHandoff
-import eth.serotine.data.outbox.iosOutbox
-import eth.serotine.data.walletconnect.WalletConnectDapps
 import eth.serotine.data.engine.MyotisHost
+import eth.serotine.data.handoff.NoWalletHandoff
 import eth.serotine.data.history.FileHistoryStarts
 import eth.serotine.data.keys.EnvelopeKeyStore
 import eth.serotine.data.keys.IosBiometricKey
@@ -14,47 +12,52 @@ import eth.serotine.data.keys.PasswordOnlyTier
 import eth.serotine.data.keys.Secp256k1Recovery
 import eth.serotine.data.keys.iosHardwareSecret
 import eth.serotine.data.logs.MemoryDebugLog
+import eth.serotine.data.network.IosConnectionMeter
 import eth.serotine.data.networks.FileNetworkSettings
+import eth.serotine.data.nfts.FileAddedNfts
+import eth.serotine.data.outbox.iosOutbox
 import eth.serotine.data.safe.FileSafeTxQueue
 import eth.serotine.data.safe.JsonSigningRequestCodec
 import eth.serotine.data.safe.PinnedSafeReleases
+import eth.serotine.data.settings.FileAmountsHidden
 import eth.serotine.data.settings.FileDebugScreen
 import eth.serotine.data.settings.FileDisplayCurrency
-import eth.serotine.data.settings.FileAmountsHidden
 import eth.serotine.data.settings.FileInterfaceMode
-import eth.serotine.data.settings.FileSyncPolicy
+import eth.serotine.data.settings.FileMeteredDownloads
 import eth.serotine.data.settings.FileSwapVenue
+import eth.serotine.data.settings.FileSyncPolicy
 import eth.serotine.data.swaps.FileWaitingSwaps
 import eth.serotine.data.tokens.BuiltInTokenCatalog
-import eth.serotine.data.nfts.FileAddedNfts
 import eth.serotine.data.tokens.FileUserTokens
 import eth.serotine.data.transfers.FileSentTransfers
 import eth.serotine.data.transfers.FileTransactionHistory
 import eth.serotine.data.upgrade.FileKnownUpgradeStore
+import eth.serotine.data.walletconnect.WalletConnectDapps
 import eth.serotine.domain.model.Network
-import eth.serotine.domain.usecase.CheckQueued
-import eth.serotine.domain.usecase.CheckHeldSignature
-import eth.serotine.domain.usecase.ObserveSafe
-import eth.serotine.domain.usecase.QuoteSafeApproval
-import eth.serotine.domain.usecase.QuoteSafeExecution
-import eth.serotine.domain.usecase.FollowAccountLogs
 import eth.serotine.domain.usecase.AnswerDappRequestsAtOnce
+import eth.serotine.domain.usecase.CheckHeldSignature
+import eth.serotine.domain.usecase.CheckQueued
+import eth.serotine.domain.usecase.FollowAccountLogs
 import eth.serotine.domain.usecase.FollowDappAccounts
 import eth.serotine.domain.usecase.FollowDebugScreen
 import eth.serotine.domain.usecase.FollowInterfaceMode
 import eth.serotine.domain.usecase.FollowNetworks
 import eth.serotine.domain.usecase.FollowOutbox
 import eth.serotine.domain.usecase.FollowSafeDeployments
-import eth.serotine.domain.usecase.KeepTransactionInputs
-import eth.serotine.domain.usecase.OutboxLock
 import eth.serotine.domain.usecase.FollowSentTransactions
 import eth.serotine.domain.usecase.FollowUpgradeReports
 import eth.serotine.domain.usecase.HistoryNotingAccounts
 import eth.serotine.domain.usecase.HistoryRecordingSentTransfers
+import eth.serotine.domain.usecase.KeepTransactionInputs
 import eth.serotine.domain.usecase.ListDeployedSafe
 import eth.serotine.domain.usecase.NetworkDemand
 import eth.serotine.domain.usecase.ObserveDebugTab
+import eth.serotine.domain.usecase.ObserveHeavyDownloads
+import eth.serotine.domain.usecase.ObserveSafe
+import eth.serotine.domain.usecase.OutboxLock
 import eth.serotine.domain.usecase.ProveCowOrderEnds
+import eth.serotine.domain.usecase.QuoteSafeApproval
+import eth.serotine.domain.usecase.QuoteSafeExecution
 import eth.serotine.domain.usecase.QuoteTransfer
 import eth.serotine.domain.usecase.UpgradeNotices
 import eth.serotine.domain.usecase.WatchAddress
@@ -73,8 +76,8 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.IO
 import kotlinx.coroutines.Job
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
@@ -143,6 +146,14 @@ class SerotineWallet {
 
     /** Whether a transaction may be signed while the light client syncs (docs/lenient-mode.md), beside the other settings. */
     private val syncPolicy = FileSyncPolicy("$dataDir/sync-policy.json")
+
+    /**
+     * Whether the heavy downloads may run now: the user's choice for a metered connection, opt-in
+     * (owner ruling, 2026-10-20), and what iOS says the current path costs. One of each, shared by
+     * the graph and the accounts' log followers.
+     */
+    private val connectionMeter = IosConnectionMeter()
+    private val meteredDownloads = FileMeteredDownloads("$dataDir/metered-downloads.json")
 
     // One engine, one light client per network that is on and needed: FollowNetworks starts with
     // the wallet and runs for the life of the process (docs/networks.md, *The engine host*). The
@@ -297,6 +308,8 @@ class SerotineWallet {
             keptTransactionInputs = node.keptTransactionInputs,
             keptSafes = node.keptSafes,
             syncPolicy = syncPolicy,
+            connectionMeter = connectionMeter,
+            meteredDownloads = meteredDownloads,
             swapVenue = FileSwapVenue("$dataDir/swap-venue.json"),
             waitingSwaps = FileWaitingSwaps("$dataDir/waiting-swaps.json"),
             debugLog = debugLog,
@@ -545,6 +558,7 @@ class SerotineWallet {
                             transactionHistory,
                             node.lightClient,
                             node.logIndex,
+                            ObserveHeavyDownloads(connectionMeter, meteredDownloads),
                             network,
                         )()
                     }

@@ -54,12 +54,13 @@ class EngineLogIndexTest {
                 LogWatch(LogWatchKey.Emitter(vault), 9_450_000),
             ),
             unwatch = listOf(LogWatchKey.Mention(token), LogWatchKey.Emitter(token)),
+            walkPaused = false,
         )
 
         assertTrue(taken)
         assertEquals(
             Json.parseToJsonElement(
-                """{"enabled":true,"watch":[""" +
+                """{"enabled":true,"backfillPaused":false,"watch":[""" +
                     """{"topic":"$alicesTopic","positions":[1,2,3],"fromBlock":9400000},""" +
                     """{"address":"${vault.hex}","fromBlock":9450000}],""" +
                     """"unwatch":["0x${"00".repeat(12)}${"7c".repeat(20)}","${token.hex}"]}""",
@@ -72,14 +73,34 @@ class EngineLogIndexTest {
     fun aChangeIsNotAskedWhileReadsCannotBeVerifiedAndIsNotTakenWhenTheEngineRefusesIt() = runTest {
         val watch = listOf(LogWatch(LogWatchKey.Mention(alice), 1))
         chain.base.snapshot = running(phase = EngineSnapshot.Phase.CATCHING_UP)
-        assertFalse(index().configure(Network.SEPOLIA, watch, emptyList()))
+        assertFalse(index().configure(Network.SEPOLIA, watch, emptyList(), walkPaused = false))
         assertEquals(emptyList(), chain.configs)
 
         chain.base.snapshot = running()
         chain.takes = false
-        assertFalse(index().configure(Network.SEPOLIA, watch, emptyList()))
-        assertFalse(index(chain = null).configure(Network.SEPOLIA, watch, emptyList()))
-        assertTrue(index().configure(Network.SEPOLIA, emptyList(), emptyList()), "nothing to ask")
+        assertFalse(index().configure(Network.SEPOLIA, watch, emptyList(), walkPaused = false))
+        assertFalse(index(chain = null).configure(Network.SEPOLIA, watch, emptyList(), walkPaused = false))
+    }
+
+    @Test
+    fun aChangeWithNothingToWatchOrUnwatchOnlyPausesOrResumesTheWalkWhetherReadsVerifyOrNot() = runTest {
+        assertTrue(index().configure(Network.SEPOLIA, emptyList(), emptyList(), walkPaused = true))
+        chain.base.snapshot = running(phase = EngineSnapshot.Phase.CATCHING_UP)
+        assertTrue(index().configure(Network.SEPOLIA, emptyList(), emptyList(), walkPaused = false))
+        chain.base.snapshot = EngineSnapshot.Down
+        assertFalse(index().configure(Network.SEPOLIA, emptyList(), emptyList(), walkPaused = true))
+        assertFalse(
+            index().configure(Network.GNOSIS, emptyList(), emptyList(), walkPaused = true),
+            "another network's index is not this one's",
+        )
+
+        assertEquals(
+            listOf(
+                """{"enabled":true,"backfillPaused":true,"watch":[],"unwatch":[]}""",
+                """{"enabled":true,"backfillPaused":false,"watch":[],"unwatch":[]}""",
+            ).map(Json::parseToJsonElement),
+            chain.configs.map(Json::parseToJsonElement),
+        )
     }
 
     @Test
@@ -89,6 +110,7 @@ class EngineLogIndexTest {
                 Network.SEPOLIA,
                 listOf(LogWatch(LogWatchKey.Mention(alice), 1)),
                 listOf(LogWatchKey.Mention(alice)),
+                walkPaused = false,
             )
         }
     }

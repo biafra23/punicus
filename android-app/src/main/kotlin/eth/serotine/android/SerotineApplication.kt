@@ -23,8 +23,6 @@ import eth.serotine.android.widget.RateWidgetPairs
 import eth.serotine.data.account.FileAccountRepository
 import eth.serotine.data.cow.FileCowOrders
 import eth.serotine.data.cow.HttpCowApi
-import eth.serotine.data.outbox.androidOutbox
-import eth.serotine.data.walletconnect.WalletConnectDapps
 import eth.serotine.data.engine.AndroidDnsServers
 import eth.serotine.data.engine.MyotisHost
 import eth.serotine.data.history.FileHistoryStarts
@@ -34,36 +32,37 @@ import eth.serotine.data.keys.EnvelopeKeyStore
 import eth.serotine.data.keys.PasswordOnlyTier
 import eth.serotine.data.keys.Secp256k1Recovery
 import eth.serotine.data.logs.MemoryDebugLog
+import eth.serotine.data.network.AndroidConnectionMeter
 import eth.serotine.data.networks.FileNetworkSettings
+import eth.serotine.data.nfts.FileAddedNfts
+import eth.serotine.data.outbox.androidOutbox
 import eth.serotine.data.prices.PinnedFeedTable
 import eth.serotine.data.rates.FileLastExchangeRate
 import eth.serotine.data.safe.FileSafeTxQueue
 import eth.serotine.data.safe.JsonSigningRequestCodec
 import eth.serotine.data.safe.PinnedSafeReleases
+import eth.serotine.data.settings.FileAmountsHidden
 import eth.serotine.data.settings.FileDebugScreen
 import eth.serotine.data.settings.FileDisplayCurrency
-import eth.serotine.data.settings.FileAmountsHidden
 import eth.serotine.data.settings.FileInterfaceMode
-import eth.serotine.data.settings.FileSyncPolicy
+import eth.serotine.data.settings.FileMeteredDownloads
 import eth.serotine.data.settings.FileSwapVenue
+import eth.serotine.data.settings.FileSyncPolicy
 import eth.serotine.data.swaps.FileWaitingSwaps
 import eth.serotine.data.tokens.BuiltInTokenCatalog
-import eth.serotine.data.nfts.FileAddedNfts
 import eth.serotine.data.tokens.FileUserTokens
 import eth.serotine.data.transfers.FileSentTransfers
 import eth.serotine.data.transfers.FileTransactionHistory
 import eth.serotine.data.upgrade.FileKnownUpgradeStore
+import eth.serotine.data.walletconnect.WalletConnectDapps
 import eth.serotine.domain.model.Network
 import eth.serotine.domain.model.PriceId
 import eth.serotine.domain.model.RatePair
 import eth.serotine.domain.repository.AccountList
-import eth.serotine.domain.usecase.CheckQueued
-import eth.serotine.domain.usecase.CheckHeldSignature
-import eth.serotine.domain.usecase.ObserveSafe
-import eth.serotine.domain.usecase.QuoteSafeApproval
-import eth.serotine.domain.usecase.QuoteSafeExecution
-import eth.serotine.domain.usecase.FollowAccountLogs
 import eth.serotine.domain.usecase.AnswerDappRequestsAtOnce
+import eth.serotine.domain.usecase.CheckHeldSignature
+import eth.serotine.domain.usecase.CheckQueued
+import eth.serotine.domain.usecase.FollowAccountLogs
 import eth.serotine.domain.usecase.FollowDappAccounts
 import eth.serotine.domain.usecase.FollowDebugScreen
 import eth.serotine.domain.usecase.FollowExchangeRate
@@ -71,20 +70,24 @@ import eth.serotine.domain.usecase.FollowInterfaceMode
 import eth.serotine.domain.usecase.FollowNetworks
 import eth.serotine.domain.usecase.FollowOutbox
 import eth.serotine.domain.usecase.FollowSafeDeployments
-import eth.serotine.domain.usecase.KeepTransactionInputs
-import eth.serotine.domain.usecase.OutboxLock
 import eth.serotine.domain.usecase.FollowSentTransactions
 import eth.serotine.domain.usecase.FollowUpgradeReports
 import eth.serotine.domain.usecase.HistoryNotingAccounts
 import eth.serotine.domain.usecase.HistoryRecordingSentTransfers
+import eth.serotine.domain.usecase.KeepTransactionInputs
 import eth.serotine.domain.usecase.ListDeployedSafe
 import eth.serotine.domain.usecase.NetworkDemand
 import eth.serotine.domain.usecase.ObserveDebugTab
 import eth.serotine.domain.usecase.ObserveDisplayCurrencies
+import eth.serotine.domain.usecase.ObserveHeavyDownloads
+import eth.serotine.domain.usecase.ObserveSafe
+import eth.serotine.domain.usecase.OutboxLock
 import eth.serotine.domain.usecase.ProveCowOrderEnds
+import eth.serotine.domain.usecase.QuoteSafeApproval
+import eth.serotine.domain.usecase.QuoteSafeExecution
 import eth.serotine.domain.usecase.QuoteTransfer
-import eth.serotine.domain.usecase.ReadExchangeRate
 import eth.serotine.domain.usecase.RateWidgetChoices
+import eth.serotine.domain.usecase.ReadExchangeRate
 import eth.serotine.domain.usecase.RefreshExchangeRate
 import eth.serotine.domain.usecase.UpgradeNotices
 import eth.serotine.domain.usecase.WatchAddress
@@ -201,6 +204,14 @@ class SerotineApplication : Application() {
 
     /** Whether a transaction may be signed while the light client syncs (docs/lenient-mode.md), beside the other settings. */
     private val syncPolicy by lazy { FileSyncPolicy(filesDir.resolve("sync-policy.json").path) }
+
+    /**
+     * Whether the heavy downloads may run now: the user's choice for a metered connection, opt-in
+     * (owner ruling, 2026-10-20), and the default network's cost. One instance of each, which the
+     * graph and the accounts' log followers share.
+     */
+    private val connectionMeter by lazy { AndroidConnectionMeter(this) }
+    private val meteredDownloads by lazy { FileMeteredDownloads(filesDir.resolve("metered-downloads.json").path) }
     private val amountsHidden by lazy { FileAmountsHidden(filesDir.resolve("amounts-hidden.json").path) }
 
     /** eth.serotine.debug is debuggable, the release app is not: what the debug app's extras hang on. */
@@ -459,6 +470,8 @@ class SerotineApplication : Application() {
             keptTransactionInputs = node.keptTransactionInputs,
             keptSafes = node.keptSafes,
             syncPolicy = syncPolicy,
+            connectionMeter = connectionMeter,
+            meteredDownloads = meteredDownloads,
             swapVenue = swapVenue,
             waitingSwaps = waitingSwaps,
             debugLog = debugLog,
@@ -957,6 +970,7 @@ class SerotineApplication : Application() {
                         transactionHistory,
                         node.lightClient,
                         node.logIndex,
+                        ObserveHeavyDownloads(connectionMeter, meteredDownloads),
                         network,
                     )()
                 } catch (e: CancellationException) {

@@ -1,6 +1,7 @@
 package eth.serotine.ui.settings
 
 import androidx.compose.ui.test.assertCountEquals
+import androidx.compose.ui.test.assertHasNoClickAction
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsOff
 import androidx.compose.ui.test.assertIsOn
@@ -14,9 +15,9 @@ import eth.serotine.ui.APP_VERSION
 import eth.serotine.ui.components.LightClientHealth.NOT_RUNNING
 import eth.serotine.ui.components.LightClientHealth.VERIFIED
 import eth.serotine.ui.theme.SerotineTheme
+import kotlin.test.assertEquals
 import org.junit.Rule
 import org.junit.Test
-import kotlin.test.assertEquals
 
 /** Renders the stateless [SettingsScreen] headless. */
 class SettingsScreenTest {
@@ -43,6 +44,7 @@ class SettingsScreenTest {
         detailedView: Boolean = false,
         networks: List<NetworkRow> = listOf(sepolia),
         turningOff: TurnOffConfirmation? = null,
+        metered: MeteredDownloadsItem? = MeteredDownloadsItem(on = false, text = METERED_DOWNLOADS_OFF),
     ) = rule.setContent {
         SerotineTheme {
             SettingsScreen(
@@ -55,6 +57,7 @@ class SettingsScreenTest {
                     debugScreen = debugScreen,
                     detailedView = detailedView,
                     turningOff = turningOff,
+                    meteredDownloads = metered,
                 ),
                 onCurrency = { currencyOpened++ },
                 onTokens = { tokensOpened++ },
@@ -65,8 +68,48 @@ class SettingsScreenTest {
                 onConfirmTurnOff = { turnOffsConfirmed++ },
                 onCancelTurnOff = { turnOffsCancelled++ },
                 onDetailedViewChange = { detailedViewChanges += it },
+                onMeteredDownloadsChange = { meteredChoices += it },
             )
         }
+    }
+
+    private val meteredChoices = mutableListOf<Boolean>()
+
+    @Test
+    fun theMeteredDownloadsSwitchIsOffByDefaultAndATapOnItsRowAllowsThem() {
+        show()
+
+        rule.onNodeWithTag(SETTINGS_METERED_TAG).assertIsOff()
+        rule.onNodeWithText(METERED_DOWNLOADS_OFF).performClick()
+        assertEquals(listOf(true), meteredChoices)
+    }
+
+    @Test
+    fun aTapOnTheAllowedMeteredDownloadsSwitchTurnsItOff() {
+        show(metered = MeteredDownloadsItem(on = true, text = METERED_DOWNLOADS_ON))
+
+        rule.onNodeWithTag(SETTINGS_METERED_TAG).assertIsOn()
+        rule.onNodeWithText(METERED_DOWNLOADS_ON).performClick()
+        assertEquals(listOf(false), meteredChoices)
+    }
+
+    @Test
+    fun theMeteredDownloadsSwitchTakesNoTapUntilItsChoiceIsRead() {
+        show(metered = null)
+
+        rule.onNodeWithTag(SETTINGS_METERED_TAG).assertHasNoClickAction()
+        assertEquals(emptyList(), meteredChoices)
+    }
+
+    @Test
+    fun aGreyedMeteredDownloadsSwitchSaysWhyOnATapAndChangesNothing() {
+        show(
+            metered = MeteredDownloadsItem(on = false, text = "Not reported here", unavailableReason = "No metering here."),
+        )
+
+        rule.onNodeWithText("Not reported here").performClick()
+        rule.onNodeWithText("No metering here.").assertExists()
+        assertEquals(emptyList(), meteredChoices)
     }
 
     @Test
