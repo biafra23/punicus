@@ -17,7 +17,8 @@ import eth.serotine.ui.components.StaleAnchorWarning
  * when its last switch could not be saved, and [signWhileSyncingNote] what turning it off leaves
  * in place while the outbox holds something (decision 10), null otherwise.
  * [turningOff] is the confirmation asked before a network with accounts is turned off (N20), null
- * while none is asked.
+ * while none is asked. [meteredDownloads] is whether the heavy downloads may use a metered
+ * connection.
  *
  * [screenCaptureAllowed] is the debug build's switch for screen recordings of the protected
  * screens (`ScreenCaptureDebugSwitch`): whether it allows capture, or null where there is no
@@ -38,7 +39,31 @@ data class SettingsUiState(
     val signWhileSyncing: Boolean = false,
     val signWhileSyncingNotSaved: Boolean = false,
     val signWhileSyncingNote: String? = null,
+    /** Null until the choice and the connection are read: the switch is then drawn off and greyed out. */
+    val meteredDownloads: MeteredDownloadsItem? = null,
 )
+
+/**
+ * The switch that allows the heavy downloads, such as the walk back over the account history, on
+ * a metered connection (owner ruling, 2026-10-20): [on] when allowed, [text] what that means now
+ * ("Off: … · Waiting now"), [simpleText] the same in simple mode's words (docs/simple-ui.md), and
+ * [unavailableReason] when it cannot be changed (on this device, or while the choice cannot be
+ * read), said on a tap of the greyed row; [simpleUnavailableReason] that in simple mode's words.
+ */
+data class MeteredDownloadsItem(
+    val on: Boolean,
+    val text: String,
+    val unavailableReason: String? = null,
+    val simpleText: String = text,
+    val simpleUnavailableReason: String? = unavailableReason,
+)
+
+/** What the switch says while the heavy downloads are not allowed on a metered connection. */
+internal const val METERED_DOWNLOADS_OFF = "Off: the account history is walked back only on Wi-Fi or another " +
+    "unmetered connection"
+
+/** What the switch says while they are. */
+internal const val METERED_DOWNLOADS_ON = "On: the account history is walked back on any connection, mobile data too"
 
 /**
  * One network's row in Settings → Networks (N16): its [name], whether it is [on], what it holds
@@ -74,3 +99,10 @@ data class TurnOffConfirmation(
     val text: String,
     val waiting: String? = null,
 )
+
+/** [METERED_DOWNLOADS_OFF] in simple mode's words, which do not say how the history is read. */
+internal const val METERED_DOWNLOADS_OFF_SIMPLE = "Off: older activity is checked only on Wi-Fi or another " +
+    "unmetered connection"
+
+/** [METERED_DOWNLOADS_ON] in simple mode's words. */
+internal const val METERED_DOWNLOADS_ON_SIMPLE = "On: older activity is checked on any connection, mobile data too"

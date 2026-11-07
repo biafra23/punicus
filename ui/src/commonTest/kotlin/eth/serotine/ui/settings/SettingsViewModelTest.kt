@@ -5,29 +5,44 @@ import eth.serotine.domain.model.AccountCustody
 import eth.serotine.domain.model.AccountKind
 import eth.serotine.domain.model.Address
 import eth.serotine.domain.model.DisplayCurrency
+import eth.serotine.domain.model.Eip1559Transaction
 import eth.serotine.domain.model.InterfaceMode
 import eth.serotine.domain.model.Network
+import eth.serotine.domain.model.SignedTransfer
+import eth.serotine.domain.model.SyncPolicy
 import eth.serotine.domain.model.Token
+import eth.serotine.domain.model.TransferAsset
+import eth.serotine.domain.model.UInt256
+import eth.serotine.domain.repository.ConnectionCost
 import eth.serotine.domain.repository.CurrencyChoice
+import eth.serotine.domain.repository.DraftBasis
+import eth.serotine.domain.repository.FeeLevel
 import eth.serotine.domain.repository.LightClient
 import eth.serotine.domain.repository.LightClientStatus
+import eth.serotine.domain.repository.MeteredDownloadsChoice
+import eth.serotine.domain.repository.OutboxList
+import eth.serotine.domain.repository.QueuedTransaction
+import eth.serotine.domain.repository.SentAction
 import eth.serotine.domain.repository.StaleAnchorConsent
+import eth.serotine.domain.usecase.AllowHeavyDownloadsOnMetered
 import eth.serotine.domain.usecase.NetworkOverview
 import eth.serotine.domain.usecase.ObserveDebugScreen
 import eth.serotine.domain.usecase.ObserveDisplayCurrencies
+import eth.serotine.domain.usecase.ObserveHeavyDownloads
 import eth.serotine.domain.usecase.ObserveInterfaceMode
 import eth.serotine.domain.usecase.ObserveKnownTokens
 import eth.serotine.domain.usecase.ObserveNetworkLive
 import eth.serotine.domain.usecase.ObserveNetworkOverview
+import eth.serotine.domain.usecase.ObserveOutbox
+import eth.serotine.domain.usecase.ObserveSyncPolicy
 import eth.serotine.domain.usecase.SetDebugScreen
 import eth.serotine.domain.usecase.SetInterfaceMode
-import eth.serotine.domain.usecase.SetSyncPolicy
-import eth.serotine.domain.usecase.ObserveSyncPolicy
-import eth.serotine.domain.usecase.ObserveOutbox
 import eth.serotine.domain.usecase.SetNetworkEnabled
+import eth.serotine.domain.usecase.SetSyncPolicy
 import eth.serotine.domain.usecase.SyncPastStaleAnchor
 import eth.serotine.ui.APP_VERSION
 import eth.serotine.ui.FakeAccounts
+import eth.serotine.ui.FakeConnectionMeter
 import eth.serotine.ui.FakeFeeds
 import eth.serotine.ui.FakeFreshness
 import eth.serotine.ui.FakeMetadata
@@ -35,6 +50,7 @@ import eth.serotine.ui.ListCatalog
 import eth.serotine.ui.MemoryCurrencySetting
 import eth.serotine.ui.MemoryDebugScreen
 import eth.serotine.ui.MemoryInterfaceMode
+import eth.serotine.ui.MemoryMeteredDownloads
 import eth.serotine.ui.MemoryNetworkSettings
 import eth.serotine.ui.MemoryOutbox
 import eth.serotine.ui.MemorySyncPolicy
@@ -46,6 +62,7 @@ import kotlin.test.AfterTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
+import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 import kotlinx.coroutines.Dispatchers
@@ -60,16 +77,6 @@ import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.test.setMain
-import eth.serotine.domain.repository.SentAction
-import eth.serotine.domain.repository.QueuedTransaction
-import eth.serotine.domain.repository.OutboxList
-import eth.serotine.domain.repository.FeeLevel
-import eth.serotine.domain.repository.DraftBasis
-import eth.serotine.domain.model.UInt256
-import eth.serotine.domain.model.TransferAsset
-import eth.serotine.domain.model.SignedTransfer
-import eth.serotine.domain.model.Eip1559Transaction
-import eth.serotine.domain.model.SyncPolicy
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class SettingsViewModelTest {
@@ -96,6 +103,8 @@ class SettingsViewModelTest {
     private val currency = MemoryCurrencySetting()
     private val policy = MemorySyncPolicy()
     private val outbox = MemoryOutbox()
+    private val meter = FakeConnectionMeter()
+    private val metered = MemoryMeteredDownloads()
 
     @AfterTest
     fun resetMainDispatcher() = Dispatchers.resetMain()
@@ -125,6 +134,8 @@ class SettingsViewModelTest {
             ObserveSyncPolicy(policy),
             SetSyncPolicy(policy),
             ObserveOutbox(outbox),
+            ObserveHeavyDownloads(meter, metered),
+            AllowHeavyDownloadsOnMetered(metered),
             clock = { 1_000 },
         )
         backgroundScope.launch { viewModel.uiState.collect {} }
@@ -308,6 +319,8 @@ class SettingsViewModelTest {
             ObserveSyncPolicy(policy),
             SetSyncPolicy(policy),
             ObserveOutbox(outbox),
+            ObserveHeavyDownloads(meter, metered),
+            AllowHeavyDownloadsOnMetered(metered),
             clock = { now },
         )
         backgroundScope.launch { viewModel.uiState.collect {} }
@@ -537,4 +550,64 @@ class SettingsViewModelTest {
         signedAt = 900,
         builtOn = DraftBasis(1, null, null, null, 1, null, 1, null),
     )
+
+    @Test
+    fun theHeavyDownloadsAreOffOnAMeteredConnectionUntilAllowedAndSayWhenTheyArePaused() = runTest {
+        val viewModel = viewModel()
+
+        val off = assertNotNull(viewModel.uiState.value.meteredDownloads)
+        assertFalse(off.on)
+        assertEquals(METERED_DOWNLOADS_OFF, off.text)
+        assertEquals(METERED_DOWNLOADS_OFF_SIMPLE, off.simpleText)
+        assertNull(off.unavailableReason)
+
+        meter.cost.value = ConnectionCost.METERED
+        runCurrent()
+        assertEquals(
+            "$METERED_DOWNLOADS_OFF · Waiting now: no unmetered connection",
+            viewModel.uiState.value.meteredDownloads?.text,
+        )
+
+        viewModel.allowHeavyDownloadsOnMetered(true)
+        runCurrent()
+        assertEquals(MeteredDownloadsChoice.Chosen(allowed = true), metered.choice.value)
+        val on = assertNotNull(viewModel.uiState.value.meteredDownloads)
+        assertTrue(on.on)
+        assertEquals(METERED_DOWNLOADS_ON, on.text, "allowed: nothing waits")
+    }
+
+    @Test
+    fun aMeteredDownloadsChoiceThatCouldNotBeSavedOrReadIsSaid() = runTest {
+        val viewModel = viewModel()
+        metered.failSaves = true
+
+        viewModel.allowHeavyDownloadsOnMetered(true)
+        runCurrent()
+        val notSaved = assertNotNull(viewModel.uiState.value.meteredDownloads)
+        assertFalse(notSaved.on)
+        assertEquals("$METERED_DOWNLOADS_OFF · Your choice could not be saved", notSaved.text)
+
+        metered.failSaves = false
+        viewModel.allowHeavyDownloadsOnMetered(true)
+        runCurrent()
+        assertEquals(METERED_DOWNLOADS_ON, viewModel.uiState.value.meteredDownloads?.text)
+
+        metered.choice.value = MeteredDownloadsChoice.Unreadable
+        runCurrent()
+        val unreadable = assertNotNull(viewModel.uiState.value.meteredDownloads)
+        assertEquals("$METERED_DOWNLOADS_OFF (your choice cannot be read)", unreadable.text)
+        // Nothing can be chosen until it can be read: the switch is greyed out and says why.
+        assertNotNull(unreadable.unavailableReason)
+    }
+
+    @Test
+    fun onADeviceThatDoesNotReportMeteringTheMeteredSwitchIsGreyedAndSaysWhy() = runTest {
+        meter.cost.value = ConnectionCost.NOT_REPORTED
+        val viewModel = viewModel()
+
+        val item = assertNotNull(viewModel.uiState.value.meteredDownloads)
+        assertFalse(item.on)
+        assertTrue(item.text.startsWith("This device does not say whether its connection is metered"), item.text)
+        assertNotNull(item.unavailableReason)
+    }
 }

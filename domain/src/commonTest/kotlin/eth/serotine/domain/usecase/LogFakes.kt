@@ -3,6 +3,8 @@ package eth.serotine.domain.usecase
 import eth.serotine.domain.model.AccountId
 import eth.serotine.domain.model.Address
 import eth.serotine.domain.model.Network
+import eth.serotine.domain.repository.ConnectionCost
+import eth.serotine.domain.repository.ConnectionMeter
 import eth.serotine.domain.repository.HistoryStart
 import eth.serotine.domain.repository.HistoryStartList
 import eth.serotine.domain.repository.HistoryStarts
@@ -12,6 +14,8 @@ import eth.serotine.domain.repository.LogQuery
 import eth.serotine.domain.repository.LogWatch
 import eth.serotine.domain.repository.LogWatchKey
 import eth.serotine.domain.repository.LogsReading
+import eth.serotine.domain.repository.MeteredDownloadsChoice
+import eth.serotine.domain.repository.MeteredDownloadsSetting
 import eth.serotine.domain.repository.ReadUnavailable
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -50,17 +54,25 @@ internal class MemoryHistoryStarts(vararg initial: Pair<Address, HistoryStart>) 
 }
 
 /**
- * A [LogIndex] that records each change asked of it and [watched] what it took, the union an
- * engine keeps (the lowest block of each entry); [takes] false refuses every change. Its
- * [coverage] and the [answer] to each query ([queries]) are a test's to set.
+ * A [LogIndex] that records each change asked of it, with whether it paused the walk ([pauses]),
+ * and [watched] what it took, the union an engine keeps (the lowest block of each entry); [takes]
+ * false refuses every change. Its [coverage] and the [answer] to each query ([queries]) are a
+ * test's to set.
  */
 internal class RecordingLogIndex : LogIndex {
     val asked = mutableListOf<Pair<List<LogWatch>, List<LogWatchKey>>>()
+    val pauses = mutableListOf<Boolean>()
     val watched = mutableMapOf<LogWatchKey, Long>()
     var takes = true
 
-    override suspend fun configure(network: Network, watch: List<LogWatch>, unwatch: List<LogWatchKey>): Boolean {
+    override suspend fun configure(
+        network: Network,
+        watch: List<LogWatch>,
+        unwatch: List<LogWatchKey>,
+        walkPaused: Boolean,
+    ): Boolean {
         asked += watch to unwatch
+        pauses += walkPaused
         if (!takes) return false
         unwatch.forEach { watched.remove(it) }
         watch.forEach { entry -> watched[entry.key] = minOf(entry.fromBlock, watched[entry.key] ?: Long.MAX_VALUE) }
@@ -76,5 +88,26 @@ internal class RecordingLogIndex : LogIndex {
     override suspend fun logs(network: Network, query: LogQuery): LogsReading {
         queries += query
         return answer(query)
+    }
+}
+
+/** A [ConnectionMeter] whose [cost] the test sets. */
+internal class FakeConnectionMeter(initial: ConnectionCost = ConnectionCost.UNMETERED) : ConnectionMeter {
+    val cost = MutableStateFlow(initial)
+
+    override fun observe(): Flow<ConnectionCost> = cost
+}
+
+/** [MeteredDownloadsSetting] in memory, as the port's contract says one behaves; [failSaves] makes every save fail. */
+internal class MemoryMeteredDownloads : MeteredDownloadsSetting {
+    val choice = MutableStateFlow<MeteredDownloadsChoice>(MeteredDownloadsChoice.Chosen(allowed = false))
+    var failSaves = false
+
+    override fun observe(): Flow<MeteredDownloadsChoice> = choice
+
+    override suspend fun allow(allowed: Boolean): Boolean {
+        if (failSaves || choice.value is MeteredDownloadsChoice.Unreadable) return false
+        choice.value = MeteredDownloadsChoice.Chosen(allowed)
+        return true
     }
 }

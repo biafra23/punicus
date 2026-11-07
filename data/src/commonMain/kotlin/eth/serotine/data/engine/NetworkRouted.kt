@@ -224,8 +224,12 @@ class NetworkRoutedPorts(private val byNetwork: Map<Network, ChainPorts>) {
     }
 
     val logIndex: LogIndex = object : LogIndex {
-        override suspend fun configure(network: Network, watch: List<LogWatch>, unwatch: List<LogWatchKey>): Boolean =
-            of(network)?.logIndex?.configure(network, watch, unwatch) ?: false
+        override suspend fun configure(
+            network: Network,
+            watch: List<LogWatch>,
+            unwatch: List<LogWatchKey>,
+            walkPaused: Boolean,
+        ): Boolean = of(network)?.logIndex?.configure(network, watch, unwatch, walkPaused) ?: false
 
         override fun observeCoverage(network: Network): Flow<LogCoverageReading> =
             of(network)?.logIndex?.observeCoverage(network) ?: flowOf(LogCoverageReading.Unavailable)

@@ -313,6 +313,8 @@ class AppNavigationTest {
         keptTransactionInputs = FakeKeptInputs(),
         keptSafes = KeptSafes.None,
         syncPolicy = MemorySyncPolicy(),
+        connectionMeter = FakeConnectionMeter(),
+        meteredDownloads = MemoryMeteredDownloads(),
         keys = object : KeyStore {
             override suspend fun newMnemonic(): NewMnemonic = NewMnemonic.Unavailable
 

@@ -60,7 +60,7 @@ class NetworkRoutedPortsTest {
             ApprovalReading.Unavailable(noEngine),
             routed.safeApprovals.approval(network, address, address, checkNotNull(Digest.parse("00".repeat(32)))),
         )
-        assertFalse(routed.logIndex.configure(network, emptyList(), emptyList()))
+        assertFalse(routed.logIndex.configure(network, emptyList(), emptyList(), walkPaused = false))
         assertEquals(LogCoverageReading.Unavailable, routed.logIndex.observeCoverage(network).first())
         assertEquals(CowVenueReading.Unavailable(noEngine), routed.cow.venue(network))
         assertEquals(Simulation.Unavailable(noEngine), routed.cow.call(network, address, ByteArray(0)))

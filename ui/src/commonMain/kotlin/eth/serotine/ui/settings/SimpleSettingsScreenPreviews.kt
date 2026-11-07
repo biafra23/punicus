@@ -44,6 +44,7 @@ private val simple = SettingsUiState(
     "0.4.0",
     tokens = "18 built in · 0 added",
     currency = "EUR",
+    meteredDownloads = meteredNotAllowed,
 )
 
 @Composable
@@ -104,6 +105,54 @@ private fun SimpleSettingsSignWhileSyncingQueuedPreview() = SimpleSettingsPrevie
 private fun SimpleSettingsSignWhileSyncingNotSavedPreview() =
     SimpleSettingsPreview(simple.copy(signWhileSyncingNotSaved = true))
 
+/** On a metered connection, the heavy downloads not allowed: in simple mode's words, waiting for Wi-Fi. */
+@Preview
+@Composable
+private fun SimpleSettingsMeteredPausedPreview() =
+    SimpleSettingsPreview(simple.copy(meteredDownloads = meteredPausedSample))
+
+/** A desktop, which does not report metering: the switch greyed out, in simple mode's words. */
+@Preview
+@Composable
+private fun SimpleSettingsMeteredNotReportedPreview() = SimpleSettingsPreview(
+    simple.copy(
+        meteredDownloads = MeteredDownloadsItem(
+            on = false,
+            text = "This device does not say whether its connection is metered",
+            unavailableReason = "This device does not report whether its connection is metered.",
+            simpleText = "This device doesn't say whether its connection is metered: older activity is checked " +
+                "on any connection",
+        ),
+    ),
+)
+
+/** A choice that cannot be read: greyed out until it can be read. */
+@Preview
+@Composable
+private fun SimpleSettingsMeteredUnreadablePreview() = SimpleSettingsPreview(
+    simple.copy(
+        meteredDownloads = MeteredDownloadsItem(
+            on = false,
+            text = "$METERED_DOWNLOADS_OFF (your choice cannot be read)",
+            unavailableReason = "Your saved choice cannot be read.",
+            simpleText = "$METERED_DOWNLOADS_OFF_SIMPLE (your choice cannot be read)",
+        ),
+    ),
+)
+
+/** The heavy downloads allowed on a metered connection, in simple mode's words. */
+@Preview
+@Composable
+private fun SimpleSettingsMeteredAllowedPreview() = SimpleSettingsPreview(
+    simple.copy(
+        meteredDownloads = MeteredDownloadsItem(
+            on = true,
+            text = METERED_DOWNLOADS_ON,
+            simpleText = METERED_DOWNLOADS_ON_SIMPLE,
+        ),
+    ),
+)
+
 /** Every preview above, which SimpleSettingsScreenPreviewsTest renders: a new preview goes in here too. */
 internal val simpleSettingsScreenPreviews: List<ScreenPreview> = listOf(
     ScreenPreview("default") { SimpleSettingsPreviewDefault() },
@@ -112,4 +161,8 @@ internal val simpleSettingsScreenPreviews: List<ScreenPreview> = listOf(
     ScreenPreview("sign-while-syncing") { SimpleSettingsSignWhileSyncingPreview() },
     ScreenPreview("sign-while-syncing-queued") { SimpleSettingsSignWhileSyncingQueuedPreview() },
     ScreenPreview("sign-while-syncing-not-saved") { SimpleSettingsSignWhileSyncingNotSavedPreview() },
+    ScreenPreview("metered-paused") { SimpleSettingsMeteredPausedPreview() },
+    ScreenPreview("metered-allowed") { SimpleSettingsMeteredAllowedPreview() },
+    ScreenPreview("metered-not-reported") { SimpleSettingsMeteredNotReportedPreview() },
+    ScreenPreview("metered-unreadable") { SimpleSettingsMeteredUnreadablePreview() },
 )

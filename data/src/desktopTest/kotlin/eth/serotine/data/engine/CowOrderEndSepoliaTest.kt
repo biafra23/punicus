@@ -84,7 +84,8 @@ class CowOrderEndSepoliaTest {
             val key = LogWatchKey.Mention(owner)
             val from = tradeBlock - 10
             withTimeout(5.minutes) {
-                while (!node.logIndex.configure(sepolia, listOf(LogWatch(key, from)), emptyList())) delay(2.seconds)
+                val watch = listOf(LogWatch(key, from))
+                while (!node.logIndex.configure(sepolia, watch, emptyList(), walkPaused = false)) delay(2.seconds)
             }
             withTimeout(30.minutes) {
                 node.logIndex.observeCoverage(sepolia).first { reading ->

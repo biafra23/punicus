@@ -25,12 +25,20 @@ private val gnosis =
     NetworkRow(100, "Gnosis Chain", true, "1 account · Verified at block 42,511,906 · 3 s ago", VERIFIED)
 private val sepoliaOff = NetworkRow(11_155_111, "Sepolia", false, "1 account · Off", NOT_RUNNING, testnet = true)
 
+/** The heavy downloads not allowed on a metered connection, the default, on one that is not. */
+internal val meteredNotAllowed = MeteredDownloadsItem(
+    on = false,
+    text = METERED_DOWNLOADS_OFF,
+    simpleText = METERED_DOWNLOADS_OFF_SIMPLE,
+)
+
 /** Docs/networks.md's N16: a release build updated from the Sepolia-only release, Sepolia off. */
 private val synced = SettingsUiState(
     listOf(ethereum, gnosis, sepoliaOff),
     VERSION,
     tokens = "11 built in · 1 added",
     currency = "EUR",
+    meteredDownloads = meteredNotAllowed,
 )
 
 @Composable
@@ -228,6 +236,75 @@ private fun SettingsSignWhileSyncingQueuedPreview() = SettingsPreview(
 private fun SettingsSignWhileSyncingNotSavedPreview() =
     SettingsPreview(synced.copy(signWhileSyncingNotSaved = true))
 
+/** The heavy downloads allowed on a metered connection (owner ruling, 2026-10-20). */
+@Preview
+@Composable
+private fun SettingsMeteredAllowedPreview() = SettingsPreview(
+    synced.copy(meteredDownloads = MeteredDownloadsItem(on = true, text = METERED_DOWNLOADS_ON)),
+)
+
+/** Not allowed, on a metered connection now: the walk back is paused. */
+@Preview
+@Composable
+private fun SettingsMeteredPausedPreview() = SettingsPreview(
+    synced.copy(meteredDownloads = meteredPausedSample),
+)
+
+/** A desktop, which does not report metering: the switch greyed out, a tap saying why. */
+private val meteredNotReported = synced.copy(
+    meteredDownloads = MeteredDownloadsItem(
+        on = false,
+        text = "This device does not say whether its connection is metered: the account history is walked " +
+            "back on any connection",
+        unavailableReason = "This device does not report whether its connection is metered.",
+    ),
+)
+
+@Preview
+@Composable
+private fun SettingsMeteredNotReportedPreview() = SettingsPreview(meteredNotReported)
+
+@Preview
+@Composable
+private fun SettingsMeteredNotReportedDarkPreview() = SettingsPreview(meteredNotReported, darkTheme = true)
+
+/** A choice that cannot be read: not allowed, greyed out until it can be read. */
+@Preview
+@Composable
+private fun SettingsMeteredUnreadablePreview() = SettingsPreview(
+    synced.copy(
+        meteredDownloads = MeteredDownloadsItem(
+            on = false,
+            text = "$METERED_DOWNLOADS_OFF (your choice cannot be read)",
+            unavailableReason = "Your saved choice cannot be read.",
+        ),
+    ),
+)
+
+/** A choice that could not be saved: the row says so, the switch as it was. */
+@Preview
+@Composable
+private fun SettingsMeteredNotSavedPreview() = SettingsPreview(
+    synced.copy(
+        meteredDownloads = MeteredDownloadsItem(
+            on = false,
+            text = "$METERED_DOWNLOADS_OFF · Your choice could not be saved",
+        ),
+    ),
+)
+
+/** A saved choice found damaged and set aside: not allowed, said until a choice is made again. */
+@Preview
+@Composable
+private fun SettingsMeteredSetAsidePreview() = SettingsPreview(
+    synced.copy(
+        meteredDownloads = MeteredDownloadsItem(
+            on = false,
+            text = "$METERED_DOWNLOADS_OFF (your saved choice was damaged and set aside)",
+        ),
+    ),
+)
+
 /** Every preview above, which SettingsScreenPreviewsTest renders: a new preview goes in here too. */
 internal val settingsScreenPreviews: List<ScreenPreview> = listOf(
     ScreenPreview("synced") { SettingsSyncedPreview() },
@@ -251,4 +328,18 @@ internal val settingsScreenPreviews: List<ScreenPreview> = listOf(
     ScreenPreview("sign-while-syncing-dark") { SettingsSignWhileSyncingDarkPreview() },
     ScreenPreview("sign-while-syncing-queued") { SettingsSignWhileSyncingQueuedPreview() },
     ScreenPreview("sign-while-syncing-not-saved") { SettingsSignWhileSyncingNotSavedPreview() },
+    ScreenPreview("metered-allowed") { SettingsMeteredAllowedPreview() },
+    ScreenPreview("metered-paused") { SettingsMeteredPausedPreview() },
+    ScreenPreview("metered-not-reported") { SettingsMeteredNotReportedPreview() },
+    ScreenPreview("metered-not-reported-dark") { SettingsMeteredNotReportedDarkPreview() },
+    ScreenPreview("metered-unreadable") { SettingsMeteredUnreadablePreview() },
+    ScreenPreview("metered-not-saved") { SettingsMeteredNotSavedPreview() },
+    ScreenPreview("metered-set-aside") { SettingsMeteredSetAsidePreview() },
+)
+
+/** Not allowed, on a metered connection now, for this file's previews and simple mode's. */
+internal val meteredPausedSample = MeteredDownloadsItem(
+    on = false,
+    text = "$METERED_DOWNLOADS_OFF · Waiting now: no unmetered connection",
+    simpleText = "$METERED_DOWNLOADS_OFF_SIMPLE · Waiting now for Wi-Fi or another unmetered connection",
 )

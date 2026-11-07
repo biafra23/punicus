@@ -249,7 +249,9 @@ rulings to the screens.
   (owner ruling, 2026-10-16). Safe co-signing uses no off-chain service
   (owner ruling, 2026-10-16).
 - An account's history comes from the engine's verified log index (owner
-  rulings, 2026-10-20, #85).
+  rulings, 2026-10-20, #85). Its walk back is a heavy download: it waits
+  off a metered connection unless the user allows it in Settings (owner
+  ruling, 2026-10-20).
 - Swaps: Uniswap first, then CoW Protocol; the user chooses the venue (owner's
   directions, 2026-10-18 and 2026-10-22). CoW's order API is used only for a
   swap the user sends to CoW (owner ruling, 2026-10-22).

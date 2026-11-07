@@ -62,9 +62,10 @@ target is what resolves the engine's AAR. One package per area,
 | `transfers` | The record of sent transactions and the history of them, kept for good. |
 | `outbox` | Lenient mode's outbox (docs/lenient-mode.md): what is signed and waits for its check, a Safe signature held until its check among it, in a file sealed with a hardware key of its own, or in memory only where there is none (docs/keys-and-signing.md, *The outbox's seal key*). |
 | `history` | Where each account's history starts. |
+| `network` | What the device's connection costs: metered or not, as Android's `ConnectivityManager` and iOS's `NWPathMonitor` say; the desktop reports none. |
 | `rates` | The exchange rate last verified, for the home-screen widget. |
 | `logs` | The Debug tab's log, in memory only. The engine adapter writes each request into it. |
-| `settings` | The display currency, the swap venue last chosen, the Debug tab's switch, the view chosen (simple mode or Detailed view), whether amounts are hidden, and the sync policy (strict, or lenient: *Sign while syncing*). |
+| `settings` | The display currency, the swap venue last chosen, the Debug tab's switch, the view chosen (simple mode or Detailed view), whether amounts are hidden, the sync policy (strict, or lenient: *Sign while syncing*), and whether the heavy downloads may use a metered connection. |
 
 ### `ui`
 

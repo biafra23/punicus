@@ -66,12 +66,14 @@ internal interface LogIndexChain : VerifiedChain {
  * named: a name would put the user's labels into the engine's files.
  *
  * A change is asked of the engine only while it can verify reads, as the engine holds a call
- * made earlier until it is ready. The coverage is polled every [pollInterval]; an entry this port
- * does not model (restricted, or a topic that is not an address at all three positions) is left
- * out of it. A query is asked of the engine only from its entry's block on, which the status says;
- * logs are taken only when every one of them is what the query selects, in its range: anything
- * else is no answer, never a part of one. A device without an engine ([chain] null) answers
- * [ReadUnavailable.NO_ENGINE].
+ * made earlier until it is ready. One with nothing to watch or unwatch sets only the walk's pause
+ * (`backfillPaused`), as the engine unions what is pushed with what it holds, and is asked
+ * whenever the engine runs, since its walk can run before reads verify. The coverage is polled
+ * every [pollInterval]; an entry this port does not model (restricted, or a topic that is not an
+ * address at all three positions) is left out of it. A query is asked of the engine only from its
+ * entry's block on, which the status says; logs are taken only when every one of them is what the
+ * query selects, in its range: anything else is no answer, never a part of one. A device without
+ * an engine ([chain] null) answers [ReadUnavailable.NO_ENGINE].
  */
 class EngineLogIndex internal constructor(
     private val served: Network,
@@ -80,14 +82,20 @@ class EngineLogIndex internal constructor(
     private val pollInterval: Duration,
 ) : LogIndex {
 
-    override suspend fun configure(network: Network, watch: List<LogWatch>, unwatch: List<LogWatchKey>): Boolean {
+    override suspend fun configure(
+        network: Network,
+        watch: List<LogWatch>,
+        unwatch: List<LogWatchKey>,
+        walkPaused: Boolean,
+    ): Boolean {
         val keys = watch.map { it.key }.toSet()
         require(unwatch.none { it in keys }) { "an entry both watched and unwatched" }
         if (network != served) return false
-        if (watch.isEmpty() && unwatch.isEmpty()) return true
         val chain = chain ?: return false
         val config = buildJsonObject {
             put("enabled", true)
+            // Always said: the engine reads one left out as "walk", and keeps it across a pause.
+            put("backfillPaused", walkPaused)
             putJsonArray("watch") {
                 watch.distinctBy { it.key }.forEach { entry ->
                     addJsonObject {
@@ -105,9 +113,13 @@ class EngineLogIndex internal constructor(
             }
             putJsonArray("unwatch") { unwatch.distinct().forEach { add(it.wireKey()) } }
         }.toString()
+        // Only the pause is asked whenever the engine runs: its walk can run before reads verify.
+        val pauseOnly = watch.isEmpty() && unwatch.isEmpty()
         return withContext(dispatcher) {
             try {
-                whyUnreadable(chain.snapshot()) == null && chain.setLogIndexConfig(config)
+                val snapshot = chain.snapshot()
+                val ready = if (pauseOnly) snapshot is EngineSnapshot.Running else whyUnreadable(snapshot) == null
+                ready && chain.setLogIndexConfig(config)
             } catch (e: Throwable) {
                 currentCoroutineContext().ensureActive() // as in ProvenReads
                 false

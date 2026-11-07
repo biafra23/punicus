@@ -5,11 +5,16 @@ import androidx.lifecycle.viewModelScope
 import eth.serotine.domain.model.InterfaceMode
 import eth.serotine.domain.model.Network
 import eth.serotine.domain.model.SyncPolicy
+import eth.serotine.domain.repository.ConnectionCost
 import eth.serotine.domain.repository.LightClientStatus
+import eth.serotine.domain.repository.MeteredDownloadsChoice
 import eth.serotine.domain.repository.OutboxList
+import eth.serotine.domain.usecase.AllowHeavyDownloadsOnMetered
+import eth.serotine.domain.usecase.HeavyDownloads
 import eth.serotine.domain.usecase.NetworkOverview
 import eth.serotine.domain.usecase.ObserveDebugScreen
 import eth.serotine.domain.usecase.ObserveDisplayCurrencies
+import eth.serotine.domain.usecase.ObserveHeavyDownloads
 import eth.serotine.domain.usecase.ObserveInterfaceMode
 import eth.serotine.domain.usecase.ObserveKnownTokens
 import eth.serotine.domain.usecase.ObserveNetworkLive
@@ -41,6 +46,8 @@ import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.onStart
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 
 /**
  * The Settings screen's ViewModel: the display currency, the known tokens, the networks with their
@@ -72,6 +79,9 @@ class SettingsViewModel(
     private val setSyncPolicy: SetSyncPolicy,
     /** What the outbox holds: what turning the switch off leaves queued (decision 10). */
     observeOutbox: ObserveOutbox,
+    /** Whether the heavy downloads may run now: the user's choice for a metered connection, and its cost. */
+    observeHeavyDownloads: ObserveHeavyDownloads,
+    private val allowOnMetered: AllowHeavyDownloadsOnMetered,
     /** Now, in unix seconds: what the light clients' lines date the head block against. */
     private val clock: () -> Long = ::epochSecondsNow,
 ) : ViewModel() {
@@ -84,6 +94,12 @@ class SettingsViewModel(
 
     /** Whether the last switch of *Sign while syncing* could not be saved. */
     private val signWhileSyncingNotSaved = MutableStateFlow(false)
+
+    /** The last choice of the heavy downloads that could not be saved, null once one is. */
+    private val meteredNotSaved = MutableStateFlow<Boolean?>(null)
+
+    /** One save at a time, in the user's order, so the last one's outcome is what [meteredNotSaved] says. */
+    private val savingMetered = Mutex()
 
     /** Lenient mode's switch as read and as last saved, and how many transactions the outbox holds. */
     private val lenient = combine(
@@ -159,6 +175,9 @@ class SettingsViewModel(
                     signWhileSyncingNotSaved = lenient.notSaved,
                     signWhileSyncingNote = queuedNote(lenient.queued, lenient.policy),
                 )
+            }
+            .combine(combine(observeHeavyDownloads(), meteredNotSaved, ::Pair)) { state, (downloads, notSaved) ->
+                state.copy(meteredDownloads = downloads.item(notSaved))
             }
             .stateIn(
                 viewModelScope,
@@ -278,6 +297,59 @@ class SettingsViewModel(
         viewModelScope.launch {
             detailedViewNotSaved.value = !setInterfaceMode(if (shown) InterfaceMode.DETAILED else InterfaceMode.SIMPLE)
         }
+    }
+
+    /** Allows the heavy downloads on a metered connection, or not; a choice not saved is said on the switch. */
+    fun allowHeavyDownloadsOnMetered(allowed: Boolean) {
+        viewModelScope.launch {
+            savingMetered.withLock { meteredNotSaved.value = allowed.takeUnless { allowOnMetered(allowed) } }
+        }
+    }
+
+    /** The switch for these downloads; [notSaved] the choice not saved, said while it is not the one held. */
+    private fun HeavyDownloads.item(notSaved: Boolean?): MeteredDownloadsItem {
+        if (cost == ConnectionCost.NOT_REPORTED) {
+            return MeteredDownloadsItem(
+                on = allowedOnMetered,
+                text = "This device does not say whether its connection is metered: the account history is " +
+                    "walked back on any connection",
+                unavailableReason = "This device does not report whether its connection is metered, so Serotine " +
+                    "takes it as unmetered and walks the account history back on any connection. There is no " +
+                    "metered connection here to allow it on.",
+                simpleText = "This device doesn't say whether its connection is metered: older activity is " +
+                    "checked on any connection",
+                simpleUnavailableReason = "This device doesn't say whether its connection is metered, so older " +
+                    "activity is checked on any connection. There's nothing here to allow.",
+            )
+        }
+        val unreadable = choice is MeteredDownloadsChoice.Unreadable
+        val remark = when {
+            unreadable -> " (your choice cannot be read)"
+            (choice as? MeteredDownloadsChoice.Chosen)?.setAside == true ->
+                " (your saved choice was damaged and set aside)"
+            else -> ""
+        } + if (notSaved != null && notSaved != allowedOnMetered) " · Your choice could not be saved" else ""
+        // A connection that cannot be read waits as a metered one does.
+        val waiting = if (mayRun) "" else " · Waiting now: no unmetered connection"
+        val reason = if (unreadable) {
+            "Your saved choice cannot be read, so heavy downloads are taken as not allowed on a metered " +
+                "connection. The app keeps trying to read it, and the switch works again once it can."
+        } else {
+            null
+        }
+        return MeteredDownloadsItem(
+            on = allowedOnMetered,
+            text = (if (allowedOnMetered) METERED_DOWNLOADS_ON else METERED_DOWNLOADS_OFF) + remark + waiting,
+            unavailableReason = reason,
+            simpleUnavailableReason = if (unreadable) {
+                "Your saved choice can't be read, so older activity is checked only on Wi-Fi or another " +
+                    "unmetered connection. Serotine keeps trying to read it, and the switch works again once it can."
+            } else {
+                null
+            },
+            simpleText = (if (allowedOnMetered) METERED_DOWNLOADS_ON_SIMPLE else METERED_DOWNLOADS_OFF_SIMPLE) +
+                remark + if (mayRun) "" else " · Waiting now for Wi-Fi or another unmetered connection",
+        )
     }
 
     /**

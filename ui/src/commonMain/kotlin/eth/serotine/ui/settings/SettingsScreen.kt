@@ -56,6 +56,9 @@ const val SETTINGS_DEBUG_SCREEN_TAG = "settings-debug-screen"
 /** Test tag of *Sign while syncing*'s row, for UI tests. */
 const val SETTINGS_SIGN_WHILE_SYNCING_TAG = "settings-sign-while-syncing"
 
+/** Test tag of the row that switches the heavy downloads on a metered connection, for UI tests. */
+const val SETTINGS_METERED_TAG = "settings-metered"
+
 /**
  * What a tap on Connected dApps says in a build without a WalletConnect project ID
  * (docs/walletconnect.md, ruling 2).
@@ -100,6 +103,7 @@ fun SettingsRoute(
             onConnections = onConnections,
             connectionsOff = connectionsOff,
             onSignWhileSyncingChange = viewModel::signWhileSyncing,
+            onMeteredDownloadsChange = viewModel::allowHeavyDownloadsOnMetered,
         )
         InterfaceMode.DETAILED -> SettingsScreen(
             state,
@@ -117,6 +121,7 @@ fun SettingsRoute(
             onConnections = onConnections,
             connectionsOff = connectionsOff,
             onSignWhileSyncingChange = viewModel::signWhileSyncing,
+            onMeteredDownloadsChange = viewModel::allowHeavyDownloadsOnMetered,
         )
     }
 }
@@ -131,7 +136,9 @@ fun SettingsRoute(
  * Each network's switch turns it on or off through [onNetworkChange] (its chain id, and whether
  * on); the confirmation before a network with accounts is turned off answers through
  * [onConfirmTurnOff] and [onCancelTurnOff] (docs/networks.md, N16 and N20). *Sign while syncing*
- * turns lenient mode on or off through [onSignWhileSyncingChange] (docs/lenient-mode.md).
+ * turns lenient mode on or off through [onSignWhileSyncingChange] (docs/lenient-mode.md). The
+ * switch for the heavy downloads on a metered connection calls [onMeteredDownloadsChange] with the
+ * new choice; greyed out, a tap says why it cannot be changed (owner ruling, 2026-10-20).
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -151,9 +158,14 @@ fun SettingsScreen(
     onConnections: () -> Unit = {},
     connectionsOff: Boolean = false,
     onSignWhileSyncingChange: (Boolean) -> Unit = {},
+    onMeteredDownloadsChange: (Boolean) -> Unit = {},
 ) {
     var asking by remember { mutableStateOf<StaleAnchorWarning?>(null) }
     var explainingConnections by remember { mutableStateOf(false) }
+    var explainingMetered by remember { mutableStateOf<String?>(null) }
+    explainingMetered?.let { reason ->
+        UnavailableDialog(UnavailableNotice(METERED_DOWNLOADS_TITLE, reason), onDismiss = { explainingMetered = null })
+    }
     if (explainingConnections) {
         UnavailableDialog(
             UnavailableNotice("Connected dApps", CONNECTIONS_OFF),
@@ -258,6 +270,7 @@ fun SettingsScreen(
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
+            MeteredDownloads(state.meteredDownloads, onMeteredDownloadsChange) { explainingMetered = it }
             Section("Advanced")
             ListItem(
                 modifier = Modifier
@@ -344,6 +357,36 @@ fun SettingsScreen(
             )
         }
     }
+}
+
+private const val METERED_DOWNLOADS_TITLE = "Heavy downloads on metered connections"
+
+/**
+ * The switch for the heavy downloads on a metered connection: the whole row toggles it, or, greyed
+ * out, says why it cannot through [onUnavailable]; while [item] is not read yet
+ * ([SettingsUiState.meteredDownloads] null) it is greyed out and takes no tap.
+ */
+@Composable
+private fun MeteredDownloads(
+    item: MeteredDownloadsItem?,
+    onChange: (Boolean) -> Unit,
+    onUnavailable: (String) -> Unit,
+) {
+    val reason = item?.unavailableReason
+    val enabled = item != null && reason == null
+    val row = when {
+        item == null -> Modifier
+        reason == null -> Modifier.toggleable(value = item.on, role = Role.Switch, onValueChange = onChange)
+        else -> Modifier.clickable { onUnavailable(reason) }.unavailable(true)
+    }
+    val color = if (enabled) Color.Unspecified else Unavailable.contentColor()
+    ListItem(
+        modifier = row.testTag(SETTINGS_METERED_TAG),
+        headlineContent = { Text(METERED_DOWNLOADS_TITLE, color = color) },
+        supportingContent = item?.let { { Text(it.text, color = color) } },
+        // The row takes the tap, so a greyed switch still says why.
+        trailingContent = { Switch(checked = item?.on == true, onCheckedChange = null, enabled = enabled) },
+    )
 }
 
 @Composable
