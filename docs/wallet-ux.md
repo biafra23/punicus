@@ -237,10 +237,10 @@ upgrades*).
      key is gone: the key store was reset, or the app restored on another
      device): "A transaction waiting to be sent was lost …", that one being
      sent when the app last closed may have gone out, and to wait until
-     Serotine has caught up and check the account's balance before signing
-     it again from Send, with Dismiss (`Outbox.acknowledgeLost`). Both
-     views. Its record is written only after its broadcast, so Activity may
-     not list it.
+     Serotine has caught up and check the account's balance (for a Safe's
+     approval or execution, the Safe's queue) before signing it again, with
+     Dismiss (`Outbox.acknowledgeLost`). Both views. Its record is written
+     only after its broadcast, so Activity may not list it.
    - The FAB (2). A long press on a row opens 3; a tap opens 4, or 16 for a
      Safe.
    - With no account yet, it names every way the FAB adds one (watch,

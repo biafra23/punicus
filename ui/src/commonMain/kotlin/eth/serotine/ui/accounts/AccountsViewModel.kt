@@ -551,9 +551,9 @@ class AccountsViewModel(
          */
         const val LOST = "A transaction waiting to be sent was lost: the key that sealed it on this device is gone " +
             "(the key store was reset, or the app was restored on another device). If it was being sent when " +
-            "Serotine last closed, it may have gone out. Before you sign it again from Send, wait until Serotine has " +
-            "caught up, and check the account's balance. A Safe signature waiting for its check is lost the same " +
-            "way, never shown: sign it again on its Safe transaction."
+            "Serotine last closed, it may have gone out. Before you sign it again, wait until Serotine has caught " +
+            "up, and check the account's balance, or for a Safe, its queue. A Safe signature waiting for its check " +
+            "is lost the same way, never shown: sign it again on its Safe transaction."
 
         const val LOST_NOT_DISMISSED = "The notice could not be dismissed: it is shown again next time."
 

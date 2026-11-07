@@ -1,5 +1,6 @@
 package eth.serotine.data.outbox
 
+import eth.serotine.data.files.fileThere
 import eth.serotine.data.keys.EnvelopeCrypto
 import eth.serotine.data.keys.HardwareSecret
 import eth.serotine.domain.model.AccountId
@@ -35,9 +36,10 @@ import kotlin.time.Duration.Companion.seconds
  * A key store that fails while it is asked never hides a sealed file behind memory: with the file
  * there, the outbox is unreadable, nothing in it lost, sent unchecked or forgotten, and the choice
  * is made again at the next use. So it is when the key store will not say whether its key exists.
- * With no file there, nothing is sealed with the key yet: where the platform can forget it
- * ([forgetKey]; a Mac), it is forgotten once, and only once the file's directory is listed without
- * it, so a new one can be made; then, or where it cannot be forgotten, memory only for this run. A
+ * A file that may be there ([fileThere] cannot tell) is taken as there. With the file known to be
+ * absent, nothing is sealed with the key yet: where the platform can forget it ([forgetKey]; a
+ * Mac), it is forgotten once, so a new one can be made; then, or where it cannot be forgotten,
+ * memory only for this run. A
  * screen that observes it while unreadable is told again once it opens: the key store is asked
  * again every [UNREADABLE_RETRY].
  *
@@ -66,18 +68,15 @@ internal class ChosenOutbox(
     /** The outbox to use; [again] once a key was forgotten, so it is never forgotten twice in one choice. */
     private fun choose(again: Boolean = false): Outbox {
         val make = hardware ?: return MemoryOutbox(lostMarker, dispatcher)
-        val sealedThere = try {
-            SystemFileSystem.exists(Path(path))
-        } catch (e: Exception) {
-            true
-        }
+        // A file that may be there is taken as there: never hidden behind memory, nor its key forgotten.
+        val sealedThere = fileThere(path) != false
         val failed: () -> Outbox = {
             when {
                 sealedThere -> UnreadableOutbox
                 again -> MemoryOutbox(lostMarker, dispatcher)
-                // Nothing is sealed with it: a key that fails is forgotten, and a new one made, once. Only
-                // when the file is known to be absent: on the JVM, a file that cannot be read says it is not there.
-                !knownAbsent() -> MemoryOutbox(lostMarker, dispatcher)
+                // Asked again: making the key may have changed the directory (its permissions restored).
+                fileThere(path) != false -> UnreadableOutbox
+                // Nothing is sealed with it: a key that fails is forgotten, and a new one made, once.
                 else -> try {
                     forgetKey()
                     choose(again = true)
@@ -112,15 +111,6 @@ internal class ChosenOutbox(
         } else {
             MemoryOutbox(lostMarker, dispatcher)
         }
-    }
-
-    /** Whether the file is absent, its directory listed without it; false when that cannot be told. */
-    private fun knownAbsent(): Boolean = try {
-        val file = Path(path)
-        val directory = file.parent ?: return false
-        SystemFileSystem.list(directory).none { it.name == file.name }
-    } catch (e: Exception) {
-        false
     }
 
     /**

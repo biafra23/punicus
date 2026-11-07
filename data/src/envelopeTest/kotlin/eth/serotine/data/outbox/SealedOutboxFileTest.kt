@@ -308,8 +308,8 @@ class SealedOutboxFileTest {
     }
 
     @Test
-    fun aKeyThatFailsWhereTheFileCannotBeToldAbsentIsNeverForgotten() = runTest {
-        // No directory to list: whether the file is there cannot be told.
+    fun aKeyThatFailsBeforeItsDirectoryIsMadeIsForgottenOnce() = runTest {
+        // No directory yet: the file system says the file is absent, so nothing is sealed under the key.
         var forgotten = 0
         val chosen = ChosenOutbox(
             file.toString(),
@@ -319,7 +319,7 @@ class SealedOutboxFileTest {
         )
 
         assertTrue(chosen.put(queued()), "in memory only")
-        assertEquals(0, forgotten)
+        assertEquals(1, forgotten)
     }
 
     @Test

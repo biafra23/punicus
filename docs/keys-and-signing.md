@@ -626,7 +626,7 @@ nothing has broadcast them, and whoever has them can. So they are sealed.
   device), the queued transaction is said as lost, the file is deleted, and
   the user is asked to sign again: one being sent when the app last closed
   may have gone out, so the user is told to check the account's balance
-  first, once the light client has caught up. So it is on a Mac whose outbox enclave state was made on another
+  (or the Safe's queue) first, once the light client has caught up. So it is on a Mac whose outbox enclave state was made on another
   Mac (copied here by a migration or a restore), which a record beside it
   says, and does not open here: the state is deleted with the file. A
   state that opens here is this Mac's, and the record is made to say so. A
@@ -639,8 +639,8 @@ nothing has broadcast them, and whoever has them can. So they are sealed.
   unreadable, every send held back, and asked about again a minute later.
   A state damaged for good leaves it so until its files are deleted by
   hand. With no file there, nothing is sealed under the key: on a Mac, one
-  that fails is forgotten and a new one made, once the file is known to be
-  absent. A data directory shared by two Macs is not supported: each takes
+  that fails is forgotten and a new one made, once the file system says
+  the file is absent (a file it cannot tell about is taken as there). A data directory shared by two Macs is not supported: each takes
   the other's state for a copy.
 
 ## A Safe owned by a hardware P-256 key
