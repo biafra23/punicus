@@ -805,8 +805,8 @@ class TransferStatusViewModel(
             "now, so where this one stands is not known. Nothing is sent from this wallet until they can be read; " +
             "Serotine keeps trying."
         const val OUTBOX_LOST = "A transaction waiting to be sent was lost: the key that sealed it on this device " +
-            "is gone. If it was being sent when Serotine last closed, it may have gone out: check the account's " +
-            "activity before you sign it again from Send."
+            "is gone. If it was being sent when Serotine last closed, it may have gone out. Before you sign it " +
+            "again from Send, wait until Serotine has caught up, and check the account's balance."
         const val LEFT_THE_OUTBOX = "It is no longer waiting to be sent from this device, and there is no record " +
             "of it being sent."
         const val NO_LONGER_QUEUED =

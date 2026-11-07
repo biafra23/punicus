@@ -34,11 +34,12 @@ import kotlin.time.Duration.Companion.seconds
  *
  * A key store that fails while it is asked never hides a sealed file behind memory: with the file
  * there, the outbox is unreadable, nothing in it lost, sent unchecked or forgotten, and the choice
- * is made again at the next use; with none, nothing is sealed with the key yet, so it is forgotten
- * once ([forgetKey]) for a new one to be made, and if that fails too, memory only for this run. So
- * does one that will not
- * say whether its key exists. A screen that observes it while unreadable is told again once it
- * opens: the key store is asked again every [UNREADABLE_RETRY].
+ * is made again at the next use. So it is when the key store will not say whether its key exists.
+ * With no file there, nothing is sealed with the key yet: where the platform can forget it
+ * ([forgetKey]; a Mac), it is forgotten once, and only once the file's directory is listed without
+ * it, so a new one can be made; then, or where it cannot be forgotten, memory only for this run. A
+ * screen that observes it while unreadable is told again once it opens: the key store is asked
+ * again every [UNREADABLE_RETRY].
  *
  * A key known never to open the file here ([OutboxKeyGone], [hardware] says so: a Mac's enclave
  * state made on another Mac) is a lost key, said as lost as [SealedOutboxFile] says one: the
@@ -74,7 +75,9 @@ internal class ChosenOutbox(
             when {
                 sealedThere -> UnreadableOutbox
                 again -> MemoryOutbox(lostMarker, dispatcher)
-                // Nothing is sealed with it: a key that fails is forgotten, and a new one made, once.
+                // Nothing is sealed with it: a key that fails is forgotten, and a new one made, once. Only
+                // when the file is known to be absent: on the JVM, a file that cannot be read says it is not there.
+                !knownAbsent() -> MemoryOutbox(lostMarker, dispatcher)
                 else -> try {
                     forgetKey()
                     choose(again = true)
@@ -109,6 +112,15 @@ internal class ChosenOutbox(
         } else {
             MemoryOutbox(lostMarker, dispatcher)
         }
+    }
+
+    /** Whether the file is absent, its directory listed without it; false when that cannot be told. */
+    private fun knownAbsent(): Boolean = try {
+        val file = Path(path)
+        val directory = file.parent ?: return false
+        SystemFileSystem.list(directory).none { it.name == file.name }
+    } catch (e: Exception) {
+        false
     }
 
     /**

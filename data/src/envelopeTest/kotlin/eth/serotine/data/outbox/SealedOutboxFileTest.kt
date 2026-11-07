@@ -273,6 +273,7 @@ class SealedOutboxFileTest {
 
     @Test
     fun aKeyThatFailsWithNothingSealedIsForgottenOnceForANewOne() = runTest {
+        SystemFileSystem.createDirectories(directory)
         var broken = true
         var forgotten = 0
         val chosen = ChosenOutbox(
@@ -287,6 +288,38 @@ class SealedOutboxFileTest {
         assertTrue(SystemFileSystem.exists(file), "sealed under the new key, never in memory for good")
         assertEquals(1, forgotten)
         assertFalse((chosen.observe().first() as OutboxList.Loaded).lost, "nothing was lost")
+    }
+
+    @Test
+    fun aKeyThatStillFailsOnceForgottenLeavesMemoryForTheRun() = runTest {
+        // The directory is there: the file is known to be absent.
+        SystemFileSystem.createDirectories(directory)
+        var forgotten = 0
+        val chosen = ChosenOutbox(
+            file.toString(),
+            { FakeHardware(claims = { error("does not answer") }) },
+            StandardTestDispatcher(testScheduler),
+            forgetKey = { forgotten++ },
+        )
+
+        assertTrue(chosen.put(queued()), "in memory only")
+        assertFalse(SystemFileSystem.exists(file))
+        assertEquals(1, forgotten, "forgotten once, never again in one choice")
+    }
+
+    @Test
+    fun aKeyThatFailsWhereTheFileCannotBeToldAbsentIsNeverForgotten() = runTest {
+        // No directory to list: whether the file is there cannot be told.
+        var forgotten = 0
+        val chosen = ChosenOutbox(
+            file.toString(),
+            { FakeHardware(claims = { error("does not answer") }) },
+            StandardTestDispatcher(testScheduler),
+            forgetKey = { forgotten++ },
+        )
+
+        assertTrue(chosen.put(queued()), "in memory only")
+        assertEquals(0, forgotten)
     }
 
     @Test

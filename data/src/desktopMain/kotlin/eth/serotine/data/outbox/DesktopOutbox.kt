@@ -24,8 +24,10 @@ import java.security.MessageDigest
  * `outbox-mac` beside it says, and not opening here, is a lost key. What `outbox.json` held
  * is said as lost and deleted, and the state with it, so a new key is made for the next
  * transaction queued. Any other failure, of the enclave, the framework or the state, says nothing
- * about the key: the outbox is unreadable until it opens, since it may hold a transaction already
- * on the network.
+ * about the key: with `outbox.json` there, the outbox is unreadable until it opens, since it may
+ * hold a transaction already on the network; with none, the state is forgotten and a new key made
+ * ([ChosenOutbox]). A directory shared by two Macs (a network home, one boot disk) is not
+ * supported: each takes the other's state for a copy, and loses what it sealed.
  */
 fun desktopOutbox(directory: String): Outbox {
     val state = Path(directory, ENCLAVE_STATE_FILE_NAME)

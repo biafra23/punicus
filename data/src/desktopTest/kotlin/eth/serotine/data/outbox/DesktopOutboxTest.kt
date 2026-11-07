@@ -82,6 +82,15 @@ class DesktopOutboxTest {
     }
 
     @Test
+    fun aStateThatOpensHereOpensEvenWhereItsRecordCannotBeWritten() {
+        write(state, "{}")
+        // A directory where the record goes: it can be neither read nor written.
+        SystemFileSystem.createDirectories(madeOn)
+
+        assertSame(hardware, secret())
+    }
+
+    @Test
     fun anEnclaveThatDoesNotAnswerOnTheMacThatMadeTheStateIsNoLostKey() {
         write(state, "{}")
         write(madeOn, thisMac)
@@ -103,7 +112,7 @@ class DesktopOutboxTest {
         assertNotLost { secret() }
         // This Mac's identity not said this time.
         write(madeOn, oldMac)
-        assertSame(hardware, secret(mac = null), "the outbox's to say, as unreadable")
+        assertSame(hardware, secret(mac = null), "the outbox's to say: unreadable with a file there")
         assertNotLost { secret(mac = null, usable = false) }
     }
 
