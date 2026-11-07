@@ -1527,7 +1527,9 @@ they are helpful." The rulings (owner rulings, 2026-11-05, #246; the
   Anything that does not match is "another contract", never a Safe. The
   pins (`SafeDeployments`) cover 1.0.0, 1.1.1 and 1.2.0 (one proxy shared by
   the last two) on Ethereum and Gnosis Chain, and, everywhere, 1.3.0, 1.4.1
-  and 1.5.0, L1 and L2, and the SafeProxy runtime code of each factory: a
+  and 1.5.0, L1 and L2, and the SafeProxy runtime code of each factory
+  (on Gnosis Chain also that network's own build of 1.1.1's proxy, which
+  differs from Mainnet's only in its Solidity metadata hash): a
   pre-1.3.0 Safe whose owners moved it since to a pinned singleton
   (`changeMasterCopy`) is recognised by its own older proxy pointing at that
   pinned singleton, same as one still on its original singleton. Sepolia

@@ -47,7 +47,9 @@ internal data class SafeSingleton(val version: String, val l2: Boolean, val modu
  *
  * Gnosis Chain has them too, read the same way on 2026-10-23 at Gnosis blocks 48,904,729 to
  * 48,904,737 through two public Gnosis nodes, which agreed: the same `VERSION()`s and proxy
- * runtime hashes, and 1.4.1's factory's code hash `0x50c3cdc4…` with 486 bytes of creation code.
+ * runtime hashes (1.3.0 on; 1.1.1's proxy is a build of its own there, pinned on Gnosis alone,
+ * [GNOSIS_ONLY_PROXY_CODE_HASHES]), and 1.4.1's factory's code hash `0x50c3cdc4…` with 486 bytes
+ * of creation code.
  * Only its [Table.creation] differs: Safe{Wallet} creates SafeL2 there, the 1.4.1 L2 singleton
  * (owner ruling, 2026-10-22; docs/networks.md, open question 6), whose events let any indexer
  * follow the Safe; `MyotisHostGnosisTest` proves the deployments through the light client.
@@ -83,8 +85,9 @@ internal data class SafeSingleton(val version: String, val l2: Boolean, val modu
  * 1.2.0's mastercopies, Keccak-256 hashed, are byte for byte what Mainnet carries, 1.2.0's on
  * Gnosis too; 1.1.1's on Gnosis differs only in Solidity's trailing metadata hash (the functional
  * bytecode before it is identical: a separate build of the same source, which the EVM never
- * reads). Diskordia.eth's own deployed code, read directly, is exactly 1.1.1's `proxyRuntimeCode()`
- * byte for byte.
+ * reads), and so does the proxy its factory deploys there, whose hash is pinned on Gnosis besides
+ * Mainnet's ([GNOSIS_ONLY_PROXY_CODE_HASHES], read 2026-11-07). Diskordia.eth's own deployed
+ * code, read directly, is exactly 1.1.1's `proxyRuntimeCode()` byte for byte.
  *
  * **Sepolia leaves 1.0.0 out.** Unlike 1.1.1's and 1.2.0's, which carry live code there too
  * (`VERSION()` "1.1.1" and "1.2.0" again, read at Sepolia block 12,010,935) and so are pinned on
@@ -120,19 +123,44 @@ internal object SafeDeployments {
         Network.GNOSIS -> GNOSIS
     }
 
+    /**
+     * Gnosis Chain's 1.1.1 `ProxyFactory` 0x76E2cFc1F5Fa8F6a5b3fC4c8F4788F0116861F9B deploys a proxy
+     * built apart from Mainnet's (also used for 1.2.0, which reuses that factory): its
+     * `proxyRuntimeCode()` is Mainnet's byte for byte up to Solidity's trailing metadata hash
+     * (bzzr1 `0a23d228…` there, `d8a00dc4…` on Mainnet and Sepolia), which the EVM never reads,
+     * so its runtime hash differs. Read as an `eth_call` on 2026-11-07 at Gnosis block 49,158,900
+     * through gnosischain.com's and publicnode.com's nodes, which agreed (a debugging source only,
+     * CLAUDE.md, *Data sources*). Without it a Gnosis Safe from that factory, such as
+     * 0xcba12315cc838375F0e1E9a9f5b2aFE0196B07B6 (moved since to the 1.4.1 L2 singleton), read as
+     * "another contract". Recognition still needs slot 0 to name a pinned singleton, as for every
+     * other proxy hash; Sepolia's and Mainnet's factories deploy the hash pinned in [table].
+     */
+    private val GNOSIS_ONLY_PROXY_CODE_HASHES =
+        setOf("30cf24338d14750aab3433d8bb0cedd0e1263ee1f4f5f84cc482f3541ce61ad5")
+
     private val ETHEREUM = table(l2 = false, includeOneZeroZero = true)
 
     private val SEPOLIA = table(l2 = false, includeOneZeroZero = false)
 
-    private val GNOSIS = table(l2 = true, includeOneZeroZero = true)
+    private val GNOSIS = table(
+        l2 = true,
+        includeOneZeroZero = true,
+        extraProxyCodeHashes = GNOSIS_ONLY_PROXY_CODE_HASHES,
+    )
 
     /**
      * A new Safe is created from 1.4.1's L1 singleton or, with [l2], its L2 one; [includeOneZeroZero]
      * (false: Sepolia alone) says whether 1.0.0's proxy hash and singleton are in [Table.proxyCodeHashes]
-     * and [Table.singletons] — 1.1.1's and 1.2.0's are, on every network this table serves.
+     * and [Table.singletons] — 1.1.1's and 1.2.0's are, on every network this table serves;
+     * [extraProxyCodeHashes] are a network's own builds of a proxy ([GNOSIS_ONLY_PROXY_CODE_HASHES]).
      */
-    private fun table(l2: Boolean, includeOneZeroZero: Boolean) = Table(
+    private fun table(
+        l2: Boolean,
+        includeOneZeroZero: Boolean,
+        extraProxyCodeHashes: Set<String> = emptySet(),
+    ) = Table(
         proxyCodeHashes = buildSet {
+            addAll(extraProxyCodeHashes)
             if (includeOneZeroZero) {
                 // 1.0.0, from ProxyFactory 0x12302fE9c02ff50939BaAaaf415fc226C078613C.
                 add("f8fffcb9b9c73fbc4ffb6dc52f0001fa998951e0d4177894b1b899f7732b6eaf")

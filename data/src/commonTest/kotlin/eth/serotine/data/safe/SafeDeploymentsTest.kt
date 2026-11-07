@@ -48,18 +48,51 @@ class SafeDeploymentsTest {
             "8e6dd036ce65611101d072e964736f6c63430007060033",
     )
 
+    /**
+     * Gnosis Chain's own build of 1.1.1's proxy: its `ProxyFactory`'s `proxyRuntimeCode()` as an
+     * `eth_call` at Gnosis block 49,158,900, 2026-11-07, two nodes agreeing, and byte for byte the
+     * code of the Gnosis Safe 0xcba12315cc838375F0e1E9a9f5b2aFE0196B07B6. It is [runtimeCode]'s
+     * 1.1.1 up to the Solidity metadata hash at its end.
+     */
+    private val gnosisOneOneOneRuntimeCode =
+        "608060405273ffffffffffffffffffffffffffffffffffffffff600054167fa619486e000000000000000000000000000000" +
+            "0000000000000000000000000060003514156050578060005260206000f35b3660008037600080366000845af43d6000803e" +
+            "60008114156070573d6000fd5b3d6000f3fea265627a7a723158200a23d2285c529de46060100feb312da05c409802321897" +
+            "869814263b54bb746264736f6c634300050e0032"
+
     @Test
     fun everyPinnedProxyHashIsTheHashOfASafeProxysRuntimeCode() {
         val hashes = runtimeCode.values.map { Keccak256().digest(it.fromHex()).toHex() }.toSet()
         val oneZeroZeroHash = Keccak256().digest(runtimeCode.getValue("1.0.0").fromHex()).toHex()
+        val gnosisOneOneOneHash = Keccak256().digest(gnosisOneOneOneRuntimeCode.fromHex()).toHex()
 
         for (network in safeNetworks) {
             // Sepolia's singleton for 1.0.0 carries no code there (SafeDeployments.kt's doc
             // comment): its proxy hash is left out, so a proxy naming it is read as a plain
-            // contract rather than shown as a Safe nothing proves holds real Safe code.
-            val expected = if (network == Network.SEPOLIA) hashes - oneZeroZeroHash else hashes
+            // contract rather than shown as a Safe nothing proves holds real Safe code. Gnosis
+            // Chain adds its own build of 1.1.1's proxy.
+            val expected = when (network) {
+                Network.SEPOLIA -> hashes - oneZeroZeroHash
+                Network.GNOSIS -> hashes + gnosisOneOneOneHash
+                Network.ETHEREUM -> hashes
+            }
             assertEquals(expected, SafeDeployments.of(network).proxyCodeHashes, network.displayName)
         }
+    }
+
+    @Test
+    fun gnosisOneOneOneProxyDiffersFromMainnetsOnlyInItsMetadataHash() {
+        val mainnet = runtimeCode.getValue("1.1.1")
+        // The bzzr1 metadata: `a265627a7a72315820` + 32 bytes + `64736f6c634300050e0032`.
+        val metadata = mainnet.indexOf("a265627a7a72315820") + "a265627a7a72315820".length
+
+        assertEquals(mainnet.length, gnosisOneOneOneRuntimeCode.length)
+        assertEquals(mainnet.substring(0, metadata), gnosisOneOneOneRuntimeCode.substring(0, metadata))
+        assertEquals(mainnet.substring(metadata + 64), gnosisOneOneOneRuntimeCode.substring(metadata + 64))
+        assertEquals(
+            "30cf24338d14750aab3433d8bb0cedd0e1263ee1f4f5f84cc482f3541ce61ad5",
+            Keccak256().digest(gnosisOneOneOneRuntimeCode.fromHex()).toHex(),
+        )
     }
 
     @Test
