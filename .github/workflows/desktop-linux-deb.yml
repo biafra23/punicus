@@ -120,6 +120,12 @@ jobs:
           echo "control Architecture: $got (version: $(dpkg-deb --field "$deb" Version), maintainer: $(dpkg-deb --field "$deb" Maintainer))"
           [ "$got" = "$want_deb" ] \
             || { echo "::error::deb control arch mismatch: expected $want_deb, got $got"; exit 1; }
+          # The package keeps the app's former name, so a Punicus deb upgrades an installed
+          # Serotine in place (desktop-app/build.gradle.kts, linux { packageName }); a
+          # different name would install beside it with every other check green.
+          pkg=$(dpkg-deb --field "$deb" Package)
+          [ "$pkg" = "serotine" ] \
+            || { echo "::error::deb Package is '$pkg', expected 'serotine' (the upgrade-in-place pin, desktop-app/build.gradle.kts linux.packageName)"; exit 1; }
           # Extract and inspect the bundled runtime — the control field only states
           # intent; the ELF class proves what jlink actually emitted.
           ex=$(mktemp -d)
