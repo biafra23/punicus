@@ -281,8 +281,9 @@ private fun SimpleAccountsQueuedDarkPreview() = SimpleAccountsPreview(queued, da
 private fun SimpleAccountsLostQueuedPreview() = SimpleAccountsPreview(
     everyday.copy(
         lostNotice = "A transaction waiting to be sent was lost: the key that sealed it on this device is gone " +
-            "(the key store was reset, or the app was restored on another device). Nothing was sent. Sign it " +
-            "again from Send if you still want to send it.",
+            "(the key store was reset, or the app was restored on another device). If it was being sent " +
+            "when Serotine last closed, it may have gone out: check the account's activity before you sign " +
+            "it again from Send.",
     ),
 )
 /** Every preview above, which SimpleAccountsScreenPreviewsTest renders: a new preview goes in here too. */

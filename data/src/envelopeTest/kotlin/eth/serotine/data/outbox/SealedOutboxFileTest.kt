@@ -272,6 +272,40 @@ class SealedOutboxFileTest {
     }
 
     @Test
+    fun aKeyThatFailsWithNothingSealedIsForgottenOnceForANewOne() = runTest {
+        var broken = true
+        var forgotten = 0
+        val chosen = ChosenOutbox(
+            file.toString(),
+            // A state that does not open, with nothing sealed under it: nothing to lose.
+            { FakeHardware(claims = { check(!broken) { "does not open" }; KeyProtection.HARDWARE }) },
+            StandardTestDispatcher(testScheduler),
+            forgetKey = { forgotten++; broken = false },
+        )
+
+        assertTrue(chosen.put(queued()))
+        assertTrue(SystemFileSystem.exists(file), "sealed under the new key, never in memory for good")
+        assertEquals(1, forgotten)
+        assertFalse((chosen.observe().first() as OutboxList.Loaded).lost, "nothing was lost")
+    }
+
+    @Test
+    fun aKeyThatFailsWithAFileSealedIsNeverForgotten() = runTest {
+        outbox().put(queued())
+        var forgotten = 0
+        val chosen = ChosenOutbox(
+            file.toString(),
+            { FakeHardware(claims = { error("does not open now") }) },
+            StandardTestDispatcher(testScheduler),
+            forgetKey = { forgotten++ },
+        )
+
+        assertEquals(OutboxList.Unreadable, chosen.observe().first())
+        assertTrue(SystemFileSystem.exists(file), "what it holds may be on the network: it stays")
+        assertEquals(0, forgotten)
+    }
+
+    @Test
     fun aLossFoundWhereNoHardwareIsLeftIsSaidInMemory() = runTest {
         outbox().put(queued())
         var stateThere = true

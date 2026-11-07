@@ -624,18 +624,22 @@ nothing has broadcast them, and whoever has them can. So they are sealed.
 - **A lost key is said, not guessed around.** When the file is there and
   its key is not (the key store reset, or a copy restored on another
   device), the queued transaction is said as lost, the file is deleted, and
-  the user is asked to sign again. So it is on a Mac whose outbox enclave
-  state was made on another Mac (copied here by a migration or a restore),
-  which a record beside it says: the state is deleted with the file. A new
-  key is made at the outbox's next use: on Android when it is next read, on
-  a Mac and iOS when the next transaction is queued.
+  the user is asked to sign again: one being sent when the app last closed
+  may have gone out, so the user is told to check the account's activity
+  first. So it is on a Mac whose outbox enclave state was made on another
+  Mac (copied here by a migration or a restore), which a record beside it
+  says, and does not open here: the state is deleted with the file. A
+  state that opens here is this Mac's, and the record is made to say so. A
+  new key is made at the outbox's next use: on Android when it is next
+  read, on a Mac and iOS when the next transaction is queued.
 - **Only a key known gone is lost.** A key store that fails, an enclave
   that does not answer, or a state that does not open on the device that
   made it may all pass, and the file may hold a transaction already on the
   network. So none of them is a lost key: the file is left as it is,
   unreadable, every send held back, and asked about again a minute later.
   A state damaged for good leaves it so until its files are deleted by
-  hand.
+  hand. With no file there, nothing is sealed under the key: on a Mac, one
+  that fails is forgotten and a new one made.
 
 ## A Safe owned by a hardware P-256 key
 

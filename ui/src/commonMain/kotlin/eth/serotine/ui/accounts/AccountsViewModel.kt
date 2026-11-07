@@ -550,9 +550,10 @@ class AccountsViewModel(
          * be opened (docs/lenient-mode.md, *The signed bytes kept*, *Safe transactions in lenient mode*).
          */
         const val LOST = "A transaction waiting to be sent was lost: the key that sealed it on this device is gone " +
-            "(the key store was reset, or the app was restored on another device). Nothing was sent. Sign it again " +
-            "from Send if you still want to send it. A Safe signature waiting for its check is lost the same way, " +
-            "never shown: sign it again on its Safe transaction."
+            "(the key store was reset, or the app was restored on another device). If it was being sent when " +
+            "Serotine last closed, it may have gone out: check the account's activity before you sign it again from " +
+            "Send. A Safe signature waiting for its check is lost the same way, never shown: sign it again on its " +
+            "Safe transaction."
 
         const val LOST_NOT_DISMISSED = "The notice could not be dismissed: it is shown again next time."
 

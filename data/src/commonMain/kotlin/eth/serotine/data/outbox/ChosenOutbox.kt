@@ -34,7 +34,9 @@ import kotlin.time.Duration.Companion.seconds
  *
  * A key store that fails while it is asked never hides a sealed file behind memory: with the file
  * there, the outbox is unreadable, nothing in it lost, sent unchecked or forgotten, and the choice
- * is made again at the next use; with none, memory only for this run. So does one that will not
+ * is made again at the next use; with none, nothing is sealed with the key yet, so it is forgotten
+ * once ([forgetKey]) for a new one to be made, and if that fails too, memory only for this run. So
+ * does one that will not
  * say whether its key exists. A screen that observes it while unreadable is told again once it
  * opens: the key store is asked again every [UNREADABLE_RETRY].
  *
@@ -60,7 +62,7 @@ internal class ChosenOutbox(
         chosen ?: withContext(dispatcher) { choose() }.also { if (it !== UnreadableOutbox) chosen = it }
     }
 
-    /** The outbox to use; [again] once a gone key was forgotten, so it is never forgotten twice in one choice. */
+    /** The outbox to use; [again] once a key was forgotten, so it is never forgotten twice in one choice. */
     private fun choose(again: Boolean = false): Outbox {
         val make = hardware ?: return MemoryOutbox(lostMarker, dispatcher)
         val sealedThere = try {
@@ -68,16 +70,28 @@ internal class ChosenOutbox(
         } catch (e: Exception) {
             true
         }
-        val failed = if (sealedThere) UnreadableOutbox else MemoryOutbox(lostMarker, dispatcher)
+        val failed: () -> Outbox = {
+            when {
+                sealedThere -> UnreadableOutbox
+                again -> MemoryOutbox(lostMarker, dispatcher)
+                // Nothing is sealed with it: a key that fails is forgotten, and a new one made, once.
+                else -> try {
+                    forgetKey()
+                    choose(again = true)
+                } catch (e: Exception) {
+                    MemoryOutbox(lostMarker, dispatcher)
+                }
+            }
+        }
         val secret = try {
             make()
         } catch (e: CancellationException) {
             throw e
         } catch (e: OutboxKeyGone) {
-            return if (again) failed else lose(e, sealedThere)
+            return if (again) failed() else lose(e, sealedThere)
         } catch (e: Exception) {
             println("Serotine: the outbox's key store is not available (${e::class.simpleName})")
-            return failed
+            return failed()
         }
         val seal = OutboxSeal(secret)
         // It would not say whether its key exists: nothing is concluded, and it is asked again next time.
@@ -88,7 +102,7 @@ internal class ChosenOutbox(
             throw e
         } catch (e: Exception) {
             println("Serotine: the outbox's key store does not answer (${e::class.simpleName})")
-            return failed
+            return failed()
         }
         return if (protection == KeyProtection.HARDWARE) {
             SealedOutboxFile(path, seal, dispatcher)

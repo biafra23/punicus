@@ -235,8 +235,9 @@ upgrades*).
      since every quote and draft is held back meanwhile.
    - Once, when queued signed bytes could not be opened (the outbox's seal
      key is gone: the key store was reset, or the app restored on another
-     device): "A transaction waiting to be sent was lost …", that nothing
-     was sent and to sign it again from Send, with Dismiss
+     device): "A transaction waiting to be sent was lost …", that one being
+     sent when the app last closed may have gone out, and to check the
+     account's activity before signing it again from Send, with Dismiss
      (`Outbox.acknowledgeLost`). Both views.
    - The FAB (2). A long press on a row opens 3; a tap opens 4, or 16 for a
      Safe.
@@ -903,8 +904,10 @@ upgrades*).
         check. Its QR code and text are not offered until then. Discard
         deletes it (`DiscardHeld`, under the outbox's lock): a co-signature's
         request stays in the queue, unsigned by it. Remove from this device
-        discards a co-signature held of it too, and its confirmation says so;
-        one whose request left the queue is never saved back by its check.
+        discards a co-signature held of it too, and its confirmation says so.
+        It goes through once confirmed, even if the screen is left. A
+        co-signature whose request has left the queue goes at the outbox's
+        next round, unchecked and untold, and is never saved back.
       - The check (`CheckHeldSignature`, run by the outbox's follower at a
         fresh verified head): the Safe verified as a Safe, the transaction's
         nonce not used yet, the signer a current owner, and the threshold it
