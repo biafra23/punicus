@@ -68,10 +68,12 @@ class SafeTx(
      * ([SAFE_TX_TYPEHASH]), unchanged since 1.0.0 (its on-chain `SAFE_TX_TYPEHASH()` getter and
      * 1.3.0's hash alike).
      *
-     * `SafeDeployments` also recognises, for display, three Safe releases that predate this
-     * domain: 1.0.0, 1.1.1 and 1.2.0, each a `domainSeparator` computed once at setup and stored
+     * `SafeDeployments` also recognises, for display, the Safe releases that predate this
+     * domain: 0.0.2, 0.1.0, 1.0.0, 1.1.0, 1.1.1 (Circles' fork of it too) and 1.2.0, each a
+     * `domainSeparator` computed once at setup and stored
      * (`keccak256(abi.encode(DOMAIN_SEPARATOR_TYPEHASH, this))`, no chain id in it anywhere) and
-     * read as is, never recomputed. A Safe left on one of those — as opposed to one moved since
+     * read as is, never recomputed; 0.0.2 and 0.1.0 hash another `SafeTx` struct type besides
+     * (`SAFE_TX_TYPEHASH` `0x14d461bc…`). A Safe left on one of those — as opposed to one moved since
      * to a pinned ≥1.3.0 singleton by its owners' own `changeMasterCopy` — checks a different
      * hash than this one, so nothing here is signed, approved or executed against it
      * ([eth.serotine.domain.usecase.SafeTxRefusal.TooOldToSign], checked against its verified
