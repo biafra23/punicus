@@ -203,7 +203,10 @@ differences:
   broadcast and record are today (`SendTransfer`). While they run, Discard
   and Edit are greyed out: "It's being checked and sent." A tap that comes
   after a peer took the transaction finds it sent, and says so. It is never
-  told as discarded.
+  told as discarded. As built, they are greyed out while it is being sent,
+  not while the check runs, which has no state of its own: a tap then waits
+  on the outbox's lock until the check is done (docs/wallet-ux.md,
+  screen 9).
 - **Sent by itself once it checks out** (decision 3). When the network's
   light client verifies at a fresh head, the outbox runs the check below. A
   transaction that passes is broadcast as a strict send is, and recorded in

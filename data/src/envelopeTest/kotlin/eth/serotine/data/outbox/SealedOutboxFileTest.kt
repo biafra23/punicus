@@ -252,7 +252,7 @@ class SealedOutboxFileTest {
         var forgotten = 0
         val chosen = ChosenOutbox(
             file.toString(),
-            // A Mac's enclave state copied from another Mac: never opens here, until it is forgotten.
+            // A Mac's enclave state made on another Mac: never opens here, until it is forgotten.
             { if (copied) throw OutboxKeyGone("copied from another Mac") else FakeHardware(provisioned = { false }) },
             StandardTestDispatcher(testScheduler),
             forgetKey = { forgotten++; copied = false },
@@ -266,6 +266,7 @@ class SealedOutboxFileTest {
 
         // A new key seals what is queued next, and the loss is said until acknowledged.
         assertTrue(chosen.put(queued(account = bob)))
+        assertTrue(SystemFileSystem.exists(file), "sealed in the file again")
         assertTrue(chosen.acknowledgeLost())
         assertFalse((chosen.observe().first() as OutboxList.Loaded).lost)
     }
@@ -276,7 +277,7 @@ class SealedOutboxFileTest {
         var stateThere = true
         val chosen = ChosenOutbox(
             file.toString(),
-            // No enclave usable on this Mac: its state is gone for good, and nothing seals here after it.
+            // Made on another Mac, and no enclave usable on this one: nothing seals here after it.
             { if (stateThere) throw OutboxKeyGone("no Secure Enclave opens it") else error("no Secure Enclave") },
             StandardTestDispatcher(testScheduler),
             forgetKey = { stateThere = false },

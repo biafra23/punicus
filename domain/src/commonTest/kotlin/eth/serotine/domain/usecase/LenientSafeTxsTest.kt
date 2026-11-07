@@ -685,4 +685,40 @@ class LenientSafeTxsTest {
         assertEquals(emptyList(), world.queue.requests.value)
         assertEquals(emptyList(), outbox.held.value)
     }
+
+    @Test
+    fun aRemovalAskedForRunsToItsEndWhenItsScreenIsLeftWhileItWaits() = runTest {
+        val request = world.request(usdcTransfer(4), world.bob.address)
+        world.queue.save(request)
+        val ready = assertIs<HeldSignCheck.Ready>(hold.check(request, world.alice.address))
+        assertIs<SafeSignatureHolding.Held>(hold.sign(ready, unlock))
+
+        lock.mutex.lock()
+        val removal = launch { RemoveQueuedSafeTx(world.queue, outbox, lock)(request.hash) }
+        runCurrent()
+        // The screen is left while the removal waits for a check.
+        removal.cancel()
+        lock.mutex.unlock()
+        removal.join()
+
+        assertEquals(emptyList(), world.queue.requests.value, "the confirmed removal went through")
+        assertEquals(emptyList(), outbox.held.value, "and its co-signature with it")
+    }
+
+    @Test
+    fun aCoSignatureLeftHeldForARemovedRequestGoesUntoldEvenWhereItsCheckWouldConflict() = runTest {
+        val request = world.request(usdcTransfer(4), world.bob.address)
+        world.queue.save(request)
+        val ready = assertIs<HeldSignCheck.Ready>(hold.check(request, world.alice.address))
+        assertIs<SafeSignatureHolding.Held>(hold.sign(ready, unlock))
+        // Removed with its release not saved; and its nonce used since.
+        world.queue.remove(request.hash)
+        world.state = world.state.copy(nonce = 5)
+        caughtUp()
+
+        follower().round()
+
+        assertEquals(emptyList(), outbox.held.value)
+        assertEquals(emptyList(), notifier.told, "nothing asks for a signature of what was removed")
+    }
 }

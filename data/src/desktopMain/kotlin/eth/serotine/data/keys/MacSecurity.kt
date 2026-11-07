@@ -47,6 +47,7 @@ internal class MacSecurity private constructor() {
         fun CFGetTypeID(cf: Pointer): Long
         fun CFDataGetTypeID(): Long
         fun CFErrorGetTypeID(): Long
+        fun CFStringGetTypeID(): Long
         fun CFRelease(cf: Pointer)
     }
 
@@ -229,6 +230,42 @@ internal class MacSecurity private constructor() {
     fun release(vararg objects: Pointer) = objects.forEach(cf::CFRelease)
 
     /**
+     * This Mac's `IOPlatformUUID`, the identity IOKit gives its logic board: the same on every run
+     * and for every user, another on another Mac. Null when IOKit does not say it.
+     */
+    fun platformUuid(): String? = try {
+        val io = Native.load(IO_KIT, IoKit::class.java)
+        io.IOServiceMatching("IOPlatformExpertDevice")
+            // IOServiceGetMatchingService consumes the matching dictionary.
+            ?.let { io.IOServiceGetMatchingService(MAIN_PORT_DEFAULT, it) }
+            ?.takeIf { it != 0 }
+            ?.let { service ->
+                try {
+                    owning { own ->
+                        val key = own(checkNotNull(cf.CFStringCreateWithCString(null, "IOPlatformUUID", UTF8)))
+                        io.IORegistryEntryCreateCFProperty(service, key, null, 0)?.let(own)
+                            ?.takeIf { cf.CFGetTypeID(it) == cf.CFStringGetTypeID() }
+                            ?.let(::stringOf)
+                    }
+                } finally {
+                    io.IOObjectRelease(service)
+                }
+            }
+    } catch (e: Throwable) {
+        // Throwable: JNA fails with Errors too.
+        println("Serotine: IOKit does not say which Mac this is (${e::class.simpleName})")
+        null
+    }
+
+    @Suppress("FunctionName") // IOKit's own names
+    private interface IoKit : Library {
+        fun IOServiceMatching(name: String): Pointer?
+        fun IOServiceGetMatchingService(mainPort: Int, matching: Pointer): Int
+        fun IORegistryEntryCreateCFProperty(entry: Int, key: Pointer, allocator: Pointer?, options: Int): Pointer?
+        fun IOObjectRelease(obj: Int): Int
+    }
+
+    /**
      * Runs [block], releasing every CF object it hands to `own` when it ends, however it ends:
      * no failure path leaks one. What [block] returns is not released.
      */
@@ -330,6 +367,8 @@ internal class MacSecurity private constructor() {
     companion object {
         private const val CORE_FOUNDATION = "/System/Library/Frameworks/CoreFoundation.framework/CoreFoundation"
         private const val SECURITY = "/System/Library/Frameworks/Security.framework/Security"
+        private const val IO_KIT = "/System/Library/Frameworks/IOKit.framework/IOKit"
+        private const val MAIN_PORT_DEFAULT = 0 // kIOMainPortDefault
         private const val UTF8 = 0x08000100 // kCFStringEncodingUTF8
         private const val SINT32_TYPE = 3L // kCFNumberSInt32Type
         private const val STRING_BYTES = 256L

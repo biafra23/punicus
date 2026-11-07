@@ -37,6 +37,7 @@ import kotlin.time.Duration
 import kotlin.time.Duration.Companion.seconds
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.async
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.combine
@@ -956,18 +957,22 @@ sealed interface SafeTxQueueReading {
  * Only here: a signature already shared stays valid elsewhere until the Safe's nonce passes it.
  * A signature of it held in lenient mode ([Outbox]) goes with it, both under [lock], so a check
  * running meanwhile never saves it back into the queue: it waits, and what it saved is removed.
+ * Once asked, it runs to its end, its caller cancelled or not: the user confirmed it, and it may
+ * wait for a check.
  */
 class RemoveQueuedSafeTx(
     private val queue: SafeTxQueue,
     private val outbox: Outbox,
     private val lock: OutboxLock,
 ) {
-    suspend operator fun invoke(hash: Digest): Boolean = lock.mutex.withLock {
-        if (!queue.remove(hash)) return@withLock false
-        // A held one that cannot be released now is released by its check, which finds its request gone.
-        (outbox.observe().first() as? OutboxList.Loaded)?.held
-            ?.filter { it.hash == hash }
-            ?.forEach { outbox.release(it.safe, hash) }
-        true
+    suspend operator fun invoke(hash: Digest): Boolean = withContext(NonCancellable) {
+        lock.mutex.withLock {
+            if (!queue.remove(hash)) return@withLock false
+            // One that cannot be released now goes at its next check, which finds its request gone.
+            (outbox.observe().first() as? OutboxList.Loaded)?.held
+                ?.filter { it.hash == hash }
+                ?.forEach { outbox.release(it.safe, hash) }
+            true
+        }
     }
 }

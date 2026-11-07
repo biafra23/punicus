@@ -355,6 +355,12 @@ class FollowOutbox(
             ?: return
         val signed = entry.signed() ?: return
         val queue = safeTxQueue.observe(safe).first() as? SafeTxQueueList.Loaded ?: return
+        // A co-signature is of a request in this device's queue: one whose request left it, removed
+        // or passed by the Safe's nonce, has nothing left to sign, and goes unchecked and untold.
+        if (!entry.proposed && queue.requests.none { it.hash == hash }) {
+            outbox.release(safe, hash)
+            return
+        }
         // Saved by a round whose release could not be saved: it passed its check then, so it only goes.
         val saved = queue.requests.firstOrNull { it.hash == hash }?.signatures.orEmpty()
         if (signed.signatures.all { it in saved }) {

@@ -39,10 +39,11 @@ import kotlin.time.Duration.Companion.seconds
  * opens: the key store is asked again every [UNREADABLE_RETRY].
  *
  * A key known never to open the file here ([OutboxKeyGone], [hardware] says so: a Mac's enclave
- * state copied from another Mac, or damaged) is a lost key, said as lost as [SealedOutboxFile]
- * says one: the marker first, the file deleted, the key forgotten ([forgetKey]), and the outbox
- * chosen again, with no file now. A memory-only outbox says a loss found that way too, until it is
- * acknowledged.
+ * state made on another Mac) is a lost key, said as lost as [SealedOutboxFile] says one: the
+ * marker first, the file deleted, the key forgotten ([forgetKey]), and the outbox chosen again,
+ * with no file now. A memory-only outbox says a loss found that way too, until it is
+ * acknowledged. Only a key known gone is: a file that may hold a transaction already on the
+ * network is never deleted on a failure that may pass.
  */
 internal class ChosenOutbox(
     private val path: String,
@@ -145,8 +146,9 @@ internal val UNREADABLE_RETRY = 60.seconds
 
 /**
  * What a platform's [ChosenOutbox] hardware throws when the outbox's own key is known never to open
- * its sealed file here (a Mac's enclave state copied from another Mac, or damaged), as opposed to a
- * key store that fails this time: the file is then lost, and said so.
+ * its sealed file here (a Mac's enclave state made on another Mac), as opposed to a key store that
+ * fails this time, a damaged state included: the file is then lost, and said so. Never thrown on a
+ * failure that may pass.
  */
 internal class OutboxKeyGone(message: String, cause: Throwable? = null) : Exception(message, cause)
 
