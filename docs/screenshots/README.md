@@ -12,7 +12,7 @@ If the folder grows too much, there are two levers, both the owner's. Deleting t
 |---|---|---|
 | [Account detail](#account-detail) | `account-detail/` | 44 |
 | [Accounts](#accounts) | `accounts/` | 35 |
-| [Activity detail](#activity-detail) | `activity-detail/` | 10 |
+| [Activity detail](#activity-detail) | `activity-detail/` | 11 |
 | [Add on networks (dialog)](#add-on-networks-dialog) | `add-on-networks-dialog/` | 5 |
 | [Add token](#add-token) | `add-token/` | 11 |
 | [Connected dApps](#connections) | `connections/` | 6 |
@@ -158,7 +158,7 @@ If the folder grows too much, there are two levers, both the owner's. Deleting t
 <a name="activity-detail"></a>
 ## Activity detail
 
-`activity-detail/`, 10 states: `sent`, `sent-dark`, `unconfirmed`, `unlisted-token`, `safe-event`, `loading`, `unavailable`, `unfamiliar-sender`, `hidden`, `hidden-dark`
+`activity-detail/`, 11 states: `sent`, `sent-dark`, `unconfirmed`, `unlisted-token`, `safe-event`, `loading`, `unavailable`, `unfamiliar-sender`, `hidden`, `hidden-dark`, `eth-logged`
 
 <a href="activity-detail/sent.png"><img src="activity-detail/sent.png" width="206" alt="sent"></a>
 <a href="activity-detail/sent-dark.png"><img src="activity-detail/sent-dark.png" width="206" alt="sent-dark"></a>
@@ -170,6 +170,7 @@ If the folder grows too much, there are two levers, both the owner's. Deleting t
 <a href="activity-detail/unfamiliar-sender.png"><img src="activity-detail/unfamiliar-sender.png" width="206" alt="unfamiliar-sender"></a>
 <a href="activity-detail/hidden.png"><img src="activity-detail/hidden.png" width="206" alt="hidden"></a>
 <a href="activity-detail/hidden-dark.png"><img src="activity-detail/hidden-dark.png" width="206" alt="hidden-dark"></a>
+<a href="activity-detail/eth-logged.png"><img src="activity-detail/eth-logged.png" width="206" alt="eth-logged"></a>
 
 <a name="add-on-networks-dialog"></a>
 ## Add on networks (dialog)
