@@ -349,7 +349,7 @@ class AccountsScreenTest {
     @Test
     fun anUpgradeBannerIsShownUnderTheStripWithTheWayToTheUpdate() {
         val banner = UpgradeBannerItem(
-            "Network upgrade ahead on Sepolia: update Serotine",
+            "Network upgrade ahead on Sepolia: update Punicus",
             "Peers announce a Sepolia network upgrade on Nov 6, 2026 that this version does not support.",
             "Reported by peers in 5 networks, not verified · fork id 0x6c1d9423",
             urgent = false,
@@ -365,7 +365,7 @@ class AccountsScreenTest {
 
     @Test
     fun aNetworkBlockedAloneSaysSoInItsSectionAndGreysOutItsAccountsSend() {
-        val reason = "This version of Serotine can no longer follow Sepolia: nothing can be sent from its accounts " +
+        val reason = "This version of Punicus can no longer follow Sepolia: nothing can be sent from its accounts " +
             "until you update the app."
         val state = ready(listOf(daily.copy(networkBlocked = reason))).let { ready ->
             ready.copy(sections = ready.sections.map { it.copy(blocked = reason) })

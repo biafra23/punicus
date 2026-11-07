@@ -683,7 +683,7 @@ class SafeSettingsViewModel(
             changeReason = changeReason(shown),
             enableModuleReason = MODULE_ENABLED_REFUSAL,
             updateReason = "Updating a Safe's version runs a migration contract's code as the Safe, a delegate " +
-                "call, which Serotine does not sign. It comes once a migration contract is pinned here.",
+                "call, which Punicus does not sign. It comes once a migration contract is pinned here.",
             moduleGuard = state.moduleGuard?.let(Eip55::format),
             removeReason = "The Safe's only owner cannot be removed: replace it instead."
                 .takeIf { state.owners.size == 1 },
@@ -930,7 +930,7 @@ class SafeSettingsViewModel(
                 "Settings → Networks."
         ReadUnavailable.STALE_ANCHOR -> "The light client refuses to sync, so the Safe's settings cannot be read."
         ReadUnavailable.SYNCING -> "The light client is still syncing, so the Safe's settings cannot be read yet."
-        ReadUnavailable.UNPROVEN -> "The Safe's storage could not be verified this time. Serotine keeps trying."
+        ReadUnavailable.UNPROVEN -> "The Safe's storage could not be verified this time. Punicus keeps trying."
         ReadUnavailable.REFUSED -> "The light client on this device cannot read this Safe's storage."
     }
 
@@ -944,7 +944,7 @@ class SafeSettingsViewModel(
     }
 
     private companion object {
-        const val SIGN_FAILED = "Serotine could not finish this signature. Nothing was queued: try again."
+        const val SIGN_FAILED = "Punicus could not finish this signature. Nothing was queued: try again."
         const val UNSAVED_REPLACED =
             "Proposed again as another transaction, so the signature made for the earlier one, which this " +
                 "device's queue could not save, was dropped: sign this one."
@@ -952,7 +952,7 @@ class SafeSettingsViewModel(
             "Signed, but this device's queue cannot be saved right now, so the proposal is not kept here: share " +
                 "it below before you leave this screen, or sign it again in a moment."
         const val LIST_UNAVAILABLE =
-            "Your account list cannot be read right now, so the Safe's settings cannot be shown. Serotine keeps " +
+            "Your account list cannot be read right now, so the Safe's settings cannot be shown. Punicus keeps " +
                 "trying."
         const val NOT_IN_WALLET = "This Safe is not in your wallet any more."
         const val NOT_A_SAFE_ACCOUNT = "Only a Safe has a Safe's settings."

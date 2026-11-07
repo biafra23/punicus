@@ -1,6 +1,6 @@
 # Embedding Myotis
 
-Serotine reads the chain through an embedded [Myotis](https://github.com/biafra23/myotis)
+Punicus reads the chain through an embedded [Myotis](https://github.com/biafra23/myotis)
 engine — a sync-committee light client that verifies every answer against
 Ethereum's consensus, so the wallet never trusts an RPC provider. This page is
 how that engine reaches the app and the rules around it. The library landed in
@@ -18,7 +18,7 @@ it, which is when the coordinates below resolve.
 
 Its whole third-party graph is JNA, slf4j and minimal-json; JNA is pinned
 strictly to the native stub the AAR carries, so never force another JNA
-version. On Android, Serotine takes JNA's classes from the libsodium bindings'
+version. On Android, Punicus takes JNA's classes from the libsodium bindings'
 JNA AAR instead of the engine's jar (the two would duplicate them), and the app
 re-states the strict pin as a constraint (`android-app/build.gradle.kts`). Entry point: `io.myotis.engine.Myotis` (`isAvailable()`,
 `newEngine()`, `defaultPorts(...)`); the consumer guide is
@@ -37,7 +37,7 @@ consumer developed against an unreleased engine, Myotis's
 `./gradlew publishToMavenLocal` publishes the set into `~/.m2` (add
 `mavenLocal()`, filtered to `eth.myotis`, while that lasts — never commit it).
 
-## Where it goes in Serotine
+## Where it goes in Punicus
 
 - **`:data` only.** The engine is a data source. An adapter in
   `eth.serotine.data.engine` implements the domain's ports (balances,
@@ -319,7 +319,7 @@ consumer developed against an unreleased engine, Myotis's
   reads after about 20 to 30 s.
 - **Resolving the library before a Myotis tag publishes it.** In a Myotis
   checkout, `./gradlew -PpublishRelease publishToMavenLocal` puts the version
-  the next tag publishes into `~/.m2`. Pass Serotine's builds an init script
+  the next tag publishes into `~/.m2`. Pass Punicus's builds an init script
   that adds `mavenLocal()` filtered to `eth.myotis`, with `-I`; the repository
   itself never names `mavenLocal()`:
 
@@ -341,7 +341,7 @@ consumer developed against an unreleased engine, Myotis's
   rather than having it from the first install, can keep getting `EPERM` from
   netd's eBPF socket filter until it is reinstalled or the device reboots. The
   engine then reports "listen failed" and the list says "No light client". No
-  released Serotine was ever without the permission, so this is a development
+  released Punicus was ever without the permission, so this is a development
   trap, not a user path.
 
 ## Sending
@@ -415,7 +415,7 @@ verified read.
     a refusal are told apart. It is the engine's answer as it stands, priced
     under the fork the chain runs: on Sepolia, Amsterdam since 2026-10-06, a
     plain transfer estimates below the 21000 of earlier forks (EIP-2780;
-    17433 when probed), so Serotine adds no floor of its own.
+    17433 when probed), so Punicus adds no floor of its own.
   - The simulation is `callDetailed` from the sender at the head, the transfer
     as it will run.
 - **`EngineBroadcaster`** (`Broadcaster`): `sendRawTransactionDetailed`. The
@@ -637,7 +637,7 @@ answered with an empty list.
 A hard fork the engine's build does not implement is the one thing that ends
 a working install: past it, the light client can no longer verify the chain
 (the sync committee signs under the new fork's version), and the wallet would
-look stuck syncing. Myotis detects one ahead of time and Serotine tells the
+look stuck syncing. Myotis detects one ahead of time and Punicus tells the
 user to update — before it, and, after it, nothing else.
 
 - **What Myotis reports.** `StatusSnapshot.upgradeAdvisory()`: an
@@ -652,11 +652,11 @@ user to update — before it, and, after it, nothing else.
   lifecycle state, asleep included. Upgraded clients announce a fork from the
   day their release carries it, so the warning comes weeks ahead.
 - **It is peer data, never verified.** Lying peers can raise a false warning,
-  never a wrong answer: nothing in verification reads it. So Serotine shows
+  never a wrong answer: nothing in verification reads it. So Punicus shows
   it as what peers report, and claims it can no longer follow the network
   only when the light client's own state agrees — not synced, or synced with
   a stale head — the rule Myotis sets for every host (CLAUDE.md, *Trust*).
-- **In Serotine.** `EngineNetworkUpgrades` (`eth.serotine.data.engine`) is the
+- **In Punicus.** `EngineNetworkUpgrades` (`eth.serotine.data.engine`) is the
   `NetworkUpgrades` port over it, polled with the engine's status; a malformed
   field becomes unknown rather than failing the status poll the light client
   and every verified read share. `ObserveUpgradeWarning` (`:domain`) joins it with the light
@@ -697,7 +697,7 @@ user to update — before it, and, after it, nothing else.
 ## What the engine's rules mean for a wallet
 
 - **Every chain read is verified or refused.** The engine answers from the
-  verified head; when it cannot prove an answer it fails the call. Serotine
+  verified head; when it cannot prove an answer it fails the call. Punicus
   shows that state (`CATCHING_UP`, `STALE_ANCHOR`, an unproven read) instead
   of filling in from anywhere else. There is no RPC-provider fallback, in
   any build type.

@@ -941,7 +941,7 @@ class CreateSafeViewModel(
         is SafePlanRefusal.ThresholdOutOfRange -> "The threshold is between 1 and the number of owners."
         is SafePlanRefusal.NeedsRecoveryModule -> "Not ${refusal.owners} of ${refusal.owners}: with one owner " +
             "lost, the others could never reach the threshold again, not even to replace the lost one. That " +
-            "takes a recovery module beside it, which Serotine does not offer yet. Lower the threshold, or add " +
+            "takes a recovery module beside it, which Punicus does not offer yet. Lower the threshold, or add " +
             "an owner."
         SafePlanRefusal.NameTooLong -> "At most ${RenameAccount.MAX_LABEL_LENGTH} characters."
     }
@@ -967,7 +967,7 @@ class CreateSafeViewModel(
                 "a fee to revert."
         is SafeDeploymentRefusal.AddressMismatch -> {
             val returned = refusal.returned?.let { "returns ${Eip55.format(it)}" } ?: "returns no address"
-            "The factory's verified run $returned, not the address computed here: the Safe release Serotine " +
+            "The factory's verified run $returned, not the address computed here: the Safe release Punicus " +
                 "pins does not match the chain, so nothing is deployed."
         }
         SafeDeploymentRefusal.Syncing -> "The light client is not synced yet: try again in a moment."
@@ -1064,19 +1064,19 @@ class CreateSafeViewModel(
         /** A name's resolution in simple mode's words: no block (docs/simple-ui.md). */
         const val RESOLVED_ON_CHAIN = "Resolved, checked on chain"
         const val DEVICE_KEY =
-            "This device's hardware key (Secure Enclave or StrongBox) as an owner comes later: Serotine does not " +
+            "This device's hardware key (Secure Enclave or StrongBox) as an owner comes later: Punicus does not " +
                 "build its passkey signer yet."
         const val DEPLOY_FAILED =
-            "Serotine could not finish this deployment. Check the paying account's balance before you deploy again."
+            "Punicus could not finish this deployment. Check the paying account's balance before you deploy again."
         const val LIST_UNAVAILABLE =
-            "Your account list cannot be read right now, so no Safe can be created. Serotine keeps trying."
-        const val NO_RELEASE = "Serotine pins no Safe release to create a Safe from on this network."
+            "Your account list cannot be read right now, so no Safe can be created. Punicus keeps trying."
+        const val NO_RELEASE = "Punicus pins no Safe release to create a Safe from on this network."
 
         /** The recovery shapes the wallet creates (docs/keys-and-signing.md, *Backup and recovery*). */
         val RULES = listOf(
             "Each transaction of the Safe needs this many of its owners' signatures.",
             "A device's hardware key is never the only owner: it has no backup.",
-            "Every owner signing (2 of 2, 3 of 3, …) takes a recovery module beside it, which Serotine does not " +
+            "Every owner signing (2 of 2, 3 of 3, …) takes a recovery module beside it, which Punicus does not " +
                 "offer yet: with one owner lost, the others could never reach the threshold again.",
         )
 

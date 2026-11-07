@@ -37,7 +37,7 @@ class UpdateRequiredViewModel(
                         updateRequiredText(warning.upgrade, network, formatTime)
                     },
                     details = blocked.values.joinToString("\n") { detailsOf(it.upgrade) },
-                    version = "This is Serotine v$APP_VERSION.",
+                    version = "This is Punicus v$APP_VERSION.",
                 )
             }
         }

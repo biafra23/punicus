@@ -41,10 +41,10 @@ class IosOutboxNotifier : OutboxNotifier {
             content.setSound(UNNotificationSound.defaultSound)
             val request = UNNotificationRequest.requestWithIdentifier("$ID_PREFIX$id", content, trigger = null)
             UNUserNotificationCenter.currentNotificationCenter().addNotificationRequest(request) { error ->
-                if (error != null) println("Serotine: outbox notification not posted (${error.code})")
+                if (error != null) println("Punicus: outbox notification not posted (${error.code})")
             }
         } catch (e: Exception) {
-            println("Serotine: no outbox notification (${e::class.simpleName})")
+            println("Punicus: no outbox notification (${e::class.simpleName})")
         }
     }
 

@@ -173,7 +173,7 @@ class SecurityViewModel(
     }
 
     private fun textOf(reason: BiometricUnavailable): String = when (reason) {
-        BiometricUnavailable.NO_HARDWARE -> "This device has no fingerprint or face sensor Serotine can use."
+        BiometricUnavailable.NO_HARDWARE -> "This device has no fingerprint or face sensor Punicus can use."
         BiometricUnavailable.NOT_ENROLLED ->
             "No fingerprint or face is enrolled: add one in the system settings to use biometric unlock."
         BiometricUnavailable.WEAK_ONLY ->
@@ -181,7 +181,7 @@ class SecurityViewModel(
         BiometricUnavailable.NOT_IN_SECURE_HARDWARE ->
             "This device cannot keep the biometric key in secure hardware, so biometric unlock is not offered."
         BiometricUnavailable.NOT_ALLOWED ->
-            "Biometrics are turned off for Serotine: allow Face ID for Serotine in the system settings to use it."
+            "Biometrics are turned off for Punicus: allow Face ID for Punicus in the system settings to use it."
         BiometricUnavailable.NO_PASSCODE ->
             "This device has no passcode: set one in the system settings to use biometric unlock."
         BiometricUnavailable.LOCKED_OUT ->
@@ -198,6 +198,6 @@ class SecurityViewModel(
         const val CONFIRMATION = "Turn on biometric unlock for your keys"
         const val NO_KEYS = "Off. Store a key first: biometric unlock opens stored keys."
         const val NOT_ON_THIS_DEVICE =
-            "Not on this device yet: Serotine has no biometric unlock here, so signing asks for the wallet password."
+            "Not on this device yet: Punicus has no biometric unlock here, so signing asks for the wallet password."
     }
 }

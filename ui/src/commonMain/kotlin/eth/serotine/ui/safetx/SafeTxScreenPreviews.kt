@@ -189,7 +189,7 @@ internal val heldSample = SafeTxUiState.Held(
         HeldStep(
             "Held",
             HeldStepState.WAITING,
-            "Waits for Sepolia to catch up. Keep Serotine open to check it sooner.",
+            "Waits for Sepolia to catch up. Keep Punicus open to check it sooner.",
         ),
         HeldStep("In the queue, to share", HeldStepState.WAITING, "Once it checks out on chain"),
     ),
@@ -334,10 +334,10 @@ private fun SafeTxDelegateCallPreview() = SafeTxPreview(
             addresses = listOf(ActionAddress("Code run as the Safe", FRIEND)),
             notes = listOf("Function 0x8d80ff0a, 356 bytes of call data"),
             warning = "A delegate call: the Safe would run this contract's code as itself, with its storage, owners " +
-                "and funds, and the code can change any of them. Serotine shows it and decodes it no further, and " +
+                "and funds, and the code can change any of them. Punicus shows it and decodes it no further, and " +
                 "does not sign, approve or execute it.",
         ),
-        refusal = "A delegate call: Serotine does not sign, approve or execute one yet. " +
+        refusal = "A delegate call: Punicus does not sign, approve or execute one yet. " +
             "Batches through the pinned MultiSendCallOnly come later.",
         canSign = false,
         canApprove = false,
@@ -357,7 +357,7 @@ private fun SafeTxUnpinnedFallbackHandlerPreview() = SafeTxPreview(
                 "Safe: one that accepts every signature lets anyone spend what the Safe has approved (Permit2, " +
                 "permits, orders), without its owners.",
         ),
-        refusal = "It sets a fallback handler Serotine does not pin, $FRIEND: the handler answers the signature " +
+        refusal = "It sets a fallback handler Punicus does not pin, $FRIEND: the handler answers the signature " +
             "checks other contracts make for the Safe, so only the canonical CompatibilityFallbackHandler 1.4.1, " +
             "or none, is signed, approved or executed here.",
         canSign = false,
@@ -418,7 +418,7 @@ private fun SafeTxGasTermsPreview() = SafeTxPreview(
             ),
             addresses = listOf(ActionAddress("Refund receiver", FRIEND)),
         ),
-        refusal = "It carries gas or refund terms: Serotine does not sign, approve or execute those.",
+        refusal = "It carries gas or refund terms: Punicus does not sign, approve or execute those.",
         canSign = false,
         canApprove = false,
         canExecute = false,

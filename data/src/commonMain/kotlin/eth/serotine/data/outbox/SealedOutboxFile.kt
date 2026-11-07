@@ -36,7 +36,7 @@ import kotlinx.io.readByteArray
  * [acknowledgeLost]): the user signs again. That is a seal key known to be gone (the key store
  * reset, a copy restored on another device), and a file sealed under another key or damaged (its tag
  * does not verify). A file that cannot be read right now (the key store would not say whether its
- * key exists, the hardware failed, a version of Serotine wrote what this one cannot read, an I/O
+ * key exists, the hardware failed, a version of Punicus wrote what this one cannot read, an I/O
  * error, a file system that cannot say whether the file or its marker is there) is
  * [OutboxList.Unreadable], untouched,
  * read again by the next subscriber, and nothing changes until it can be read. File work runs on
@@ -121,15 +121,15 @@ internal class SealedOutboxFile(
             val sealed = SystemFileSystem.source(file).buffered().use { it.readByteArray() }
             when (val opening = seal.open(sealed)) {
                 OutboxSeal.Opening.WrongKey -> lostNow("it was sealed under another key, or is damaged")
-                OutboxSeal.Opening.Newer -> unreadable("a newer version of Serotine wrote it")
+                OutboxSeal.Opening.Newer -> unreadable("a newer version of Punicus wrote it")
                 OutboxSeal.Opening.Failed -> unreadable("the hardware key store failed")
                 is OutboxSeal.Opening.Opened -> {
                     val decoding = StoredOutbox.decode(opening.plaintext)
                     opening.plaintext.fill(0)
                     when (decoding) {
                         is StoredOutbox.Decoding.Read -> OutboxList.Loaded(decoding.queued, lost, decoding.held)
-                        StoredOutbox.Decoding.Newer -> unreadable("a newer version of Serotine wrote it")
-                        // The tag verified, so it is what a version of Serotine sealed: not damage, and kept.
+                        StoredOutbox.Decoding.Newer -> unreadable("a newer version of Punicus wrote it")
+                        // The tag verified, so it is what a version of Punicus sealed: not damage, and kept.
                         StoredOutbox.Decoding.Damaged -> unreadable("this version cannot read what it holds")
                     }
                 }
@@ -142,7 +142,7 @@ internal class SealedOutboxFile(
     }
 
     private fun unreadable(why: String): OutboxList {
-        println("Serotine: the outbox cannot be read now ($why); it is left as it is")
+        println("Punicus: the outbox cannot be read now ($why); it is left as it is")
         return OutboxList.Unreadable
     }
 
@@ -157,7 +157,7 @@ internal class SealedOutboxFile(
         }
         SystemFileSystem.delete(file, mustExist = false)
         keyChecked = true
-        println("Serotine: the outbox could not be opened ($why); what it held is deleted")
+        println("Punicus: the outbox could not be opened ($why); what it held is deleted")
         return OutboxList.Loaded(emptyList(), lost = true)
     }
 
@@ -189,7 +189,7 @@ internal class SealedOutboxFile(
                 state.value = loaded.copy(queued = queued, held = held)
                 true
             } catch (e: Exception) {
-                println("Serotine: the outbox could not be saved (${e::class.simpleName})")
+                println("Punicus: the outbox could not be saved (${e::class.simpleName})")
                 false
             }
         }

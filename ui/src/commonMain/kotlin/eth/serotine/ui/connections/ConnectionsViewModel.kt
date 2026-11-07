@@ -59,7 +59,7 @@ class ConnectionsViewModel(
                             name = proposal.dapp.name,
                             url = proposal.dapp.url,
                             line = if (proposal.refusal != null) {
-                                "Asks for more than Serotine offers · Review"
+                                "Asks for more than Punicus offers · Review"
                             } else {
                                 "Asks to connect · Review"
                             },
@@ -125,7 +125,7 @@ class ConnectionsViewModel(
         fun networksLine(networks: Set<Network>): String {
             val held = Network.entries.filter { it in networks }
             val names = when (held.size) {
-                0 -> return "On no network Serotine serves"
+                0 -> return "On no network Punicus serves"
                 1 -> held.single().displayName
                 else -> held.dropLast(1).joinToString(", ") { it.displayName } + " and " + held.last().displayName
             }

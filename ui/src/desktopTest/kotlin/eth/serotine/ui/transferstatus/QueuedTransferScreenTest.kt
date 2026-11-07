@@ -54,7 +54,7 @@ class QueuedTransferScreenTest {
     fun aQueuedTransferSaysWhatItWaitsForAndOffersEditAndDiscard() {
         show(queuedSample)
 
-        rule.onNodeWithText("Waits for Sepolia to catch up. Keep Serotine open to send it sooner.").assertIsDisplayed()
+        rule.onNodeWithText("Waits for Sepolia to catch up. Keep Punicus open to send it sooner.").assertIsDisplayed()
         rule.onNodeWithTag(TRANSFER_SIGN_AGAIN_TAG).performScrollTo().performClick()
         rule.onNodeWithTag(TRANSFER_DISCARD_TAG).performScrollTo().performClick()
         assertEquals(listOf("again", "discard"), events)

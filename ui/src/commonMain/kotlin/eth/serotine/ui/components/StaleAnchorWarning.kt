@@ -53,15 +53,15 @@ data class StaleAnchorWarning(
             }
             return StaleAnchorWarning(
                 chainId = network.chainId,
-                banner = "Serotine's last trusted checkpoint for $name is $age old, older than $limit. Nothing " +
+                banner = "Punicus's last trusted checkpoint for $name is $age old, older than $limit. Nothing " +
                     "on $name is verified until you decide.",
                 title = "Catch up with $name anyway?",
-                body = "To catch up from a checkpoint this old, Serotine has to trust the validators who signed " +
+                body = "To catch up from a checkpoint this old, Punicus has to trust the validators who signed " +
                     "for $name $age ago. Many may have left since, and their old keys can no longer be " +
-                    "punished, so whoever gathers enough of them could show Serotine a made-up chain. That " +
+                    "punished, so whoever gathers enough of them could show Punicus a made-up chain. That " +
                     "cannot reveal your keys or move your funds by itself, but balances, incoming payments " +
                     "and confirmations could be false. If you go on, check large amounts elsewhere before you " +
-                    "act on them. This holds while Serotine keeps running: when it starts again and the " +
+                    "act on them. This holds while Punicus keeps running: when it starts again and the " +
                     "checkpoint is still too old, it asks again.",
             )
         }

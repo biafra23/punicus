@@ -109,11 +109,11 @@ enum class KeyProtection {
     /** The password and a key-store secret that is not in secure hardware (an emulator, some devices). */
     SOFTWARE_KEY_STORE,
 
-    /** The password alone, stretched harder: Serotine uses no hardware key store on this computer. */
+    /** The password alone, stretched harder: Punicus uses no hardware key store on this computer. */
     PASSWORD_ONLY,
 
     /**
-     * The password alone, stretched harder, on a computer whose TPM Serotine does not use yet:
+     * The password alone, stretched harder, on a computer whose TPM Punicus does not use yet:
      * Windows and Linux, until their TPM path is built (the owner's ruling of 2026-10-16). The
      * user is told so, a TPM present or not.
      */
@@ -139,7 +139,7 @@ enum class PasswordCost {
 /** The envelope's biometric path on this device, as [KeyStore.describe] reports it. */
 sealed interface BiometricUnlock {
 
-    /** Serotine has no biometric path on this platform yet (Windows and Linux). */
+    /** Punicus has no biometric path on this platform yet (Windows and Linux). */
     data object NotOnThisDevice : BiometricUnlock
 
     /** This device cannot offer one now, for [reason]. */
@@ -176,7 +176,7 @@ enum class BiometricUnavailable {
     /** The key the path needs would not be in secure hardware here (rule 5), so it is not made. */
     NOT_IN_SECURE_HARDWARE,
 
-    /** A sensor and an enrolled face or finger, but the user turned biometrics off for Serotine. */
+    /** A sensor and an enrolled face or finger, but the user turned biometrics off for Punicus. */
     NOT_ALLOWED,
 
     /** The device has no passcode, without which no biometric key can be made. */
@@ -201,7 +201,7 @@ sealed interface BiometricChange {
     /** No key is stored yet, so there is nothing to unlock and no wallet password to check. */
     data object NoKeys : BiometricChange
 
-    /** Serotine has no biometric path on this platform yet. Nothing changed. */
+    /** Punicus has no biometric path on this platform yet. Nothing changed. */
     data object NotOnThisDevice : BiometricChange
 
     /**

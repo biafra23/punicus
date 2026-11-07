@@ -663,9 +663,9 @@ class CowOrderViewModel(
         const val NOT_HERE = "This order is not recorded on this device: it was signed elsewhere, or its record " +
             "was dropped once its end was proven and a week had passed since it was signed."
         const val UNREADABLE = "The record of this device's CoW orders cannot be read right now."
-        const val CANCEL_FAILED = "Serotine could not finish this cancellation. Try again."
+        const val CANCEL_FAILED = "Punicus could not finish this cancellation. Try again."
         const val LIST_UNAVAILABLE = "Your account list cannot be read right now, so nothing can be signed. " +
-            "Serotine keeps trying. Meanwhile the order ends by itself at its validity."
+            "Punicus keeps trying. Meanwhile the order ends by itself at its validity."
         const val NOT_IN_WALLET = "This account is not in your wallet any more, so its key is not on this " +
             "device. The order ends by itself at its validity."
         const val WATCH_ONLY = "This account is watch-only: its key is not on this device, so the cancellation " +

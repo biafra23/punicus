@@ -153,7 +153,7 @@ fun HandoffScreen(
                 ) {
                     Note(
                         "This account's key is not on this device. Another wallet app that holds it signs and " +
-                            "sends the transfer; Serotine then checks the chain for it.",
+                            "sends the transfer; Punicus then checks the chain for it.",
                     )
                     TransferFormFields(
                         state.form,
@@ -228,7 +228,7 @@ private fun WaitingContent(state: HandoffUiState.Waiting, onBack: () -> Unit) {
         Note(state.progress)
         state.problem?.let { Text(it, color = MaterialTheme.colorScheme.tertiary) }
         Note(
-            "If you leave now, Serotine stops looking. The account's balance still shows the transfer once a " +
+            "If you leave now, Punicus stops looking. The account's balance still shows the transfer once a " +
                 "block has it.",
         )
         OutlinedButton(onClick = onBack, Modifier.align(Alignment.End)) { Text("Stop waiting") }

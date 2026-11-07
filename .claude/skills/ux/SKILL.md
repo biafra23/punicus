@@ -1,6 +1,6 @@
 ---
 name: ux
-description: "The UX designer's briefing for Serotine. Where the screens' contract lives (docs/wallet-ux.md and its mockups), the rules every screen follows, what a screen may claim about the chain, and how a design lands (the doc, a preview per state, screenshots in the PR). Use when designing or changing a screen, a dialog, a flow, or the words the user sees."
+description: "The UX designer's briefing for Punicus. Where the screens' contract lives (docs/wallet-ux.md and its mockups), the rules every screen follows, what a screen may claim about the chain, and how a design lands (the doc, a preview per state, screenshots in the PR). Use when designing or changing a screen, a dialog, a flow, or the words the user sees."
 ---
 
 # Designing a screen

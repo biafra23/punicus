@@ -1,5 +1,5 @@
 # Toolchain pins. Kotlin and Compose MIRROR biafra23/myotis's
-# (gradle/libs.versions.toml there) on purpose: Serotine embeds the Myotis engine
+# (gradle/libs.versions.toml there) on purpose: Punicus embeds the Myotis engine
 # library, and one known-good Kotlin/Compose stack shared by the two repositories
 # means the library's Kotlin metadata never runs ahead of the host's compiler.
 # Bump both together.

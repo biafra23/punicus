@@ -34,7 +34,7 @@ fun iosHardwareSecret(keysDirectory: String): HardwareSecret? = try {
     // Not knowing the wallet's factor is no reason to guess one: the key store reports itself
     // unavailable. Said here, where the cause is known.
     val reason = "the hardware factor cannot be determined (${e.message ?: e::class.simpleName})"
-    println("Serotine: $reason")
+    println("Punicus: $reason")
     UnavailableHardware(reason)
 }
 

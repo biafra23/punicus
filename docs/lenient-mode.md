@@ -224,7 +224,7 @@ differences:
   after the last screen leaves (`GracePeriodJob`), and the outbox runs during
   it too. After that a queued transaction waits until the app is back in the
   foreground. The status step and Home say so: "Waits for Ethereum to catch
-  up. Keep Serotine open to send it sooner." The hosts run it as they run
+  up. Keep Punicus open to send it sooner." The hosts run it as they run
   `FollowSafeDeployments`: a use case `FollowOutbox`, never from `App` or
   `AppGraph`. A send and a conflict are each told in a notification, through
   a new port `OutboxNotifier`, implemented in the hosts as `UpgradeNotifier`
@@ -434,7 +434,7 @@ rulings, 2026-11-06):
    tap?** An hour from its signature, as simple mode's hour.
 5. **The signed bytes across a restart?** Kept, sealed with a hardware key
    of their own, as *The signed bytes kept* says; in memory only on a
-   device without a hardware key store Serotine uses. Not the file with no
+   device without a hardware key store Punicus uses. Not the file with no
    seal: whoever copies it could send what it holds. After a nonce gap, the
    user signs again at the lower nonce, and a leaked copy of the old
    signature would then make the payment a second time.

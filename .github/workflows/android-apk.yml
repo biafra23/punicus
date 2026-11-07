@@ -179,7 +179,7 @@ jobs:
           mkdir -p "$t"
           export REHEARSAL_PW=$(openssl rand -hex 24)
           keytool -genkeypair -keystore "$t/k.p12" -storetype PKCS12 -alias rehearsal \
-            -keyalg RSA -keysize 2048 -validity 1 -dname "CN=Serotine signing rehearsal" \
+            -keyalg RSA -keysize 2048 -validity 1 -dname "CN=Punicus signing rehearsal" \
             -storepass:env REHEARSAL_PW >/dev/null 2>&1
           keytool -list -v -keystore "$t/k.p12" -alias rehearsal -storepass:env REHEARSAL_PW \
             | sed -n 's/.*SHA256: //p' > "$t/pin"
@@ -225,7 +225,7 @@ jobs:
     if: startsWith(github.ref, 'refs/tags/v')
     uses: ./.github/workflows/release-version-guard.yml
 
-  # Sign the release APK with the Serotine release key. The ONLY job that ever
+  # Sign the release APK with the Punicus release key. The ONLY job that ever
   # holds that key, so it is kept as small as it can be (docs/android-release-signing.md):
   #   - the secrets live in the `android-release` ENVIRONMENT, not the repo, and
   #     that environment's deployment rule admits v* tags only, so no PR branch,
@@ -298,7 +298,7 @@ jobs:
           overwrite: true  # same re-run reason as the build job's artifacts
 
   # Attach both APKs to the GitHub Release for the pushed tag: the release-signed
-  # app (Serotine-<tag>-android.apk) and the debug one (Serotine-<tag>-android-debug.apk).
+  # app (Punicus-<tag>-android.apk) and the debug one (Punicus-<tag>-android-debug.apk).
   # A tree with no pinned release certificate publishes the debug APK alone.
   # Runs ONLY on `v*` tags (never on branch/PR builds), and reuses the artifacts
   # rather than rebuilding. The desktop workflows publish to the SAME release for
@@ -356,7 +356,7 @@ jobs:
           shopt -s nullglob
           # variant, expected package, asset suffix. The package check is the
           # point of shipping two APKs: the debug-signed one must never carry the
-          # release app's id, or it would install over Serotine as an update for
+          # release app's id, or it would install over Punicus as an update for
           # anyone who uninstalled the release app (and a lookalike signed with the
           # same public key could follow).
           while read -r variant package suffix; do
@@ -368,8 +368,8 @@ jobs:
             got=$("$aapt2" dump packagename "${apks[0]}" < /dev/null)  # not the loop's stdin
             [ "$got" = "$package" ] \
               || { echo "::error::the $variant APK is package '$got', expected '$package'"; exit 1; }
-            mv "${apks[0]}" "apk/Serotine-${GITHUB_REF_NAME}-${suffix}.apk"
-            echo "  ok: $variant = $package -> Serotine-${GITHUB_REF_NAME}-${suffix}.apk"
+            mv "${apks[0]}" "apk/Punicus-${GITHUB_REF_NAME}-${suffix}.apk"
+            echo "  ok: $variant = $package -> Punicus-${GITHUB_REF_NAME}-${suffix}.apk"
           done < <(
             if [ "$SIGNED" = true ]; then echo "release eth.serotine android"; fi
             echo "debug eth.serotine.debug android-debug"
@@ -388,25 +388,25 @@ jobs:
           # (no shell escaping of backticks/quotes) and renders as intended.
           notes=$(mktemp)
           cat > "$notes" <<'NOTES'
-          Pre-release build of the Serotine wallet apps.
+          Pre-release build of the Punicus wallet apps.
 
-          **Android (`*-android.apk`)**, in a release that has it — the Serotine app, signed with
-          Serotine's own release key (its certificate's SHA-256 is in
+          **Android (`*-android.apk`)**, in a release that has it — the Punicus app, signed with
+          Punicus's own release key (its certificate's SHA-256 is in
           `android-app/release-signing-cert.sha256` in the repository). A release without it carries
           only the debug app below. Install via "Install unknown apps" and switch that off again afterwards;
-          only ever install Serotine, and its updates, from this releases page.
+          only ever install Punicus, and its updates, from this releases page.
 
-          **Android debug (`*-android-debug.apk`)** — a separate test app ("Serotine Debug", amber
+          **Android debug (`*-android-debug.apk`)** — a separate test app ("Punicus Debug", amber
           icon, package `eth.serotine.debug`), signed with the publicly known debug key: anyone can
           build an APK that installs over it as an update, so never keep an account you use in it.
           It installs next to the release app.
 
-          **Desktop macOS (`Serotine-v<version>-<arch>.dmg`)** — unsigned; download the dmg matching
+          **Desktop macOS (`Punicus-v<version>-<arch>.dmg`)** — unsigned; download the dmg matching
           your Mac (arm64 for Apple Silicon, x64 for Intel). First launch:
           right-click → Open to get past Gatekeeper (not notarized yet).
 
-          **Desktop Linux (`Serotine-v<version>-<arch>.deb`)** — install with
-          `sudo apt install ./Serotine-v<version>-<arch>.deb`.
+          **Desktop Linux (`Punicus-v<version>-<arch>.deb`)** — install with
+          `sudo apt install ./Punicus-v<version>-<arch>.deb`.
 
           **Desktop Windows** — not in this release: the embedded engine has no Windows build yet.
           NOTES
@@ -417,9 +417,9 @@ jobs:
           if ! gh release view "$tag" >/dev/null 2>&1; then
             gh release create "$tag" \
               --prerelease \
-              --title "Serotine $tag" \
+              --title "Punicus $tag" \
               --notes-file "$notes" \
               --target "${GITHUB_SHA}" \
             || gh release view "$tag" >/dev/null 2>&1
           fi
-          gh release upload "$tag" apk/Serotine-*.apk --clobber
+          gh release upload "$tag" apk/Punicus-*.apk --clobber

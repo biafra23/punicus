@@ -274,7 +274,7 @@ class MyotisHost private constructor(
                 } catch (e: Throwable) {
                     // Throwable: the calls cross JNA. Uncaught on this thread it would end the
                     // process; the light clients keep their last state instead.
-                    System.err.println("Serotine: the engine could not be switched: $e")
+                    System.err.println("Punicus: the engine could not be switched: $e")
                 }
             }
         } catch (e: RejectedExecutionException) {
@@ -297,7 +297,7 @@ class MyotisHost private constructor(
                     try {
                         created.shutdownAll()
                     } catch (e: Throwable) {
-                        System.err.println("Serotine: the engine did not shut down cleanly: $e")
+                        System.err.println("Punicus: the engine did not shut down cleanly: $e")
                     }
                 }
                 engine = EngineState.Absent
@@ -527,7 +527,7 @@ class MyotisHost private constructor(
             try {
                 call(handle)
             } catch (e: Throwable) {
-                System.err.println("Serotine: ${network.displayName}'s light client did not $what: $e")
+                System.err.println("Punicus: ${network.displayName}'s light client did not $what: $e")
             }
         }
 
@@ -536,7 +536,7 @@ class MyotisHost private constructor(
                 // Stops and unregisters the chain, so that a later start creates it anew.
                 (engine as? EngineState.Created)?.engine?.stop(network.engineName())
             } catch (e: Throwable) {
-                System.err.println("Serotine: ${network.displayName}'s light client did not stop cleanly: $e")
+                System.err.println("Punicus: ${network.displayName}'s light client did not stop cleanly: $e")
             } finally {
                 running.ports.close() // the cache writers close whatever the engine does
             }
@@ -882,4 +882,4 @@ class MyotisHost private constructor(
  * user's "No light client" cannot tell a developer. Engine state only; no key material is
  * anywhere near this path.
  */
-private fun report(why: String) = System.err.println("Serotine: no light client: $why")
+private fun report(why: String) = System.err.println("Punicus: no light client: $why")

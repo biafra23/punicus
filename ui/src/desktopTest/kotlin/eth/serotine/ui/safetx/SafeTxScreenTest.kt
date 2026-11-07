@@ -225,7 +225,7 @@ class SafeTxScreenTest {
     fun aTransactionThisWalletWillNotSignSaysWhyAndOffersNothingToSign() {
         show(
             overview.copy(
-                refusal = "A delegate call: Serotine does not sign, approve or execute one yet. " +
+                refusal = "A delegate call: Punicus does not sign, approve or execute one yet. " +
                     "Batches through the pinned MultiSendCallOnly come later.",
                 canSign = false,
                 canApprove = false,

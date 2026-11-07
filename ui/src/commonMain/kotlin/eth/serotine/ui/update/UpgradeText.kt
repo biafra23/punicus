@@ -11,8 +11,8 @@ import eth.serotine.ui.platform.formatDateTime
 // report it and nothing verifies it, so each text says that peers report it, and only the
 // update screen, which needs the light client's own agreement, says the app is not verifying.
 
-/** Where every Serotine release is published (README, *Releases*): what "update" leads to. */
-const val RELEASES_URL = "https://github.com/biafra23/serotine/releases"
+/** Where every Punicus release is published (README, *Releases*): what "update" leads to. */
+const val RELEASES_URL = "https://github.com/biafra23/punicus/releases"
 
 /**
  * An upgrade warning as a banner shows it, display-ready: [urgent] when this version can no
@@ -25,18 +25,18 @@ data class UpgradeBannerItem(val title: String, val text: String, val details: S
             when (warning) {
                 UpgradeWarning.None -> null
                 is UpgradeWarning.Ahead -> UpgradeBannerItem(
-                    "Network upgrade ahead on ${network.displayName}: update Serotine",
+                    "Network upgrade ahead on ${network.displayName}: update Punicus",
                     "Peers announce a ${network.displayName} network upgrade${warning.upgrade.onDate(formatTime)} " +
-                        "that this version of Serotine does not support. Update the app before it activates, " +
-                        "or Serotine stops verifying at the upgrade.",
+                        "that this version of Punicus does not support. Update the app before it activates, " +
+                        "or Punicus stops verifying at the upgrade.",
                     detailsOf(warning.upgrade),
                     urgent = false,
                 )
                 is UpgradeWarning.Activated -> UpgradeBannerItem(
                     if (warning.upgrade.reportedActive) {
-                        "Network upgrade reported on ${network.displayName}: update Serotine"
+                        "Network upgrade reported on ${network.displayName}: update Punicus"
                     } else {
-                        "Network upgrade due on ${network.displayName}: update Serotine"
+                        "Network upgrade due on ${network.displayName}: update Punicus"
                     },
                     activatedText(warning.upgrade, network, formatTime),
                     detailsOf(warning.upgrade),
@@ -63,15 +63,15 @@ data class UpgradeNotificationText(val title: String, val text: String) {
         ): UpgradeNotificationText {
             val name = network.displayName
             val on = notice.upgrade.onDate(formatTime)
-            val ahead = "Peers announce a $name network upgrade$on that this version of Serotine does not " +
+            val ahead = "Peers announce a $name network upgrade$on that this version of Punicus does not " +
                 "support. Update the app before it activates."
             return when (notice.kind) {
                 UpgradeNotice.Kind.ANNOUNCED ->
-                    UpgradeNotificationText("Update Serotine before the network upgrade", ahead)
+                    UpgradeNotificationText("Update Punicus before the network upgrade", ahead)
                 UpgradeNotice.Kind.WEEK_AHEAD -> UpgradeNotificationText("$name upgrades within a week", ahead)
                 UpgradeNotice.Kind.DAY_AHEAD -> UpgradeNotificationText("$name upgrades within a day", ahead)
                 UpgradeNotice.Kind.ACTIVATED ->
-                    UpgradeNotificationText("Update Serotine", activatedText(notice.upgrade, network, formatTime))
+                    UpgradeNotificationText("Update Punicus", activatedText(notice.upgrade, network, formatTime))
             }
         }
     }
@@ -84,10 +84,10 @@ data class UpgradeNotificationText(val title: String, val text: String) {
 private fun activatedText(upgrade: NetworkUpgrade, network: Network, formatTime: (Long) -> String): String {
     val name = network.displayName
     val happened = if (upgrade.reportedActive) {
-        "Peers report that $name upgraded${upgrade.onDate(formatTime)} to rules this version of Serotine does " +
+        "Peers report that $name upgraded${upgrade.onDate(formatTime)} to rules this version of Punicus does " +
             "not support."
     } else {
-        "Peers announced a $name network upgrade${upgrade.onDate(formatTime)} that this version of Serotine " +
+        "Peers announced a $name network upgrade${upgrade.onDate(formatTime)} that this version of Punicus " +
             "does not support, and that time has passed."
     }
     return "$happened Update the app to keep using your wallet."
@@ -106,10 +106,10 @@ private val NetworkUpgrade.reportedActive: Boolean
 internal fun updateRequiredText(upgrade: NetworkUpgrade, network: Network, formatTime: (Long) -> String): String {
     val name = network.displayName
     val happened = if (upgrade.reportedActive) {
-        "Peers report that $name upgraded${upgrade.onDate(formatTime)} to rules this version of Serotine does " +
+        "Peers report that $name upgraded${upgrade.onDate(formatTime)} to rules this version of Punicus does " +
             "not support, and its light client is not verifying the chain."
     } else {
-        "Peers announced a $name network upgrade${upgrade.onDate(formatTime)} that this version of Serotine " +
+        "Peers announced a $name network upgrade${upgrade.onDate(formatTime)} that this version of Punicus " +
             "does not support. That time has passed, and its light client is not verifying the chain."
     }
     return "$happened Update the app to keep using your wallet."

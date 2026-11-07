@@ -71,6 +71,6 @@ internal class BiometricWraps(private val directory: String) {
         const val SUFFIX = ".bio"
         val JSON = Json
 
-        fun report(what: String) = println("Serotine: $what")
+        fun report(what: String) = println("Punicus: $what")
     }
 }

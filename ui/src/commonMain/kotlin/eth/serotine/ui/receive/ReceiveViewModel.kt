@@ -53,7 +53,7 @@ class ReceiveViewModel(
             )
             AccountLookup.NotInList -> ReceiveUiState.Gone
             AccountLookup.ListUnavailable ->
-                ReceiveUiState.Unavailable("Your account list cannot be read right now. Serotine keeps trying.")
+                ReceiveUiState.Unavailable("Your account list cannot be read right now. Punicus keeps trying.")
         }
     }.stateIn(
         viewModelScope,

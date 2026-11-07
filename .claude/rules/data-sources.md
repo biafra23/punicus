@@ -263,7 +263,7 @@ and #144.)
 docs/walletconnect.md is the contract.)
 
 - **WalletConnect v2 is the dApp connection protocol**, in both directions: a
-  dApp connects to Serotine, and Serotine connects to an external wallet that
+  dApp connects to Punicus, and Punicus connects to an external wallet that
   signs for a Safe owner.
 - **The relay never supplies chain state.** It sees the device's IP address,
   the topics, the timing and size of messages and the project ID. The
@@ -291,12 +291,12 @@ docs/walletconnect.md is the contract.)
     may switch between them with `wallet_switchEthereumChain`.
   - A Sepolia session is Sepolia alone. A dApp can never switch a session
     from testnet to real funds, nor back.
-  - A proposal that requires a chain Serotine does not serve, or chains of
+  - A proposal that requires a chain Punicus does not serve, or chains of
     both kinds, is rejected. Accounts of the other kind than those already
     chosen are greyed out on the proposal screen, a tap saying why.
   - Each request names one of its session's networks and an account of the
     session on that network, or it is refused.
-- **dApps connecting to Serotine come first**; an external wallet as a Safe
+- **dApps connecting to Punicus come first**; an external wallet as a Safe
   owner's signer follows (docs/walletconnect.md, *The plan*).
 
 ## Send from another wallet hands a payment link to another wallet app
@@ -307,7 +307,7 @@ docs/walletconnect.md is the contract.)
   currency or of an ERC-20 token is handed to another wallet app as an
   EIP-681 payment link. That wallet signs and broadcasts it, through its own
   provider, which the review says learns the transfer and the IP address.
-  Serotine contacts no service.
+  Punicus contacts no service.
 - Every network that is on. It is not a dApp session, so the ruling on dApp
   sessions' networks (real funds or testnet, never both; owner ruling,
   2026-11-05, on #22) does not bind it.

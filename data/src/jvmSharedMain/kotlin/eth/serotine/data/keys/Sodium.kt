@@ -89,7 +89,7 @@ internal object Sodium {
             // 0: initialized now, 1: already initialized; -1: failed.
             if (loaded.sodium_init() < 0) null else loaded
         } catch (e: Throwable) {
-            println("Serotine: libsodium cannot be loaded (${e::class.simpleName})")
+            println("Punicus: libsodium cannot be loaded (${e::class.simpleName})")
             null
         }
     }

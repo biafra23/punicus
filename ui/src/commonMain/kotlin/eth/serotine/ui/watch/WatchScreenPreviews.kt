@@ -99,7 +99,7 @@ private fun WatchNotASafePreview() = WatchPreview(
     WatchUiState(
         address = TREASURY,
         detection = Detection.Contract(
-            "This address holds a contract that is not a recognised Safe. Serotine watches accounts and Safes.",
+            "This address holds a contract that is not a recognised Safe. Punicus watches accounts and Safes.",
         ),
     ),
 )

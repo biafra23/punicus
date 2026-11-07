@@ -8,18 +8,18 @@ debug one alone until then:
 
 | asset | app | package | signed with |
 |---|---|---|---|
-| `Serotine-<tag>-android.apk` | **Serotine** (dark icon) | `eth.serotine` | the Serotine **release key**, held only in GitHub Actions secrets |
-| `Serotine-<tag>-android-debug.apk` | **Serotine Debug** (amber icon) | `eth.serotine.debug` | the **debug key**, `android-app/debug.keystore`, which is public |
+| `Punicus-<tag>-android.apk` | **Punicus** (dark icon) | `eth.serotine` | the Punicus **release key**, held only in GitHub Actions secrets |
+| `Punicus-<tag>-android-debug.apk` | **Punicus Debug** (amber icon) | `eth.serotine.debug` | the **debug key**, `android-app/debug.keystore`, which is public |
 
 ## Why two apps
 
 Android accepts an update only from the signer of the installed app. The debug
 keystore and its passwords are committed (`android-app/build.gradle.kts`), so
 anyone can sign with it, and anything it signs can be "updated" by anyone. A
-lookalike APK under the release package id could install over Serotine as an
+lookalike APK under the release package id could install over Punicus as an
 ordinary update and keep its data — for a wallet, its accounts and whatever the
 key store holds. (Myotis shipped a debug-signed build under its release id once
-and had to walk its users through an uninstall; Serotine starts out right.)
+and had to walk its users through an uninstall; Punicus starts out right.)
 
 So the release app is signed with a key that never enters the repository, and the
 debug build type is a separate app (`applicationIdSuffix = ".debug"`, its own
@@ -51,7 +51,7 @@ then reach only the debug app. Both apps install side by side.
 
 Until the release key is set up, a tag publishes the debug APK alone. A tree
 without `android-app/release-signing-cert.sha256` has no release app to sign:
-`sign-release` is skipped and `release` uploads `Serotine-<tag>-android-debug.apk`
+`sign-release` is skipped and `release` uploads `Punicus-<tag>-android-debug.apk`
 only. Every earlier run of the `build` job warns while the pin file is missing.
 
 Once the pin is committed, it fails closed. Without the secrets, or with a key
@@ -67,7 +67,7 @@ never quietly turned into a debug-only release.
    ```bash
    keytool -genkeypair -v -keystore serotine-release.p12 -storetype PKCS12 \
      -alias serotine-release -keyalg RSA -keysize 4096 -validity 10950 \
-     -dname "CN=Serotine"
+     -dname "CN=Punicus"
    ```
 
    **Back it up offline**, with its password, in at least two places. A lost key
@@ -80,11 +80,11 @@ never quietly turned into a debug-only release.
    reviewer**:
 
    ```bash
-   gh api -X PUT repos/biafra23/serotine/environments/android-release \
+   gh api -X PUT repos/biafra23/punicus/environments/android-release \
      -F 'deployment_branch_policy[protected_branches]=false' \
      -F 'deployment_branch_policy[custom_branch_policies]=true' \
      -F "reviewers[][type]=User" -F "reviewers[][id]=$(gh api user --jq .id)"
-   gh api -X POST repos/biafra23/serotine/environments/android-release/deployment-branch-policies \
+   gh api -X POST repos/biafra23/punicus/environments/android-release/deployment-branch-policies \
      -f name='v*' -f type=tag
    ```
 
@@ -110,9 +110,9 @@ never quietly turned into a debug-only release.
    prompts for each value, so a password never lands in your shell history:
 
    ```bash
-   base64 -i serotine-release.p12 | gh secret set ANDROID_RELEASE_KEYSTORE_BASE64 --env android-release --repo biafra23/serotine
-   gh secret set ANDROID_RELEASE_KEYSTORE_PASSWORD --env android-release --repo biafra23/serotine
-   gh secret set ANDROID_RELEASE_KEY_ALIAS --env android-release --repo biafra23/serotine --body serotine-release
+   base64 -i serotine-release.p12 | gh secret set ANDROID_RELEASE_KEYSTORE_BASE64 --env android-release --repo biafra23/punicus
+   gh secret set ANDROID_RELEASE_KEYSTORE_PASSWORD --env android-release --repo biafra23/punicus
+   gh secret set ANDROID_RELEASE_KEY_ALIAS --env android-release --repo biafra23/punicus --body serotine-release
    ```
 
    `ANDROID_RELEASE_KEY_PASSWORD` is needed only for a JKS keystore whose key
@@ -138,7 +138,7 @@ first tag after this change.
 ## Verifying a download
 
 ```bash
-apksigner verify --print-certs Serotine-<tag>-android.apk
+apksigner verify --print-certs Punicus-<tag>-android.apk
 ```
 
 The `Signer #1 certificate SHA-256 digest` must equal
@@ -147,7 +147,7 @@ the same fingerprint for an installed app.
 
 ## Local builds
 
-`./gradlew :android-app:installDebug` installs **Serotine Debug** (the `.debug`
+`./gradlew :android-app:installDebug` installs **Punicus Debug** (the `.debug`
 package) next to a release install. `assembleRelease` gives the unsigned APK. To
 sign it yourself, run the CI script with the same variables. `read -s` keeps the
 password out of your shell history:
@@ -157,7 +157,7 @@ export ANDROID_HOME=~/Library/Android/sdk   # or point ANDROID_BUILD_TOOLS at a 
 read -rs ANDROID_RELEASE_KEYSTORE_PASSWORD && export ANDROID_RELEASE_KEYSTORE_PASSWORD
 ANDROID_RELEASE_KEYSTORE_BASE64="$(base64 -i serotine-release.p12)" \
 ANDROID_RELEASE_KEY_ALIAS=serotine-release \
-  scripts/sign_release_apk.sh android-app/build/outputs/apk/release/android-app-release-unsigned.apk Serotine.apk
+  scripts/sign_release_apk.sh android-app/build/outputs/apk/release/android-app-release-unsigned.apk Punicus.apk
 ```
 
 ## Rotating the key

@@ -75,7 +75,7 @@ class InstanceLockTest {
         }
     }
 
-    /** Asks another JVM to take the lock: what a second Serotine would see. */
+    /** Asks another JVM to take the lock: what a second Punicus would see. */
     private fun probe(crash: Boolean = false): String {
         val java = File(System.getProperty("java.home"), "bin/java").path
         // Through an argument file: a long class path overruns Windows' command-line limit.

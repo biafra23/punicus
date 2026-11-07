@@ -509,7 +509,7 @@ private fun AccountDetailSafeQueueUnreadablePreview() = AccountDetailPreview(
     treasury.copy(
         segment = DetailSegment.QUEUE,
         queue = SafeQueue.Unavailable(
-            "This device's queue of Safe transactions cannot be read right now. Serotine keeps trying.",
+            "This device's queue of Safe transactions cannot be read right now. Punicus keeps trying.",
         ),
     ),
 )
@@ -631,7 +631,7 @@ private fun AccountDetailActivityUnavailablePreview() = AccountDetailPreview(
     daily.copy(
         segment = DetailSegment.ACTIVITY,
         activity = ActivityUiState.Unavailable(
-            "The history of your transactions cannot be read right now. Serotine keeps trying.",
+            "The history of your transactions cannot be read right now. Punicus keeps trying.",
         ),
     ),
 )
@@ -676,7 +676,7 @@ private fun AccountDetailLoadingPreview() = AccountDetailPreview(AccountDetailUi
 @Preview
 @Composable
 private fun AccountDetailListUnavailablePreview() = AccountDetailPreview(
-    AccountDetailUiState.Unavailable("Your account list cannot be read right now. Serotine keeps trying."),
+    AccountDetailUiState.Unavailable("Your account list cannot be read right now. Punicus keeps trying."),
 )
 
 @Preview

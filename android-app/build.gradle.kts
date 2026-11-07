@@ -72,11 +72,11 @@ android {
     }
 
     buildTypes {
-        // Its own app next to the release one: eth.serotine.debug, "Serotine Debug",
+        // Its own app next to the release one: eth.serotine.debug, "Punicus Debug",
         // amber launcher icon (src/debug/res). Android accepts an update only from the
         // installed app's signer, and the debug signer above is reproducible by anyone,
         // so sharing the release app's package would let any lookalike debug-signed APK
-        // install over Serotine and keep its data — for a wallet, its accounts.
+        // install over Punicus and keep its data — for a wallet, its accounts.
         debug {
             applicationIdSuffix = ".debug"
             versionNameSuffix = "-debug"

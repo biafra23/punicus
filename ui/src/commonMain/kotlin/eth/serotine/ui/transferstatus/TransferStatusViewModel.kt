@@ -328,7 +328,7 @@ class TransferStatusViewModel(
             else -> StatusStep(
                 "Queued",
                 StepState.WAITING,
-                "Waits for $name to catch up. Keep Serotine open to send it sooner.",
+                "Waits for $name to catch up. Keep Punicus open to send it sooner.",
             )
         }
         val signed = if (conflict != null) {
@@ -788,14 +788,14 @@ class TransferStatusViewModel(
             ReadUnavailable.NO_ENGINE -> "there is no light client on this device."
             ReadUnavailable.NETWORK_OFF -> "the network's light client is not running."
             ReadUnavailable.STALE_ANCHOR -> "the light client refuses to sync."
-            ReadUnavailable.SYNCING -> "the light client is still syncing. Serotine keeps checking."
-            ReadUnavailable.UNPROVEN -> "its receipt could not be verified this time. Serotine keeps checking."
+            ReadUnavailable.SYNCING -> "the light client is still syncing. Punicus keeps checking."
+            ReadUnavailable.UNPROVEN -> "its receipt could not be verified this time. Punicus keeps checking."
             ReadUnavailable.REFUSED -> "the light client on this device cannot read receipts."
         }
 
     private companion object {
         const val NATIVE_DECIMALS = 18
-        const val RETRY_FAILED = "Serotine could not finish sending it again. Try again."
+        const val RETRY_FAILED = "Punicus could not finish sending it again. Try again."
 
         /** Why Discard and Edit wait while a queued transfer's check and broadcast run. */
         const val BEING_SENT = "It's being checked and sent."
@@ -803,10 +803,10 @@ class TransferStatusViewModel(
         const val SENT_BEFORE_DISCARD = "It was sent before it could be discarded."
         const val OUTBOX_UNREADABLE = "The transactions waiting to be sent on this device cannot be read right " +
             "now, so where this one stands is not known. Nothing is sent from this wallet until they can be read; " +
-            "Serotine keeps trying."
+            "Punicus keeps trying."
         const val OUTBOX_LOST = "A transaction waiting to be sent was lost: the key that sealed it on this device " +
-            "is gone. If it was being sent when Serotine last closed, it may have gone out. Before you sign it " +
-            "again, wait until Serotine has caught up, and check the account's balance, or for a Safe, its queue."
+            "is gone. If it was being sent when Punicus last closed, it may have gone out. Before you sign it " +
+            "again, wait until Punicus has caught up, and check the account's balance, or for a Safe, its queue."
         const val LEFT_THE_OUTBOX = "It is no longer waiting to be sent from this device, and there is no record " +
             "of it being sent."
         const val NO_LONGER_QUEUED =

@@ -146,7 +146,7 @@ class IosSecureEnclaveSecret(private val stateFile: String) : HardwareSecret {
                 IosSecurity.release(key)
             }
         } catch (e: Throwable) {
-            println("Serotine: the Secure Enclave cannot be used (${e.message ?: e::class.simpleName})")
+            println("Punicus: the Secure Enclave cannot be used (${e.message ?: e::class.simpleName})")
             false
         }
     }

@@ -112,7 +112,7 @@ class MacBiometricKeyTest {
         assertTrue(key.create())
         val dek = ByteArray(32) { (it * 7).toByte() }
 
-        val opened = withTimeout(60_000) { key.unwrap(key.wrap(dek), "test Serotine's Touch ID unlock") }
+        val opened = withTimeout(60_000) { key.unwrap(key.wrap(dek), "test Punicus's Touch ID unlock") }
 
         assertIs<BiometricUnwrap.Dek>(opened)
         assertContentEquals(dek, opened.bytes)
@@ -125,7 +125,7 @@ class MacBiometricKeyTest {
         assertTrue(key.create())
         val wrapped = key.wrap(ByteArray(32))
 
-        val unwrap = async(Dispatchers.IO) { key.unwrap(wrapped, "test that Serotine dismisses its prompt") }
+        val unwrap = async(Dispatchers.IO) { key.unwrap(wrapped, "test that Punicus dismisses its prompt") }
         delay(1_500)
         unwrap.cancel()
 

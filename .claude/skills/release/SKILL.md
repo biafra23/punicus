@@ -1,6 +1,6 @@
 ---
 name: release
-description: "Cutting a release of Serotine. One release PR with the version pin moved, the engine-bump question, the Android release key, and what a v* tag publishes. The tag is the owner's. Use when the owner asks for a release, a version bump, a v* tag, or says 'cut a release'."
+description: "Cutting a release of Punicus. One release PR with the version pin moved, the engine-bump question, the Android release key, and what a v* tag publishes. The tag is the owner's. Use when the owner asks for a release, a version bump, a v* tag, or says 'cut a release'."
 ---
 
 # Releases: ask before cutting one

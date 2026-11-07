@@ -3,7 +3,7 @@ package eth.serotine.domain.model
 /**
  * The payment links (EIP-681) Send from another wallet hands to another wallet app on this device
  * (issue #255; owner ruling, 2026-11-05): a transfer of the network's currency or of an ERC-20
- * token, which the other wallet signs and broadcasts. Serotine signs nothing and receives nothing
+ * token, which the other wallet signs and broadcasts. Punicus signs nothing and receives nothing
  * back through the link.
  *
  * A link is written in the one form every wallet that reads them was found to take (#255's spike:

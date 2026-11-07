@@ -176,7 +176,7 @@ internal fun safeTxActionItem(
         addresses = listOf(ActionAddress("Code run as the Safe", Eip55.format(action.to))),
         notes = listOf(callData(action.selector, action.dataSize)),
         warning = "A delegate call: the Safe would run this contract's code as itself, with its storage, " +
-            "owners and funds, and the code can change any of them. Serotine shows it and decodes it no " +
+            "owners and funds, and the code can change any of them. Punicus shows it and decodes it no " +
             "further, and does not sign, approve or execute it.",
     )
 }
@@ -389,7 +389,7 @@ private fun tokenAmount(
     val known = tokens.firstOrNull { it.token.address == address }
         ?: return AmountText(
             "${if (hidden) AMOUNT_MASK else grouped(amount)} units of a token",
-            unknownNote = "Serotine does not know the token at this contract: the amount is in its smallest " +
+            unknownNote = "Punicus does not know the token at this contract: the amount is in its smallest " +
                 "units, and how many decimals it has is not known here.",
         )
     val symbol = displaySymbol(known.token.symbol)
@@ -438,7 +438,7 @@ internal fun gasTermsItem(terms: SafeTxGasTerms, network: Network): GasTermsItem
 internal const val GAS_TERMS_WARNING =
     "Gas and refund terms: a refund pays (gas used + baseGas) × gasPrice to the refund receiver, bounded only " +
         "by what the Safe holds, and with a gas price the call gets exactly safeTxGas; a safeTxGas without one " +
-        "lets a failing call use up the nonce. Serotine proposes none, and does not sign, approve or execute a " +
+        "lets a failing call use up the nonce. Punicus proposes none, and does not sign, approve or execute a " +
         "transaction that carries them."
 
 /** Why a Safe transaction that enables a module is not signed, approved or executed (owner ruling on #54). */
@@ -450,14 +450,14 @@ internal const val MODULE_ENABLED_REFUSAL =
 internal fun safeTxRefusalText(refusal: SafeTxRefusal, network: Network): String = when (refusal) {
     SafeTxRefusal.Malformed -> "This text is not a Safe signing request."
     is SafeTxRefusal.UnknownVersion ->
-        "A signing request of a newer version (${refusal.version}): update Serotine to read it."
+        "A signing request of a newer version (${refusal.version}): update Punicus to read it."
     // The same address on another network is another Safe: both are named (docs/networks.md, N15).
     is SafeTxRefusal.WrongChain -> Network.ofChainId(refusal.chainId)?.let { other ->
         "This request is for the Safe at this address on ${other.displayName}. This account is the Safe on " +
             "${network.displayName}: a different Safe, with its own owners and nonce. Watch the Safe on " +
             "${other.displayName} to sign it there."
     } ?: "A request for chain id ${refusal.chainId}, which is not a network this wallet supports."
-    SafeTxRefusal.NotASafe -> "The address holds no Safe Serotine recognises, as its verified code and storage say."
+    SafeTxRefusal.NotASafe -> "The address holds no Safe Punicus recognises, as its verified code and storage say."
     is SafeTxRefusal.OtherSafe ->
         "This request is for another Safe, ${Eip55.format(refusal.safe)}: import it from that Safe's own screen."
     is SafeTxRefusal.NonceUsed ->
@@ -468,7 +468,7 @@ internal fun safeTxRefusalText(refusal: SafeTxRefusal, network: Network): String
     is SafeTxRefusal.BadSignature ->
         "The signature said to be ${Eip55.format(refusal.owner)}'s is not that owner's over this transaction: " +
             "refused, and nothing of the request is kept."
-    SafeTxRefusal.DelegateCall -> "A delegate call: Serotine does not sign, approve or execute one yet. Batches " +
+    SafeTxRefusal.DelegateCall -> "A delegate call: Punicus does not sign, approve or execute one yet. Batches " +
         "through the pinned MultiSendCallOnly come later."
     is SafeTxRefusal.AlreadySigned -> "${Eip55.format(refusal.owner)} has signed it already."
     SafeTxRefusal.AlreadyApproved -> "This owner has approved it on chain already."
@@ -476,16 +476,16 @@ internal fun safeTxRefusalText(refusal: SafeTxRefusal, network: Network): String
         "Sent from this wallet already and in no block yet: sending it again would only pay a fee to revert."
     is SafeTxRefusal.ThresholdNotMet ->
         "${refusal.confirmations} of the ${refusal.threshold} confirmations it needs: not enough to execute."
-    SafeTxRefusal.GasTerms -> "It carries gas or refund terms: Serotine does not sign, approve or execute those."
-    is SafeTxRefusal.UnpinnedFallbackHandler -> "It sets a fallback handler Serotine does not pin, " +
+    SafeTxRefusal.GasTerms -> "It carries gas or refund terms: Punicus does not sign, approve or execute those."
+    is SafeTxRefusal.UnpinnedFallbackHandler -> "It sets a fallback handler Punicus does not pin, " +
         "${Eip55.format(refusal.handler)}: the handler answers the signature checks other contracts make for the " +
         "Safe, so only the canonical CompatibilityFallbackHandler 1.4.1, or none, is signed, approved or executed " +
         "here."
     is SafeTxRefusal.ModuleEnabled -> MODULE_ENABLED_REFUSAL
     SafeTxRefusal.UndecodedSelfCall -> "A call to the Safe itself that could not be decoded exactly: on chain it " +
-        "could still change the Safe's settings, so Serotine does not sign, approve or execute it."
+        "could still change the Safe's settings, so Punicus does not sign, approve or execute it."
     is SafeTxRefusal.NeedsRecoveryModule -> "It would leave all ${refusal.owners} owners needed to sign: with one " +
-        "of them lost, the rest could never reach the threshold again. That needs a recovery module, and Serotine " +
+        "of them lost, the rest could never reach the threshold again. That needs a recovery module, and Punicus " +
         "recognises none yet (#54), so it does not sign, approve or execute it."
     SafeTxRefusal.Syncing -> "The light client is not synced yet: try again in a moment."
     SafeTxRefusal.SwapNeedsFreshCheck -> SWAP_NEEDS_FRESH_CHECK
@@ -494,7 +494,7 @@ internal fun safeTxRefusalText(refusal: SafeTxRefusal, network: Network): String
         if (refusal.reason == ReadUnavailable.UNPROVEN) SAFE_UNPROVEN else unavailableText(refusal.reason)
     is SafeTxRefusal.NotQuoted -> callRefusalText(refusal.refusal, network)
     is SafeTxRefusal.TooOldToSign -> "This Safe is still on version ${refusal.version}, from before the way " +
-        "Serotine checks signatures today: it is shown, but not signed, approved or executed here. Migrating it " +
+        "Punicus checks signatures today: it is shown, but not signed, approved or executed here. Migrating it " +
         "to a newer version (in Safe{Wallet} or another app) fixes this."
 }
 

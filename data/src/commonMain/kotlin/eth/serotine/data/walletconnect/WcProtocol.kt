@@ -23,12 +23,12 @@ internal object WcProtocol {
     /** The chains a dApp session may hold, each a [Network]'s: of one kind of funds per session ([fundsOf]). */
     val CHAINS: Set<String> = Network.entries.map { it.caip2 }.toSet()
 
-    /** Whether [chain] is a testnet's (true), real funds' (false), or none Serotine serves (null). */
+    /** Whether [chain] is a testnet's (true), real funds' (false), or none Punicus serves (null). */
     fun fundsOf(chain: String): Boolean? = dappNetworkOf(chain)?.testnet
 
     /**
      * The CAIP-10 account [account] (`eip155:1:0x…`, the address in lower case) as its chain and address, or
-     * null when it is out of shape or on a chain Serotine does not serve.
+     * null when it is out of shape or on a chain Punicus does not serve.
      */
     fun accountOf(account: String): Pair<String, String>? {
         val chain = account.substringBeforeLast(':')
@@ -141,13 +141,13 @@ internal object WcProtocol {
 
     /** Why a proposal's chains make it one to reject. */
     enum class ChainRefusal {
-        /** A required chain Serotine does not serve. */
+        /** A required chain Punicus does not serve. */
         UNSUPPORTED,
 
         /** Required chains of both kinds of funds: a session holds one (ruling 9). */
         MIXED,
 
-        /** No chain Serotine serves, required or optional. */
+        /** No chain Punicus serves, required or optional. */
         NONE,
     }
 
@@ -155,8 +155,8 @@ internal object WcProtocol {
      * What a proposal asks of a session, read from its required and optional namespaces, and why it
      * cannot be approved, when it cannot ([refusal], with [chainRefusal] when its chains are why). The
      * rules (docs/walletconnect.md, *Pairing and the session proposal*): a required namespace naming a chain
-     * Serotine does not serve, chains of both kinds of funds, any namespace but `eip155`, a method outside
-     * the closed list or an event outside [EVENTS], or no chain Serotine serves asked for at all, makes the
+     * Punicus does not serve, chains of both kinds of funds, any namespace but `eip155`, a method outside
+     * the closed list or an event outside [EVENTS], or no chain Punicus serves asked for at all, makes the
      * proposal one to reject. An optional namespace adds its methods and events where it names one of the
      * session's chains ([chains]).
      */
@@ -164,7 +164,7 @@ internal object WcProtocol {
         val requiredChains: Set<String>,
         val optionalChains: Set<String>,
         /**
-         * The chains a session with it may hold: those it asks for that Serotine serves, of its required
+         * The chains a session with it may hold: those it asks for that Punicus serves, of its required
          * chains' kind of funds when it requires any.
          */
         val chains: Set<String>,

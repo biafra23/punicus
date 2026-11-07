@@ -37,7 +37,7 @@ internal object LaError {
         BIOMETRY_NOT_ENROLLED, PASSCODE_NOT_SET -> BiometricUnwrap.Unusable(BiometricUnusable.INVALIDATED)
         BIOMETRY_NOT_AVAILABLE, BIOMETRY_NOT_PAIRED, BIOMETRY_DISCONNECTED ->
             BiometricUnwrap.Unusable(BiometricUnusable.SENSOR_UNAVAILABLE)
-        else -> BiometricUnwrap.Failed.also { println("Serotine: the biometric prompt failed ($code)") }
+        else -> BiometricUnwrap.Failed.also { println("Punicus: the biometric prompt failed ($code)") }
     }
 
     /**

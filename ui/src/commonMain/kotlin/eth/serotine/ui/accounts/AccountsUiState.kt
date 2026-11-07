@@ -74,7 +74,7 @@ sealed interface AccountsUiState {
      * *Hiding amounts*): every amount here already reads "••••" beside its unit.
      *
      * Lenient mode's outbox (docs/lenient-mode.md, *Where it shows*): simple mode's [queued], a line
-     * per network with something queued ("Ethereum: 1 waiting to send · Keep Serotine open to send
+     * per network with something queued ("Ethereum: 1 waiting to send · Keep Punicus open to send
      * it sooner"), drawn under [freshness] (Detailed view says it in the section,
      * [NetworkSection.queued]); and [lostNotice], said until dismissed, when queued signed bytes
      * could not be opened since they were sealed (the seal key gone), null otherwise.
@@ -145,7 +145,7 @@ sealed interface AccountsUiState {
  * light client refuses to sync from a checkpoint past the weak-subjectivity window, with the way
  * to catch up anyway (owner's request, 2026-10-24): drawn in the error colour too. [queued] is what
  * its accounts have queued in lenient mode, under its status line ("1 waiting to send · Keep
- * Serotine open to send it sooner"; docs/lenient-mode.md, *Where it shows*), null when nothing is.
+ * Punicus open to send it sooner"; docs/lenient-mode.md, *Where it shows*), null when nothing is.
  */
 data class NetworkSection(
     val chainId: Long,
@@ -377,7 +377,7 @@ internal fun networkOffReason(network: String, account: String, done: String = "
  * longer follow it, others still followed (docs/networks.md, *Upgrades and the update screen*).
  */
 internal fun networkBlockedReason(network: String, done: String = "sent"): String =
-    "This version of Serotine can no longer follow $network: nothing can be $done from its accounts until " +
+    "This version of Punicus can no longer follow $network: nothing can be $done from its accounts until " +
         "you update the app."
 
 /** What Create Safe says while the account list is still being read. */

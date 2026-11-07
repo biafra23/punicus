@@ -256,7 +256,7 @@ internal class VersionedJsonFile<T>(
         val RETRY_INTERVAL = 5.seconds
         val LENIENT = Json { ignoreUnknownKeys = true }
 
-        fun report(what: String) = println("Serotine: $what")
+        fun report(what: String) = println("Punicus: $what")
     }
 }
 

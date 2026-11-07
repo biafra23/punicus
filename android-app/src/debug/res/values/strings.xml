@@ -3,5 +3,5 @@
     <!-- The debug build type is its own app (applicationIdSuffix ".debug", signed with the
          public debug key) and installs next to the release one: name it apart, as its amber
          icon background sets it apart. -->
-    <string name="app_name">Serotine Debug</string>
+    <string name="app_name">Punicus Debug</string>
 </resources>

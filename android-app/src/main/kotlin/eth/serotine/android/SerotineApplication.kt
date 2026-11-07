@@ -172,7 +172,7 @@ class SerotineApplication : Application() {
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
-            System.err.println("Serotine: following the view stopped: ${e::class.simpleName}")
+            System.err.println("Punicus: following the view stopped: ${e::class.simpleName}")
         }
     }
 
@@ -186,7 +186,7 @@ class SerotineApplication : Application() {
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
-            System.err.println("Serotine: following the networks stopped: ${e::class.simpleName}")
+            System.err.println("Punicus: following the networks stopped: ${e::class.simpleName}")
         }
     }
 
@@ -496,7 +496,7 @@ class SerotineApplication : Application() {
      */
     private val scope = CoroutineScope(
         SupervisorJob() + Dispatchers.Default + CoroutineExceptionHandler { _, e ->
-            System.err.println("Serotine: the app's background work stopped: $e")
+            System.err.println("Punicus: the app's background work stopped: $e")
         },
     )
 
@@ -643,7 +643,7 @@ class SerotineApplication : Application() {
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
-            System.err.println("Serotine: $what stopped: ${e::class.simpleName}")
+            System.err.println("Punicus: $what stopped: ${e::class.simpleName}")
         }
     }
 
@@ -700,7 +700,7 @@ class SerotineApplication : Application() {
             throw e
         } catch (e: Exception) {
             System.err.println(
-                "Serotine: following a ${pair.network.displayName} widget's rate stopped: ${e::class.simpleName}",
+                "Punicus: following a ${pair.network.displayName} widget's rate stopped: ${e::class.simpleName}",
             )
         }
     }
@@ -844,7 +844,7 @@ class SerotineApplication : Application() {
     } catch (e: Exception) {
         // The others' reads still count.
         val name = pair.network.displayName
-        System.err.println("Serotine: a $name widget's rate was not read: ${e::class.simpleName}")
+        System.err.println("Punicus: a $name widget's rate was not read: ${e::class.simpleName}")
         false
     }
 
@@ -946,7 +946,7 @@ class SerotineApplication : Application() {
                     throw e
                 } catch (e: Exception) {
                     System.err.println(
-                        "Serotine: proving the CoW orders' ends on ${network.displayName} stopped: " +
+                        "Punicus: proving the CoW orders' ends on ${network.displayName} stopped: " +
                             "${e::class.simpleName}",
                     )
                 }
@@ -977,7 +977,7 @@ class SerotineApplication : Application() {
                     throw e
                 } catch (e: Exception) {
                     System.err.println(
-                        "Serotine: following the accounts\' logs on ${network.displayName} stopped: " +
+                        "Punicus: following the accounts\' logs on ${network.displayName} stopped: " +
                             "${e::class.simpleName}",
                     )
                 }
@@ -995,7 +995,7 @@ class SerotineApplication : Application() {
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
-            System.err.println("Serotine: following sent transactions stopped: ${e::class.simpleName}")
+            System.err.println("Punicus: following sent transactions stopped: ${e::class.simpleName}")
         }
     }
 
@@ -1071,7 +1071,7 @@ class SerotineApplication : Application() {
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
-            System.err.println("Serotine: following Safe deployments stopped: ${e::class.simpleName}")
+            System.err.println("Punicus: following Safe deployments stopped: ${e::class.simpleName}")
         }
     }
 
@@ -1171,6 +1171,6 @@ class SerotineApplication : Application() {
         val MANUAL_START_TIMEOUT = 2.minutes
 
         /** The logcat tag of the debug app's diagnostics. */
-        const val LOG_TAG = "Serotine"
+        const val LOG_TAG = "Punicus"
     }
 }

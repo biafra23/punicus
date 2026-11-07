@@ -33,21 +33,21 @@ data class OutboxNotificationText(val title: String, val text: String) {
         /** [queued] was handed to the network. */
         fun sent(queued: QueuedTransaction): OutboxNotificationText = OutboxNotificationText(
             title = "Queued ${kind(queued)} sent on ${queued.network.displayName}",
-            text = "${what(queued)} was handed to the network. Open Serotine to follow it.",
+            text = "${what(queued)} was handed to the network. Open Punicus to follow it.",
         )
 
         /** [queued] no longer stands, for [conflict]: its signature was deleted. */
         fun conflict(queued: QueuedTransaction, conflict: QueueConflict): OutboxNotificationText = OutboxNotificationText(
             title = "A queued ${kind(queued)} needs your signature again",
             text = "${conflictReason(conflict, queued)} ${what(queued)} on ${queued.network.displayName} was not " +
-                "sent. Open Serotine to sign it again or discard it.",
+                "sent. Open Punicus to sign it again or discard it.",
         )
 
         /** [held] checked out at a fresh head: it is in the Safe's queue, to be shared. */
         fun heldChecked(held: HeldSafeSignature): OutboxNotificationText = OutboxNotificationText(
             title = "Safe signature checked on ${held.network.displayName}",
             text = "Your signature of ${safeTxOf(held.nonce, held.request.safe)} checked out on chain. It's in the " +
-                "Safe's queue on this device now: open Serotine to share it with the other owners.",
+                "Safe's queue on this device now: open Punicus to share it with the other owners.",
         )
 
         /** [held] no longer stands, for [conflict]: its signature was deleted, never shown. */
@@ -61,7 +61,7 @@ data class OutboxNotificationText(val title: String, val text: String) {
                 },
                 text = "${heldConflictReason(conflict, held)} Your signature of " +
                     "${safeTxOf(held.nonce, held.request.safe)} on ${held.network.displayName} was deleted and never " +
-                    "shown. Open Serotine to see it.",
+                    "shown. Open Punicus to see it.",
             )
 
         /** What a queued transaction is called: a transfer, or a transaction. */

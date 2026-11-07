@@ -86,11 +86,11 @@ class UpdateRequiredViewModelTest {
         runCurrent()
         assertEquals(
             UpdateRequiredUiState.Required(
-                text = "Peers report that Sepolia upgraded on <1791294816> to rules this version of Serotine does " +
+                text = "Peers report that Sepolia upgraded on <1791294816> to rules this version of Punicus does " +
                     "not support, and its light client is not verifying the chain. Update the app to keep using " +
                     "your wallet.",
                 details = "Reported by peers in 5 networks, not verified · fork id 0x6c1d9423",
-                version = "This is Serotine v$APP_VERSION.",
+                version = "This is Punicus v$APP_VERSION.",
             ),
             viewModel.uiState.value,
         )

@@ -51,7 +51,7 @@ class MacBiometricKey(private val stateFile: String) : BiometricKey {
                 LaError.BIOMETRY_NOT_AVAILABLE, LaError.BIOMETRY_NOT_PAIRED, LaError.BIOMETRY_DISCONNECTED ->
                     BiometricUnavailable.NO_HARDWARE
                 else -> BiometricUnavailable.NO_HARDWARE.also {
-                    println("Serotine: biometrics cannot be evaluated ($code)")
+                    println("Punicus: biometrics cannot be evaluated ($code)")
                 }
             }
         }
@@ -72,7 +72,7 @@ class MacBiometricKey(private val stateFile: String) : BiometricKey {
         val key = try {
             security.createBiometricEnclaveKey()
         } catch (e: IllegalStateException) {
-            println("Serotine: no biometric key in the Secure Enclave (${e.message})")
+            println("Punicus: no biometric key in the Secure Enclave (${e.message})")
             return false
         }
         try {
@@ -105,7 +105,7 @@ class MacBiometricKey(private val stateFile: String) : BiometricKey {
         val state = try {
             read()
         } catch (e: Exception) {
-            println("Serotine: the biometric key's state cannot be read (${e.message ?: e::class.simpleName})")
+            println("Punicus: the biometric key's state cannot be read (${e.message ?: e::class.simpleName})")
             null
         } ?: return BiometricUnwrap.Unusable(BiometricUnusable.OFF)
         return try {
@@ -177,7 +177,7 @@ class MacBiometricKey(private val stateFile: String) : BiometricKey {
     }
 
     private fun notOpened(e: Throwable): BiometricUnwrap {
-        println("Serotine: the biometric key did not open its wrap (${e.message ?: e::class.simpleName})")
+        println("Punicus: the biometric key did not open its wrap (${e.message ?: e::class.simpleName})")
         return BiometricUnwrap.Failed
     }
 

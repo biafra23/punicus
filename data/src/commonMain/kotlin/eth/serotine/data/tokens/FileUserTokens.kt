@@ -24,7 +24,7 @@ import kotlinx.serialization.json.Json
  * and nothing changes until it can be read.
  *
  * Format 2 records each token's network by its chain id, and the hidden ones as entries of their
- * own with theirs. Everything in a format-1 file was written when Serotine worked on Sepolia
+ * own with theirs. Everything in a format-1 file was written when Punicus worked on Sepolia
  * alone, so it reads as Sepolia's (docs/networks.md, *Files*). An entry on a network this version
  * does not know is passed over and the file kept aside as it was, so it is never lost.
  */

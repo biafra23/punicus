@@ -405,7 +405,7 @@ class ActivityDetailViewModel(
     )
 
     private companion object {
-        const val UNREADABLE = "The history of your transactions cannot be read right now. Serotine keeps trying."
+        const val UNREADABLE = "The history of your transactions cannot be read right now. Punicus keeps trying."
         const val NOT_SENT_HERE = "This transaction is not in this account's history."
         const val ACCOUNTS_UNREADABLE = "The wallet's accounts cannot be read right now."
         const val NOT_IN_WALLET = "This account is not in the wallet any more, so its history on chain is not read."

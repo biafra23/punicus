@@ -53,7 +53,7 @@ nowhere else. Sepolia values are never added into a total with real ones.
 
 ## What the engine already offers
 
-Myotis was multichain before Serotine embedded it, and its multichain support
+Myotis was multichain before Punicus embedded it, and its multichain support
 needs nothing new from the engine:
 
 - `MyotisEngine` hosts one `ChainHandle` per network in one process
@@ -466,7 +466,7 @@ network where docs/wallet-ux.md has it say "Sepolia" today.
 ### Upgrades and the update screen
 
 Upgrade advisories are per network, and so are the banner and the
-notifications ("Network upgrade ahead on Gnosis Chain: update Serotine"). The
+notifications ("Network upgrade ahead on Gnosis Chain: update Punicus"). The
 update screen, which replaces every other, is Myotis's rule for a host that
 follows one network. With several networks, the plan is that it shows only
 when **every network with accounts** is blocked. A network blocked alone
@@ -548,7 +548,7 @@ The owner decided each as this page proposes (2026-10-22; CLAUDE.md, *Data
 sources*): the default named in each item below is the ruling.
 
 1. **Real funds.** Mainnet and Gnosis hold real value. Should the first
-   account added on either show a one-time notice (what Serotine is, what
+   account added on either show a one-time notice (what Punicus is, what
    is verified, that it is new software)? Or is the "Real funds" line in
    the network step (N8) enough?
 2. **Names on Gnosis Chain.** (a) none, addresses only (the plan's default);

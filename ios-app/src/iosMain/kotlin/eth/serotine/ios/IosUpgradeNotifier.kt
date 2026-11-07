@@ -60,7 +60,7 @@ class IosUpgradeNotifier(private val network: Network) : UpgradeNotifier {
             post(noticeId, text.title, text.text, trigger = null)
         } catch (e: Exception) {
             // A notice that cannot be put into words or posted: the app's screens still say it.
-            println("Serotine: no upgrade notification (${e::class.simpleName})")
+            println("Punicus: no upgrade notification (${e::class.simpleName})")
         }
     }
 
@@ -74,8 +74,8 @@ class IosUpgradeNotifier(private val network: Network) : UpgradeNotifier {
         post(
             reminderId,
             title = "Network upgrade reminder",
-            body = "Peers announced a $name network upgrade that this version of Serotine does not support, and " +
-                "a reminder about it is due. Open Serotine to see where it stands.",
+            body = "Peers announced a $name network upgrade that this version of Punicus does not support, and " +
+                "a reminder about it is due. Open Punicus to see where it stands.",
             trigger = UNTimeIntervalNotificationTrigger.triggerWithTimeInterval(seconds.toDouble(), repeats = false),
         )
     }
@@ -87,7 +87,7 @@ class IosUpgradeNotifier(private val network: Network) : UpgradeNotifier {
         content.setSound(UNNotificationSound.defaultSound)
         center.addNotificationRequest(UNNotificationRequest.requestWithIdentifier(id, content, trigger)) { error ->
             // Refused (no permission, or the system's limit): the app's own screens still say it.
-            if (error != null) println("Serotine: upgrade notification not posted (${error.code})")
+            if (error != null) println("Punicus: upgrade notification not posted (${error.code})")
         }
     }
 

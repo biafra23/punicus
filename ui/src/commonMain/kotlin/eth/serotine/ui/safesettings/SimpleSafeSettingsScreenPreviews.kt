@@ -41,7 +41,7 @@ private val overview = SafeSettingsUiState.Overview(
     changeReason = null,
     enableModuleReason = MODULE_ENABLED_REFUSAL,
     updateReason = "Updating a Safe's version runs a migration contract's code as the Safe, a delegate call, which " +
-        "Serotine does not sign. It comes once a migration contract is pinned here.",
+        "Punicus does not sign. It comes once a migration contract is pinned here.",
 )
 
 private val review = SafeSettingsUiState.Review(

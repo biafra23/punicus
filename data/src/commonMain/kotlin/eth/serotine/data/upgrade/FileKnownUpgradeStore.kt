@@ -155,6 +155,6 @@ class FileKnownUpgradeStore(
         const val FORMAT_VERSION = 2
         val JSON = Json
 
-        fun report(what: String) = println("Serotine: $what")
+        fun report(what: String) = println("Punicus: $what")
     }
 }

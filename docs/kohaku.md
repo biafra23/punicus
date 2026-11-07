@@ -1,6 +1,6 @@
 # Kohaku compliance
 
-How Serotine becomes a Kohaku-compliant wallet: it holds the private notes
+How Punicus becomes a Kohaku-compliant wallet: it holds the private notes
 that any Kohaku wallet derives from the same recovery phrase, and it finds
 the same notes on restore. Railgun comes first, then Privacy Pools (*The
 plan*). This page is a plan. Nothing of it is built, and every decision it
@@ -16,22 +16,22 @@ and Myotis `5578e75` (2026-11-03). The facts below are from those commits.
 
 Kohaku ([ethereum/kohaku](https://github.com/ethereum/kohaku)) is the
 Ethereum Foundation's privacy SDK for wallets, and a roadmap. It publishes no
-certification and no checklist. Serotine uses it as a **specification, not
+certification and no checklist. Punicus uses it as a **specification, not
 as a runtime**:
 
-- Serotine copies, exactly, what decides which notes a recovery phrase
+- Punicus copies, exactly, what decides which notes a recovery phrase
   holds: the derivation paths, the note-secret scheme, the commitment
   formats, the discovery rule on restore and the root checks.
-- Serotine's port has the semantics of Kohaku's plugin interface, so every
+- Punicus's port has the semantics of Kohaku's plugin interface, so every
   protocol looks the same to the use cases and the screens.
-- Serotine follows Kohaku's releases the way it follows Myotis's: a pinned
+- Punicus follows Kohaku's releases the way it follows Myotis's: a pinned
   commit, and a move of the pin that is reviewed (*Following Kohaku*).
-- Serotine does not run Kohaku's TypeScript. The code is Kotlin in `:data`,
+- Punicus does not run Kohaku's TypeScript. The code is Kotlin in `:data`,
   or Rust linked the way the Myotis natives are (D9).
 
 Why not the runtime:
 
-- Serotine has no JS engine. Embedding one, with zero-knowledge proving in
+- Punicus has no JS engine. Embedding one, with zero-knowledge proving in
   JS or WASM, is heavy on a phone.
 - Kohaku's host gives a plugin `keystore.deriveAt(path)`, a raw private key.
   Running npm code with that would break *Key material* in
@@ -65,7 +65,7 @@ becomes the source of the vectors and the pin moves to it.
 - Kohaku's reference keystore (`packages/plugins/src/host/mnemonic-keystore.ts`)
   takes the BIP-39 seed with the empty passphrase. It derives BIP-32
   secp256k1 keys, except under Railgun's coin type 1984.
-- Serotine fits: `Bip39.seed` uses the empty passphrase, and a phrase's
+- Punicus fits: `Bip39.seed` uses the empty passphrase, and a phrase's
   envelope keeps its seed (owner ruling, 2026-10-15). Create account stores
   its words through the same import.
 - An account with no seed here holds no notes: a watched account, which has
@@ -140,7 +140,7 @@ only if the owner wants Tornado Cash at all (D3):
   `Deposited` event carries; the gap limit is zero. For each deposit, follow
   its change notes while the newest one's nullifier hash has been spent.
 
-Serotine uses the same rules. Another one finds fewer notes, or notes the
+Punicus uses the same rules. Another one finds fewer notes, or notes the
 other wallets do not.
 
 **Only over complete coverage.** Discovery and the balance run only once the
@@ -171,7 +171,7 @@ The port mirrors `packages/plugins/src/base.ts`:
 
 - **Railgun:** the contract records every root a tree has ever had
   (`rootHistory`), so a tree cut short still has a valid root, and the stock
-  client reports such a tree as complete. Serotine runs the checks Myotis's
+  client reports such a tree as complete. Punicus runs the checks Myotis's
   `docs/seeded-log-histories.md` (*Closing the gap on the client*) and #101
   list, and fails loudly on each:
   - a rejected batch, or a commitment it cannot place, is an error, never a
@@ -184,9 +184,9 @@ The port mirrors `packages/plugins/src/base.ts`:
   one of its 64 most recent roots. The association set's root equals the
   Entrypoint's `latestRoot()` exactly (`verification/root-verification.ts`).
 - **Tornado Cash:** `isKnownRoot(root)`. Kohaku leaves the check off by
-  default (`verify = false`). Serotine always runs it: a stricter check
+  default (`verify = false`). Punicus always runs it: a stricter check
   derives the same notes.
-- **The head they are read at.** Serotine's verified call
+- **The head they are read at.** Punicus's verified call
   (`VerifiedChain.call`) reads at the verified head (`latest`) only. So each
   root is read at the head, and the pool's logs must be covered up to that
   same head. Where a leaf landed between the top the logs reach and the
@@ -194,7 +194,7 @@ The port mirrors `packages/plugins/src/base.ts`:
   64-root window absorbs a few such leaves, and Railgun's open-tree check
   waits for them.
 
-## How it fits Serotine's rules
+## How it fits Punicus's rules
 
 ### Key material
 
@@ -278,7 +278,7 @@ deployment (D7).
 - **Privacy Pools:** an `Emitter` entry for the Entrypoint and for each
   pool, from the deployment block.
 
-### What Serotine can do today
+### What Punicus can do today
 
 - **Watch:** yes. `LogIndex.configure(network, listOf(LogWatch(
   LogWatchKey.Emitter(contract), deployBlock)), emptyList())` is exactly the
@@ -287,7 +287,7 @@ deployment (D7).
 - `FollowAccountLogs` unwatches only accounts that left the wallet
   (`AccountLogs.kt`, `gone`). It leaves a pool's entry alone.
 - **Import:** no. Myotis's `ChainHandle.importLogIndexFiles` and
-  `exportLogIndex` exist on the JVM API (ABI v24). Serotine's `LogIndexChain`
+  `exportLogIndex` exist on the JVM API (ABI v24). Punicus's `LogIndexChain`
   wraps only `setLogIndexConfig`, `logIndexStatusJson` and `getLogs`, and the
   `LogIndex` port has no import. On iOS, Myotis's typed `ChainHandle` has no
   import either; only `RustEngine.importLogIndexFiles` does.
@@ -301,7 +301,7 @@ deployment (D7).
 - Railgun's history is 6M blocks deep even on Sepolia. Its balance is shown
   from an imported seed, with Myotis walking and verifying everything above
   the seed's top (Railgun part 4).
-- An import must not be followed by a push of Serotine's own entry for the
+- An import must not be followed by a push of Punicus's own entry for the
   proxy from a lower block: the engine keeps the lower block, and the band
   below the seed would be refused until walked (#101).
 - Privacy Pools' Sepolia history is about 3.6M blocks; whether its walk is
@@ -314,13 +314,13 @@ From Myotis's ruling on seeded histories (2026-09-25,
 (`docs/eth-getlogs-design.md`, *Import*):
 
 - A seed is served on the word of the protocol's maintainers, and only to a
-  client that checks its rebuilt root on chain. Serotine's trust rules do not
+  client that checks its rebuilt root on chain. Punicus's trust rules do not
   carry this exception today (D6; #101's question 1).
 - Today's seeds do not qualify: they are Myotis's own fetch from a node over
   JSON-RPC, a DEBUG / DEMO artefact. A production seed is published or
   vouched for by Railgun's maintainers.
 - Myotis does not yet tell seeded coverage from walked coverage. That marker
-  is its own precondition, unmet. Until it exists, Serotine labels a seeded
+  is its own precondition, unmet. Until it exists, Punicus labels a seeded
   span as seeded.
 - A seed must reach within 500,000 blocks of finality (about 69 days), or it
   imports and never catches up. Today's seeds are usable to block 26,597,965
@@ -341,11 +341,11 @@ From Myotis's ruling on seeded histories (2026-09-25,
   purpose and never funded. It writes, per protocol, the keys or note
   secrets, the addresses, the commitments, the nullifiers, the discovery
   results on a fixed log set and the roots. The file names the commits and
-  versions it came from. `:data`'s tests check Serotine against it, and that
+  versions it came from. `:data`'s tests check Punicus against it, and that
   those are the pins, so a mismatch fails `./gradlew build`.
 - **A move of a pin** regenerates the vectors. A changed derivation or note
   format is a breaking change for the user's funds: the PR says so, and the
-  owner decides whether Serotine follows.
+  owner decides whether Punicus follows.
 
 ## The plan
 
@@ -412,7 +412,7 @@ needed:
   them. Each part that shows something brings its own screens.
 - **Later**, each a plan of its own: Tornado Cash if D3 says yes
   (kohaku-rs's crate, linked as a native library); Tor for the engine's
-  reads and sends (Myotis has it behind `-PtorEngine`; Serotine does not
+  reads and sends (Myotis has it behind `-PtorEngine`; Punicus does not
   wire it).
 
 ## Open decisions
@@ -453,7 +453,7 @@ match:
 - **D5. The association set's tree** (Privacy Pools). From which IPFS
   gateway, or 0xbow's API instead. It is used only when its root is the
   Entrypoint's `latestRoot()`.
-- **D6. Seeded histories.** Does Serotine adopt Myotis's ruling of
+- **D6. Seeded histories.** Does Punicus adopt Myotis's ruling of
   2026-09-25, for clients that run the checks of *The root checks*? #101's
   question 1 asks the same for Railgun: only once Myotis's preconditions are
   met, on Sepolia now labelled as seeded (#101's recommendation), or only
@@ -489,5 +489,5 @@ match:
   `docs/railgun-poc.md`, `docs/railgun-android.md`,
   `docs/privacy-and-tor.md`,
   `myotis-api/src/main/java/io/myotis/api/ChainHandle.java`.
-- Serotine issue #101 (Railgun), which read `Railgun-Privacy/contract` and
+- Punicus issue #101 (Railgun), which read `Railgun-Privacy/contract` and
   `@railgun-community/engine` 9.9.1 and `wallet` 10.8.6.

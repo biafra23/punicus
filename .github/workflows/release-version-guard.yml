@@ -1,6 +1,6 @@
 # Refuse to publish a release whose TAG disagrees with the version in the TREE.
 #
-# Release asset names come from the tag (Serotine-${GITHUB_REF_NAME}-android.apk,
+# Release asset names come from the tag (Punicus-${GITHUB_REF_NAME}-android.apk,
 # the release title), while what is *inside* those assets comes from the source:
 # :desktop-app and :android-app both derive their versions from project.version.
 # Nothing connects the two but this guard (Myotis learned it the hard way: a

@@ -1,7 +1,7 @@
 package eth.serotine.domain.model
 
 /**
- * An Ethereum network Serotine works on, with its EIP-155 [chainId] and its native
+ * An Ethereum network Punicus works on, with its EIP-155 [chainId] and its native
  * currency's [nativeSymbol] (the chain registry's), [nativeName], [nativeIcon] (the key of its
  * bundled icon) and [nativePriceId], the price id of its feed; [testnet] when its prices are
  * a testnet's, which have no market value (docs/wallet-ux.md, *Prices*); [secondsPerSlot], the
@@ -77,7 +77,7 @@ enum class Network(
     companion object {
         private const val SLOTS_PER_SYNC_COMMITTEE_PERIOD = 8_192L
 
-        /** The network whose EIP-155 chain id is [chainId], or null for one Serotine does not work on. */
+        /** The network whose EIP-155 chain id is [chainId], or null for one Punicus does not work on. */
         fun ofChainId(chainId: Long): Network? = entries.firstOrNull { it.chainId == chainId }
     }
 }

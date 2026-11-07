@@ -399,12 +399,12 @@ class AccountDetailViewModelTest {
         val ready = viewModel.uiState.value as AccountDetailUiState.Ready
         assertEquals(true, ready.networkBlocked)
         assertEquals(
-            "This version of Serotine can no longer follow Sepolia: nothing can be sent from its accounts until " +
+            "This version of Punicus can no longer follow Sepolia: nothing can be sent from its accounts until " +
                 "you update the app.",
             ready.sendReason,
         )
         assertEquals(
-            "This version of Serotine can no longer follow Sepolia: nothing can be swapped from its accounts until " +
+            "This version of Punicus can no longer follow Sepolia: nothing can be swapped from its accounts until " +
                 "you update the app.",
             ready.swapReason,
         )
@@ -595,7 +595,7 @@ class AccountDetailViewModelTest {
         runCurrent()
 
         assertEquals(
-            AccountDetailUiState.Unavailable("Your account list cannot be read right now. Serotine keeps trying."),
+            AccountDetailUiState.Unavailable("Your account list cannot be read right now. Punicus keeps trying."),
             viewModel.uiState.value,
         )
     }

@@ -160,7 +160,7 @@ fun DappTransactionScreen(
                 Text(state.name, style = MaterialTheme.typography.headlineSmall)
                 Text(state.url, style = MaterialTheme.typography.bodyMedium)
                 Text(
-                    "Stated by the dApp, not verified: Serotine cannot check who is asking.",
+                    "Stated by the dApp, not verified: Punicus cannot check who is asking.",
                     Modifier.padding(top = 8.dp),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,

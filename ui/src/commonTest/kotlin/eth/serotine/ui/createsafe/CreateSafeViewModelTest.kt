@@ -548,7 +548,7 @@ class CreateSafeViewModelTest {
         val elsewhere = eip55(Address.of("0x" + "ee".repeat(20)))
         assertEquals(
             "The factory's verified run returns $elsewhere, not the address computed here: the Safe release " +
-                "Serotine pins does not match the chain, so nothing is deployed.",
+                "Punicus pins does not match the chain, so nothing is deployed.",
             review.error,
         )
         viewModel.onPasswordChange("correct horse battery")

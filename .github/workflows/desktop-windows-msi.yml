@@ -145,7 +145,7 @@ jobs:
             || { echo "::error::could not read the release version (got '$version')"; exit 1; }
           echo "RELEASE_VERSION=$version" >> "$GITHUB_ENV"
 
-      # Compose names the output Serotine-<packageVersion>.msi; rename it to the
+      # Compose names the output Punicus-<packageVersion>.msi; rename it to the
       # arch-tagged name, like the dmgs and debs. Exactly one, or fail.
       - name: Tag .msi with architecture
         run: |
@@ -154,7 +154,7 @@ jobs:
           msis=("$MSI_DIR"/*.msi)
           [ "${#msis[@]}" -eq 1 ] \
             || { echo "::error::expected exactly 1 msi, found ${#msis[@]}: ${msis[*]}"; exit 1; }
-          mv "${msis[0]}" "$MSI_DIR/Serotine-x64.msi"
+          mv "${msis[0]}" "$MSI_DIR/Punicus-x64.msi"
 
       # The build goes green on "BUILD SUCCESSFUL" alone, so check what the msi
       # actually carries: an administrative install unpacks it without
@@ -185,7 +185,7 @@ jobs:
             return $rec.GetType().InvokeMember('StringData', 'GetProperty', $null, $rec, @(1))
           }
 
-          $msi = (Resolve-Path "$env:MSI_DIR/Serotine-x64.msi").Path
+          $msi = (Resolve-Path "$env:MSI_DIR/Punicus-x64.msi").Path
           $ex = Join-Path $env:RUNNER_TEMP 'msi-extract'
           # The extract's log goes where the smoke step's logs go, so it is uploaded on failure too.
           $smoke = (New-Item -ItemType Directory -Force -Path (Join-Path $env:RUNNER_TEMP 'msi-smoke')).FullName
@@ -204,7 +204,7 @@ jobs:
           # upper-case, and -ne compares case-insensitively.
           if ("$upgrade".Trim('{', '}') -ne 'a7691ec4-0334-46d8-8160-599a8dcdbd18') { Fail "msi UpgradeCode '$upgrade' is not the pinned one" }
 
-          foreach ($name in 'Serotine.exe', 'jvm.dll') {
+          foreach ($name in 'Punicus.exe', 'jvm.dll') {
             $hits = @(Get-ChildItem -Path $ex -Recurse -File -Filter $name)
             if ($hits.Count -ne 1) { Fail "expected exactly one $name in the msi, found $($hits.Count)" }
             $machine = Get-PeMachine $hits[0].FullName
@@ -223,14 +223,14 @@ jobs:
           # Collected for upload by the next step (same path there).
           $env:SMOKE_DIR = Join-Path $env:RUNNER_TEMP 'msi-smoke'
           New-Item -ItemType Directory -Force -Path $env:SMOKE_DIR | Out-Null
-          $msi = (Resolve-Path "$env:MSI_DIR/Serotine-x64.msi").Path
+          $msi = (Resolve-Path "$env:MSI_DIR/Punicus-x64.msi").Path
           # perUserInstall puts the app in %LOCALAPPDATA%\<packageName> (no admin
           # prompt); menuGroup and shortcut add the two links. All three must be
           # absent before the install, so finding them afterwards proves this msi
           # put them there.
-          $exe = Join-Path $env:LOCALAPPDATA 'Serotine\Serotine.exe'
-          $menuLink = Join-Path $env:APPDATA 'Microsoft\Windows\Start Menu\Programs\Serotine\Serotine.lnk'
-          $desktopLink = Join-Path ([Environment]::GetFolderPath('Desktop')) 'Serotine.lnk'
+          $exe = Join-Path $env:LOCALAPPDATA 'Punicus\Punicus.exe'
+          $menuLink = Join-Path $env:APPDATA 'Microsoft\Windows\Start Menu\Programs\Punicus\Punicus.lnk'
+          $desktopLink = Join-Path ([Environment]::GetFolderPath('Desktop')) 'Punicus.lnk'
           foreach ($f in $exe, $menuLink, $desktopLink) {
             if (Test-Path $f) { Fail "$f exists before the install — not a fresh runner" }
           }
@@ -243,7 +243,7 @@ jobs:
             if (-not (Test-Path $f)) {
               # Say where things did land, so a layout change is a one-run fix.
               Get-ChildItem -Path $env:LOCALAPPDATA, $env:ProgramFiles, "$env:APPDATA\Microsoft\Windows\Start Menu",
-                  ([Environment]::GetFolderPath('Desktop')) -Include 'Serotine.exe', 'Serotine*.lnk' -Recurse -Depth 4 -File -ErrorAction SilentlyContinue |
+                  ([Environment]::GetFolderPath('Desktop')) -Include 'Punicus.exe', 'Punicus*.lnk' -Recurse -Depth 4 -File -ErrorAction SilentlyContinue |
                 ForEach-Object { Write-Output "found: $($_.FullName)" }
               Fail "the install did not create $f"
             }
@@ -257,7 +257,7 @@ jobs:
             # Still running a while later: a crash at start-up (a missing JDK module
             # in the jlink image, a Compose/skiko load failure) shows up here.
             Start-Sleep -Seconds 30
-            if ($app.HasExited) { Fail "Serotine exited (code $($app.ExitCode)) within 30s of starting" }
+            if ($app.HasExited) { Fail "Punicus exited (code $($app.ExitCode)) within 30s of starting" }
             Write-Output "OK: still running 30s after launch"
 
             # Best effort: what the desktop shows, for a human to look at.
@@ -285,7 +285,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: serotine-desktop-msi-smoke-x64-${{ github.sha }}
+          name: punicus-desktop-msi-smoke-x64-${{ github.sha }}
           path: ${{ runner.temp }}/msi-smoke
           if-no-files-found: ignore
           retention-days: 14
@@ -297,8 +297,8 @@ jobs:
         if: ${{ !cancelled() }}
         uses: actions/upload-artifact@v4
         with:
-          name: serotine-desktop-msi-x64-${{ github.sha }}
-          path: ${{ env.MSI_DIR }}/Serotine-x64.msi
+          name: punicus-desktop-msi-x64-${{ github.sha }}
+          path: ${{ env.MSI_DIR }}/Punicus-x64.msi
           # Missing is an error on a green run; after a failed build there is none.
           if-no-files-found: ${{ job.status == 'success' && 'error' || 'ignore' }}
           retention-days: 30
@@ -327,7 +327,7 @@ jobs:
       - name: Download the msi
         uses: actions/download-artifact@v4
         with:
-          name: serotine-desktop-msi-x64-${{ github.sha }}
+          name: punicus-desktop-msi-x64-${{ github.sha }}
           path: msi
 
       - name: Publish to GitHub Release
@@ -339,38 +339,38 @@ jobs:
           tag="${GITHUB_REF_NAME}"
           printf '%s' "$tag" | grep -Eq '^v[A-Za-z0-9._-]+$' \
             || { echo "::error::'$tag' is not a valid release tag (expected v<version>)"; exit 1; }
-          test -f msi/Serotine-x64.msi || { echo "::error::missing msi/Serotine-x64.msi"; exit 1; }
-          mv msi/Serotine-x64.msi "msi/Serotine-${tag}-x64.msi"
+          test -f msi/Punicus-x64.msi || { echo "::error::missing msi/Punicus-x64.msi"; exit 1; }
+          mv msi/Punicus-x64.msi "msi/Punicus-${tag}-x64.msi"
           notes=$(mktemp)
           cat > "$notes" <<'NOTES'
-          Pre-release build of the Serotine wallet apps.
+          Pre-release build of the Punicus wallet apps.
 
-          **Android (`*-android.apk`)**, in a release that has it — the Serotine app, signed with
-          Serotine's own release key (its certificate's SHA-256 is in
+          **Android (`*-android.apk`)**, in a release that has it — the Punicus app, signed with
+          Punicus's own release key (its certificate's SHA-256 is in
           `android-app/release-signing-cert.sha256` in the repository). A release without it carries
           only the debug app below. Install via "Install unknown apps" and switch that off again afterwards;
-          only ever install Serotine, and its updates, from this releases page.
+          only ever install Punicus, and its updates, from this releases page.
 
-          **Android debug (`*-android-debug.apk`)** — a separate test app ("Serotine Debug", amber
+          **Android debug (`*-android-debug.apk`)** — a separate test app ("Punicus Debug", amber
           icon, package `eth.serotine.debug`), signed with the publicly known debug key: anyone can
           build an APK that installs over it as an update, so never keep an account you use in it.
           It installs next to the release app.
 
-          **Desktop macOS (`Serotine-v<version>-<arch>.dmg`)** — unsigned; download the dmg matching
+          **Desktop macOS (`Punicus-v<version>-<arch>.dmg`)** — unsigned; download the dmg matching
           your Mac (arm64 for Apple Silicon, x64 for Intel). First launch:
           right-click → Open to get past Gatekeeper (not notarized yet).
 
-          **Desktop Linux (`Serotine-v<version>-<arch>.deb`)** — install with
-          `sudo apt install ./Serotine-v<version>-<arch>.deb`.
+          **Desktop Linux (`Punicus-v<version>-<arch>.deb`)** — install with
+          `sudo apt install ./Punicus-v<version>-<arch>.deb`.
 
           **Desktop Windows** — not in this release: the embedded engine has no Windows build yet.
           NOTES
           if ! gh release view "$tag" >/dev/null 2>&1; then
             gh release create "$tag" \
               --prerelease \
-              --title "Serotine $tag" \
+              --title "Punicus $tag" \
               --notes-file "$notes" \
               --target "${GITHUB_SHA}" \
             || gh release view "$tag" >/dev/null 2>&1
           fi
-          gh release upload "$tag" "msi/Serotine-${tag}-x64.msi" --clobber
+          gh release upload "$tag" "msi/Punicus-${tag}-x64.msi" --clobber

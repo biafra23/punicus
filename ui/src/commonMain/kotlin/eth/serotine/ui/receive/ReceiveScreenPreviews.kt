@@ -57,7 +57,7 @@ private fun ReceiveLoadingPreview() = ReceivePreview(ReceiveUiState.Loading)
 @Preview
 @Composable
 private fun ReceiveListUnavailablePreview() = ReceivePreview(
-    ReceiveUiState.Unavailable("Your account list cannot be read right now. Serotine keeps trying."),
+    ReceiveUiState.Unavailable("Your account list cannot be read right now. Punicus keeps trying."),
 )
 
 /** Docs/networks.md's N13: an account on Gnosis Chain, whose address works elsewhere once added there. */

@@ -1,6 +1,6 @@
 # Architecture
 
-Serotine is laid out as a clean architecture with MVVM in the presentation
+Punicus is laid out as a clean architecture with MVVM in the presentation
 layer. This page is the contract every change is held to (the reviewer reads
 it through CLAUDE.md); the Accounts tab listing the managed accounts, an
 account's own screens, and the recovery-phrase screen that adds one show each

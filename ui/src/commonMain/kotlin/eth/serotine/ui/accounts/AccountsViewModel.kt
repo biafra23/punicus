@@ -551,7 +551,7 @@ class AccountsViewModel(
          */
         const val LOST = "A transaction waiting to be sent was lost: the key that sealed it on this device is gone " +
             "(the key store was reset, or the app was restored on another device). If it was being sent when " +
-            "Serotine last closed, it may have gone out. Before you sign it again, wait until Serotine has caught " +
+            "Punicus last closed, it may have gone out. Before you sign it again, wait until Punicus has caught " +
             "up, and check the account's balance, or for a Safe, its queue. A Safe signature waiting for its check " +
             "is lost the same way, never shown: sign it again on its Safe transaction."
 
@@ -559,7 +559,7 @@ class AccountsViewModel(
 
         const val OUTBOX_UNREADABLE = "The transactions waiting to be sent on this device cannot be read right " +
             "now, so nothing is sent from this wallet until they can be: one of them may already be on its way. " +
-            "Serotine keeps trying."
+            "Punicus keeps trying."
 
         /**
          * What a network's [queued] transactions come to, under its line: how many wait to send, how
@@ -589,7 +589,7 @@ class AccountsViewModel(
                 when {
                     waiting == 0 -> null
                     off != null -> "$off is off: turn it on to send $them"
-                    !verifies -> "Keep Serotine open to send $them sooner"
+                    !verifies -> "Keep Punicus open to send $them sooner"
                     else -> null
                 },
             ).takeIf { it.isNotEmpty() }?.joinToString(" · ")
@@ -611,10 +611,10 @@ class AccountsViewModel(
         const val DAMAGED_SET_ASIDE =
             "Your saved account list was damaged and has been set aside. Add your accounts again."
         const val NEWER_FORMAT =
-            "Your account list was saved by a newer version of Serotine. Update the app to see it."
+            "Your account list was saved by a newer version of Punicus. Update the app to see it."
         const val READ_FAILED =
             "Your saved account list cannot be read right now. Nothing has been changed, and no " +
-                "account can be added until it can be read. Serotine keeps trying."
+                "account can be added until it can be read. Punicus keeps trying."
     }
 }
 

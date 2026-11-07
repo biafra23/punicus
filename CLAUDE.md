@@ -1,7 +1,7 @@
 # CLAUDE.md
 
 Instructions for an AI coding agent working in this repository; humans read
-them too. Serotine is the sibling of
+them too. Punicus is the sibling of
 [biafra23/myotis](https://github.com/biafra23/myotis): a Compose Multiplatform
 wallet for Ethereum accounts (EOAs) and Safe{Wallet} smart accounts, built on
 the embedded Myotis engine. **The rules of development are Myotis's.** On

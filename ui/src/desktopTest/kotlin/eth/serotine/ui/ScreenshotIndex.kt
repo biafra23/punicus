@@ -18,7 +18,7 @@ internal object ScreenshotIndex {
     private const val THUMB_WIDTH = 206
 
     private val intro = """
-        Every screen of Serotine in every state its previews draw, rendered headless from the
+        Every screen of Punicus in every state its previews draw, rendered headless from the
         previews (`ui/src/commonMain/kotlin/eth/serotine/ui/**/<Feature>ScreenPreviews.kt`). CI
         renders them on every pull request and commits the ones the PR changes, so the images
         come from one environment and a diff of this folder shows only real changes. The same
@@ -30,7 +30,7 @@ internal object ScreenshotIndex {
     /** How to keep the images out of a clone, and the two ways to purge the folder (owner rulings, 2026-11-04). */
     private val weight = listOf(
         """
-            Clone without the images: `git clone --filter=blob:none https://github.com/biafra23/serotine.git`
+            Clone without the images: `git clone --filter=blob:none https://github.com/biafra23/punicus.git`
             fetches a file only when a command needs it, so the history of this folder costs nothing until it
             is looked at. `git sparse-checkout set --no-cone '/*' '!/docs/screenshots/'` leaves it out of the
             working tree as well.
@@ -82,7 +82,7 @@ internal object ScreenshotIndex {
         appendLine("<head>")
         appendLine("<meta charset=\"utf-8\">")
         appendLine("<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">")
-        appendLine("<title>Serotine screenshots</title>")
+        appendLine("<title>Punicus screenshots</title>")
         appendLine("<style>")
         appendLine("body { font-family: system-ui, sans-serif; margin: 1.5rem; color: #1a1a1a; background: #f4f4f6; }")
         appendLine("nav a { margin-right: .75rem; white-space: nowrap; }")
@@ -95,7 +95,7 @@ internal object ScreenshotIndex {
         appendLine("</style>")
         appendLine("</head>")
         appendLine("<body>")
-        appendLine("<h1>Serotine screenshots</h1>")
+        appendLine("<h1>Punicus screenshots</h1>")
         (listOf(intro) + weight).forEach {
             appendLine("<p>${escape(it).replace(Regex("`([^`]+)`"), "<code>$1</code>")}</p>")
         }

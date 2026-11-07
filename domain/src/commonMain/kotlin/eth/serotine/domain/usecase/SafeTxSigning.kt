@@ -270,7 +270,7 @@ internal fun SigningRequest.unsignable(): SafeTxRefusal? {
  *
  * Only the Safe's current owners and threshold are seen, not the changes queued at earlier
  * nonces: a threshold change signed behind an owner's removal can end as an n-of-n once both
- * run. Serotine's own execution quote checks the state the Safe is in then, and refuses it; but
+ * run. Punicus's own execution quote checks the state the Safe is in then, and refuses it; but
  * another wallet holding enough signatures could still execute it. Closing that fully is part of
  * how far ahead of a Safe's nonce a request may be signed, the owner's open question (#59).
  */

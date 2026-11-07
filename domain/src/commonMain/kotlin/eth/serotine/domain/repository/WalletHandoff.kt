@@ -11,7 +11,7 @@ package eth.serotine.domain.repository
 interface WalletHandoff {
 
     /**
-     * Whether a link can be handed over now: a wallet app other than Serotine takes `ethereum:`
+     * Whether a link can be handed over now: a wallet app other than Punicus takes `ethereum:`
      * links ([HandoffAvailability.AVAILABLE]), none does ([HandoffAvailability.NO_WALLET]), or this
      * platform hands none over at all. Asked anew each time, since a wallet may be installed or
      * removed meanwhile; quick, and safe to call from the main thread.
@@ -22,14 +22,14 @@ interface WalletHandoff {
      * Opens [link], an `ethereum:` payment link, in another wallet app. [HandoffOpening.OPENED] once
      * the platform has handed it over (the user may still pick no app in the chooser, which this
      * cannot tell); [HandoffOpening.NO_WALLET] when no app takes it; [HandoffOpening.REFUSED] when
-     * the app that takes it would not be opened (a handler guarded by a permission Serotine lacks).
+     * the app that takes it would not be opened (a handler guarded by a permission Punicus lacks).
      */
     suspend fun open(link: String): HandoffOpening
 }
 
 /** What [WalletHandoff.availability] answers. */
 enum class HandoffAvailability {
-    /** A wallet app other than Serotine takes `ethereum:` links on this device. */
+    /** A wallet app other than Punicus takes `ethereum:` links on this device. */
     AVAILABLE,
 
     /** No app on this device takes `ethereum:` links: one has to be installed first. */

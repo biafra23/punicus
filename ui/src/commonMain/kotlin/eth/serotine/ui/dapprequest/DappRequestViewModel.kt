@@ -357,25 +357,25 @@ class DappRequestViewModel(
         fun warningLine(warning: DappSignWarning): String = when (warning) {
             DappSignWarning.DOMAIN_NOT_DAPP_URL ->
                 "This sign-in is for another site than the one the dApp named when it connected. It may be a " +
-                    "site posing as another. Both names are the dApp's own claim, so Serotine cannot tell which " +
+                    "site posing as another. Both names are the dApp's own claim, so Punicus cannot tell which " +
                     "site is asking."
             DappSignWarning.NO_CHAIN_ID ->
                 "This data names no network, so the signature may be taken on any chain where the same " +
                     "contract is."
             DappSignWarning.NOT_DECODED ->
-                "Serotine does not know this kind of data, so it cannot tell what signing it lets someone do: " +
+                "Punicus does not know this kind of data, so it cannot tell what signing it lets someone do: " +
                     "it is shown field by field. Sign only if you trust this dApp and understand every field."
             DappSignWarning.NOT_A_SIGN_IN ->
-                "This is not a sign-in. Serotine cannot tell what signing it commits you to: sign only if you " +
+                "This is not a sign-in. Punicus cannot tell what signing it commits you to: sign only if you " +
                     "trust this dApp and understand the message."
         }
 
         /**
-         * The network a request is on, with its kind of funds: Sepolia keeps its testnet warning. One Serotine does
+         * The network a request is on, with its kind of funds: Sepolia keeps its testnet warning. One Punicus does
          * not serve (refused, whatever it asks) is said as such.
          */
         fun onLine(network: Network?): String = when {
-            network == null -> "On a network Serotine does not connect dApps on"
+            network == null -> "On a network Punicus does not connect dApps on"
             network.testnet -> "On ${network.displayName}, a test network"
             else -> "On ${network.displayName}, real funds"
         }
@@ -402,7 +402,7 @@ class DappRequestViewModel(
             DappSignRefusal.TX_TO_ZERO_ADDRESS ->
                 "It sends to the zero address: nobody holds its key, so what it sends would be lost for good."
             DappSignRefusal.TYPED_TOO_LARGE ->
-                "The data has more fields than this screen can show, and Serotine signs nothing it cannot show in full."
+                "The data has more fields than this screen can show, and Punicus signs nothing it cannot show in full."
         }
     }
 }

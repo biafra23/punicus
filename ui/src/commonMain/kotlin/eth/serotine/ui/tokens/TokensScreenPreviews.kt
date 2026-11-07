@@ -147,7 +147,7 @@ private fun TokensUnreadablePreview() = TokensPreview(
     TokensUiState(
         onSepolia(listOf(usdc, link, uni.copy(hidden = false))),
         notice = "Your token settings cannot be read right now, so nothing can be added, hidden or removed. " +
-            "Serotine keeps trying.",
+            "Punicus keeps trying.",
         canChange = false,
     ),
 )

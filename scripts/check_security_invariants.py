@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Security invariants of the Serotine source tree, checked without a build.
+"""Security invariants of the Punicus source tree, checked without a build.
 
 Each check encodes something the audit of 2026-11-01 verified and the rules under .claude/
 require: the Myotis boundary, the mnemonic's closed path, the key store's floors, the biometric

@@ -58,7 +58,7 @@ fun UpdateRequiredScreen(
     onGetUpdate: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    Scaffold(modifier = modifier, topBar = { TopAppBar(title = { Text("Serotine") }) }) { padding ->
+    Scaffold(modifier = modifier, topBar = { TopAppBar(title = { Text("Punicus") }) }) { padding ->
         Column(
             Modifier
                 .padding(padding)
@@ -75,7 +75,7 @@ fun UpdateRequiredScreen(
                 modifier = Modifier.size(48.dp),
                 tint = MaterialTheme.colorScheme.error,
             )
-            Text("Update Serotine", style = MaterialTheme.typography.headlineSmall)
+            Text("Update Punicus", style = MaterialTheme.typography.headlineSmall)
             Text(state.text, style = MaterialTheme.typography.bodyLarge, textAlign = TextAlign.Center)
             Text(state.keepsData, style = MaterialTheme.typography.bodyMedium, textAlign = TextAlign.Center)
             Button(onClick = onGetUpdate, modifier = Modifier.testTag(UPDATE_BUTTON_TAG)) { Text("Get the update") }

@@ -661,7 +661,7 @@ class AppNavigationTest {
         status.value = LightClientStatus.Synced(headBlock = 100, headTimestamp = null, finalized = null)
         rule.waitUntil { rule.onAllNodesWithText("No accounts yet").fetchSemanticsNodes().isNotEmpty() }
         rule.onNodeWithTag(UPDATE_REQUIRED_TAG).assertDoesNotExist()
-        rule.onNodeWithText("Network upgrade reported on Sepolia: update Serotine").assertIsDisplayed()
+        rule.onNodeWithText("Network upgrade reported on Sepolia: update Punicus").assertIsDisplayed()
         rule.onNodeWithText("Settings").assertIsDisplayed()
     }
 

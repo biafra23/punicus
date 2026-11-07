@@ -37,7 +37,7 @@ import kotlinx.serialization.json.Json
  * [AccountCustody.InKeyStore]; the next change writes the file as format 2. Format 3 records
  * the ENS name an account's name follows ([Account.ensName]); an entry without one, as every
  * entry of an older file, follows none. Format 4 records each account's network by its chain
- * id ([Account.network]); every entry of an older file was written when Serotine worked on
+ * id ([Account.network]); every entry of an older file was written when Punicus worked on
  * Sepolia alone, so it reads as a Sepolia account (docs/networks.md, *Files*). The next change
  * writes the file as the current format. An entry whose chain id this version does not know was
  * written by a later version that works on more networks: the list is then

@@ -581,7 +581,7 @@ class SafeSwapViewModelTest {
         val viewModel = viewModel(asset = null, replacing = world.request(world.swap(4)).hash)
 
         assertEquals(
-            "This device's queue cannot be read right now, so the swap to propose again cannot be found. Serotine " +
+            "This device's queue cannot be read right now, so the swap to propose again cannot be found. Punicus " +
                 "keeps trying.",
             assertIs<SafeSwapUiState.CannotSwap>(viewModel.uiState.value).message,
         )

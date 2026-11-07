@@ -1149,8 +1149,8 @@ class SendViewModel(
         const val GWEI_DECIMALS = 9
         const val IF_NOTHING_CHANGED = ", if nothing changed"
         const val SEND_FAILED =
-            "Serotine could not finish this transfer. Check the account's balance before you send again."
-        const val QUEUE_FAILED = "Serotine could not finish signing this transfer. Nothing was queued or sent."
+            "Punicus could not finish this transfer. Check the account's balance before you send again."
+        const val QUEUE_FAILED = "Punicus could not finish signing this transfer. Nothing was queued or sent."
         const val NOT_KEPT = "Signed, but the outbox could not keep it, so the signature was dropped: nothing was " +
             "queued or sent. Try again."
         const val NO_LONGER_LENIENT = "Sign while syncing, or the network, was turned off since this was " +
@@ -1158,7 +1158,7 @@ class SendViewModel(
         const val NO_NAME_IN_A_DRAFT = "The light client is still syncing, and a name is resolved only once it " +
             "has caught up: to prepare this transfer now, enter the address, or pick one of your accounts."
         const val LIST_UNAVAILABLE =
-            "Your account list cannot be read right now, so nothing can be sent. Serotine keeps trying."
+            "Your account list cannot be read right now, so nothing can be sent. Punicus keeps trying."
         const val NOT_IN_WALLET = "This account is not in your wallet any more."
         const val SAFE =
             "Sending from a Safe takes a Safe transaction its owners sign: Send on the Safe's own screen proposes one."

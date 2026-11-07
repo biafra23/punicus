@@ -36,7 +36,7 @@ import kotlinx.coroutines.withTimeoutOrNull
 
 // Send from another wallet (issue #255; owner rulings, 2026-11-05): a transfer from an EOA whose key
 // this device does not hold, handed to another wallet app as a payment link, which that wallet signs
-// and broadcasts. Serotine signs nothing, and nothing comes back through the link: what became of the
+// and broadcasts. Punicus signs nothing, and nothing comes back through the link: what became of the
 // transfer is read from verified blocks alone.
 
 /** How long the outcome is watched for after the handoff (decision 4 of #255): after that, the account's history. */
@@ -61,7 +61,7 @@ sealed interface HandoffOffer {
 /**
  * Whether [account] gets Send from another wallet ([HandoffOffer]): an EOA whose key this device
  * does not hold, on a device that hands payment links to other wallets. Watched still means
- * Serotine signs nothing (decision 5 of #255): the other wallet must hold the key. [availability]
+ * Punicus signs nothing (decision 5 of #255): the other wallet must hold the key. [availability]
  * is asked of [wallets] anew unless the caller asked once for many accounts; never throws.
  */
 class OfferHandoff(private val wallets: WalletHandoff) {

@@ -74,7 +74,7 @@ class IosBiometricKey(private val stateFile: String) : BiometricKey {
                 BiometricUnavailable.NOT_ALLOWED
             }
             else -> BiometricUnavailable.NO_HARDWARE.also {
-                println("Serotine: biometrics cannot be evaluated ($code)")
+                println("Punicus: biometrics cannot be evaluated ($code)")
             }
         }
     }
@@ -93,7 +93,7 @@ class IosBiometricKey(private val stateFile: String) : BiometricKey {
         val key = try {
             IosSecurity.createBiometricEnclaveKey()
         } catch (e: IllegalStateException) {
-            println("Serotine: no biometric key in the Secure Enclave (${e.message})")
+            println("Punicus: no biometric key in the Secure Enclave (${e.message})")
             return@locked false
         }
         try {
@@ -123,7 +123,7 @@ class IosBiometricKey(private val stateFile: String) : BiometricKey {
         val state = try {
             read()
         } catch (e: Exception) {
-            println("Serotine: the biometric key's state cannot be read (${e.message ?: e::class.simpleName})")
+            println("Punicus: the biometric key's state cannot be read (${e.message ?: e::class.simpleName})")
             null
         } ?: return BiometricUnwrap.Unusable(BiometricUnusable.OFF)
         if (enrolledNow().changedSince(state)) return BiometricUnwrap.Unusable(BiometricUnusable.INVALIDATED)
@@ -140,7 +140,7 @@ class IosBiometricKey(private val stateFile: String) : BiometricKey {
                     IosSecurity.release(key)
                 }
             } catch (e: Exception) {
-                println("Serotine: the biometric key did not open its wrap (${e.message ?: e::class.simpleName})")
+                println("Punicus: the biometric key did not open its wrap (${e.message ?: e::class.simpleName})")
                 BiometricUnwrap.Failed
             }
         } finally {

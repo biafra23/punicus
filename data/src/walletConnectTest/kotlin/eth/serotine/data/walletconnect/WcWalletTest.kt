@@ -79,7 +79,7 @@ class WcWalletTest {
             store = store,
             connector = relay.connector("wallet"),
             projectId = "0123456789abcdef0123456789abcdef",
-            metadata = WcMetadata(name = "Serotine", url = "https://github.com/biafra23/serotine"),
+            metadata = WcMetadata(name = "Punicus", url = "https://github.com/biafra23/punicus"),
             nowMillis = { now() },
         )
         val job = backgroundScope.launch { walletConnect.run() }
@@ -155,7 +155,7 @@ class WcWalletTest {
         val dapp = dapp()
         dapp.subscribePairing()
         running.wallet.pair(dapp.uri())
-        // Polygon: a chain Serotine has no dApp sessions on.
+        // Polygon: a chain Punicus has no dApp sessions on.
         dapp.propose(7, buildJsonObject { put("eip155", namespace(listOf("eip155:137"), listOf("personal_sign"), emptyList())) }, JsonObject(emptyMap()))
         settle()
         assertEquals(WcProtocol.Error.UNSUPPORTED_CHAINS, running.view().proposals.single().refusal)

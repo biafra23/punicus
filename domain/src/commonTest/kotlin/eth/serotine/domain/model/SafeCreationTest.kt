@@ -16,7 +16,7 @@ import kotlin.test.assertNull
  * - the proxy creation code is `SafeProxy`'s `bytecode` in `@safe-global/safe-contracts`
  *   1.4.1-build.0 (npm; `build/artifacts/contracts/proxies/SafeProxy.sol/SafeProxy.json`), the build
  *   the canonical 1.4.1 deployment came from: its `deployedBytecode` hashes to the SafeProxy runtime
- *   hash Serotine pins from Sepolia (`d7d408eb…`), and its SafeProxyFactory's to the factory's code
+ *   hash Punicus pins from Sepolia (`d7d408eb…`), and its SafeProxyFactory's to the factory's code
  *   hash in safe-global/safe-deployments (`0x50c3cdc4…`);
  * - [theFactorysOwnRunAgrees]: that factory and the 1.4.1 Safe singleton, deployed from the same
  *   package on a local anvil, returned this address from `createProxyWithNonce` (an `eth_call`),

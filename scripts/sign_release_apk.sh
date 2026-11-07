@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Sign the UNSIGNED release APK with the Serotine release key, then prove what was signed.
+# Sign the UNSIGNED release APK with the Punicus release key, then prove what was signed.
 #
 # Usage: scripts/sign_release_apk.sh <unsigned.apk> <out.apk>
 #
