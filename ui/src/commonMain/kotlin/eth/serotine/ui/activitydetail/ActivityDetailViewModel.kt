@@ -21,7 +21,7 @@ import eth.serotine.domain.usecase.ObserveAccounts
 import eth.serotine.domain.usecase.ObserveAmountsHidden
 import eth.serotine.domain.usecase.ObserveKnownTokens
 import eth.serotine.domain.usecase.ObserveSafeHistory
-import eth.serotine.domain.usecase.ObserveSentToAddresses
+import eth.serotine.domain.usecase.ObserveSentTo
 import eth.serotine.domain.usecase.ObserveTokenTransfers
 import eth.serotine.domain.usecase.SafeChainEvent
 import eth.serotine.domain.usecase.ToggleAmountsHidden
@@ -53,8 +53,8 @@ import kotlinx.coroutines.launch
  * every address and hash it concerns in full, with the wallet's names for them ([ObserveAccounts])
  * and the tokens' symbols and decimals ([ObserveKnownTokens]); a Safe transaction approved or
  * executed, sent from here or seen on chain, is headed with what it does as its row is, from the
- * request this device holds of it. One received from an address the
- * wallet never sent to ([ObserveSentToAddresses]) and that is none of its accounts says why to
+ * request this device holds of it. One received from an address the wallet never sent to, in a
+ * transaction it did not send ([ObserveSentTo]), and that is none of its accounts says why to
  * compare it before copying it. A transfer of a contract the wallet
  * does not list is a claim, as its row is: only the contract is named, and an ERC-20 one can be
  * added. No intents: Copy is the screen's own, Status and Add token are navigation.
@@ -67,7 +67,7 @@ class ActivityDetailViewModel(
     observeSafeHistory: ObserveSafeHistory,
     observeTokenTransfers: ObserveTokenTransfers,
     observeKnownTokens: ObserveKnownTokens,
-    observeSentTo: ObserveSentToAddresses,
+    observeSentTo: ObserveSentTo,
     /** Whether amounts are hidden (docs/wallet-ux.md, *Hiding amounts*): the eye in the top bar shows it. */
     observeAmountsHidden: ObserveAmountsHidden,
     /** Hides amounts or shows them again: what a tap on the eye asks. */
@@ -339,7 +339,8 @@ class ActivityDetailViewModel(
      * contract only the contract, as its row does, since it can log any transfer between any
      * addresses (a look-alike address planted for the user to copy). An ERC-20 one the wallet does
      * not list can be added; one it hides, or a built-in one its contract contradicts, is listed
-     * already.
+     * already. The protocol's log of an ETH transfer (EIP-7708) is no token's: both sides and the
+     * ETH that moved, with no contract.
      */
     private fun transferShown(
         title: String,
@@ -350,9 +351,16 @@ class ActivityDetailViewModel(
     ): ActivityDetailUiState {
         val names = parties.names
         val transfer = event.transfer
+        val row = rows.transferRow(event, parties, tokens)
+        val sides = listOf(addressOf("From", transfer.from, names), addressOf("To", transfer.to, names))
+        if (transfer is TokenTransfer.Fungible && transfer.isEth) {
+            val moved = DetailField("Amount", rows.amount(transfer.amount, TransferAsset.Native))
+            // A cautioned sender says why; otherwise, what this log is.
+            val note = if (row.state == ActivityState.CAUTION) "$SENDER_NOTE ${ethNote(network)}" else ethNote(network)
+            return shownOf(title, row, sides + moved + loggedAt(event), note = note)
+        }
         val listed = tokens[transfer.token]
         val known = listed?.takeIf { it.shown }
-        val row = rows.transferRow(event, parties, tokens)
         val symbol = listed?.let { displaySymbol(it.token.symbol) }
         val contract = addressOf("Token contract", transfer.token, names, symbol)
         if (known == null) {
@@ -372,7 +380,6 @@ class ActivityDetailViewModel(
                 )
             is TokenTransfer.Nft -> DetailField("Token id", transfer.tokenId.toDecimal())
         }
-        val sides = listOf(addressOf("From", transfer.from, names), addressOf("To", transfer.to, names))
         return shownOf(title, row, sides + moved + contract + loggedAt(event))
     }
 
@@ -407,6 +414,10 @@ class ActivityDetailViewModel(
         const val MOVED_NOTHING = "This transfer moved nothing, so it is not shown: anyone can have a token log " +
             "one from any address, to plant a look-alike address for you to copy."
         const val UNLISTED = "The claim of a contract the wallet does not list"
+
+        /** What the network's own log of a transfer of its currency (EIP-7708) is: no token's. */
+        fun ethNote(network: Network): String = "A plain ${network.nativeSymbol} transfer, which the network itself " +
+            "logs since its upgrade with EIP-7708: no token is involved, whatever explorers list it under."
         const val SENDER_NOTE = "You have not sent to the sender's address from this device, and it is not one of " +
             "your accounts. Anyone can send you a little from an address made to look like one you use, so that you " +
             "copy it from your history later: compare every character before you send anything to it."

@@ -2,7 +2,9 @@ package eth.serotine.domain.model
 
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertNull
+import kotlin.test.assertTrue
 
 /** [TokenTransfers.decode] on the ERC-20 and ERC-721 shapes of `Transfer`. */
 class TokenTransfersTest {
@@ -36,5 +38,17 @@ class TokenTransfersTest {
         val notAnAddress = "0x" + "ff".repeat(32)
         val unaddressed = listOf(TokenTransfers.TRANSFER, notAnAddress, topic(bob))
         assertNull(TokenTransfers.decode(token, unaddressed, "0x" + word(1)))
+    }
+
+    @Test
+    fun theProtocolsLogOfAnEthTransferIsReadAsEth() {
+        val topics = listOf(TokenTransfers.TRANSFER, topic(alice), topic(bob))
+
+        val eth = TokenTransfers.decode(TokenTransfers.ETH, topics, "0x" + word(500_000_000_000_000_000))
+        val usdc = TokenTransfers.decode(token, topics, "0x" + word(5))
+
+        assertEquals(TokenTransfer.Fungible(TokenTransfers.ETH, alice, bob, UInt256.of(500_000_000_000_000_000)), eth)
+        assertTrue(eth!!.isEth)
+        assertFalse(usdc!!.isEth)
     }
 }

@@ -57,7 +57,7 @@ import eth.serotine.domain.usecase.ObserveNetworkLive
 import eth.serotine.domain.usecase.ObserveSafe
 import eth.serotine.domain.usecase.ObserveSafeHistory
 import eth.serotine.domain.usecase.ObserveSafeTxQueue
-import eth.serotine.domain.usecase.ObserveSentToAddresses
+import eth.serotine.domain.usecase.ObserveSentTo
 import eth.serotine.domain.usecase.ObserveTokenHoldings
 import eth.serotine.domain.usecase.ObserveTokenTransfers
 import eth.serotine.domain.usecase.ObserveUsdPrice
@@ -237,7 +237,7 @@ class AccountDetailViewModelTest {
         ObserveSafeHistory(logIndex, historyStarts),
         ObserveTokenTransfers(logIndex, historyStarts),
         ObserveKnownTokens(catalog, userTokens, metadata),
-        ObserveSentToAddresses(history),
+        ObserveSentTo(history),
         ObserveAccountCowOrders(cowOrders),
         ObserveWaitingSwaps(waitingSwaps),
         ObserveOutbox(MemoryOutbox()),

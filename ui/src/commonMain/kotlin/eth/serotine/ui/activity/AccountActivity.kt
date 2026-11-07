@@ -2,10 +2,12 @@ package eth.serotine.ui.activity
 
 import eth.serotine.domain.model.AccountId
 import eth.serotine.domain.model.Address
+import eth.serotine.domain.model.CowOrder
 import eth.serotine.domain.model.Network
 import eth.serotine.domain.model.SafeEvent
 import eth.serotine.domain.model.TokenTransfer
 import eth.serotine.domain.model.TransferAsset
+import eth.serotine.domain.model.UInt256
 import eth.serotine.domain.repository.CowOrderEnd
 import eth.serotine.domain.repository.CowOrderRecord
 import eth.serotine.domain.repository.HistoryEntry
@@ -24,7 +26,7 @@ import eth.serotine.domain.usecase.ObserveAccounts
 import eth.serotine.domain.usecase.ObserveKnownTokens
 import eth.serotine.domain.usecase.ObserveOutbox
 import eth.serotine.domain.usecase.ObserveSafeHistory
-import eth.serotine.domain.usecase.ObserveSentToAddresses
+import eth.serotine.domain.usecase.ObserveSentTo
 import eth.serotine.domain.usecase.ObserveTokenTransfers
 import eth.serotine.domain.usecase.ObserveWaitingSwaps
 import eth.serotine.domain.usecase.SafeChainEvent
@@ -47,7 +49,7 @@ import kotlinx.coroutines.flow.onStart
  * ([ObserveTokenTransfers]) and, for a Safe, its own events ([ObserveSafeHistory]). The names
  * the wallet gives the addresses they concern come from [ObserveAccounts], the tokens' symbols
  * and decimals from the tokens it knows ([ObserveKnownTokens]); a transfer received from an
- * address the wallet never sent to ([ObserveSentToAddresses]) and that is none of its accounts
+ * address the wallet never sent to ([ObserveSentTo]) and that is none of its accounts
  * is cautioned. A log of a transaction listed as sent, in a block, is left out when its row says
  * the same. The CoW orders the account signed here ([ObserveAccountCowOrders]) are listed among
  * the transactions, and open their status. Every row goes by when it happened, newest first
@@ -63,7 +65,7 @@ class AccountActivity(
     private val observeSafeHistory: ObserveSafeHistory,
     private val observeTokenTransfers: ObserveTokenTransfers,
     private val observeKnownTokens: ObserveKnownTokens,
-    private val observeSentTo: ObserveSentToAddresses,
+    private val observeSentTo: ObserveSentTo,
     private val observeCowOrders: ObserveAccountCowOrders,
     private val observeWaitingSwaps: ObserveWaitingSwaps,
     private val observeOutbox: ObserveOutbox,
@@ -180,10 +182,15 @@ class AccountActivity(
             val safeRows = safeEvents
                 .filterNot { it.transactionHash in seenInBlocks && it.event.saidBySentRow() }
                 .map { rows.eventRow(it, parties) to it }
+            // ETH a Safe received is its own event too: the network's log of it is left out beside it.
+            val received = safeEvents.mapNotNullTo(HashSet()) { event ->
+                (event.event as? SafeEvent.Received)?.let { Triple(event.transactionHash, it.from, it.amount) }
+            }
             // Until the tokens are known, a transfer's amount cannot be said: none is listed yet.
             val tokenRows = tokenEvents
                 .takeIf { tokens != null }.orEmpty()
                 .filterNot { it.transfer.movesNothing() }
+                .filterNot { it.saidBySafeEvent(address, received) }
                 .filterNot { event -> seenInBlocks[event.transactionHash]?.let { event.transfer.saidBy(it) } == true }
                 .filterNot { event ->
                     val fill = fills[event.transactionHash.lowercase()].orEmpty()
@@ -296,19 +303,48 @@ class AccountActivity(
     }
 
     /**
-     * Whether [entry]'s row, which names its block, says this transfer: the token, the amount and
-     * the recipient the account sent in a transfer, or the token and the amount it sold in a swap.
-     * What it received, and any other move of a token (a fee, a share to a third address), it does
-     * not.
+     * Whether this is the network's log of ETH the Safe at [safe] received (EIP-7708) that one of
+     * its [received] events (transaction, sender, amount) says already.
+     */
+    private fun TokenTransferEvent.saidBySafeEvent(
+        safe: Address,
+        received: Set<Triple<String, Address, UInt256>>,
+    ): Boolean {
+        val eth = transfer as? TokenTransfer.Fungible ?: return false
+        return eth.isEth && eth.to == safe && Triple(transactionHash, eth.from, eth.amount) in received
+    }
+
+    /**
+     * Whether [entry]'s row, which names its block, says this transfer: the token or ETH, the
+     * amount and the recipient the account sent in a transfer; what it sold in a swap; the ETH a
+     * wrap sent WETH9, and the ETH an unwrap was paid back. ETH is said by the network's own log of
+     * it (EIP-7708). What a swap received, and any other move (a fee, a share to a third address),
+     * it does not.
      */
     private fun TokenTransfer.saidBy(entry: HistoryEntry): Boolean {
-        if (this !is TokenTransfer.Fungible || from != entry.transfer.account) return false
-        val (asset, sent) = when (val action = entry.transfer.action) {
-            is SentAction.Transfer -> if (action.to == to) action.asset to action.amount else return false
-            is SentAction.Swap -> action.sell to action.amountIn
+        if (this !is TokenTransfer.Fungible) return false
+        val account = entry.transfer.account
+        val (asset, moved) = when (val action = entry.transfer.action) {
+            is SentAction.Transfer ->
+                if (from == account && action.to == to) action.asset to action.amount else return false
+            is SentAction.Swap -> if (from == account) action.sell to action.amountIn else return false
+            is SentAction.Wrap -> if (from == account && to == action.weth.address) {
+                TransferAsset.Native to action.amount
+            } else {
+                return false
+            }
+            is SentAction.Unwrap -> if (to == account && from == action.weth.address) {
+                TransferAsset.Native to action.amount
+            } else {
+                return false
+            }
             else -> return false
         }
-        return (asset as? TransferAsset.Erc20Token)?.token?.address == token && sent == amount
+        val same = when (asset) {
+            TransferAsset.Native -> isEth
+            is TransferAsset.Erc20Token -> asset.token.address == token
+        }
+        return same && moved == amount
     }
 
     /**
@@ -417,14 +453,19 @@ class AccountActivity(
     /** Whether this transfer is what the filled [order] bought: its trade's buy, from its settlement to its account. */
     private fun TokenTransfer.boughtIn(order: CowOrderRecord): Boolean {
         val trade = (order.end as? CowOrderEnd.Filled)?.trade ?: return false
+        // Native ETH bought is paid as ETH, which the network logs (EIP-7708) under its own address.
+        val bought = token == trade.buyToken || (isEth && trade.buyToken == CowOrder.NATIVE_BUY_TOKEN)
         return this is TokenTransfer.Fungible && from == order.settlement && to == order.account &&
-            token == trade.buyToken && amount == trade.buyAmount
+            bought && amount == trade.buyAmount
     }
 
     private companion object {
-        /** What an account's Activity does not list yet: the network's own currency it received, among others. */
-        fun notListedYet(network: Network) =
-            "${network.nativeSymbol} it received, and transactions sent from it elsewhere, are not listed yet."
+        /**
+         * What an account's Activity does not list yet: the network's own currency it received,
+         * listed only where the network logs it (EIP-7708), among others.
+         */
+        fun notListedYet(network: Network) = "${network.nativeSymbol} it received is listed only where the network " +
+            "logs it, and transactions sent from it elsewhere are not listed yet."
 
         const val COVERAGE = "Transactions sent from this device. Transactions received, and those sent " +
             "from this account elsewhere, are not listed yet."

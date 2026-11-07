@@ -1011,9 +1011,10 @@ Screens 22 to 24 are the swap screens (docs/swaps.md).
       on chain from the block its history starts at on (when it was
       deployed from this device, or added here: "since added", owner ruling
       2026-10-20) its token transfers and a Safe's events, each with how far
-      it is checked so far, or why it is not listed yet. For an EOA, ETH it
-      received and transactions sent from it elsewhere are not listed yet
-      (issue #85 has the plan for them).
+      it is checked so far, or why it is not listed yet. For an EOA, its
+      network's currency it received is listed only where the network logs
+      it (EIP-7708, below), and transactions sent from it elsewhere are not
+      listed yet (issue #85 has the plan for them).
     - Before every other row, whichever way the rows run, what the account
       has queued in lenient mode (docs/lenient-mode.md, *Where it shows*;
       owner rulings, 2026-11-06): "Send 0.1 ETH", "To Savings · 0x5aAe…eAed",
@@ -1076,16 +1077,31 @@ Screens 22 to 24 are the swap screens (docs/swaps.md).
       which plants a look-alike address in a history. An added token whose
       symbol is a built-in token's warns, as every screen does. One received
       from an address this wallet never sent to and that is none of its
-      accounts (`ObserveSentToAddresses`: the recipients of the transfers
+      accounts (`ObserveSentTo`: the recipients of the transfers
       and Safe transactions its accounts sent, approved or executed) is
       cautioned, "From an address you have not sent to: compare every
       character before you copy it" (owner's request on #136, 2026-10-21):
       anyone can send a little from a look-alike of an address the user
       uses, so that it is copied from the history later. ETH a Safe
-      received is cautioned alike. By block like
+      received is cautioned alike. What a swap sent from here bought,
+      arriving in its transaction, is not (its proceeds come from a pool
+      never sent to): its ETH, or a built-in token whose contract does not
+      contradict it. Nothing else a transaction sent from here logs vouches for
+      its sender, since a dApp's call or a contract paid runs code anyone
+      may have written, and an added token's contract can log any sender. By block like
       the events, opening its detail (26); the transfer a row sent from here, in
       a block, already says (its token, amount and recipient, or the amount
       sold in a swap) is that row alone.
+    - And the network's own log of every transfer of its currency
+      (EIP-7708, seen on Sepolia): a `Transfer` in the ERC-20 shape from the
+      system address `0xfffffffffffffffffffffffffffffffffffffffe`, which no
+      contract can log from. It is listed as that currency ("Sent 0.5 ETH",
+      "To …"), never as an unlisted token, though explorers show it among
+      token transfers. Where a row sent from here, in a block, says it (a
+      transfer, a swap's sale, a wrap's ETH, an unwrap's ETH paid back), a
+      Safe's own
+      "Received" event says it, or a CoW order's fill says it (the ETH it
+      bought), that row is the only one.
     - Where the list comes from: every transaction a peer took (or maybe
       took) goes into the history as it is recorded
       (`HistoryRecordingSentTransfers`), which is kept for good, unlike the
@@ -1124,6 +1140,9 @@ Screens 22 to 24 are the swap screens (docs/swaps.md).
       An ERC-721 one, a hidden token or a built-in one its contract
       contradicts has none (the wallet adds ERC-20 tokens, and lists the
       others already).
+    - The network's log of a transfer of its currency: From, To and the
+      amount, no contract, and a note that it is a plain transfer of that
+      currency, no token.
     - A Safe's event: what it names (the sender of ETH received, an owner,
       a module, a guard, a handler, the hashes), and the Safe.
     - A transfer whose row is cautioned about its sender says why beside

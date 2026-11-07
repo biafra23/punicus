@@ -212,19 +212,32 @@ class TransactionHistoriesTest {
     }
 
     @Test
-    fun theAddressesSentToAreTheRecipientsOfTransfersAndOfSafeTransactionsAndNoneWhileUnreadable() = runTest {
-        val carol = Address.of("0x" + "bb".repeat(20))
-        val transferred = transfer(5)
-        val payment = SafeTx.call(carol, UInt256.of(5), ByteArray(0), nonce = 4)
-        val executed = transfer(6).copy(action = SentAction.SafeExecution(world.request(payment)))
-        val deployed = transfer(7)
-            .copy(action = SentAction.SafeDeployment(world.safe, listOf(world.alice.address), 1, "1.4.1", "Vault"))
-        listOf(transferred, executed, deployed).forEach { history.record(it) }
+    fun whatWasSentIsTheRecipientsOfTransfersAndOfSafeTransactionsAndWhatSwapsBoughtAndNothingWhileUnreadable() =
+        runTest {
+            val carol = Address.of("0x" + "bb".repeat(20))
+            val router = Address.of("0x" + "50".repeat(20))
+            val transferred = transfer(5)
+            val payment = SafeTx.call(carol, UInt256.of(5), ByteArray(0), nonce = 4)
+            val executed = transfer(6).copy(action = SentAction.SafeExecution(world.request(payment)))
+            val deployed = transfer(7)
+                .copy(action = SentAction.SafeDeployment(world.safe, listOf(world.alice.address), 1, "1.4.1", "Vault"))
+            val swapped = transfer(8).copy(
+                action = SentAction.Swap(
+                    router,
+                    TransferAsset.Native,
+                    UInt256.of(5),
+                    TransferAsset.Native,
+                    UInt256.ONE,
+                ),
+            )
+            listOf(transferred, executed, deployed, swapped).forEach { history.record(it) }
 
-        assertEquals(setOf(bob, carol), ObserveSentToAddresses(history)().first())
-        history.readable.value = false
-        assertEquals(emptySet(), ObserveSentToAddresses(history)().first())
-    }
+            val sent = ObserveSentTo(history)().first()
+            assertEquals(setOf(bob, carol), sent.addresses, "a swap's router is no recipient")
+            assertEquals(mapOf(swapped.hash to TransferAsset.Native), sent.bought, "only what a swap bought")
+            history.readable.value = false
+            assertEquals(SentTo(emptySet(), emptyMap()), ObserveSentTo(history)().first())
+        }
 
     @Test
     fun anOutcomeThatSaysLessThanTheOneRecordedIsRefused() = runTest {
