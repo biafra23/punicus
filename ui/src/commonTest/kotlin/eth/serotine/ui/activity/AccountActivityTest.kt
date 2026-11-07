@@ -826,8 +826,8 @@ class AccountActivityTest {
         assertEquals("From 0x5aAe…eAed", shown.rows[2].detail)
         assertEquals(
             "Transactions sent from this device. On chain from block 9,400,000 on, when it was added here: " +
-                "its token transfers. ETH it received is listed only where the network logs it, and transactions " +
-                "sent from it elsewhere are not listed yet.",
+                "its token transfers. Its ETH transfers are listed only where the network logs them, and " +
+                "transactions sent from it elsewhere are not listed yet.",
             shown.coverage,
         )
     }
@@ -929,6 +929,38 @@ class AccountActivityTest {
         val rows = assertIs<ActivityUiState.Shown>(activity().value).rows
 
         assertEquals(ActivityState.CAUTION, rows.single { it.title == "Received 1 ADD" }.state)
+    }
+
+    @Test
+    fun dustOfWhatASwapBoughtBelowItsSignedMinimumIsStillCautioned() = runTest {
+        starts.starts.value = mapOf(alice.address to HistoryStart.Fixed(9_400_000))
+        index.coverage.value = LogCoverageReading.Read(
+            mapOf(LogWatchKey.Mention(alice.address) to LogCoverage(9_400_000, 9_400_000L..9_420_000L)),
+        )
+        val pool = Address.of("0x6418eec70f50913ff0d756b48d32ce7c02b47c47")
+        val lookalike = Address.of("0x5aae000000000000000000000000000000000ead")
+        val swap = sent(
+            12,
+            SentAction.Swap(
+                Address.of("0x" + "50".repeat(20)),
+                TransferAsset.Native,
+                UInt256.of("100000000000000000"),
+                TransferAsset.Erc20Token(usdc),
+                UInt256.of(900_000),
+            ),
+            350,
+        )
+        history.entries.value = listOf(HistoryEntry(swap, SentOutcome.Included(9_404_000, succeeded = true)))
+        index.logs = listOf(
+            tokenLog(usdc.address, 9_404_000, pool, alice.address, word("f4240"), swap.hash, index = 1),
+            // A swap's code moving dust of the same token from a look-alike: not its proceeds.
+            tokenLog(usdc.address, 9_404_000, lookalike, alice.address, word("1"), swap.hash, index = 2),
+        )
+
+        val rows = assertIs<ActivityUiState.Shown>(activity().value).rows
+
+        assertEquals(ActivityState.DONE, rows.single { it.title == "Received 1 USDC" }.state)
+        assertEquals(ActivityState.CAUTION, rows.single { it.title == "Received 0.000001 USDC" }.state)
     }
 
     @Test

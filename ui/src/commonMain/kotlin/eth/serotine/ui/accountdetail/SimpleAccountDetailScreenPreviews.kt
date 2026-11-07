@@ -225,8 +225,8 @@ private fun SimpleAccountActivityPreview() = SimpleAccountDetailPreview(
             ),
             coverage = "Transactions sent from this device. On chain from block 23,590,000 on, when it was added " +
                 "here: its token transfers.",
-            simpleCoverage = "Activity since you added it. ETH it received is listed only where the network logs " +
-                "it, and transactions sent from it elsewhere are not listed yet.",
+            simpleCoverage = "Activity since you added it. Its ETH transfers are listed only where the network " +
+                "logs them, and transactions sent from it elsewhere are not listed yet.",
         ),
     ),
 )

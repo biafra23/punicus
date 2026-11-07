@@ -461,11 +461,11 @@ class AccountActivity(
 
     private companion object {
         /**
-         * What an account's Activity does not list yet: the network's own currency it received,
-         * listed only where the network logs it (EIP-7708), among others.
+         * What an account's Activity does not list yet: the network's own currency it sent or
+         * received, listed only where the network logs it (EIP-7708), among others.
          */
-        fun notListedYet(network: Network) = "${network.nativeSymbol} it received is listed only where the network " +
-            "logs it, and transactions sent from it elsewhere are not listed yet."
+        fun notListedYet(network: Network) = "Its ${network.nativeSymbol} transfers are listed only where the " +
+            "network logs them, and transactions sent from it elsewhere are not listed yet."
 
         const val COVERAGE = "Transactions sent from this device. Transactions received, and those sent " +
             "from this account elsewhere, are not listed yet."

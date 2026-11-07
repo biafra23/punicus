@@ -1012,9 +1012,9 @@ Screens 22 to 24 are the swap screens (docs/swaps.md).
       deployed from this device, or added here: "since added", owner ruling
       2026-10-20) its token transfers and a Safe's events, each with how far
       it is checked so far, or why it is not listed yet. For an EOA, its
-      network's currency it received is listed only where the network logs
-      it (EIP-7708, below), and transactions sent from it elsewhere are not
-      listed yet (issue #85 has the plan for them).
+      transfers of its network's currency are listed only where the network
+      logs them (EIP-7708, below), and transactions sent from it elsewhere
+      are not listed yet (issue #85 has the plan for them).
     - Before every other row, whichever way the rows run, what the account
       has queued in lenient mode (docs/lenient-mode.md, *Where it shows*;
       owner rulings, 2026-11-06): "Send 0.1 ETH", "To Savings · 0x5aAe…eAed",
@@ -1083,10 +1083,12 @@ Screens 22 to 24 are the swap screens (docs/swaps.md).
       character before you copy it" (owner's request on #136, 2026-10-21):
       anyone can send a little from a look-alike of an address the user
       uses, so that it is copied from the history later. ETH a Safe
-      received is cautioned alike. What a swap sent from here bought,
-      arriving in its transaction, is not (its proceeds come from a pool
-      never sent to): its ETH, or a built-in token whose contract does not
-      contradict it. Nothing else a transaction sent from here logs vouches for
+      received is cautioned alike. What a swap sent from here bought (an
+      account's own, or a Safe's executed from here), arriving in its
+      transaction, is not (its proceeds come from a pool never sent to): its
+      ETH, or a built-in token whose contract does not contradict it, of at
+      least the minimum the swap was signed for; dust of the same asset is
+      cautioned. Nothing else a transaction sent from here logs vouches for
       its sender, since a dApp's call or a contract paid runs code anyone
       may have written, and an added token's contract can log any sender. By block like
       the events, opening its detail (26); the transfer a row sent from here, in

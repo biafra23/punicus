@@ -5,7 +5,6 @@ import eth.serotine.domain.model.AccountKind
 import eth.serotine.domain.model.Address
 import eth.serotine.domain.model.Network
 import eth.serotine.domain.model.TokenTransfer
-import eth.serotine.domain.model.TransferAsset
 import eth.serotine.domain.repository.AccountList
 import eth.serotine.domain.usecase.IndexedHistory
 import eth.serotine.domain.usecase.KnownToken
@@ -120,17 +119,16 @@ internal class Parties(val list: AccountList, private val sent: SentTo, network:
         sender == Address.ZERO || sender in names || sender in sent.addresses
 
     /**
-     * Whether [transfer], logged by the transaction [transaction], is the asset a swap this
-     * wallet sent there bought: its ETH (the network's log of it), or its token. Its sender is the
-     * swap's pool, which the user asked for, not a stranger. The caller says whether the token is
-     * one whose logs can be trusted for that (built in, its contract not contradicting it): an
-     * added one's contract could log any sender.
+     * Whether [transfer], logged by the transaction [transaction], is what a swap this wallet sent
+     * there bought: its ETH (the network's log of it) or its token, at least the minimum it was
+     * signed for. Its sender is the swap's pool, which the user asked for, not a stranger; dust of
+     * the same asset, which code the swap ran could move from anyone, is not. The caller says
+     * whether the token is one whose logs can be trusted for that (built in, its contract not
+     * contradicting it): an added one's contract could log any sender.
      */
-    fun boughtHere(transaction: String, transfer: TokenTransfer): Boolean = when (
-        val asset = sent.bought[transaction]
-    ) {
-        null -> false
-        TransferAsset.Native -> transfer.isEth
-        is TransferAsset.Erc20Token -> transfer is TokenTransfer.Fungible && transfer.token == asset.token.address
+    fun boughtHere(transaction: String, transfer: TokenTransfer): Boolean {
+        val bought = sent.bought[transaction] ?: return false
+        if (transfer !is TokenTransfer.Fungible || transfer.amount < bought.minimum) return false
+        return if (bought.token == null) transfer.isEth else transfer.token == bought.token
     }
 }

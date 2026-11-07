@@ -227,8 +227,8 @@ private const val SAFE_ACTIVITY_COVERAGE = "Transactions sent from this device. 
     "when it was added here: its events, checked from block 9,410,000 so far; its token transfers."
 
 private const val TOKENS_ACTIVITY_COVERAGE = "Transactions sent from this device. On chain from block 9,400,000 on, " +
-    "when it was added here: its token transfers. ETH it received is listed only where the network logs it, and " +
-    "transactions sent from it elsewhere are not listed yet."
+    "when it was added here: its token transfers. Its ETH transfers are listed only where the network logs them, " +
+    "and transactions sent from it elsewhere are not listed yet."
 
 /**
  * An account's token transfers among a transaction sent from here, by date: each event dated by its
