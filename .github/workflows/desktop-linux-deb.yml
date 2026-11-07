@@ -91,7 +91,7 @@ jobs:
           echo "::error::DEB build failed after 3 attempts"
           exit 1
 
-      # jpackage names the output punicus_<version>_<debarch>.deb; rename it to the
+      # jpackage names the output serotine_<version>_<debarch>.deb; rename it to the
       # arch-only artifact name Punicus-<arch>.deb (the publish job adds the tag for
       # the release asset). Assert exactly one deb — zero or multiple should fail
       # here, not silently ship an arbitrary pick.

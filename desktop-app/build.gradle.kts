@@ -243,6 +243,10 @@ compose.desktop {
             }
             linux {
                 iconFile.set(appIconResources.map { it.file("serotine-icon.png") })
+                // The deb's package name keeps the app's former name, so a Punicus deb upgrades an
+                // installed Serotine in place instead of installing beside it. The app, its launcher
+                // and its menu entry are named by packageName above.
+                packageName = "serotine"
                 packageVersion = releaseVersion
                 debMaintainer = "dirk@jaeckel.com"
                 menuGroup = "Utility"
