@@ -6,7 +6,9 @@ import androidx.compose.ui.Modifier
 /**
  * The Settings tab in simple mode (docs/simple-ui.md, T1): [SettingsScreen] as it is, each
  * network's row saying how it stands without a block number ([NetworkRow.simpleLine]: "Up to date",
- * "Test network · live", "Can't check right now"). The rest, Detailed view's switch and *Sign
+ * "Test network · live", "Can't check right now"), and the switch for heavy downloads on a
+ * metered connection in simple mode's words ([MeteredDownloadsItem.simpleText] and
+ * [MeteredDownloadsItem.simpleUnavailableReason]). The rest, Detailed view's switch and *Sign
  * while syncing* among it, is the same in both views.
  */
 @Composable

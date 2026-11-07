@@ -140,6 +140,19 @@ private fun SimpleSettingsMeteredUnreadablePreview() = SimpleSettingsPreview(
     ),
 )
 
+/** The heavy downloads allowed on a metered connection, in simple mode's words. */
+@Preview
+@Composable
+private fun SimpleSettingsMeteredAllowedPreview() = SimpleSettingsPreview(
+    simple.copy(
+        meteredDownloads = MeteredDownloadsItem(
+            on = true,
+            text = METERED_DOWNLOADS_ON,
+            simpleText = METERED_DOWNLOADS_ON_SIMPLE,
+        ),
+    ),
+)
+
 /** Every preview above, which SimpleSettingsScreenPreviewsTest renders: a new preview goes in here too. */
 internal val simpleSettingsScreenPreviews: List<ScreenPreview> = listOf(
     ScreenPreview("default") { SimpleSettingsPreviewDefault() },
@@ -149,6 +162,7 @@ internal val simpleSettingsScreenPreviews: List<ScreenPreview> = listOf(
     ScreenPreview("sign-while-syncing-queued") { SimpleSettingsSignWhileSyncingQueuedPreview() },
     ScreenPreview("sign-while-syncing-not-saved") { SimpleSettingsSignWhileSyncingNotSavedPreview() },
     ScreenPreview("metered-paused") { SimpleSettingsMeteredPausedPreview() },
+    ScreenPreview("metered-allowed") { SimpleSettingsMeteredAllowedPreview() },
     ScreenPreview("metered-not-reported") { SimpleSettingsMeteredNotReportedPreview() },
     ScreenPreview("metered-unreadable") { SimpleSettingsMeteredUnreadablePreview() },
 )
