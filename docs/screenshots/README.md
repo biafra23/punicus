@@ -52,7 +52,7 @@ If the folder grows too much, there are two levers, both the owner's. Deleting t
 | [Safe swap (simple mode)](#simple-safe-swap) | `simple-safe-swap/` | 4 |
 | [Safe transaction (simple mode)](#simple-safe-tx) | `simple-safe-tx/` | 15 |
 | [Send (simple mode)](#simple-send) | `simple-send/` | 8 |
-| [Settings (simple mode)](#simple-settings) | `simple-settings/` | 9 |
+| [Settings (simple mode)](#simple-settings) | `simple-settings/` | 10 |
 | [Swap (simple mode)](#simple-swap) | `simple-swap/` | 11 |
 | [Tokens (simple mode)](#simple-tokens) | `simple-tokens/` | 2 |
 | [Transfer status (simple mode)](#simple-transfer-status) | `simple-transfer-status/` | 13 |
@@ -874,7 +874,7 @@ If the folder grows too much, there are two levers, both the owner's. Deleting t
 <a name="simple-settings"></a>
 ## Settings (simple mode)
 
-`simple-settings/`, 9 states: `default`, `default-dark`, `off`, `sign-while-syncing`, `sign-while-syncing-queued`, `sign-while-syncing-not-saved`, `metered-paused`, `metered-not-reported`, `metered-unreadable`
+`simple-settings/`, 10 states: `default`, `default-dark`, `off`, `sign-while-syncing`, `sign-while-syncing-queued`, `sign-while-syncing-not-saved`, `metered-paused`, `metered-allowed`, `metered-not-reported`, `metered-unreadable`
 
 <a href="simple-settings/default.png"><img src="simple-settings/default.png" width="206" alt="default"></a>
 <a href="simple-settings/default-dark.png"><img src="simple-settings/default-dark.png" width="206" alt="default-dark"></a>
@@ -883,6 +883,7 @@ If the folder grows too much, there are two levers, both the owner's. Deleting t
 <a href="simple-settings/sign-while-syncing-queued.png"><img src="simple-settings/sign-while-syncing-queued.png" width="206" alt="sign-while-syncing-queued"></a>
 <a href="simple-settings/sign-while-syncing-not-saved.png"><img src="simple-settings/sign-while-syncing-not-saved.png" width="206" alt="sign-while-syncing-not-saved"></a>
 <a href="simple-settings/metered-paused.png"><img src="simple-settings/metered-paused.png" width="206" alt="metered-paused"></a>
+<a href="simple-settings/metered-allowed.png"><img src="simple-settings/metered-allowed.png" width="206" alt="metered-allowed"></a>
 <a href="simple-settings/metered-not-reported.png"><img src="simple-settings/metered-not-reported.png" width="206" alt="metered-not-reported"></a>
 <a href="simple-settings/metered-unreadable.png"><img src="simple-settings/metered-unreadable.png" width="206" alt="metered-unreadable"></a>
 
