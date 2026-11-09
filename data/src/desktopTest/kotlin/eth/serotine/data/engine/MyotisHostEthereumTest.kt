@@ -158,6 +158,24 @@ class MyotisHostEthereumTest {
             println("[${at()}] $oldSafe: $oldKind")
             assertIs<AddressKind.Safe>(assertIs<KindReading.Verified>(oldKind).kind, "a recognised Safe")
 
+            // Safes still on the oldest singletons (SafeDeployments.kt's doc comment, read 2026-11-07):
+            // 0.0.2 and 0.1.0 behind the 2018 relay's 363-byte proxies, and 1.1.0 behind its factory's.
+            for ((other, version) in listOf(
+                "0x9177eee5b477fe65293141e55b328f42c991012e" to "0.0.2",
+                "0xcbdea182b28da96017dff21a6f7e7c36a500e417" to "0.1.0",
+                "0x9ff80c034f165bb25c041080634845e064d5599a" to "1.1.0",
+            )) {
+                val otherKind = withTimeout(5.minutes) {
+                    node.addressKinds.observeKind(ethereum, Address.of(other)).first {
+                        it !is KindReading.Syncing &&
+                            !(it is KindReading.Unavailable && it.reason == ReadUnavailable.UNPROVEN)
+                    }
+                }
+                println("[${at()}] $other: $otherKind")
+                val recognised = assertIs<AddressKind.Safe>(assertIs<KindReading.Verified>(otherKind).kind, other)
+                assertEquals(version, recognised.state.version, other)
+            }
+
             val name = withTimeout(5.minutes) {
                 var resolution: NameResolution
                 do {

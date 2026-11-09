@@ -191,10 +191,11 @@ sealed interface SafeTxRefusal {
     /**
      * The Safe is still on its [version] singleton, from before 1.3.0's EIP-712 domain
      * (`EIP712Domain(uint256 chainId,address verifyingContract)`, computed fresh for every call):
-     * 1.0.0, 1.1.1 and 1.2.0 each compute their `domainSeparator` once at setup and store it, with
-     * no chain id anywhere in it ([SafeTx.hash]'s KDoc). [SafeTx.hash] would compute a digest that
+     * 0.0.2, 0.1.0, 1.0.0, 1.1.0, 1.1.1 and 1.2.0 each compute their `domainSeparator` once at
+     * setup and store it, with no chain id anywhere in it ([SafeTx.hash]'s KDoc); 0.0.2 and 0.1.0
+     * hash another `SafeTx` struct type besides. [SafeTx.hash] would compute a digest that
      * Safe never checks, so nothing here is signed, approved or executed against it. Shown only
-     * (`SafeDeployments` recognises 1.0.0, 1.1.1 and 1.2.0 for display so a Safe left there, or
+     * (`SafeDeployments` recognises these releases for display so a Safe left there, or
      * one still deciding whether to migrate, is not shown as a plain contract). A Safe since moved
      * to a pinned ≥1.3.0 singleton by its owners (`changeMasterCopy`) is unaffected:
      * [eth.serotine.domain.repository.SafeState.version] is the singleton it is on now, not the
@@ -284,12 +285,22 @@ internal fun SigningRequest.withoutRecovery(owners: Int): SafeTxRefusal? =
  * [SafeTxRefusal.TooOldToSign] when this Safe is still on one of the singletons from before
  * 1.3.0's EIP-712 domain and `SafeTx` struct type ([SafeTxRefusal.TooOldToSign]'s KDoc); null
  * for a pinned ≥1.3.0 singleton, migrated to or deployed on.
+ *
+ * Fail-closed: only the versions [SafeTx.hash] computes the digest of
+ * ([EIP712_CHAIN_ID_DOMAIN_VERSIONS]) may be signed; every other version a Safe is recognised
+ * on is refused, so pinning another old singleton for display (0.0.2, 0.1.0 and 1.1.0 were,
+ * after 1.0.0, 1.1.1 and 1.2.0) can never let a digest be signed that the Safe does not check.
+ * A release after 1.5.0 is refused too until it is added there, once [SafeTx.hash] is checked
+ * against it: pinning it in `SafeDeployments` alone shows it and signs nothing.
  */
 internal fun SafeState.tooOldToSign(): SafeTxRefusal? =
-    SafeTxRefusal.TooOldToSign(version).takeIf { version in PRE_EIP712_DOMAIN_VERSIONS }
+    SafeTxRefusal.TooOldToSign(version).takeIf { version !in EIP712_CHAIN_ID_DOMAIN_VERSIONS }
 
-/** The versions [SafeState.tooOldToSign] refuses: Safe's own releases before 1.3.0. */
-private val PRE_EIP712_DOMAIN_VERSIONS = setOf("1.0.0", "1.1.1", "1.2.0")
+/**
+ * The versions [SafeState.tooOldToSign] lets through: Safe's releases from 1.3.0 on, whose
+ * `EIP712Domain(uint256 chainId,address verifyingContract)` and `SafeTx` type [SafeTx.hash] computes.
+ */
+private val EIP712_CHAIN_ID_DOMAIN_VERSIONS = setOf("1.3.0", "1.4.1", "1.5.0")
 
 /** [SigningRequest.withoutRecovery] for [this] change of a Safe of [owners] owners now. */
 internal fun SafeSettingsChange.withoutRecovery(owners: Int): SafeTxRefusal.NeedsRecoveryModule? {

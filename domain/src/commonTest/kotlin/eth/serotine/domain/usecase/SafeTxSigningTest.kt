@@ -133,7 +133,9 @@ class SafeTxSigningTest {
     fun aSafeStillOnAPreOneThreeZeroSingletonIsNeitherImportedNorSignedThoughItIsRecognised() = runTest {
         // diskordia.eth's case, had it never moved to a pinned ≥1.3.0 singleton: recognised (its
         // owners and threshold are read and shown) but checks a hash this app does not compute.
-        for (version in listOf("1.0.0", "1.1.1", "1.2.0")) {
+        // Every recognised release before 1.3.0, and, fail-closed, a version this app has no
+        // digest for at all.
+        for (version in listOf("0.0.2", "0.1.0", "1.0.0", "1.1.0", "1.1.1", "1.2.0", "9.9.9")) {
             world.state = world.state.copy(version = version)
             val request = world.request(usdcTransfer(4), world.carol)
 

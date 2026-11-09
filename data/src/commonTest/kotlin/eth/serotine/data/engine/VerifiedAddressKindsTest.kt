@@ -309,6 +309,33 @@ class VerifiedAddressKindsTest {
     }
 
     @Test
+    fun aSafeOlderThanOneThreeZeroHasNoGuardWhateverItsGuardSlotHolds() = runTest {
+        chain.snapshot = running(head = 9)
+        safeStorage()
+        // A word no address, and one that is: both nothing to a 1.1.1 Safe, which never reads it.
+        chain.storage[address to VerifiedAddressKinds.GUARD_SLOT.toHex()] = "ff".repeat(32)
+        val old = SafeDeployments.Table(
+            proxyCodeHashes = safes.proxyCodeHashes,
+            singletons = mapOf(singleton to SafeSingleton("1.1.1", l2 = false, guard = false)),
+            creation = null,
+        )
+        val kinds = VerifiedAddressKinds(
+            Network.SEPOLIA,
+            chain,
+            StandardTestDispatcher(testScheduler),
+            4.seconds,
+            old,
+            chain.clock(testScheduler),
+            logged::add,
+        )
+
+        val reading = kinds.observeKind(Network.SEPOLIA, address).first { it !is KindReading.Syncing }
+        val kind = (reading as KindReading.Verified).kind
+        assertEquals(null, (kind as AddressKind.Safe).state.guard)
+        assertEquals("1.1.1", kind.state.version)
+    }
+
+    @Test
     fun aReadTheHeadMovedUnderIsMadeAgainAtOnce() = runTest {
         chain.snapshot = running(head = 9)
         safeStorage()

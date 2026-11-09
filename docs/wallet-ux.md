@@ -1517,27 +1517,38 @@ they are helpful." The rulings (owner rulings, 2026-11-05, #246; the
 
 - **Detection** (issue #10) reads only verified state, each value with its
   block: the proxy's code hash must be a pinned SafeProxy runtime hash; slot
-  0 (the singleton) must be a pinned canonical singleton for the network
-  (1.0.0, 1.1.1, 1.2.0, 1.3.0, 1.4.1 or 1.5.0, L1 or L2 where there is one);
-  the owners are the linked list in slot 2 walked from the sentinel `0x1`
-  with storage proofs, the threshold is slot 4 and the nonce slot 5. The
-  modules (slot 1's list), the guard and, from 1.5.0, the module guard are
-  read too, because a module can move funds without the owners' signatures;
-  a Safe older than 1.3.0 has neither guard, and is read as having none.
-  Anything that does not match is "another contract", never a Safe. The
-  pins (`SafeDeployments`) cover 1.0.0, 1.1.1 and 1.2.0 (one proxy shared by
-  the last two) on Ethereum and Gnosis Chain, and, everywhere, 1.3.0, 1.4.1
-  and 1.5.0, L1 and L2, and the SafeProxy runtime code of each factory: a
-  pre-1.3.0 Safe whose owners moved it since to a pinned singleton
-  (`changeMasterCopy`) is recognised by its own older proxy pointing at that
-  pinned singleton, same as one still on its original singleton. Sepolia
-  pins 1.1.1 and 1.2.0 too (their singletons carry live code there) but not
-  1.0.0, whose Mainnet singleton predates Sepolia and has none there — a
-  recognised Safe always names a singleton proven to hold real Safe code on
-  that network, never merely an address this app expects one at. A Safe's
-  control badge follows its verified owners: as many held here as its
-  threshold is full control, fewer is co-signer, none is watch-only, and so
-  is a Safe not read yet.
+  0 (the singleton) must be a Safe singleton pinned for the network
+  (0.0.2 to 1.5.0, L1 or L2 where there is one: every release in Safe's
+  deployments list, and the older and forked ones Safe's Transaction
+  Service indexes); the owners are the linked list in slot 2 walked from
+  the sentinel `0x1` with storage proofs, the threshold is slot 4 and the
+  nonce slot 5. The modules (slot 1's list), the guard and, from 1.5.0, the
+  module guard are read too, because a module can move funds without the
+  owners' signatures; a Safe older than 1.3.0 has neither guard, and is
+  read as having none. Anything that does not match is "another contract",
+  never a Safe.
+  - **The singleton is the anchor; the proxy is audited.** Singletons are
+    pinned by address, per network, only where that address holds live code
+    of the release it is pinned as: 1.1.1 to 1.5.0 everywhere; 1.0.0 and
+    0.1.0 on Ethereum and Gnosis Chain; 0.0.2 and 1.1.0 on Ethereum;
+    Circles' fork of 1.1.1 on Gnosis Chain. Proxies are pinned by code hash,
+    one set for every network: each Safe factory's proxy since 1.0.0 and the
+    other builds a survey of real Safes found (the old relay's
+    `PayingProxy`s, Circles', third parties' builds), each checked by a test
+    to do nothing but read slot 0 and delegate to it. So a pre-1.3.0 Safe
+    whose owners moved it since to a pinned singleton (`changeMasterCopy`)
+    is recognised by its own older proxy pointing at that singleton, same as
+    one still on its original singleton.
+  - Recognised is not signable: a Safe on a release before 1.3.0 checks a
+    hash Punicus does not compute, so it is shown and nothing is signed,
+    approved or executed for it; only 1.3.0, 1.4.1 and 1.5.0 are signed for.
+  - Sepolia pins 1.1.1 and 1.2.0 too (their singletons carry live code
+    there) but not 1.0.0 or the 0.x releases, which have none there — a
+    recognised Safe always names a singleton proven to hold real Safe code on
+    that network, never merely an address this app expects one at.
+  - A Safe's control badge follows its verified owners: as many held here as
+    its threshold is full control, fewer is co-signer, none is watch-only,
+    and so is a Safe not read yet.
   - The numbered slots carry the block they were proven at; the guards sit
     at hashed slots no storage proof names, so they are verified reads at the
     head, which may be a head newer than that block.

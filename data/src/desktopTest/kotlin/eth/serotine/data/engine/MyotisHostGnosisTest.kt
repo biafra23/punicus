@@ -105,6 +105,26 @@ class MyotisHostGnosisTest {
             }
             println("[${at()}] $safe: $kind")
             assertIs<AddressKind.Safe>(assertIs<KindReading.Verified>(kind).kind, "a recognised Safe")
+
+            // Safes of other proxy builds and singletons (SafeDeployments.kt's doc comment, read
+            // 2026-11-07): 1.1.1's Gnosis-built proxy moved since to SafeL2 1.4.1 (2 of 3); a
+            // Circles 1.1.1 Safe; and the 170-byte solc 0.5.14 proxy most Gnosis Safes carry, on
+            // the 1.3.0 L2 singleton.
+            for ((other, version) in listOf(
+                "0xcba12315cc838375f0e1e9a9f5b2afe0196b07b6" to "1.4.1",
+                "0x9d85bd2b2af382063c58866a9255537979dbe7bc" to "1.1.1",
+                "0x02f84fdf488800c283711388765a9acc42febeb4" to "1.3.0",
+            )) {
+                val otherKind = withTimeout(5.minutes) {
+                    node.addressKinds.observeKind(gnosis, Address.of(other)).first {
+                        it !is KindReading.Syncing &&
+                            !(it is KindReading.Unavailable && it.reason == ReadUnavailable.UNPROVEN)
+                    }
+                }
+                println("[${at()}] $other: $otherKind")
+                val recognised = assertIs<AddressKind.Safe>(assertIs<KindReading.Verified>(otherKind).kind, other)
+                assertEquals(version, recognised.state.version, other)
+            }
         } finally {
             progress.cancel()
             node.shutdown()
