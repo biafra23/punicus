@@ -133,7 +133,7 @@ skip the PR is when the user explicitly says not to open one.
    PR and off by default (owner ruling, 2026-10-09). In a claude.ai/code
    cloud session, `subscribe_pr_activity` at the same moment, without asking
    and without sending the owner to the Auto-fix toggle (owner ruling,
-   2026-11-10). "Pushed" is not "done".
+   2026-11-10, #284). "Pushed" is not "done".
 5. **Address every comment** and drive CI to green. Keep watching until the
    PR is merged or closed.
 

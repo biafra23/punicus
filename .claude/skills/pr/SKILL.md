@@ -71,11 +71,11 @@ Then rename the session (Claude Code desktop app only; see the end).
   the session's Auto-fix switch; it is per PR and off by default there too.
   Make it without asking, and never tell the owner to turn Auto-fix on in
   the UI: this rule is the owner's standing, explicit request for it on
-  every PR a session opens or takes over (owner ruling, 2026-11-10, after
-  cloud sessions began stopping at "PR created" to ask for the toggle).
+  every PR a session opens (owner ruling, 2026-11-10, #284, after cloud
+  sessions began stopping at "PR created" to ask for the toggle).
 - If the result says another Claude session already watches the PR, this
-  session gets no events. Say so in the report; never claim the PR is
-  watched.
+  session gets no events. Say so in the report; never report this session
+  as watching it.
 - **Any other host:** use whatever it offers to watch a PR.
 - Then wait for CI and review feedback. The task is not done at "pushed".
 
