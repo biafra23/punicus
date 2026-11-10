@@ -20,7 +20,7 @@ on or off in Settings.
 
 ## Status
 
-Early, with pre-releases only (the version is `0.2.0-SNAPSHOT`; every `v*` tag
+Early, with pre-releases only (the version is `0.4.0-SNAPSHOT`; every `v*` tag
 publishes a pre-release).
 What the app does today:
 
