@@ -393,6 +393,68 @@ From Myotis's ruling on seeded histories (2026-09-25,
   among the sources. A seed that ends below the head pulls the accounts'
   history coverage down with it until the gap is walked again.
 
+## How walletbeat rates it
+
+[Walletbeat](https://github.com/walletbeat/walletbeat) rates wallets, and
+its *Private token transfers* attribute is where this plan shows. Read at
+walletbeat `dc05991` (2026-11-10):
+`src/schema/attributes/privacy/private-transfers.ts` and
+`src/schema/features/privacy/transaction-privacy.ts`. What it rates is
+walletbeat's, not a rule here.
+
+### What it recognizes
+
+- Four technologies: ERC-5564 stealth addresses, Tornado Cash Nova,
+  Privacy Pools and Railgun.
+- **Tornado Cash classic is not among them.** Nova, the variant with
+  transfers inside the pool, is. The Tornado Cash of D3 is classic, so it
+  would earn nothing there.
+- **The default send decides first.** A wallet whose default transfer of
+  ETH or an ERC-20 is public fails ("not the default"), whatever it
+  integrates. A private technology as the default, or the user's explicit
+  choice on every send (`EXPLICIT_CHOICE`), avoids that.
+- **The worst integration sets the rating.** With several technologies
+  supported, the ratings merge to the worst one. A half-built protocol
+  pulls a complete one down.
+- None of the wallets walletbeat lists is marked as supporting Privacy Pools
+  today.
+
+### What a pass needs, for Privacy Pools
+
+Each missing item lowers the rating, in this order:
+
+- the Ether pool and the USDC pool on Ethereum;
+- ragequit;
+- deposit data that can be exported and imported, and no custodian that can
+  read it or that an export depends on. Punicus derives the secrets from the
+  recovery phrase and stores none, so the same words restore them in any
+  Kohaku wallet (*Privacy Pools note secrets*). Whether walletbeat counts
+  that as export and import is its reviewers' call;
+- a withdrawal through a relayer. A withdrawal without one is rated not
+  private: the account that pays the gas is public. A default relayer that
+  learns the IP address is rated not private too (D4);
+- a warning against operations in quick succession;
+- encrypted deposit data held by a custodian who learns the IP address
+  leaves the integration "relying on an external provider".
+
+### What a pass needs, for Railgun
+
+Private transfers between 0zk addresses (part 5); a warning about the
+correlation of a shield, of an unshield to the user's own addresses, and of
+operations in quick succession; the tree synced and decrypted on the
+device, as Punicus plans it; a broadcaster that does not learn the IP
+address, broadcasting being the default over self-relay (D4). A warning
+about sharing a viewing key is noted, not required.
+
+### What it means for this plan
+
+- A Railgun that shields only (parts 1 to 4) or a Privacy Pools without
+  relayed withdrawals is an incomplete integration to walletbeat, and,
+  under the worst-rating merge, lowers a complete one beside it.
+- Punicus's send is public by default today, so the attribute fails until
+  the send screen makes the choice explicit or a private send the default.
+  That is a screen decision, docs/wallet-ux.md's and the owner's.
+
 ## Following Kohaku
 
 - **The pins.** The Kohaku commit this page matches, `8c83d64`, and, for
