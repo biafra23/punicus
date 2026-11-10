@@ -10,7 +10,10 @@ page and the rules under `.claude/` (their short form in CLAUDE.md) disagree,
 the rules win and this page is fixed.
 
 Read at Kohaku `8c83d64` (2026-11-02), kohaku-rs's `main` of the same week
-and Myotis `5578e75` (2026-11-03). The facts below are from those commits.
+and Myotis `5578e75` (2026-11-03). The facts below are from those commits,
+except where a section names a later read: *Why a seed at all* (Myotis
+`dc3a1c0`, 2026-11-10) and *How walletbeat rates it* (walletbeat `dc05991`,
+2026-11-10).
 
 ## What "compliant" means here
 
@@ -189,7 +192,8 @@ The port mirrors `packages/plugins/src/base.ts`:
   - **Amount and timing.** Privacy Pools takes any amount, so the same odd
     amount out soon after it went in is easy to match. A partial withdrawal
     with change left in the pool, a round amount and time help. Tornado
-    Cash's fixed denominations avoid this by design.
+    Cash's fixed denominations avoid matching by amount by design, not by
+    timing.
   - **What follows.** Sending the funds back to a known account, or to an
     exchange account in the user's name, links them again.
   - **The IP address**, which the relayer or the bundler sees (D4).
@@ -351,6 +355,9 @@ Read at Myotis `dc3a1c0` (2026-11-10).
   - Myotis has no fallback for expired history, and the Portal Network is
     abandoned. The walk then stalls rather than fails, and that range is
     never covered (`docs/eth-getlogs-design.md`).
+  - So a balance from the walk alone over expired history would stay
+    "syncing" for good (*Only over complete coverage*). `LogsReading.NotCovered`
+    does not tell a stalled walk from a slow one.
   - Privacy Pools (from block 22,153,713) is after the Merge and not affected
     today. A rolling expiry of about a year would reach it too.
 - **Sepolia has neither problem to that degree**, an inference, not a
@@ -623,7 +630,9 @@ match:
 - Kohaku's roadmap: <https://notes.ethereum.org/@niard/KohakuRoadmap>.
 - Myotis: `docs/eth-getlogs-design.md`, `docs/seeded-log-histories.md`,
   `docs/railgun-poc.md`, `docs/railgun-android.md`,
-  `docs/privacy-and-tor.md`,
+  `docs/privacy-and-tor.md`, `docs/logindex-verified-bundle-design.md`,
   `myotis-api/src/main/java/io/myotis/api/ChainHandle.java`.
+- walletbeat: `src/schema/attributes/privacy/private-transfers.ts`,
+  `src/schema/features/privacy/transaction-privacy.ts`.
 - Punicus issue #101 (Railgun), which read `Railgun-Privacy/contract` and
   `@railgun-community/engine` 9.9.1 and `wallet` 10.8.6.
