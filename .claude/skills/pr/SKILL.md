@@ -66,8 +66,17 @@ Then rename the session (Claude Code desktop app only; see the end).
   this call never wakes the session for its review comments or CI failures,
   and the owner ends up typing "please address the comment" for each one
   (owner ruling, 2026-10-09, after a day of exactly that).
-- **Elsewhere:** use whatever the host offers to watch a PR
-  (`subscribe_pr_activity`).
+- **claude.ai/code cloud session:** at the same moment, call
+  `subscribe_pr_activity` with the owner, repo and PR number. That call is
+  the session's Auto-fix switch; it is per PR and off by default there too.
+  Make it without asking, and never tell the owner to turn Auto-fix on in
+  the UI: this rule is the owner's standing, explicit request for it on
+  every PR a session opens or takes over (owner ruling, 2026-11-10, after
+  cloud sessions began stopping at "PR created" to ask for the toggle).
+- If the result says another Claude session already watches the PR, this
+  session gets no events. Say so in the report; never claim the PR is
+  watched.
+- **Any other host:** use whatever it offers to watch a PR.
 - Then wait for CI and review feedback. The task is not done at "pushed".
 
 ## Step 5: address the PR comments

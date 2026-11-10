@@ -130,8 +130,10 @@ skip the PR is when the user explicitly says not to open one.
 4. **Wait for review comments, and make sure they reach you.** In the
    desktop app, right after `gh pr create` returns: `mcp__ccd_pr__set_monitor`
    with the PR's URL, `auto_fix: true`, `address_comments: true`; it is per
-   PR and off by default (owner ruling, 2026-10-09). Elsewhere
-   `subscribe_pr_activity`. "Pushed" is not "done".
+   PR and off by default (owner ruling, 2026-10-09). In a claude.ai/code
+   cloud session, `subscribe_pr_activity` at the same moment, without asking
+   and without sending the owner to the Auto-fix toggle (owner ruling,
+   2026-11-10). "Pushed" is not "done".
 5. **Address every comment** and drive CI to green. Keep watching until the
    PR is merged or closed.
 
