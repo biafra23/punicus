@@ -529,6 +529,93 @@ What it means for D9, for the owner to weigh:
   Punicus's adapter supplies the verified log index and verified calls in
   their place; a pluggable syncer is where that fits.
 
+### What the clients ask of the node
+
+Read in Kohaku `886f72d` (`packages/provider`, `packages/privacy-pools`,
+`packages/tornado-cash`) and kohaku-rs (`crates/tornadocash`; on
+`feat/kohaku-railgun`, `crates/railgun-sync`), against Myotis `dc3a1c0`'s
+verified methods (`docs/implementation-status.md`).
+
+- **Every standard method is one Myotis serves**: Kohaku's provider
+  interface is `eth_getLogs`, `eth_call`, `eth_blockNumber`,
+  `eth_getBalance`, `eth_getCode`, `eth_getTransactionReceipt`,
+  `eth_estimateGas`, `eth_gasPrice`, `eth_getTransactionCount`, and through
+  `request` `eth_getBlockByNumber`, `eth_feeHistory`,
+  `eth_maxPriorityFeePerGas` and `eth_chainId`.
+- **Within Myotis's limits:**
+  - `eth_getLogs` answers only for an entry of the log index. Punicus
+    watches each pool (*What it must hold*).
+  - `eth_call` reads at the head. The clients call at `latest`.
+  - `eth_getBlockByNumber` reaches 512 blocks below the head.
+  - A transaction or receipt by hash is found in the recent blocks only.
+- **Tornado Cash classic:** nothing beyond these.
+- **Privacy Pools: one read beyond them.** `syncHistoryTimestampsThunk.ts`
+  dates the history by headers on a grid back to the Entrypoint's
+  deployment, about 130 on mainnet by its own comment. Myotis refuses those
+  older than 512 blocks. Only the history's dates depend on it, never a
+  balance or a spend. Punicus dates by block until the engine reports a
+  log's time (docs/embedding-myotis.md, *History*).
+- **Railgun: the TXID tree has no RPC syncer.** The note history has one
+  (`RpcSyncer`; the default composes Subsquid's indexer with an RPC tail).
+  The TXID tree, which every PPOI proof is built against, has only
+  `SubsquidSyncer` (`railgun-sync/src/subsquid.rs`). A spend with a PPOI
+  proof then rests on an indexer, which *Verified, or not available* rules
+  out unless D4 says otherwise.
+  - Why there is no RPC syncer is an inference, not checked against the
+    contract: a TXID rests on the `transact` call's input, which no log
+    carries, and Myotis finds old transactions by hash nowhere.
+- **Nova** has no client to read. Its outputs are in logs, so logs and
+  `eth_call` would likely do: an inference.
+- **Not node methods:** the gas sponsoring in Kohaku's Privacy Pools and
+  Tornado Cash calls a bundler's `eth_sendUserOperation`,
+  `eth_estimateUserOperationGas` and `pimlico_getUserOperationGasPrice`.
+  With the association set (0xbow's API or IPFS) and the optional
+  `saga-log-source` indexer, these are services for D4 and D5, not gaps in
+  Myotis.
+
+### Privacy Pools in Rust
+
+What a client in Rust takes, piece by piece:
+
+- **Small:**
+  - the note secrets: a BIP-32 key, an EIP-712 signature and keccak, from
+    standard crates;
+  - Poseidon over BN254 as circom computes it: TACEO's `poseidon-rust`,
+    vendored on kohaku-rs's Railgun branch, or another circom-compatible
+    crate;
+  - the Lean IMT, for the state tree and the association set's tree:
+    kohaku-rs's generic `kohaku-merkle-tree`, or a small one of its own;
+  - the events, `Deposited`, `Withdrawn`, `Ragequit`, `LeafInserted` and
+    `RootUpdated`;
+  - discovery, the root checks and the balance, as this page pins them, with
+    Kohaku's TypeScript as the reference and the source of the vectors;
+  - the association set's tree from IPFS, and the relayer or bundler
+    requests (D4, D5).
+- **The real work: the prover** for `withdraw` and `commitment`, from
+  circom 2's WebAssembly witness generators and `.zkey` keys (*What it means
+  for D9*). Options to evaluate, named here from general knowledge and not
+  checked:
+  - `ark-circom`, which runs the `.wasm` in a WebAssembly runtime: awkward
+    on iOS, which allows no code compiled at runtime;
+  - a native witness generator made at build time (iden3's `witnesscalc`,
+    or `rust-witness` / `circom-witness-rs`), proving with `ark-groth16` or
+    rapidsnark;
+  - mopro, which packages that path for Android and iOS.
+
+  Whichever it is, its proofs must match snarkjs's on Kohaku's vectors.
+- So the first step is a spike: one `withdraw` and one `commitment` proved
+  in Rust on Android and iOS, checked against snarkjs. The rest is routine
+  beside it.
+
+Compared with the others in Rust:
+
+- **Tornado Cash classic** is built (`kohaku-tornadocash`). What is left is
+  integration: the verified log index in place of its syncing, and D3.
+- **Railgun** is the most to build, but two codebases exist, so the work is
+  adopting one. Its TXID tree is the gap above.
+- **Nova** is about Privacy Pools' size plus encrypted outputs and key
+  registration, with no code and no Kohaku reference.
+
 ## Following Kohaku
 
 - **The pins.** The Kohaku commit this page matches, `8c83d64`, and, for
@@ -679,14 +766,20 @@ match:
   `config.ts`, `utils.ts`, `verification/root-verification.ts`,
   `state/thunks/discoverUserSecretsThunk.ts`, `data/ipfsAsp.service.ts`,
   `data/saga-log-source.ts`; `packages/tornado-cash/src/account/`;
-  `packages/railgun/README.md`.
+  `packages/railgun/README.md`; `packages/provider/src/provider.ts`;
+  `packages/privacy-pools/src/data/`,
+  `state/thunks/syncHistoryTimestampsThunk.ts`;
+  `packages/tornado-cash/src/data/`.
 - kohaku-rs: `README.md`, `crates/tornadocash/`; on `feat/kohaku-railgun`,
-  `crates/railgun/README.md` and `crates/railgun-poi/`.
+  `crates/railgun/README.md`, `crates/railgun-poi/` and
+  `crates/railgun-sync/`.
+- `@fatsolutions/privacy-pools-core-circuits` 1.0.5 (npm): its artifacts.
 - railgun-rust: `crates/`, `Cargo.toml`.
 - Kohaku's roadmap: <https://notes.ethereum.org/@niard/KohakuRoadmap>.
 - Myotis: `docs/eth-getlogs-design.md`, `docs/seeded-log-histories.md`,
   `docs/railgun-poc.md`, `docs/railgun-android.md`,
   `docs/privacy-and-tor.md`, `docs/logindex-verified-bundle-design.md`,
+  `docs/implementation-status.md`,
   `myotis-api/src/main/java/io/myotis/api/ChainHandle.java`.
 - walletbeat: `src/schema/attributes/privacy/private-transfers.ts`,
   `src/schema/features/privacy/transaction-privacy.ts`.
