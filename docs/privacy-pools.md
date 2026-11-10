@@ -328,7 +328,8 @@ From the research on the options (2026-11-10):
   many inputs before it is used.
 - The witness holds the note's secrets: the library zeroes its buffers and
   never logs an input.
-- **Part 0, the spike**, runs this on the desktop first (*The plan*).
+- **Part 0, the spike**, ran this on the desktop: every step passed, and a
+  `withdraw` proof takes about 0.4 s (*The plan*).
 
 ### The log index
 
@@ -383,7 +384,7 @@ own: nothing is shown to the user before Part 7.
 
 | Part | What | Needs | Cloud |
 |---|---|---|---|
-| 0 | Prover spike | — | yes (desktop) |
+| 0 | Prover spike: done on the desktop | — | yes (desktop) |
 | 1 | This page, the decisions as rulings | the owner | yes |
 | 2 | The native library and its build | D9, D14 | partly |
 | 3 | Test vectors from Kohaku | D1, D11 | yes |
@@ -397,15 +398,57 @@ own: nothing is shown to the user before Part 7.
 | 11 | Ethereum | D6 | partly |
 | 12 | Final PR into `main` | the owner merges | — |
 
-### Part 0: the prover spike (approved 2026-11-10, running)
+### Part 0: the prover spike (approved and run, 2026-11-10)
 
-- On the desktop, in a scratch directory outside the repository.
-- snarkjs proves and verifies both circuits: the reference vectors.
-- Rust proves from snarkjs's witness and the published `.zkey`; snarkjs
-  verifies it with the published `.vkey`.
-- Rust computes the witness from the `.wasm` (`rust-witness`) and from a
-  graph; each must equal snarkjs's, element by element.
-- Times, memory and binary sizes recorded.
+Run on the desktop (Linux x86_64, 4 cores), in a scratch directory outside
+the repository. Every step passed for both circuits.
+
+- **The reference**: snarkjs 0.7.5 proved and verified both circuits, from
+  inputs built as Kohaku's `withdrawThunk` builds them (Lean IMT, Poseidon,
+  depth 32). Its witnesses, proofs and public signals are the first
+  vectors.
+- **The source**: the published `.zkey`, `.vkey` and `.wasm` are
+  byte-identical to 0xbow `privacy-pools-core` at `df4bf730`
+  (`packages/circuits/trusted-setup/final-keys/`, `build/`). The package's
+  own repository could not be read; it was not needed.
+- **The prover**: `taceo-circom-types` 0.3.4 and `taceo-groth16` 0.2.3
+  (`CircomReduction`), over `ark-groth16` 0.6, proved from snarkjs's
+  witness and the published `.zkey`. snarkjs verified each proof with the
+  published `.vkey`; the public signals were identical.
+- **The witness**, two ways, each equal to snarkjs's element by element
+  (1,542 for `commitment`, 36,901 for `withdraw`, the `.zkey`'s count):
+  - `rust-witness` 0.1.6 from the published `.wasm`;
+  - a `circom-witness-rs` 0.5.1 graph, built from 0xbow's source at
+    `df4bf730` with circomlib 2.0.5 at **`--O1`**. `--O2` gives 17,513
+    signals and does not fit the `.zkey`.
+- **From inputs to a verified proof in Rust**, both ways:
+
+  | | `commitment` | `withdraw` |
+  |---|---|---|
+  | `.zkey` load (curve checks off; pinned by hash instead) | 3 ms | 35–45 ms |
+  | witness, graph / `.wasm` | 0.07 ms / 2.1 ms | 2.6 ms / 45 ms |
+  | proof | 22 ms | 330 ms (1.23 s on one thread) |
+  | peak memory | 13 MiB | 67–72 MiB |
+
+  snarkjs needs 2.6 s and 413 MiB for the same `withdraw`.
+- **Size**, stripped, x86_64: 1.8 MB with the graphs (230 KB and 43 KB,
+  loaded at run time); 6.9 MB with both `.wasm` compiled in.
+- **A finding the design must carry**: neither Rust witness checks the
+  circuit's assertions. With a wrong state root, snarkjs refuses ("Assert
+  Failed"); both Rust routes return a witness, and the prover a proof that
+  only a verification catches. **The library verifies every proof against
+  the pinned `.vkey` before it returns it** (about 2 ms).
+- **The stack chosen for Part 2**, subject to D9: the `circom-witness-rs`
+  graphs at `--O1` with the TACEO prover. The graphs are built once,
+  offline, by the GPL builder pinned to its commit (`5121bdc6`, embedding
+  circom 2.2.2), from 0xbow's `df4bf730`; only the graphs, under the MIT
+  runtime, ship. Their sha256 is pinned beside the `.zkey`'s. CI rebuilds
+  them and compares their witnesses with the published `.wasm`'s on the
+  vectors; `rust-witness` stays as that cross-check only.
+- To vet before Part 2: the TACEO releases used are four days old (an
+  August pair, 0.3.2 and 0.2.1, also exists); `rust-witness` fetches an
+  unpinned `w2c2`; what the GPL builder's licence means for the graphs it
+  writes (D15).
 - **Next, on devices** (not in the cloud): Android arm64-v8a, armeabi-v7a
   and x86_64, an iPhone and the simulator, Windows. Success: every proof
   verifies, `withdraw` under 2 s on a mid-range arm64 phone and under 5 s on
@@ -599,9 +642,11 @@ Each is recorded as decided before its code lands.
 
 ## Risks
 
-- **The graph does not match the `.zkey`.** Then `rust-witness` from the
-  `.wasm`, which matches by construction; then a WebAssembly interpreter of
-  our own (`wasmi`).
+- **The graph does not match the `.zkey`.** The spike's `--O1` graph does;
+  a rebuild that does not fails CI. Then `rust-witness` from the `.wasm`,
+  which matches by construction.
+- **A proof of a witness that breaks an assertion.** The Rust witnesses do
+  not check them; the library verifies every proof before returning it.
 - **The association set's root moves under a withdrawal.** Proving is fast
   enough to redo; the send checks the root first.
 - **The Entrypoint is upgraded.** D12.
