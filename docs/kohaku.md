@@ -518,10 +518,13 @@ What it means for D9, for the owner to weigh:
   natives. Kotlin would start from nothing, the prover included.
 - Railgun on kohaku-rs's branch would also keep Punicus on Kohaku's own code,
   as *Following Kohaku* wants, once the branch is merged.
-- Privacy Pools has the least code to build on. Kohaku proves it with
-  snarkjs's Groth16, the circom toolchain Tornado Cash's circuits come from,
-  so `kohaku-tornadocash`'s prover may serve it. That is an inference, not
-  tried.
+- Privacy Pools has the least code to build on, and its prover is the open
+  part. Kohaku proves it with snarkjs, from circom's WebAssembly witness
+  generators and `.zkey` proving keys
+  (`@fatsolutions/privacy-pools-core-circuits` 1.0.5: `withdraw` and
+  `commitment`). `kohaku-tornadocash` proves with `websnark-rs` from a
+  `circuit.bin` of Tornado Cash's older circom, so it is unlikely to take
+  these as they are; a Rust witness generator for circom 2 is needed.
 - Every client above reads chain data over JSON-RPC or from an indexer.
   Punicus's adapter supplies the verified log index and verified calls in
   their place; a pluggable syncer is where that fits.
