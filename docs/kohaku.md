@@ -312,8 +312,10 @@ deployment (D7).
 ### What Punicus can do today
 
 - **Watch:** yes. `LogIndex.configure(network, listOf(LogWatch(
-  LogWatchKey.Emitter(contract), deployBlock)), emptyList())` is exactly the
-  engine's address entry. `EngineLogIndex.logs` serves it and refuses a range
+  LogWatchKey.Emitter(contract), deployBlock)), emptyList(), walkPaused)` is
+  exactly the engine's address entry. `walkPaused` is per network, not per
+  entry: a pool's follower and `FollowAccountLogs` share it, so both must
+  say the same. `EngineLogIndex.logs` serves it and refuses a range
   below its start (`BeforeStart`).
 - `FollowAccountLogs` unwatches only accounts that left the wallet
   (`AccountLogs.kt`, `gone`). It leaves a pool's entry alone.
