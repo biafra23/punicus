@@ -12,8 +12,8 @@ the rules win and this page is fixed.
 Read at Kohaku `8c83d64` (2026-11-02), kohaku-rs's `main` of the same week
 and Myotis `5578e75` (2026-11-03). The facts below are from those commits,
 except where a section names a later read: *Why a seed at all* (Myotis
-`dc3a1c0`, 2026-11-10) and *How walletbeat rates it* (walletbeat `dc05991`,
-2026-11-10).
+`dc3a1c0`, 2026-11-10), *How walletbeat rates it* (walletbeat `dc05991`,
+2026-11-10) and *Existing implementations* (its own commits, 2026-11-10).
 
 ## What "compliant" means here
 
@@ -475,6 +475,57 @@ about sharing a viewing key is noted, not required.
   the send screen makes the choice explicit or a private send the default.
   That is a screen decision, docs/wallet-ux.md's and the owner's.
 
+## Existing implementations
+
+What D9 can build on. None is mature, and none is in Java or Kotlin.
+Read on 2026-11-10: kohaku-rs `dd5ded2` and its `feat/kohaku-railgun`
+branch at `287e862`, railgun-rust `e9a0e74`, Kohaku `886f72d`.
+
+| Protocol | Rust | Java or Kotlin |
+|---|---|---|
+| Tornado Cash classic | kohaku-rs `kohaku-tornadocash` on `master` | none |
+| Railgun | kohaku-rs `feat/kohaku-railgun`, unmerged; railgun-rust, third party | none |
+| Privacy Pools | none | none |
+| Tornado Cash Nova | none | none |
+
+- **kohaku-rs** ([ethereum/kohaku-rs](https://github.com/ethereum/kohaku-rs))
+  says of itself: "NOT READY FOR PRODUCTION USE. Packages contain UNAUDITED
+  CODE."
+  - `kohaku-tornadocash`: deposit and withdrawal, event syncing, the Merkle
+    tree, relayed and paymaster-sponsored (ERC-4337) withdrawals. It proves
+    with `websnark-rs` and bundles the circuit files, about 9.3 MiB
+    compressed. Its benchmark: 1.4 s a proof natively, 0.5 s in parallel, on
+    a desktop CPU.
+  - `feat/kohaku-railgun`, last commit 2026-11-09: the wallet, UTXO
+    indexing, shielding, spend selection and proofs, with PPOI, a paymaster
+    and syncers as separate crates. The core contacts no PPOI service, and a
+    consumer supplies the syncer (`UtxoSyncer`).
+- **railgun-rust**
+  ([triamazikamno/railgun-rust](https://github.com/triamazikamno/railgun-rust)),
+  MIT: about 205 commits since 2026-01-20, every crate at 0.1.0, no README.
+  It has the only Rust client of the Waku broadcasters, and PPOI. kohaku-rs
+  takes PPOI test fixtures from it.
+- **Privacy Pools** has a full client only in Kohaku's TypeScript, with
+  Kohaku's TypeScript Poseidon and Lean IMT packages. Nothing in kohaku-rs,
+  on any branch.
+- **Nova** has no code in Kohaku or kohaku-rs.
+- Myotis has no client of any of them. Its Railgun proof of concept serves
+  logs to an outside wallet over local JSON-RPC (`docs/railgun-poc.md`).
+
+What it means for D9, for the owner to weigh:
+
+- Rust is where the work is, and Punicus links Rust as it links the Myotis
+  natives. Kotlin would start from nothing, the prover included.
+- Railgun on kohaku-rs's branch would also keep Punicus on Kohaku's own code,
+  as *Following Kohaku* wants, once the branch is merged.
+- Privacy Pools has the least code to build on. Kohaku proves it with
+  snarkjs's Groth16, the circom toolchain Tornado Cash's circuits come from,
+  so `kohaku-tornadocash`'s prover may serve it. That is an inference, not
+  tried.
+- Every client above reads chain data over JSON-RPC or from an indexer.
+  Punicus's adapter supplies the verified log index and verified calls in
+  their place; a pluggable syncer is where that fits.
+
 ## Following Kohaku
 
 - **The pins.** The Kohaku commit this page matches, `8c83d64`, and, for
@@ -626,7 +677,9 @@ match:
   `state/thunks/discoverUserSecretsThunk.ts`, `data/ipfsAsp.service.ts`,
   `data/saga-log-source.ts`; `packages/tornado-cash/src/account/`;
   `packages/railgun/README.md`.
-- kohaku-rs: `README.md`, `crates/tornadocash/`.
+- kohaku-rs: `README.md`, `crates/tornadocash/`; on `feat/kohaku-railgun`,
+  `crates/railgun/README.md` and `crates/railgun-poi/`.
+- railgun-rust: `crates/`, `Cargo.toml`.
 - Kohaku's roadmap: <https://notes.ethereum.org/@niard/KohakuRoadmap>.
 - Myotis: `docs/eth-getlogs-design.md`, `docs/seeded-log-histories.md`,
   `docs/railgun-poc.md`, `docs/railgun-android.md`,
