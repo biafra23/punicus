@@ -174,6 +174,9 @@ The port mirrors `packages/plugins/src/base.ts`:
   Railgun has it: a payment to a `0zk…` address.
 - Privacy Pools and Tornado Cash have none. Funds leave the pool only by a
   withdrawal to a public address, and its amount and recipient are public.
+- Privacy Pools' ragequit is the exception to what follows: it returns a
+  deposit to the address that made it, in public and linked to it. A
+  deposit the association set has not approved has no other way out.
 - The recipient need not be the user's own. A withdrawal straight to a payee
   is a payment whose sender stays private.
 - The link between a deposit and its withdrawal is broken cryptographically,
@@ -189,7 +192,7 @@ The port mirrors `packages/plugins/src/base.ts`:
     Cash's fixed denominations avoid this by design.
   - **What follows.** Sending the funds back to a known account, or to an
     exchange account in the user's name, links them again.
-  - **The IP address**, which the relayer sees (D4).
+  - **The IP address**, which the relayer or the bundler sees (D4).
 
 ### The root checks
 
@@ -323,20 +326,22 @@ and it is verified all the way. A seed does not make anything more correct:
 it adds trust in its publisher. It is there for cost and for availability.
 Read at Myotis `dc3a1c0` (2026-11-10).
 
-- **The logs are small; proving none is missing is not.** Railgun's whole
-  mainnet history is about 426,000 logs, an index of about 243 MB
-  (Myotis `docs/railgun-poc.md`).
+- **The logs are small; proving none is missing is not.** Today's mainnet
+  demo seed holds Railgun's history to block 26,097,965 in about 438,000
+  logs, 261 MB (*What it must hold*; Myotis `docs/railgun-android.md`).
 - A block is skipped only when its `logsBloom` rules the contract out.
   Mainnet blocks carry 2,000 or more bloom elements, each setting 3 of 2,048
   bits. So 85–95 % of blocks match even an address that never appears, and
-  each match is settled only by the block's complete receipts.
+  each match is settled only by the block's complete receipts
+  (`docs/seeded-log-histories.md`).
 - Myotis estimates those receipts, at 100–200 KB a block, at about 1 TB for
   a range of about 9M blocks, unmeasured
   (`docs/logindex-verified-bundle-design.md`). It calls Railgun's walk a
   multi-day download.
 - Every header back to the deployment is fetched as well. At roughly 600
   bytes a header, an estimate, that is about 7 GB for Railgun's 11.4M blocks
-  on Ethereum and about 2 GB for Privacy Pools' 3.6M on Sepolia.
+  on Ethereum, about 3.6 GB for its 6M on Sepolia and about 2 GB for Privacy
+  Pools' 3.6M on Sepolia.
 - **Peers may no longer hold the data.** Under EIP-4444's history expiry,
   execution clients may drop old block bodies and receipts over the `eth`
   protocol, pre-Merge history first, and many nodes do.
@@ -348,25 +353,33 @@ Read at Myotis `dc3a1c0` (2026-11-10).
     never covered (`docs/eth-getlogs-design.md`).
   - Privacy Pools (from block 22,153,713) is after the Merge and not affected
     today. A rolling expiry of about a year would reach it too.
-- **Sepolia has neither problem to that degree.** Its blooms are sparse and
-  its history is served. There a walk costs time and download, not
-  feasibility. Walking only is one of D6's answers; under the heavy-download
-  rule it waits for an unmetered connection and takes days, not forever.
+- **Sepolia has neither problem to that degree**, an inference, not a
+  measurement:
+  - its blocks carry far fewer logs than mainnet's, so its blooms should be
+    sparse and a walk should fetch receipts for a small share of blocks;
+  - Railgun (from 5,784,774) and Privacy Pools (from 8,461,453) were deployed
+    there long after Sepolia's Merge in 2022, so pre-Merge expiry does not
+    touch them.
+- So on Sepolia a walk is a question of time and download, not of
+  feasibility, and walking only is one of D6's answers. Under the
+  heavy-download rule it waits for an unmetered connection. How long it
+  takes is not measured yet: Privacy Pools' part 2 measures its own walk
+  there.
 
-### Why Railgun needs an import, even on Sepolia
+### Why the plan imports Railgun's history, even on Sepolia
 
-- Mainnet's `logsBloom` is so full that 85–95 % of blocks look like
-  candidates (Myotis `docs/seeded-log-histories.md`). The walk then fetches
-  nearly every block's receipts, and Myotis calls Railgun's walk a
-  multi-day download.
-- Railgun's history is 6M blocks deep even on Sepolia. Its balance is shown
-  from an imported seed, with Myotis walking and verifying everything above
-  the seed's top (Railgun part 4).
+A proposal, pending D6 (#101's recommendation). Walking only stays D6's
+other answer (*Why a seed at all*).
+
+- On Ethereum, the walk is a multi-day download (*Why a seed at all*).
+- Railgun's history is 6M blocks deep even on Sepolia. The plan shows its
+  balance from an imported seed, labelled as seeded, with Myotis walking and
+  verifying everything above the seed's top (Railgun part 4).
 - An import must not be followed by a push of Punicus's own entry for the
   proxy from a lower block: the engine keeps the lower block, and the band
   below the seed would be refused until walked (#101).
 - Privacy Pools' Sepolia history is about 3.6M blocks; whether its walk is
-  bearable is measured by its part 3.
+  bearable is measured by its part 2.
 
 ### What an import must respect
 
