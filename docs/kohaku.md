@@ -167,6 +167,30 @@ The port mirrors `packages/plugins/src/base.ts`:
   asset, chain or account; invalid address; insufficient balance;
   multi-asset not supported; transfer not supported.
 
+### What "no private transfer" means
+
+- A private transfer moves value from one shielded note to another inside
+  the pool. On chain, the amount, the sender and the recipient stay hidden.
+  Railgun has it: a payment to a `0zk…` address.
+- Privacy Pools and Tornado Cash have none. Funds leave the pool only by a
+  withdrawal to a public address, and its amount and recipient are public.
+- The recipient need not be the user's own. A withdrawal straight to a payee
+  is a payment whose sender stays private.
+- The link between a deposit and its withdrawal is broken cryptographically,
+  not hoped away. The proof shows that some deposit of the set is spent,
+  never which one. On Privacy Pools the set is the deposits the association
+  set approved.
+- What links them again is the user's own behaviour:
+  - **Gas.** A fresh address holds no ETH. Funding it from a known account
+    links the two. That is what the relayer or bundler is for (D4).
+  - **Amount and timing.** Privacy Pools takes any amount, so the same odd
+    amount out soon after it went in is easy to match. A partial withdrawal
+    with change left in the pool, a round amount and time help. Tornado
+    Cash's fixed denominations avoid this by design.
+  - **What follows.** Sending the funds back to a known account, or to an
+    exchange account in the user's name, links them again.
+  - **The IP address**, which the relayer sees (D4).
+
 ### The root checks
 
 - **Railgun:** the contract records every root a tree has ever had
@@ -291,6 +315,43 @@ deployment (D7).
   wraps only `setLogIndexConfig`, `logIndexStatusJson` and `getLogs`, and the
   `LogIndex` port has no import. On iOS, Myotis's typed `ChainHandle` has no
   import either; only `RustEngine.importLogIndexFiles` does.
+
+### Why a seed at all: the walk is possible, but not affordable
+
+The walk back to a contract's deployment is always possible in principle,
+and it is verified all the way. A seed does not make anything more correct:
+it adds trust in its publisher. It is there for cost and for availability.
+Read at Myotis `dc3a1c0` (2026-11-10).
+
+- **The logs are small; proving none is missing is not.** Railgun's whole
+  mainnet history is about 426,000 logs, an index of about 243 MB
+  (Myotis `docs/railgun-poc.md`).
+- A block is skipped only when its `logsBloom` rules the contract out.
+  Mainnet blocks carry 2,000 or more bloom elements, each setting 3 of 2,048
+  bits. So 85–95 % of blocks match even an address that never appears, and
+  each match is settled only by the block's complete receipts.
+- Myotis estimates those receipts, at 100–200 KB a block, at about 1 TB for
+  a range of about 9M blocks, unmeasured
+  (`docs/logindex-verified-bundle-design.md`). It calls Railgun's walk a
+  multi-day download.
+- Every header back to the deployment is fetched as well. At roughly 600
+  bytes a header, an estimate, that is about 7 GB for Railgun's 11.4M blocks
+  on Ethereum and about 2 GB for Privacy Pools' 3.6M on Sepolia.
+- **Peers may no longer hold the data.** Under EIP-4444's history expiry,
+  execution clients may drop old block bodies and receipts over the `eth`
+  protocol, pre-Merge history first, and many nodes do.
+  - Railgun (block 14,737,691) and Tornado Cash (from about 9.1M) were
+    deployed before the Merge (block 15,537,394). Myotis's own seed generator
+    needs a node that still holds pre-Merge receipts (`docs/railgun-poc.md`).
+  - Myotis has no fallback for expired history, and the Portal Network is
+    abandoned. The walk then stalls rather than fails, and that range is
+    never covered (`docs/eth-getlogs-design.md`).
+  - Privacy Pools (from block 22,153,713) is after the Merge and not affected
+    today. A rolling expiry of about a year would reach it too.
+- **Sepolia has neither problem to that degree.** Its blooms are sparse and
+  its history is served. There a walk costs time and download, not
+  feasibility. Walking only is one of D6's answers; under the heavy-download
+  rule it waits for an unmetered connection and takes days, not forever.
 
 ### Why Railgun needs an import, even on Sepolia
 
