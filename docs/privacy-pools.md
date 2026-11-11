@@ -310,8 +310,11 @@ From the research on the options (2026-11-10):
 - **Recommended**: a witness graph built from the circom source at build
   time (`circom-witness-rs`, as TACEO's `taceo-groth16-material`, or iden3's
   `circom-witnesscalc`), proved with pure-Rust Groth16 (`taceo-groth16` or
-  `ark-groth16` 0.6) from the published `.zkey`. No JIT, no C toolchain,
-  every target. It is World ID's stack on phones. Nethereum proves these
+  `ark-groth16` 0.6) from the published `.zkey`. No JIT, every target. One
+  C dependency after all: `circom-witness-rs` needs `zstd-sys`, so each
+  platform's C compiler builds it (found in Part 2a; the NDK's clang on
+  Android, Xcode's on iOS). It only ever reads a graph whose hash was
+  checked first. It is World ID's stack on phones. Nethereum proves these
   very circuits with a `circom-witnesscalc` graph built at `--O1`.
 - **Fallback and cross-check**: `rust-witness`, which turns the published
   `.wasm` into C at build time, so it is the very artifact the `.zkey` was
@@ -438,14 +441,17 @@ the repository. Every step passed for both circuits.
   circuit's assertions. With a wrong state root, snarkjs refuses ("Assert
   Failed"); both Rust routes return a witness, and the prover a proof that
   only a verification catches. **The library verifies every proof against
-  the pinned `.vkey` before it returns it** (about 2 ms).
+  the verifying key in the pinned `.zkey` before it returns it** (about 2
+  ms). A test checks that key equals the published, pinned `.vkey`.
 - **The stack chosen for Part 2**, subject to D9: the `circom-witness-rs`
   graphs at `--O1` with the TACEO prover. The graphs are built once,
   offline, by the GPL builder pinned to its commit (`5121bdc6`, embedding
   circom 2.2.2), from 0xbow's `df4bf730`; only the graphs, under the MIT
-  runtime, ship. Their sha256 is pinned beside the `.zkey`'s. CI rebuilds
-  them and compares their witnesses with the published `.wasm`'s on the
-  vectors; `rust-witness` stays as that cross-check only.
+  runtime, ship. Their sha256 is pinned beside the `.zkey`'s. A workflow
+  rebuilds them on demand and weekly and fails unless they equal the
+  committed ones byte for byte (`native-graphs.yml`); the library's tests
+  prove with them and verify each proof with the published `.vkey`.
+  `rust-witness` stays as a cross-check only.
 - To vet before Part 2: the TACEO releases used are four days old (an
   August pair, 0.3.2 and 0.2.1, also exists); `rust-witness` fetches an
   unpinned `w2c2`; what the GPL builder's licence means for the graphs it
@@ -664,8 +670,8 @@ D3's direction of 2026-11-10):
 ## Risks
 
 - **The graph does not match the `.zkey`.** The spike's `--O1` graph does;
-  a rebuild that does not fails CI. Then `rust-witness` from the `.wasm`,
-  which matches by construction.
+  a rebuild that does not fails the graph workflow. Then `rust-witness`
+  from the `.wasm`, which matches by construction.
 - **A proof of a witness that breaks an assertion.** The Rust witnesses do
   not check them; the library verifies every proof before returning it.
 - **The association set's root moves under a withdrawal.** Proving is fast

@@ -4,6 +4,7 @@
 * text=auto eol=lf
 *.bat text eol=crlf
 *.png binary
+*.bin binary
 *.jar binary
 *.keystore binary
 *.icns binary
