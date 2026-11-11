@@ -734,6 +734,8 @@ match:
 - docs/privacy-pools.md's D11 (Kohaku's derivation, not 0xbow's) and D14
   (the circuit artifacts bundled).
 
+**Open**, with what is left of D2, D3 and D9:
+
 - **D1. The definition.** Is "Kohaku compliant" what *What "compliant"
   means here* says: Kohaku as the spec at a pinned commit, Railgun's engine
   where Kohaku has no code, checked by vectors?

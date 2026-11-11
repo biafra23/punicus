@@ -617,7 +617,8 @@ D3's direction of 2026-11-10):
 - **D9: in this repository.** The native library lives under
   `native/privacy-pools/`, built by Gradle and CI (docs/architecture.md and
   `.claude/rules/architecture.md`, *Native code*). The prover stack is Part
-  0's, unless Part 2 finds otherwise.
+  0's. If Part 2 finds it does not hold, the owner decides the change on
+  Part 2's PR.
 - **D11: Kohaku's derivation.** Not 0xbow's (`.claude/rules/trust.md`;
   docs/keys-and-signing.md).
 - **D14: bundled.** In every build, pinned by sha256, never fetched
@@ -629,6 +630,10 @@ D3's direction of 2026-11-10):
 
 **Open:**
 
+- **D14a. Where the build takes the artifacts from**: committed in this
+  repository (about 19 MB, mostly the `.zkey`s), or downloaded by Gradle
+  and CI from a pinned source and checked against the pinned hashes. Either
+  way the app never fetches them (D14). Part 2 proposes.
 - **D2a. The cache's file**: an app-private file, as now, or sealed with a
   hardware key as the outbox's file is. It ties withdrawals to deposits
   (docs/keys-and-signing.md, *The cache of public values*).
