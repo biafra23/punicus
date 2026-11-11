@@ -35,7 +35,13 @@ rustup target list --installed | grep -qx "$triple" || {
   echo "in native/privacy-pools (the iOS build of :data needs both)" >&2
   exit 1
 }
-cargo rustc --release --lib --locked --crate-type staticlib --target "$triple" --target-dir "$target_dir"
+# Machine code only, no LLVM bitcode: Xcode's linker and nm read bitcode with Apple's LLVM, which is
+# older than rustc's and refuses its bitcode ("Unknown attribute kind", seen on macos-15 with Xcode
+# 16.4). So no LTO here (it would keep bitcode in the archive) and no embedded bitcode; the app's
+# link dead-strips what this library does not use. The encoded flags reach only the target with
+# --target, not the build scripts of zstd-sys and blake3.
+CARGO_PROFILE_RELEASE_LTO=off CARGO_ENCODED_RUSTFLAGS="-Cembed-bitcode=no" \
+  cargo rustc --release --lib --locked --crate-type staticlib --target "$triple" --target-dir "$target_dir"
 built="$target_dir/$triple/release/libprivacy_pools.a"
 
 work=$(mktemp -d)
