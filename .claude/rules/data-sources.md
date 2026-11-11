@@ -7,6 +7,7 @@ paths:
   - "android-app/**/*"
   - "desktop-app/**/*"
   - "ios-app/**/*"
+  - "native/**/*"
   - "*.kts"
   - "docs/**/*"
 ---
@@ -319,6 +320,21 @@ docs/walletconnect.md is the contract.)
 - On mobile; not on the desktop. Built for Android so far. iOS is not built
   yet, which is no ruling: the engine's iOS reads have no verified block body,
   and iOS opens an undefined one of several apps that claim `ethereum:`.
+
+## Privacy Pools' circuit artifacts are bundled
+
+(Owner ruling, 2026-11-11, docs/privacy-pools.md D14.)
+
+- The circuits' proving and verification keys, and what computes their
+  witness (today the witness graphs), ship in every build, each pinned by
+  its sha256 in code. The proving keys are most of it: about 19 MB.
+- The app never fetches them, at first use or later. Kohaku's prover
+  downloads them from GitHub at every proof, unchecked; Punicus does not.
+- Where the build takes them from, committed here or downloaded by the build
+  from a pinned source and checked against the hash, is open
+  (docs/privacy-pools.md, D14a).
+- A file whose hash does not match is no artifact: proving is refused, and
+  says why.
 
 ## Open decisions
 

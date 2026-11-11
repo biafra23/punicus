@@ -2,12 +2,14 @@
 
 How Punicus becomes a Kohaku-compliant wallet: it holds the private notes
 that any Kohaku wallet derives from the same recovery phrase, and it finds
-the same notes on restore. Railgun comes first, then Privacy Pools (*The
-plan*). This page is a plan. Nothing of it is built, and every decision it
-names is open until the owner takes it (*Open decisions*). Issue #219 tracks
-it; issue #101 is Railgun's own design, which this page builds on. Where this
-page and the rules under `.claude/` (their short form in CLAUDE.md) disagree,
-the rules win and this page is fixed.
+the same notes on restore. Privacy Pools comes first, then Railgun: the
+owner reversed the order on 2026-11-10, and docs/privacy-pools.md replaces
+this page's Privacy Pools parts (*The plan*). This page is a plan. Nothing
+of it is built, and every decision it names is open until the owner takes it
+(*Open decisions*). Issue #219 tracks it; issue #101 is Railgun's own
+design, which this page builds on. Where this page and the rules under
+`.claude/` (their short form in CLAUDE.md) disagree, the rules win and this
+page is fixed.
 
 Read at Kohaku `8c83d64` (2026-11-02), kohaku-rs's `main` of the same week
 and Myotis `5578e75` (2026-11-03). The facts below are from those commits,
@@ -372,8 +374,8 @@ Read at Myotis `dc3a1c0` (2026-11-10).
 - So on Sepolia a walk is a question of time and download, not of
   feasibility, and walking only is one of D6's answers. Under the
   heavy-download rule it waits for an unmetered connection. How long it
-  takes is not measured yet: Privacy Pools' part 2 measures its own walk
-  there.
+  takes is not measured yet: docs/privacy-pools.md's Part 4 measures
+  Privacy Pools' own walk there.
 
 ### Why the plan imports Railgun's history, even on Sepolia
 
@@ -388,7 +390,7 @@ other answer (*Why a seed at all*).
   proxy from a lower block: the engine keeps the lower block, and the band
   below the seed would be refused until walked (#101).
 - Privacy Pools' Sepolia history is about 3.6M blocks; whether its walk is
-  bearable is measured by its part 2.
+  bearable is measured by docs/privacy-pools.md's Part 4.
 
 ### What an import must respect
 
@@ -635,9 +637,12 @@ Compared with the others in Rust:
 
 ## The plan
 
-Railgun first, then Privacy Pools (the direction given for this plan,
-2026-11-03, on PR #220). Each is a multi-PR plan of its own, landing part by
-part through its feature branch and reaching `main` in one final PR
+Privacy Pools first, then Railgun (the owner's direction, 2026-11-10; it
+reverses "Railgun first, then Privacy Pools" of 2026-11-03, on PR #220).
+docs/privacy-pools.md replaces the Privacy Pools parts below, with its own
+numbering: its Part 4 measures the Sepolia walk this page calls part 2.
+Each is a multi-PR plan of its own, landing part by part through its
+feature branch and reaching `main` in one final PR
 (`.claude/skills/feature-branch/SKILL.md`). Each part follows
 docs/architecture.md's checklist.
 
@@ -669,7 +674,7 @@ needed:
    circuit files pinned by hash, PPOI, gas through a broadcaster. Needs D4
    and D9, and a Myotis issue if D9 puts the client there.
 
-### Privacy Pools, through `feature/privacy-pools`, after Railgun
+### Privacy Pools, through `feature/privacy-pools` (replaced by docs/privacy-pools.md)
 
 1. **The keychain** in the key-store adapter: the signing key at
    `m/28784'/1'/<accountIndex>'`, the note message signed in native code,
@@ -720,6 +725,19 @@ match:
   contracts;
 - D2 in `.claude/rules/trust.md` and docs/keys-and-signing.md.
 
+**Decided for Privacy Pools** (owner rulings, 2026-11-11; docs/privacy-pools.md,
+*Open decisions*, which numbers them the same way):
+
+- D2, for Privacy Pools: yes. Railgun's viewing key is still open.
+- D3, in part: Privacy Pools first (the owner's direction, 2026-11-10).
+- D9, for Privacy Pools: Rust, in this repository.
+- D10, for Privacy Pools: yes, the parts merged by their author into
+  `feature/privacy-pools` once CI is green and every comment answered.
+- docs/privacy-pools.md's D11 (Kohaku's derivation, not 0xbow's) and D14
+  (the circuit artifacts bundled).
+
+**Open**, with what is left of D2, D3 and D9:
+
 - **D1. The definition.** Is "Kohaku compliant" what *What "compliant"
   means here* says: Kohaku as the spec at a pinned commit, Railgun's engine
   where Kohaku has no code, checked by vectors?
@@ -728,8 +746,9 @@ match:
   values leaving it, as *Key material* above sets out? And Railgun's viewing
   key: does the scan run inside the adapter, or may the key leave it (#101's
   question 4)? Scanning without an unlock depends on that answer.
-- **D3. Which protocols.** Railgun, then Privacy Pools. Tornado Cash: yes or
-  no, given its sanctions history.
+- **D3. Which protocols.** Privacy Pools, then Railgun (the owner's direction,
+  2026-11-10, reversing the order of 2026-11-03). Tornado Cash: yes or no,
+  given its sanctions history.
 - **D4. The off-chain services of a spend.** Railgun: the PPOI nodes and the
   broadcasters, over HTTP with Ktor and over Waku (#101's question 2).
   Privacy Pools: a relayer (it learns the recipient, the amount and the

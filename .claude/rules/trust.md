@@ -7,6 +7,7 @@ paths:
   - "android-app/**/*"
   - "desktop-app/**/*"
   - "ios-app/**/*"
+  - "native/**/*"
   - "*.kts"
   - "docs/**/*"
 ---
@@ -239,6 +240,37 @@ is the owner's decision, never a PR author's. Today the list has one entry:
     stays under the rule above.
   - Open, the owner's to decide: whether Create account, one screen using
     both legs of the path, is within the entry (#40).
+
+### Privacy Pools note secrets are key material
+
+(Owner rulings, 2026-11-11, docs/privacy-pools.md D2 and D11;
+docs/keys-and-signing.md, *Privacy Pools note secrets*.)
+
+- **Kohaku's derivation**: the key at `m/28784'/1'/<accountIndex>'`, a note's
+  secrets from its EIP-712 signature (docs/kohaku.md, *Privacy Pools note
+  secrets*). Not 0xbow's: a phrase used on privacypools.com restores no
+  notes here.
+- The key, the note signature, the nullifier and the secret exist only
+  inside the key-store adapter, inside one call, as byte arrays zeroed
+  before it returns. They are not an exception to *Key material*: they
+  follow it.
+- **Proving runs inside that call**: the adapter hands the secrets to the
+  native prover (docs/architecture.md, *Native code*).
+- **The native library zeroes every buffer of its own that held a secret**,
+  Poseidon's inputs and the witness alike, and never logs an input. Copies a
+  third-party prover keeps are checked in Part 2 and, where not zeroed,
+  said in docs/keys-and-signing.md.
+- **Only public values leave the adapter**: a precommitment, a nullifier
+  hash, a commitment, a finished and verified proof.
+- **Those public values may be cached**, so that discovery runs without an
+  unlock. They are not key material, and the cache never holds a secret.
+  - The cache is an app-private file, out of backups and device transfers,
+    never logged.
+  - It tells more than any one value: it ties each withdrawal to the deposit
+    it spends, the one link the pool hides, and recognizes the next ones.
+  - **It serves discovery only.** A deposit's precommitment is derived
+    inside the unlock that signs that deposit; a deposit carrying another
+    one is not signed.
 
 ## How keys are held
 
