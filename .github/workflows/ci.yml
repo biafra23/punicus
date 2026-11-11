@@ -125,3 +125,34 @@ jobs:
           if-no-files-found: ignore
           retention-days: 14
           overwrite: true
+
+  # The native Privacy Pools library (native/privacy-pools; docs/privacy-pools.md, Part 2;
+  # docs/architecture.md, *Native code*): formatting, clippy and its tests, in release mode, as a
+  # proof in debug mode takes minutes. The tests prove both circuits against the reference
+  # vectors, so they need the proving keys: the fetch script downloads the pinned npm package and
+  # refuses any file whose hash is not the pinned one. The runner's preinstalled rustup installs
+  # the stable toolchain native/privacy-pools/rust-toolchain.toml names.
+  native:
+    name: Native library (Rust)
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    defaults:
+      run:
+        working-directory: native/privacy-pools
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+
+      - name: Fetch the pinned circuit artifacts
+        run: scripts/fetch-artifacts.sh
+
+      - name: Check formatting
+        run: cargo fmt --check
+
+      - name: Clippy
+        run: cargo clippy --release --all-targets --locked -- -D warnings
+
+      - name: Test
+        run: cargo test --release --locked

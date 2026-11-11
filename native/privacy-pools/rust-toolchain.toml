@@ -1,0 +1,4 @@
+# Track stable, as Myotis does (its rust-toolchain.toml); the minimum rustc is `rust-version` in Cargo.toml.
+[toolchain]
+channel = "stable"
+components = ["rustfmt", "clippy"]

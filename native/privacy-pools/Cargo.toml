@@ -1,0 +1,38 @@
+[package]
+name = "privacy-pools-native"
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.85"
+license = "GPL-3.0-only"
+publish = false
+description = "Punicus's native Privacy Pools library: circomlib's Poseidon, zk-kit's Lean IMT, and Groth16 proofs of the withdraw and commitment circuits, behind a C ABI (docs/privacy-pools.md)."
+
+[lib]
+name = "privacy_pools"
+crate-type = ["rlib", "cdylib", "staticlib"]
+
+# Every dependency is pinned exactly: each one sits between the note secrets and a proof
+# (docs/keys-and-signing.md, *Privacy Pools note secrets*). A move of a pin is a reviewed change.
+[dependencies]
+ark-bn254 = "=0.6.0"
+ark-ec = "=0.6.0"
+ark-ff = "=0.6.0"
+ark-groth16 = "=0.6.0"
+circom-witness-rs = "=0.5.1"
+light-poseidon = "=0.5.0"
+rand = "=0.8.8"
+ruint = "=1.21.1"
+sha2 = "=0.10.9"
+taceo-circom-types = { version = "=0.3.4", default-features = false, features = ["bn254", "groth16", "zkey"] }
+taceo-groth16 = "=0.2.3"
+zeroize = "=1.9.1"
+
+[dev-dependencies]
+serde_json = "=1.0.154"
+# The snarkjs proof type, to check the Solidity encoding against a snarkjs proof (tests only).
+taceo-circom-types = { version = "=0.3.4", default-features = false, features = ["bn254", "groth16", "proof"] }
+
+[profile.release]
+strip = true
+lto = "thin"
+codegen-units = 1
