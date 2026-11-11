@@ -2,6 +2,7 @@
 
 package eth.serotine.data.privacypools
 
+import eth.serotine.data.keys.sodium.sodium_memzero
 import eth.serotine.data.privacypools.native.pp_lean_imt_proof
 import eth.serotine.data.privacypools.native.pp_lean_imt_root
 import eth.serotine.data.privacypools.native.pp_poseidon
@@ -29,18 +30,18 @@ import kotlinx.cinterop.usePinned
 import kotlinx.cinterop.value
 import platform.Foundation.NSLock
 import platform.posix.memcpy
-import platform.posix.memset
 
 /**
  * The native Privacy Pools library on iOS (`native/privacy-pools`, its README; docs/privacy-pools.md,
  * Part 2e), through cinterop (`privacyPools.def`): the same calls as the JNA binding of Android and
  * the desktop, over the static library linked into the app, so it is always there.
  *
- * Field elements are 32 big-endian bytes below `p`. Every buffer that crosses the boundary and may
- * hold a secret is native memory this binding clears after the call (`memset`), so no copy of a
- * secret is left in one (the public `.zkey` and graph are freed uncleared); the caller's own arrays
- * are the caller's to zero (docs/keys-and-signing.md, *Privacy Pools note secrets*). Nothing here
- * logs an input.
+ * Field elements are 32 big-endian bytes below `p`. Every native buffer this binding makes that may
+ * hold a secret is cleared after the call with libsodium's `sodium_memzero`, which an optimizer may
+ * not drop as it may a `memset` before a `free`, so no copy of a secret is left in one. A prover's
+ * inputs, and the public `.zkey` and graph, are not copied at all: the caller's arrays are pinned and
+ * handed over as they are, and the caller's own arrays are the caller's to zero
+ * (docs/keys-and-signing.md, *Privacy Pools note secrets*). Nothing here logs an input.
  */
 internal object PrivacyPoolsNative {
     /** A field element's width. */
@@ -117,16 +118,16 @@ internal class PrivacyPools {
      */
     fun prover(circuit: PoolCircuit, zkey: ByteArray, graph: ByteArray): NativeResult<PoolProver> {
         if (zkey.isEmpty() || graph.isEmpty()) return NativeResult.Refused(NativeError.BAD_ARTIFACT)
-        return Buffer(zkey.size, secret = false).use { z ->
-            z.write(zkey)
-            Buffer(graph.size, secret = false).use { g ->
-                g.write(graph)
+        // Pinned, not copied: the library parses both into its own values and keeps neither buffer,
+        // so no second copy of the proving key (most of the 19 MB) exists while it loads.
+        return zkey.usePinned { z ->
+            graph.usePinned { g ->
                 Buffer(4, secret = true).use { status ->
                     val code = status.pointer.reinterpret<IntVar>()
                     code.pointed.value = -1
                     val handle = pp_prover_new(
-                        circuit.number.convert(), z.pointer, zkey.size.convert(), g.pointer, graph.size.convert(),
-                        code,
+                        circuit.number.convert(), z.addressOf(0).reinterpret<UByteVar>(), zkey.size.convert(),
+                        g.addressOf(0).reinterpret<UByteVar>(), graph.size.convert(), code,
                     )
                     val answered = code.pointed.value
                     if (handle != null && answered == 0) {
@@ -154,20 +155,19 @@ internal class PoolProver(private var handle: COpaquePointer?, val circuit: Pool
 
     /**
      * Proves [circuit] from its packed inputs ([PoolCircuit.inputs] field elements in the order of
-     * `src/ffi.rs`), which may hold the note's secrets: they are copied into native memory that is
-     * cleared after the call. The caller zeroes [inputs] itself.
+     * `src/ffi.rs`), which may hold the note's secrets: the array is pinned and handed to the library
+     * as it is, so no native copy of it is made. The caller zeroes [inputs] itself.
      */
     fun prove(inputs: ByteArray): NativeResult<Proved> = locked {
         val prover = handle ?: return@locked NativeResult.Refused(NativeError.NULL_POINTER)
         val width = PrivacyPoolsNative.FIELD_BYTES
         if (inputs.size != circuit.inputs * width) return@locked NativeResult.Refused(NativeError.BAD_LENGTH)
-        Buffer(inputs.size, secret = true).use { packed ->
-            packed.write(inputs)
+        inputs.usePinned { packed ->
             Buffer(PrivacyPoolsNative.PROOF_BYTES, secret = true).use { proof ->
                 Buffer(circuit.publicSignals * width, secret = true).use { public ->
                     val status = pp_prove(
-                        prover.reinterpret(), packed.pointer, circuit.inputs.convert(), proof.pointer,
-                        public.pointer, circuit.publicSignals.convert(),
+                        prover.reinterpret(), packed.addressOf(0).reinterpret<UByteVar>(), circuit.inputs.convert(),
+                        proof.pointer, public.pointer, circuit.publicSignals.convert(),
                     )
                     answer(status) {
                         Proved(proof.read(), List(circuit.publicSignals) { public.read(it * width, width) })
@@ -196,7 +196,7 @@ internal class PoolProver(private var handle: COpaquePointer?, val circuit: Pool
 
 /**
  * Native memory for one call, from the native heap: written from and read into Kotlin arrays, and
- * released by [use], which clears it first when it may hold a [secret].
+ * released by [use], which clears it first with `sodium_memzero` when it may hold a [secret].
  */
 private class Buffer(private val size: Int, private val secret: Boolean) {
     /** The memory; at least one byte, so an empty input still has an address. */
@@ -216,7 +216,7 @@ private class Buffer(private val size: Int, private val secret: Boolean) {
         try {
             block(this)
         } finally {
-            if (secret) memset(pointer, 0, maxOf(size, 1).convert())
+            if (secret) sodium_memzero(pointer, maxOf(size, 1).convert())
             nativeHeap.free(pointer)
         }
 }

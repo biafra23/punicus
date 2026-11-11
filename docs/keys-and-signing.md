@@ -637,7 +637,8 @@ the key-store adapter, inside one call, zeroed afterwards.
     2e settled that it cannot: on iOS this library is one object whose only
     global symbols are its six functions (docs/privacy-pools.md, *2e, as
     built*), so an allocator in it stays its own. Whether to add one is
-    still open; until then the copies stand as said here.
+    still open, and the owner's to decide; until then the copies stand as
+    said here.
 - **The determinism check.** The first note signed in a call is signed
   twice; a mismatch refuses the call. Secrets are derived again at every
   use and never stored.

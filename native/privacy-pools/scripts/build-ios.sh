@@ -29,7 +29,16 @@ esac
 
 here="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$here"
-# The target first, with the command that adds it: cargo's own error names neither.
+# Xcode.app started from the Dock or Finder runs the app's Gradle phase without the login shell's
+# PATH, where rustup puts cargo and rustup (~/.cargo/bin): put that directory on PATH here.
+cargo_bin="${CARGO_HOME:-$HOME/.cargo}/bin"
+if [ -d "$cargo_bin" ]; then PATH="$cargo_bin:$PATH"; export PATH; fi
+command -v rustup > /dev/null || {
+  echo "no rustup on PATH (nor in $cargo_bin): install Rust with rustup (https://rustup.rs)," >&2
+  echo "or start Xcode from a shell that has it" >&2
+  exit 1
+}
+# The target, with the command that adds it: cargo's own error names neither.
 rustup target list --installed | grep -qx "$triple" || {
   echo "rustup lacks the target $triple: run \`rustup target add aarch64-apple-ios aarch64-apple-ios-sim\`" >&2
   echo "in native/privacy-pools (the iOS build of :data needs both)" >&2
@@ -59,7 +68,9 @@ xcrun --sdk "$sdk" libtool -static -o "$out/libprivacy_pools.a" "$work/privacy_p
 # ld -r keeps; linkers ignore it, but Xcode's nm would read the symbols from it, with an LLVM older
 # than rustc's, and fail ("Unknown attribute kind", Xcode 16.4). The machine code's own symbol
 # table is the one the app's link resolves against.
-got=$(xcrun --sdk "$sdk" nm --no-llvm-bc -gU "$out/libprivacy_pools.a" | awk 'NF == 3 { print $3 }' | sort)
+# Read from the merged object, the archive's one member: nm prints no header line for an object, which
+# a path with spaces in it could otherwise turn into a symbol.
+got=$(xcrun --sdk "$sdk" nm --no-llvm-bc -gU "$work/privacy_pools.o" | awk 'NF == 3 { print $3 }' | sort)
 want=$(sort "$here/ios-exports.txt")
 if [ "$got" != "$want" ]; then
   echo "libprivacy_pools.a ($triple) defines other globals than ios-exports.txt:" >&2

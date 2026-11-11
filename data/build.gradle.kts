@@ -661,17 +661,14 @@ mapOf("iosArm64" to "aarch64-apple-ios", "iosSimulatorArm64" to "aarch64-apple-i
     }
 }
 
-// What the iOS tests (iosTest, PrivacyPoolsIosTest) read: where the vectors, graphs and fetched
-// artifacts are, and whether the proving tests run. Generated, as a simulator test has no system
-// properties; the simulator reads the Mac's files at that path.
+// Where the iOS tests (iosTest, PoolVectors.kt) read the vectors, graphs and fetched artifacts.
+// Generated, as a simulator test has no system properties; the simulator reads the Mac's files there.
 val generatePrivacyPoolsIosTestEnv by tasks.registering {
     val outDir = layout.buildDirectory.dir("generated/privacy-pools/iosTestEnv/kotlin")
     val dir = privacyPoolsDir.asFile.absolutePath
     // As a Kotlin string literal: the path's backslashes, quotes and dollar signs escaped.
     val literal = dir.replace("\\", "\\\\").replace("\"", "\\\"").replace("$", "\\$")
-    val proving = providers.gradleProperty("privacyPoolsProving").isPresent
     inputs.property("dir", dir)
-    inputs.property("proving", proving)
     outputs.dir(outDir)
     doLast {
         val f = outDir.get().file("eth/serotine/data/privacypools/PrivacyPoolsTestEnv.kt").asFile
@@ -683,19 +680,21 @@ val generatePrivacyPoolsIosTestEnv by tasks.registering {
 
             /** native/privacy-pools, where the tests read the vectors, graphs and artifacts. */
             internal const val PRIVACY_POOLS_DIR: String = "$literal"
-
-            /** Whether the build fetched the proving keys (-PprivacyPoolsProving), so the proving tests run. */
-            internal const val PRIVACY_POOLS_PROVING: Boolean = $proving
             """.trimIndent() + "\n",
         )
     }
 }
 kotlin.sourceSets.getByName("iosTest").kotlin.srcDir(generatePrivacyPoolsIosTestEnv)
-// What PrivacyPoolsIosTest reads through that path, which Gradle tracks as a string, not as files; and
-// each test's outcome in the log, as Kotlin/Native prints none: the CI log then shows the proving tests
-// ran on the simulator, not merely that the task passed.
+// What the iOS tests read through that path, which Gradle tracks as a string, not as files; each test's
+// outcome in the log, as Kotlin/Native prints none; and the proving tests (PrivacyPoolsIosProvingTest)
+// only with -PprivacyPoolsProving, which fetches their keys. Kotlin/Native has no test assumptions, so
+// they are left out by the filter instead: a passed proving test in the log is a proof that ran.
+val privacyPoolsProving = providers.gradleProperty("privacyPoolsProving").isPresent
 tasks.matching { it.name == "iosSimulatorArm64Test" }.configureEach {
     (this as AbstractTestTask).testLogging { events("passed", "skipped", "failed") }
+    if (!privacyPoolsProving) {
+        filter.excludeTestsMatching("eth.serotine.data.privacypools.PrivacyPoolsIosProvingTest")
+    }
     inputs.dir(privacyPoolsDir.dir("tests/vectors")).withPropertyName("privacyPoolsVectors")
         .withPathSensitivity(PathSensitivity.RELATIVE)
     inputs.dir(privacyPoolsDir.dir("graphs")).withPropertyName("privacyPoolsGraphs")
