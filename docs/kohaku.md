@@ -105,7 +105,10 @@ and the nullifiers. Scanning reads the proxy's `Shield`, `Transact`,
 
 Kohaku's default is the signature scheme
 (`packages/privacy-pools/src/account/signature-keys.ts`). The older BIP-32
-scheme in `keys.ts` is deprecated, derives other notes and is not built.
+scheme in `keys.ts` is deprecated, derives other notes and is not built: it
+is Kohaku's own older scheme, not 0xbow's, so its notes stay unfound.
+0xbow's derivation is a third, built for reading (docs/privacy-pools.md,
+D11).
 
 - The signing key is at `m/28784'/1'/<accountIndex>'`.
 - It signs the EIP-712 message `PrivacyPoolNote(uint64 depositIndex, uint64
@@ -145,8 +148,10 @@ only if the owner wants Tornado Cash at all (D3):
   `Deposited` event carries; the gap limit is zero. For each deposit, follow
   its change notes while the newest one's nullifier hash has been spent.
 
-Punicus uses the same rules. Another one finds fewer notes, or notes the
-other wallets do not.
+Punicus uses the same rules for Kohaku's notes: another one finds fewer
+notes, or notes the other wallets do not. Beside them it runs 0xbow's rule
+for 0xbow's notes (per pool, a gap of 10; D11), and so finds notes other
+Kohaku wallets do not.
 
 **Only over complete coverage.** Discovery and the balance run only once the
 pool's entry is covered from its deployment block to the head the roots are
@@ -452,8 +457,10 @@ Each missing item lowers the rating, in this order:
 - deposit data that can be exported and imported, and no custodian that can
   read it or that an export depends on. Punicus derives the secrets from the
   recovery phrase and stores none, so the same words restore them in any
-  Kohaku wallet (*Privacy Pools note secrets*). Whether walletbeat counts
-  that as export and import is its reviewers' call;
+  Kohaku wallet (*Privacy Pools note secrets*). A note of 0xbow's derivation,
+  and its change notes, restore here and on privacypools.com only: what
+  option B of D11 costs. Whether walletbeat counts that as export and
+  import is its reviewers' call;
 - a withdrawal through a relayer. A withdrawal without one is rated not
   private: the account that pays the gas is public. A default relayer that
   learns the IP address is rated not private too (D4);
@@ -733,8 +740,9 @@ match:
 - D9, for Privacy Pools: Rust, in this repository.
 - D10, for Privacy Pools: yes, the parts merged by their author into
   `feature/privacy-pools` once CI is green and every comment answered.
-- docs/privacy-pools.md's D11 (Kohaku's derivation, not 0xbow's) and D14
-  (the circuit artifacts bundled).
+- docs/privacy-pools.md's D11 (Kohaku's derivation for new deposits, and the
+  notes of 0xbow's derivation found and spent too, as amended 2026-11-11) and
+  D14 (the circuit artifacts bundled).
 
 **Open**, with what is left of D2, D3 and D9:
 
