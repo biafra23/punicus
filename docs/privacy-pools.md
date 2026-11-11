@@ -607,7 +607,8 @@ which the owner runs or hands to a device session.
 All the owner's. D1 to D10 are docs/kohaku.md's; this page adds D11 to D15.
 Each is recorded as decided before its code lands.
 
-**Decided** (owner rulings, 2026-11-11, recorded in the rule files):
+**Decided** (owner rulings, 2026-11-11, recorded in the rule files, and
+D3's direction of 2026-11-10):
 
 - **D2: yes.** The secrets and the proving stay inside the key-store
   adapter; only public values leave it; the public values may be cached
@@ -622,10 +623,15 @@ Each is recorded as decided before its code lands.
 - **D14: bundled.** In every build, pinned by sha256, never fetched
   (`.claude/rules/data-sources.md`, *Privacy Pools' circuit artifacts are
   bundled*).
-- **D3, in part: Privacy Pools first** (the owner's direction, 2026-11-10).
-  Tornado Cash stays out of this plan.
+- **D3, in part: Privacy Pools first** (the owner's direction, 2026-11-10,
+  recorded on this page and in docs/kohaku.md). Tornado Cash stays out of
+  this plan.
 
 **Open:**
+
+- **D2a. The cache's file**: an app-private file, as now, or sealed with a
+  hardware key as the outbox's file is. It ties withdrawals to deposits
+  (docs/keys-and-signing.md, *The cache of public values*).
 
 - **D1. The definition** of "Kohaku compliant" (docs/kohaku.md).
 - **D4. How a withdrawal is paid for**: 0xbow's relayer (which one, on what

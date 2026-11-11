@@ -610,22 +610,43 @@ the key-store adapter, inside one call, zeroed afterwards.
   - or proves: hands the secrets to the native prover
     (docs/architecture.md, *Native code*) and returns the proof, verified
     against the pinned verification key before it leaves.
-  The seed, the key, the signatures, the secrets and the witness are byte
-  arrays zeroed before the call returns. The prover's witness buffers are
-  zeroed in native code. Nothing of it is logged, cached or turned into a
-  `String`.
+  The seed, the key, the signatures and the secrets are byte arrays zeroed
+  before the call returns. The secrets cross into native code on both
+  paths, as Poseidon's inputs and as the witness: the native library zeroes
+  every buffer of its own that held a secret, and never logs an input.
+  Nothing of it is logged, cached or turned into a `String`.
+  - **The prover's own copies.** A Groth16 prover works on copies of the
+    witness the library never holds (`ark-groth16` keeps its own vectors
+    for its multi-scalar multiplications). Whether the pinned prover zeroes
+    them, or can be made to, is checked in Part 2. Where it cannot, it is
+    said here, as the JDK's AES copy is (*What never leaves a call*).
 - **The determinism check.** The first note signed in a call is signed
   twice; a mismatch refuses the call. Secrets are derived again at every
   use and never stored.
 - **The cache of public values** (D2). So that discovery runs without an
   unlock, an unlock also derives the public values of the next deposits (8
   proposed) and of each known deposit's next change notes, and stores them
-  in an app-private file, out of backups and device transfers. They are not
-  key material: a precommitment and a nullifier hash are what the chain
-  shows once a note is used. But they tell which deposits are the user's,
-  so the file is kept as WalletConnect's session file is, and never logged.
-  The cache holds no secret, no signature and no key. Discovery asks for an
-  unlock only when the cache runs out, and says why.
+  in an app-private file, out of backups and device transfers, never logged.
+  - **What it holds** is no secret, no signature and no key: each value is
+    what the chain shows once its note is used.
+  - **What it tells** is more than any one value. A deposit's precommitment
+    next to its notes' nullifier hashes ties each withdrawal (whose
+    `Withdrawn` carries the nullifier hash), with its recipient and amount,
+    to the deposit it spends: the one link the pool hides. And it holds the
+    values of notes not used yet, so a copy of it recognizes the next
+    deposits and withdrawals as they happen.
+  - Whether an app-private file is enough for that, or the file is sealed
+    as the outbox's is (*The outbox's seal key*), is the owner's call
+    (docs/privacy-pools.md, *Open decisions*).
+  - **It serves discovery only.** A precommitment a deposit sends decides
+    who can spend that deposit, so it never comes from the cache: it is
+    derived inside the unlock that signs the deposit, and a deposit
+    carrying another one is not signed. Where the depositing account is of
+    the note's phrase, its envelope holds the seed both keys derive from,
+    so this costs no second unlock. The unlock that refills the cache
+    checks what the file held the same way, and drops what does not match.
+  - Discovery asks for an unlock only when the cache runs out, and says
+    why.
 - **Unlocks** are the account keys': the password path, or the biometric
   path where it is on. A withdrawal and a ragequit each take one unlock.
 

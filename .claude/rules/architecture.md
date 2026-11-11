@@ -7,6 +7,7 @@ paths:
   - "android-app/**/*"
   - "desktop-app/**/*"
   - "ios-app/**/*"
+  - "native/**/*"
   - "*.kts"
 ---
 
