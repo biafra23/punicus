@@ -21,8 +21,8 @@ triple=${1:?Rust target}
 target_dir=${2:?cargo target dir}
 out=${3:?out dir}
 case "$triple" in
-  aarch64-apple-ios) sdk=iphoneos ;;
-  aarch64-apple-ios-sim) sdk=iphonesimulator ;;
+  aarch64-apple-ios) sdk=iphoneos platform=ios ;;
+  aarch64-apple-ios-sim) sdk=iphonesimulator platform=ios-simulator ;;
   *) echo "unsupported target $triple" >&2; exit 1 ;;
 esac
 : "${IPHONEOS_DEPLOYMENT_TARGET:?set IPHONEOS_DEPLOYMENT_TARGET to the minimum iOS of the app}"
@@ -45,9 +45,11 @@ built="$target_dir/$triple/release/libprivacy_pools.a"
 
 work=$(mktemp -d)
 trap 'rm -rf "$work"' EXIT
-# Every member of cargo's archive, merged into one object; only the listed symbols stay global.
-xcrun --sdk "$sdk" ld -r -arch arm64 -exported_symbols_list "$here/ios-exports.txt" \
-  -all_load "$built" -o "$work/privacy_pools.o"
+# Every member of cargo's archive, merged into one object; only the listed symbols stay global. The
+# platform is named, or ld assumes the device's and refuses the simulator's objects.
+sdk_version=$(xcrun --sdk "$sdk" --show-sdk-version)
+xcrun --sdk "$sdk" ld -r -arch arm64 -platform_version "$platform" "$IPHONEOS_DEPLOYMENT_TARGET" "$sdk_version" \
+  -exported_symbols_list "$here/ios-exports.txt" -all_load "$built" -o "$work/privacy_pools.o"
 mkdir -p "$out"
 rm -f "$out/libprivacy_pools.a"
 xcrun --sdk "$sdk" libtool -static -o "$out/libprivacy_pools.a" "$work/privacy_pools.o"
