@@ -626,10 +626,11 @@ the key-store adapter, inside one call, zeroed afterwards.
     - Both versions are derived, as notes of both exist.
   - **Where that runs.** In the native library, through an entry of its own
     that takes the 32-byte key, rounds it for the legacy version, reduces it
-    and hashes it, with every buffer wiped: in Kotlin a `BigInteger` or a
-    `Double` holding an account key could not be zeroed (rule 7).
-    `pp_poseidon` keeps refusing a value at or above `p`. Part 6 adds the
-    entry.
+    and hashes it, with every buffer of its own wiped: in Kotlin a
+    `BigInteger` or a `Double` holding an account key could not be zeroed
+    (rule 7). The Poseidon it hashes with keeps a copy it does not wipe
+    (*The copies third-party code keeps*, below). `pp_poseidon` keeps
+    refusing a value at or above `p`. Part 6 adds the entry.
   - **The legacy keys are weak.** Each legacy master value is one of about
     2^53. A spent note publishes its nullifier hash, a function of the
     master nullifier and public values alone, so the master values can be
@@ -677,7 +678,12 @@ the key-store adapter, inside one call, zeroed afterwards.
   - **The copies third-party code keeps** (checked in Part 2b, 2026-11-11,
     at the pinned versions). None of these crates zeroes anything: their
     sources hold no `zeroize` at all.
-    - `light-poseidon` 0.5.0: its permutation state, on the Poseidon path;
+    - `light-poseidon` 0.5.0: its permutation state, on the Poseidon path.
+      Once Part 6 adds the entry for 0xbow's derivation, that state holds
+      its two account keys reduced mod `p` (the first is the EOA's own
+      key, up to about six candidates, as the curve order is about 5.3
+      times `p`) and its master values, at every discovery refill and
+      every spend of a 0xbow note, since they are derived again at each;
     - `circom-witness-rs` 0.5.1: its evaluation memory, the graph's node
       values, which hold every signal of the witness;
     - `taceo-groth16` 0.2.3 and `ark-groth16`, `ark-poly` 0.6.0: the
@@ -696,7 +702,10 @@ the key-store adapter, inside one call, zeroed afterwards.
     global symbols are its six functions (docs/privacy-pools.md, *2e, as
     built*), so an allocator in it stays its own. Whether to add one is
     still open, and the owner's to decide; until then the copies stand as
-    said here.
+    said here. The question covers 0xbow's account keys and master values
+    above as well, and is best decided before Part 6 codes their entry:
+    accept the copy, add the allocator, or hash them with a Poseidon whose
+    state can be wiped.
 - **The determinism check.** The first note signed in a call is signed
   twice; a mismatch refuses the call. Secrets are derived again at every
   use and never stored.
