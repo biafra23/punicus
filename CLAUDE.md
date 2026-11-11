@@ -60,7 +60,8 @@ it names for your task.
 ```bash
 # Build all modules: compile, unit tests (JVM + Android unit), the headless Compose UI tests,
 # Android lint, the debug + release APKs. Needs JDK 21, an Android SDK (ANDROID_HOME, or
-# sdk.dir in a git-ignored local.properties) and Rust (rustup) for native/privacy-pools.
+# sdk.dir in a git-ignored local.properties) with the NDK libs.versions.toml pins, and Rust
+# (rustup, with the Android targets: native/privacy-pools/scripts/android-toolchain.sh) for native/.
 # The iOS targets build on macOS only.
 ./gradlew build
 ./gradlew build -PprivacyPoolsProving   # also the Privacy Pools proving tests (fetches ~19 MB of keys)

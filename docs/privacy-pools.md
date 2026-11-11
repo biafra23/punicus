@@ -391,7 +391,7 @@ own: nothing is shown to the user before Part 7.
 | 0 | Prover spike: done on the desktop | — | yes (desktop) |
 | 1 | This page, the decisions as rulings | the owner | yes |
 | 2a | The native library (done, #289) | D9, D14 | yes |
-| 2b | Its Kotlin binding and the desktop build | D9 | yes |
+| 2b | Its Kotlin binding and the desktop build (done, #291) | D9 | yes |
 | 2c | The Android build (NDK) | D9 | CI only |
 | 2d | The iOS build and Windows | D9 | CI only |
 | 3 | Test vectors from Kohaku | D1, D11 | yes |
@@ -477,7 +477,7 @@ the repository. Every step passed for both circuits.
 
 In four parts: 2a the crate and its tests (#289); 2b its Kotlin binding
 through JNA and the desktop build, Gradle building the library with cargo
-and the binding's tests running on the desktop JVM; 2c the four Android
+and the binding's tests running on the desktop JVM (#291); 2c the four Android
 ABIs with the NDK's clang (`zstd-sys` compiles C); 2d the iOS static
 library through cinterop, and Windows.
 
@@ -487,9 +487,42 @@ library through cinterop, and Windows.
   `pp_poseidon`), each taking and returning bytes, never logging.
 - Where it lives (D9, owner ruling, 2026-11-11): in this repository,
   `native/privacy-pools/`, built by Gradle through cargo.
-- **The build**: `cargo-ndk` for the four Android ABIs, the host library for
-  the desktop (Linux, macOS, Windows), a static library for iOS (device and
-  simulator) linked into `SerotineKit`.
+- **The build**: the four Android ABIs, the host library for the desktop
+  (Linux, macOS, Windows), a static library for iOS (device and simulator)
+  linked into `SerotineKit`.
+- **2c, as built**: `:data`'s `buildPrivacyPoolsAndroid` runs one cargo build
+  per ABI the app ships (arm64-v8a, armeabi-v7a, x86, x86_64), with the
+  NDK's clang as linker and as the C compiler of `zstd-sys` and `blake3`
+  (both through `circom-witness-rs`), at the app's minSdk.
+  It puts the libraries into `:data`'s jniLibs.
+  - No `cargo-ndk`: the task sets what it would, clang itself with
+    `--target` as linker and C compiler and the flags in
+    `CARGO_ENCODED_RUSTFLAGS`, which an inherited `RUSTFLAGS` cannot
+    override. A build needs only the NDK and rustup's four Android targets,
+    which `native/privacy-pools/scripts/android-toolchain.sh` installs, and
+    no other tool to pin.
+  - An Android Studio deploy builds only the device's ABI; every other
+    build, CI's among them, builds all four.
+  - The NDK is pinned (`gradle/libs.versions.toml`, `ndk`: r28, which
+    aligns to 16 KB pages by default). The task passes the 16 KB alignment
+    to the linker anyway and fails on any LOAD segment that is not 16 KB
+    aligned, as Android 15's 16 KB-page devices need.
+  - Without the NDK or the targets the build fails and says how to get
+    them. `-PskipPrivacyPoolsAndroid` builds the APK without the library,
+    saying so, and the binding answers `UNAVAILABLE` there. No workflow
+    passes it.
+  - The cost: 2.1 MB (arm64-v8a) to 3.6 MB (x86) per ABI, 10.9 MB in all,
+    on every device. Punicus ships one universal APK, and at minSdk 29 its
+    libraries stay uncompressed inside it and load from there: every
+    install carries all four copies, in the download and on disk. Only ABI
+    splits or an app bundle would bring that down to one.
+  - The engine ships arm64-v8a and x86_64 only, so on armeabi-v7a and x86
+    the app has no light client and no pool state to prove against: the
+    two 32-bit copies (5.9 MB) serve nothing there today. Which ABIs ship
+    is the owner's call (the comment at `android-app`'s `abiFilters`).
+  - `android-apk.yml` checks each APK for the library in every ABI it
+    ships, built for that ABI. Nothing runs it on a device yet: the
+    first Android code that calls it comes with Part 6.
 - **CI**: Rust and the NDK on `ubuntu-latest` (`ci.yml`, `android-apk.yml`),
   Rust on `macos-15` (`ios.yml`, `desktop-dmg.yml`), Windows
   (`desktop-windows-msi.yml`). `check_apk_min_api.py` must stay green.

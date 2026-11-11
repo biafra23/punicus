@@ -11,6 +11,8 @@
 # last 8.x line; 9.x changes the KMP Android target to its own plugin, a
 # migration for both repositories at once.
 agp = "8.13.2"
+# The NDK :data cross-compiles the Privacy Pools library with (r28: 16 KB pages by default).
+ndk = "28.2.13676358"
 # Kotlin 2.2.21 is the floor for the iOS target on Xcode 26 (Myotis's reason to
 # pin it); Compose Multiplatform 1.9.x pairs with Kotlin 2.2.20+.
 kotlin = "2.2.21"
