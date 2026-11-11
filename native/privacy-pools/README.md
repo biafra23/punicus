@@ -44,8 +44,8 @@ The inputs of `pp_prove`, packed in this order:
 ```bash
 cd native/privacy-pools
 scripts/fetch-artifacts.sh            # the pinned proving keys, into artifacts/ (git-ignored)
-cargo test --release --locked         # release: a proof in debug mode takes minutes
-cargo clippy --release --all-targets --locked -- -D warnings
+cargo test --profile ci --locked      # optimised: a proof unoptimised takes minutes
+cargo clippy --all-targets --locked -- -D warnings
 cargo fmt --check
 scripts/build-graphs.sh               # rebuilds graphs/ from pinned sources, to compare
 ```

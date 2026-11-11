@@ -56,4 +56,6 @@ pub enum Error {
     NullPointer = 15,
     /// The library panicked; nothing it returned is to be used.
     Panic = 16,
+    /// A tree of no leaves, which has no root.
+    EmptyTree = 17,
 }

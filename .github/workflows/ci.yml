@@ -127,8 +127,8 @@ jobs:
           overwrite: true
 
   # The native Privacy Pools library (native/privacy-pools; docs/privacy-pools.md, Part 2;
-  # docs/architecture.md, *Native code*): formatting, clippy and its tests, in release mode, as a
-  # proof in debug mode takes minutes. The tests prove both circuits against the reference
+  # docs/architecture.md, *Native code*): formatting, clippy and its tests, the tests in the crate's
+  # optimised `ci` profile, as a proof unoptimised takes minutes. The tests prove both circuits against the reference
   # vectors, so they need the proving keys: the fetch script downloads the pinned npm package and
   # refuses any file whose hash is not the pinned one. The runner's preinstalled rustup installs
   # the stable toolchain native/privacy-pools/rust-toolchain.toml names.
@@ -145,6 +145,12 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 
+      # The compiled dependencies (arkworks, the prover, the witness runtime), keyed on Cargo.lock.
+      - name: Cache cargo
+        uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
+        with:
+          workspaces: native/privacy-pools
+
       - name: Fetch the pinned circuit artifacts
         run: scripts/fetch-artifacts.sh
 
@@ -152,7 +158,7 @@ jobs:
         run: cargo fmt --check
 
       - name: Clippy
-        run: cargo clippy --release --all-targets --locked -- -D warnings
+        run: cargo clippy --all-targets --locked -- -D warnings
 
       - name: Test
-        run: cargo test --release --locked
+        run: cargo test --profile ci --locked

@@ -21,8 +21,8 @@ pub fn from_be(bytes: &[u8]) -> Result<Fr, Error> {
     Ok(value)
 }
 
-/// Writes a field element as 32 big-endian bytes.
-pub fn to_be(value: &Fr) -> [u8; FIELD_BYTES] {
+/// Writes a field element of BN254's scalar or base field as 32 big-endian bytes.
+pub fn to_be<F: PrimeField>(value: &F) -> [u8; FIELD_BYTES] {
     let mut out = [0u8; FIELD_BYTES];
     let bytes = value.into_bigint().to_bytes_be();
     out[FIELD_BYTES - bytes.len()..].copy_from_slice(&bytes);

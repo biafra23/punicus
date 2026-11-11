@@ -8,7 +8,7 @@
 use std::collections::HashSet;
 
 use ark_bn254::Fr;
-use ark_ff::{BigInteger, PrimeField, Zero};
+use ark_ff::Zero;
 
 use crate::{hash, Error};
 
@@ -32,7 +32,7 @@ pub struct InclusionProof {
 impl LeanImt {
     /// Builds the tree. Refuses a zero leaf, a repeated leaf, and a tree deeper than [MAX_DEPTH].
     pub fn new(leaves: Vec<Fr>) -> Result<Self, Error> {
-        if leaves.len() > (1usize << MAX_DEPTH) {
+        if leaves.len() as u64 > 1u64 << MAX_DEPTH {
             return Err(Error::TreeTooDeep);
         }
         let mut seen = HashSet::with_capacity(leaves.len());
@@ -40,7 +40,7 @@ impl LeanImt {
             if leaf.is_zero() {
                 return Err(Error::ZeroLeaf);
             }
-            if !seen.insert(leaf.into_bigint().to_bytes_be()) {
+            if !seen.insert(*leaf) {
                 return Err(Error::DuplicateLeaf);
             }
         }

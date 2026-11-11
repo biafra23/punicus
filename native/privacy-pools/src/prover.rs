@@ -13,7 +13,7 @@ use std::collections::HashMap;
 
 use ark_bn254::{Bn254, Fq, Fr};
 use ark_ff::{BigInteger, PrimeField, UniformRand};
-use ark_groth16::{Proof, ProvingKey};
+use ark_groth16::{PreparedVerifyingKey, Proof, ProvingKey};
 use rand::rngs::OsRng;
 use ruint::aliases::U256;
 use taceo_circom_types::{groth16::Zkey, CheckElement};
@@ -32,6 +32,7 @@ pub struct Prover {
     circuit: Circuit,
     matrices: ConstraintMatrices<Fr>,
     key: ProvingKey<Bn254>,
+    verifying: PreparedVerifyingKey<Bn254>,
     graph: circom_witness_rs::Graph,
 }
 
@@ -107,7 +108,8 @@ impl Prover {
             return Err(Error::BadArtifact);
         }
         let graph = circom_witness_rs::init_graph(graph).map_err(|_| Error::BadArtifact)?;
-        Ok(Self { circuit, matrices, key, graph })
+        let verifying = ark_groth16::prepare_verifying_key(&key.vk);
+        Ok(Self { circuit, matrices, key, verifying, graph })
     }
 
     /// The circuit this prover proves.
@@ -153,13 +155,24 @@ impl Prover {
         self.prove(signals)
     }
 
-    fn prove(&self, mut signals: Signals) -> Result<Proved, Error> {
-        let inputs = std::mem::take(&mut signals.0);
-        let computed = circom_witness_rs::calculate_witness(inputs, &self.graph, None);
+    /// The witness from the graph, through buffers this crate owns and wipes: the signals, the
+    /// graph's input buffer and its output. (`circom_witness_rs::calculate_witness` would take
+    /// the signals by value and drop them unwiped.)
+    fn prove(&self, signals: Signals) -> Result<Proved, Error> {
+        let names: Vec<String> = signals.0.keys().cloned().collect();
+        let mapping = circom_witness_rs::try_get_input_mapping(&names, &self.graph).map_err(|_| Error::Witness)?;
+        let mut buffer = circom_witness_rs::get_inputs_buffer(circom_witness_rs::get_inputs_size(&self.graph));
+        for (name, values) in &signals.0 {
+            let start = mapping[name];
+            let slot = buffer.get_mut(start..start + values.len()).ok_or(Error::Witness)?;
+            slot.copy_from_slice(values);
+        }
+        drop(signals);
+        let computed = self.graph.evaluate(&buffer, None);
+        buffer.zeroize();
         let mut values = computed.map_err(|_| Error::Witness)?;
         let mut witness: Vec<Fr> = values.iter().map(u256_to_fr).collect();
-        values.iter_mut().for_each(|v| *v = U256::ZERO);
-        drop(values);
+        values.zeroize();
         let result = self.prove_witness(&witness);
         witness.zeroize();
         result
@@ -176,7 +189,10 @@ impl Prover {
         s.zeroize();
         let proof = proved.map_err(|_| Error::Proof)?;
         let public_signals = witness[1..self.matrices.num_instance_variables].to_vec();
-        Groth16::<Bn254>::verify(&self.key.vk, &proof, &public_signals).map_err(|_| Error::ProofRejected)?;
+        let verified = ark_groth16::Groth16::<Bn254>::verify_proof(&self.verifying, &proof, &public_signals);
+        if verified != Ok(true) {
+            return Err(Error::ProofRejected);
+        }
         Ok(Proved { proof: solidity(&proof), public_signals })
     }
 }
@@ -197,9 +213,7 @@ impl Signals {
 
 impl Drop for Signals {
     fn drop(&mut self) {
-        for values in self.0.values_mut() {
-            values.iter_mut().for_each(|v| *v = U256::ZERO);
-        }
+        self.0.values_mut().for_each(Zeroize::zeroize);
     }
 }
 
@@ -219,14 +233,6 @@ fn u256_to_fr(value: &U256) -> Fr {
 
 fn solidity(proof: &Proof<Bn254>) -> SolidityProof {
     SolidityProof([proof.a.x, proof.a.y, proof.b.x.c1, proof.b.x.c0, proof.b.y.c1, proof.b.y.c0, proof.c.x, proof.c.y])
-}
-
-/// A base-field element as 32 big-endian bytes, for the proof's coordinates.
-pub fn fq_to_be(value: &Fq) -> [u8; 32] {
-    let mut out = [0u8; 32];
-    let bytes = value.into_bigint().to_bytes_be();
-    out[32 - bytes.len()..].copy_from_slice(&bytes);
-    out
 }
 
 #[cfg(test)]

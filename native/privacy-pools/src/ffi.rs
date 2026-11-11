@@ -17,7 +17,7 @@ use crate::{
     field::{self, FIELD_BYTES},
     hash,
     lean_imt::{LeanImt, MAX_DEPTH},
-    prover::{fq_to_be, CommitmentInputs, Proved, Prover, WithdrawInputs},
+    prover::{CommitmentInputs, Proved, Prover, WithdrawInputs},
     Error,
 };
 
@@ -95,7 +95,7 @@ pub unsafe extern "C" fn pp_lean_imt_root(
 ) -> i32 {
     guard(|| {
         let tree = tree(leaves, count)?;
-        let root = tree.root().ok_or(Error::NoSuchLeaf)?;
+        let root = tree.root().ok_or(Error::EmptyTree)?;
         if out_depth.is_null() {
             return Err(Error::NullPointer);
         }
@@ -203,15 +203,16 @@ pub unsafe extern "C" fn pp_prove(
         if public_count != circuit.public_signals() {
             return Err(Error::BadLength);
         }
+        // The outputs first: a refusal costs no proof, and makes no copy of the secrets.
+        let proof = output(out_proof, PROOF_BYTES)?;
+        let public = output(out_public, public_count * FIELD_BYTES)?;
         let bytes = input(inputs, count.checked_mul(FIELD_BYTES).ok_or(Error::BadLength)?)?;
         let mut values = field::many_from_be(bytes, count)?;
         let proved = prove(prover, circuit, &values);
         values.zeroize();
         let proved = proved?;
-        let proof = output(out_proof, PROOF_BYTES)?;
-        let public = output(out_public, public_count * FIELD_BYTES)?;
         for (chunk, coordinate) in proof.chunks_exact_mut(32).zip(proved.proof.0.iter()) {
-            chunk.copy_from_slice(&fq_to_be(coordinate));
+            chunk.copy_from_slice(&field::to_be(coordinate));
         }
         for (chunk, signal) in public.chunks_exact_mut(FIELD_BYTES).zip(proved.public_signals.iter()) {
             chunk.copy_from_slice(&field::to_be(signal));

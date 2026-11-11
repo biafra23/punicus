@@ -11,17 +11,17 @@
 # - `--O1`: the level the keys were made at. `--O2` gives 17,513 signals for `withdraw`, which do not
 #   fit its .zkey (docs/privacy-pools.md, Part 0).
 #
-# Usage: native/privacy-pools/scripts/build-graphs.sh [out-dir]   (default: a temporary directory)
+# Usage: native/privacy-pools/scripts/build-graphs.sh [out-dir]   (default: ./graphs-rebuilt)
 # Then compare: sha256sum <out-dir>/*.bin native/privacy-pools/graphs/*.bin
 set -euo pipefail
 
 here="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+out="$(mkdir -p "${1:-graphs-rebuilt}" && cd "${1:-graphs-rebuilt}" && pwd)"
 work="$(mktemp -d)"
-out="${1:-$work/out}"
-mkdir -p "$out"
+trap 'rm -rf "${work:?}"' EXIT
 
 builder_repo="https://github.com/philsippl/circom-witness-rs"
-builder_commit="5121bdc6"
+builder_commit="5121bdc66d25052e58bf92c228644d0b29132e47"
 circuits_repo="https://github.com/0xbow-io/privacy-pools-core"
 circuits_commit="df4bf730214bf9d0c717a9258f7a74861758c269"
 circomlib_version="2.0.5"

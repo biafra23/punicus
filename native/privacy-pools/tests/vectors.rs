@@ -208,3 +208,22 @@ fn refuses_inputs_of_the_other_circuit() {
     let prover = load(Circuit::Commitment, "commitment");
     assert_eq!(prove(&prover, &withdraw_inputs(), 4), Err(Error::BadLength as i32));
 }
+
+#[test]
+fn an_empty_tree_has_no_root() {
+    let mut root = [0u8; 32];
+    let mut depth = 0u32;
+    let status = unsafe { ffi::pp_lean_imt_root(std::ptr::null(), 0, root.as_mut_ptr(), &mut depth) };
+    assert_eq!(status, Error::EmptyTree as i32);
+}
+
+#[test]
+fn refuses_null_outputs_before_proving() {
+    let prover = load(Circuit::Commitment, "commitment");
+    let packed = pack(&commitment_inputs());
+    let mut public = vec![0u8; 4 * 32];
+    let status = unsafe {
+        ffi::pp_prove(prover.0, packed.as_ptr(), COMMITMENT_INPUTS, std::ptr::null_mut(), public.as_mut_ptr(), 4)
+    };
+    assert_eq!(status, Error::NullPointer as i32);
+}
