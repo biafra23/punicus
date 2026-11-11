@@ -602,19 +602,34 @@ the key-store adapter, inside one call, zeroed afterwards.
     `keccak256("nullifier" ‖ rs)` and `keccak256("salt" ‖ rs)`.
 - **0xbow's derivation, to find and spend the notes privacypools.com made
   from the same phrase** (D11 amended, 2026-11-11; 0xbow
-  `privacy-pools-core`, `packages/sdk/src/crypto.ts` and
-  `core/account.service.ts`). The two derivations find disjoint notes; a
-  restore runs both.
+  `privacy-pools-core` at `df4bf730`, `packages/sdk/src/crypto.ts` and
+  `core/account.service.ts`, the pin the circuits' keys come from too; it
+  moves only in a PR that says so, as Kohaku's does, docs/kohaku.md,
+  *Following Kohaku*). The two derivations find disjoint notes; a restore
+  runs both.
   - The master nullifier is Poseidon of the private key at
     `m/44'/60'/0'/0/0`, the master secret Poseidon of the one at
     `m/44'/60'/1'/0/0`, each read as an integer. The first is the phrase's
     first account key here too: it is derived inside the call, as for
     signing, and zeroed with the rest.
-  - The **legacy** keys read that integer through a JavaScript float
-    (`bytesToNumber`), which keeps only its top 53 bits or so; the current
-    ones read it whole (`bytesToBigInt`). Both are derived, as notes of
-    both exist. The exact reduction is matched by vectors from 0xbow's SDK
-    (Part 3).
+  - **From a key to a field element**, exactly as 0xbow's code computes it:
+    - the current keys read the 32-byte key as an unsigned integer
+      (`bytesToBigInt`);
+    - the **legacy** keys read it as a JavaScript number (`bytesToNumber`,
+      `Number()` of that integer): the integer **rounded to the nearest IEEE
+      754 binary64 value, ties to even**, then that value as an exact
+      integer (`BigInt()`);
+    - either integer is then **reduced mod `p`** before it is hashed: about
+      four keys in five are at or above BN254's `p`, and maci-crypto's
+      Poseidon reduces every input (`@zk-kit/poseidon-cipher`'s
+      `poseidonPerm` through `F1Field.e`, `res %= p`).
+    - Both versions are derived, as notes of both exist.
+  - **Where that runs.** In the native library, through an entry of its own
+    that takes the 32-byte key, rounds it for the legacy version, reduces it
+    and hashes it, with every buffer wiped: in Kotlin a `BigInteger` or a
+    `Double` holding an account key could not be zeroed (rule 7).
+    `pp_poseidon` keeps refusing a value at or above `p`. Part 6 adds the
+    entry.
   - **The legacy keys are weak.** Each legacy master value is one of about
     2^53. A spent note publishes its nullifier hash, a function of the
     master nullifier and public values alone, so the master values can be
@@ -623,7 +638,9 @@ the key-store adapter, inside one call, zeroed afterwards.
     says so, and offers to move it: any withdrawal moves its remainder to
     the current keys (next bullet).
   - A deposit's nullifier and secret: Poseidon(master, scope, index), its
-    index counted per pool. A change note's: Poseidon(master, label, k).
+    index counted per pool from 0. A change note's: Poseidon(master, label,
+    k), k counted from 0 for a deposit's first change note (`account.service.ts`,
+    `createWithdrawalSecrets`: the lineage's count of change notes so far).
   - **A change note never takes the legacy keys.** The change of a note
     under 0xbow's current keys takes the current keys at the next index.
     The change of a legacy note takes the current keys at index 0: that is
@@ -640,7 +657,11 @@ the key-store adapter, inside one call, zeroed afterwards.
     every use.
 - **One call, all inside** (D2). A `PoolKeychain` call opens the envelope as
   `sign` does, derives the key, signs the note digests it needs, hashes the
-  signatures into the secrets, and then does one of two things:
+  signatures into the secrets, and then does one of two things. For 0xbow's
+  derivation it derives the two account keys instead and hands them to the
+  native library's entry above, which returns the master values' public
+  products or proves with the secrets; the account keys enter the pool
+  library only there, and are zeroed on both sides:
   - returns each note's **public** values: the precommitment, the nullifier
     hash, the commitment;
   - or proves: hands the secrets to the native prover
@@ -660,9 +681,15 @@ the key-store adapter, inside one call, zeroed afterwards.
   twice; a mismatch refuses the call. Secrets are derived again at every
   use and never stored.
 - **The cache of public values** (D2). So that discovery runs without an
-  unlock, an unlock also derives the public values of the next deposits (8
-  proposed) and of each known deposit's next change notes, and stores them
+  unlock, an unlock also derives the public values of the next deposits and
+  of each known deposit's next change notes, and stores them
   in an app-private file, out of backups and device transfers, never logged.
+  - **How many.** Kohaku's discovery stops at the first miss: 8 ahead are
+    proposed. 0xbow's stops after 10 misses in a row, per pool and per key
+    version: it needs at least 10 past the last found, so 12 are proposed
+    per pool for the current keys. The legacy keys take no new deposit, so
+    their 12 per pool are derived once, at the first discovery, and only
+    refreshed when a legacy note is found.
   - **What it holds** is no secret, no signature and no key: each value is
     what the chain shows once its note is used.
   - **What it tells** is more than any one value. A deposit's precommitment

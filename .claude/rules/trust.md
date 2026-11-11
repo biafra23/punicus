@@ -243,8 +243,8 @@ is the owner's decision, never a PR author's. Today the list has one entry:
 
 ### Privacy Pools note secrets are key material
 
-(Owner rulings, 2026-11-11, docs/privacy-pools.md D2 and D11, D11 as
-amended the same day; docs/keys-and-signing.md, *Privacy Pools note
+(Owner rulings, 2026-11-11: D2 and D11 on #288, D11 amended on #290;
+docs/privacy-pools.md; docs/keys-and-signing.md, *Privacy Pools note
 secrets*.)
 
 - **New deposits take Kohaku's derivation**: the key at
@@ -260,11 +260,12 @@ secrets*.)
 - **0xbow's legacy keys are weak** (about 53 bits of each key survive its
   float conversion). A legacy note is shown as such, and the user is offered
   to move it.
-- Every derivation's master values, keys and signatures are key material,
-  as the notes' nullifiers and secrets are.
-- The key, the note signature, the nullifier and the secret exist only
-  inside the key-store adapter, inside one call, as byte arrays zeroed
-  before it returns. They are not an exception to *Key material*: they
+- **This key material, of both derivations,** exists only inside the
+  key-store adapter, inside one call, as byte arrays zeroed before it
+  returns, and in the native library that call hands it to: Kohaku's signing
+  key and note signatures; 0xbow's two account keys (`m/44'/60'/0'/0/0` and
+  `m/44'/60'/1'/0/0`) and its master nullifier and secret, current and
+  legacy; and every note's nullifier and secret. They are not an exception to *Key material*: they
   follow it.
 - **Proving runs inside that call**: the adapter hands the secrets to the
   native prover (docs/architecture.md, *Native code*).
