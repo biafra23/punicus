@@ -624,6 +624,10 @@ D3's direction of 2026-11-10):
 - **D14: bundled.** In every build, pinned by sha256, never fetched
   (`.claude/rules/data-sources.md`, *Privacy Pools' circuit artifacts are
   bundled*).
+- **D10: yes.** The parts are merged into `feature/privacy-pools` by their
+  author, once every comment is addressed and CI is green (owner's answer,
+  2026-11-11, in the session that wrote this page; the feature-branch
+  skill, step 3). The final PR into `main` stays the owner's.
 - **D3, in part: Privacy Pools first** (the owner's direction, 2026-11-10,
   recorded on this page and in docs/kohaku.md). Tornado Cash stays out of
   this plan.
@@ -648,7 +652,6 @@ D3's direction of 2026-11-10):
 - **D7. Pools read from their deployment**, outside "since added"; and
   whether following them is a per-network opt-in, given the download.
 - **D8. The account index**: 0, one private account per phrase and network.
-- **D10. Merging the parts** into `feature/privacy-pools` by their author.
 - **D12. The upgradeable Entrypoint**: pin its implementation and grey out
   deposit and relayed withdrawal when it moves, as proposed.
 - **D13. Which assets**: ETH first, then USDC and USDT (Kohaku's three), or

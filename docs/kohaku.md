@@ -731,6 +731,8 @@ match:
 - D2, for Privacy Pools: yes. Railgun's viewing key is still open.
 - D3, in part: Privacy Pools first (the owner's direction, 2026-11-10).
 - D9, for Privacy Pools: Rust, in this repository.
+- D10, for Privacy Pools: yes, the parts merged by their author into
+  `feature/privacy-pools` once CI is green and every comment answered.
 - docs/privacy-pools.md's D11 (Kohaku's derivation, not 0xbow's) and D14
   (the circuit artifacts bundled).
 
