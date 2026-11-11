@@ -140,17 +140,19 @@ jobs:
             for abi in $abis; do
               grep -qx "lib/$abi/libprivacy_pools.so" "$RUNNER_TEMP/apk-entries.txt" \
                 || { echo "::error::the $variant APK has no lib/$abi/libprivacy_pools.so"; exit 1; }
+              # Extended regexes over file(1)'s words, which differ between its versions: the
+              # runner's names x86 "Intel i386", older ones "Intel 80386".
               case "$abi" in
-                arm64-v8a)   want="ARM aarch64" ;;
-                armeabi-v7a) want="ARM, EABI5" ;;
-                x86)         want="Intel 80386" ;;
-                x86_64)      want="x86-64" ;;
+                arm64-v8a)   want="^ELF 64-bit .*ARM aarch64" ;;
+                armeabi-v7a) want="^ELF 32-bit .*ARM, EABI5" ;;
+                x86)         want="^ELF 32-bit .*Intel (80386|i386)" ;;
+                x86_64)      want="^ELF 64-bit .*x86-64" ;;
                 *) echo "::error::the $variant APK ships an unknown ABI '$abi'"; exit 1 ;;
               esac
               unzip -p "$apk" "lib/$abi/libprivacy_pools.so" > "$RUNNER_TEMP/libprivacy_pools.so"
               info=$(file -b "$RUNNER_TEMP/libprivacy_pools.so")
               echo "$variant $abi: $info"
-              echo "$info" | grep -q "$want" \
+              echo "$info" | grep -Eq "$want" \
                 || { echo "::error::the $variant APK's lib/$abi/libprivacy_pools.so is not $want: $info"; exit 1; }
             done
           done
