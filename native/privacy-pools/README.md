@@ -86,6 +86,13 @@ the NDK `gradle/libs.versions.toml` pins and rustup's four Android targets.
 `ANDROID_HOME=<sdk> scripts/android-toolchain.sh` installs both, as CI does.
 `-PskipPrivacyPoolsAndroid` leaves the library out of the APK.
 
+On a Mac, `:data` builds it for iOS too (`buildPrivacyPoolsIosArm64`,
+`buildPrivacyPoolsIosSimulatorArm64`, through `scripts/build-ios.sh`), which needs rustup's
+`aarch64-apple-ios` and `aarch64-apple-ios-sim` targets. The script links cargo's archive
+relocatably so that only the six functions of `ios-exports.txt` stay global: the Myotis engine,
+linked into the same app, is a Rust static library too, and both would otherwise define the
+standard library's unmangled symbols. `include/privacy_pools.h` declares the ABI for cinterop.
+
 ## Licences
 
 This crate is GPL-3.0, as Punicus is. The graphs are the output of the GPL-3.0 builder over

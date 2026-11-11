@@ -65,3 +65,8 @@ int crypto_sign_ed25519_detached(unsigned char *sig, unsigned long long *siglen_
 
 int crypto_sign_ed25519_verify_detached(const unsigned char *sig, const unsigned char *m,
                                         unsigned long long mlen, const unsigned char *pk);
+
+// The Privacy Pools binding's wipe of its native buffers (eth.serotine.data.privacypools, its iOS
+// half): libsodium's own, which an optimizer may not drop as it may a memset before a free.
+
+void sodium_memzero(void * const pnt, const size_t len);

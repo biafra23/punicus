@@ -1,0 +1,80 @@
+#!/usr/bin/env bash
+# Builds the iOS static library (docs/privacy-pools.md, Part 2e) for one Rust target, as :data's
+# buildPrivacyPoolsIos* tasks call it on a Mac:
+#
+#   scripts/build-ios.sh <aarch64-apple-ios|aarch64-apple-ios-sim> <cargo target dir> <out dir>
+#
+# The Myotis engine's libmyotis_engine.a, linked into the same framework, is a Rust static library
+# too, and exports _rust_eh_personality and compiler-rt's builtins unmangled; each carries its own
+# standard library. Linked as cargo makes it, this library would define the same symbols, and the
+# link refuses duplicates. So the archive cargo makes is linked relocatably (ld -r) with only the six
+# functions of ../ios-exports.txt exported: every other symbol becomes local to this one object,
+# which nothing else can see or collide with, the standard library, the allocator and the panic
+# machinery included. The object is archived as <out dir>/libprivacy_pools.a, and the script fails
+# unless its defined global symbols are exactly those six.
+#
+# IPHONEOS_DEPLOYMENT_TARGET (the app's, from :data) sets the minimum iOS for rustc and for the C
+# that zstd-sys and blake3 compile.
+set -euo pipefail
+
+triple=${1:?Rust target}
+target_dir=${2:?cargo target dir}
+out=${3:?out dir}
+case "$triple" in
+  aarch64-apple-ios) sdk=iphoneos platform=ios ;;
+  aarch64-apple-ios-sim) sdk=iphonesimulator platform=ios-simulator ;;
+  *) echo "unsupported target $triple" >&2; exit 1 ;;
+esac
+: "${IPHONEOS_DEPLOYMENT_TARGET:?set IPHONEOS_DEPLOYMENT_TARGET to the minimum iOS of the app}"
+
+here="$(cd "$(dirname "$0")/.." && pwd)"
+cd "$here"
+# Xcode.app started from the Dock or Finder runs the app's Gradle phase without the login shell's
+# PATH, where rustup puts cargo and rustup (~/.cargo/bin): put that directory on PATH here.
+cargo_bin="${CARGO_HOME:-$HOME/.cargo}/bin"
+if [ -d "$cargo_bin" ]; then PATH="$cargo_bin:$PATH"; export PATH; fi
+command -v rustup > /dev/null || {
+  echo "no rustup on PATH (nor in $cargo_bin): install Rust with rustup (https://rustup.rs)," >&2
+  echo "or start Xcode from a shell that has it" >&2
+  exit 1
+}
+# The target, with the command that adds it: cargo's own error names neither.
+rustup target list --installed | grep -qx "$triple" || {
+  echo "rustup lacks the target $triple: run \`rustup target add aarch64-apple-ios aarch64-apple-ios-sim\`" >&2
+  echo "in native/privacy-pools (the iOS build of :data needs both)" >&2
+  exit 1
+}
+# -fno-common for the C that zstd-sys and blake3 compile: a tentative definition (zstd's
+# `int g_ZSTD_threading_useless_symbol;`) is otherwise a common symbol, which carries no visibility,
+# so zstd-sys's -fvisibility=hidden misses it and ld -r keeps it global. As a definition it is hidden,
+# and ld -r makes it local with the rest. (Xcode's ld-prime has no -d to define commons instead.)
+export "CFLAGS_${triple//-/_}=-fno-common"
+cargo rustc --release --lib --locked --crate-type staticlib --target "$triple" --target-dir "$target_dir"
+built="$target_dir/$triple/release/libprivacy_pools.a"
+
+work=$(mktemp -d)
+trap 'rm -rf "$work"' EXIT
+# Every member of cargo's archive, merged into one object; only the listed symbols stay global. The
+# platform is named, or ld assumes the device's and refuses the simulator's objects.
+sdk_version=$(xcrun --sdk "$sdk" --show-sdk-version)
+xcrun --sdk "$sdk" ld -r -arch arm64 -platform_version "$platform" "$IPHONEOS_DEPLOYMENT_TARGET" "$sdk_version" \
+  -exported_symbols_list "$here/ios-exports.txt" -all_load "$built" -o "$work/privacy_pools.o"
+mkdir -p "$out"
+rm -f "$out/libprivacy_pools.a"
+xcrun --sdk "$sdk" libtool -static -o "$out/libprivacy_pools.a" "$work/privacy_pools.o"
+
+# The guarantee itself: the archive defines exactly the six functions as globals. --no-llvm-bc: the
+# objects of rustup's prebuilt standard library carry embedded bitcode (__LLVM,__bitcode), which
+# ld -r keeps; linkers ignore it, but Xcode's nm would read the symbols from it, with an LLVM older
+# than rustc's, and fail ("Unknown attribute kind", Xcode 16.4). The machine code's own symbol
+# table is the one the app's link resolves against.
+# Read from the merged object, the archive's one member: nm prints no header line for an object, which
+# a path with spaces in it could otherwise turn into a symbol.
+got=$(xcrun --sdk "$sdk" nm --no-llvm-bc -gU "$work/privacy_pools.o" | awk 'NF == 3 { print $3 }' | sort)
+want=$(sort "$here/ios-exports.txt")
+if [ "$got" != "$want" ]; then
+  echo "libprivacy_pools.a ($triple) defines other globals than ios-exports.txt:" >&2
+  diff <(echo "$want") <(echo "$got") >&2 || true
+  exit 1
+fi
+echo "built $out/libprivacy_pools.a ($triple): globals $(echo "$got" | tr '\n' ' ')"
