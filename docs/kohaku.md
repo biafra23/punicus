@@ -720,6 +720,15 @@ match:
   contracts;
 - D2 in `.claude/rules/trust.md` and docs/keys-and-signing.md.
 
+**Decided for Privacy Pools** (owner rulings, 2026-11-11; docs/privacy-pools.md,
+*Open decisions*, which numbers them the same way):
+
+- D2, for Privacy Pools: yes. Railgun's viewing key is still open.
+- D3, in part: Privacy Pools first (the owner's direction, 2026-11-10).
+- D9, for Privacy Pools: Rust, in this repository.
+- docs/privacy-pools.md's D11 (Kohaku's derivation, not 0xbow's) and D14
+  (the circuit artifacts bundled).
+
 - **D1. The definition.** Is "Kohaku compliant" what *What "compliant"
   means here* says: Kohaku as the spec at a pinned commit, Railgun's engine
   where Kohaku has no code, checked by vectors?

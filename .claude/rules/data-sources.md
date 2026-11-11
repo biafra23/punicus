@@ -320,6 +320,18 @@ docs/walletconnect.md is the contract.)
   yet, which is no ruling: the engine's iOS reads have no verified block body,
   and iOS opens an undefined one of several apps that claim `ethereum:`.
 
+## Privacy Pools' circuit artifacts are bundled
+
+(Owner ruling, 2026-11-11, docs/privacy-pools.md D14.)
+
+- The circuits' proving and verification keys and their witness graphs ship
+  in every build, each pinned by its sha256 in code. The proving keys are
+  most of it: about 19 MB.
+- They are never fetched, at first use or later. Kohaku's prover downloads
+  them from GitHub at every proof, unchecked; Punicus does not.
+- A file whose hash does not match is no artifact: proving is refused, and
+  says why.
+
 ## Open decisions
 
 Each is recorded here before its code lands. Today: each optional

@@ -156,8 +156,8 @@ docs/kohaku.md *Privacy Pools note secrets* pins it:
 
 **It is not 0xbow's.** 0xbow's SDK and privacypools.com derive
 `Poseidon(master, scope, index)` from two HD keys (`sdk/src/crypto.ts:39-107`).
-A phrase used there finds nothing here, and the other way round. Which one
-Punicus follows is D11.
+A phrase used there finds nothing here, and the other way round. Punicus
+follows Kohaku's (D11, owner ruling, 2026-11-11).
 
 ### Discovery and balance
 
@@ -289,7 +289,8 @@ Punicus follows is D11.
   - No Poseidon, no tree: `:domain` sees public values and compares roots.
     Keccak for `scope`, `label` and `context` is allowed there
     (owner rulings, 2026-10-18, #50 and 2026-11-03, #218).
-- **A Rust library**, `privacy-pools-native` (D9): Poseidon, the Lean IMT,
+- **A Rust library** in this repository, `native/privacy-pools/` (D9, owner
+  ruling, 2026-11-11): Poseidon, the Lean IMT,
   the witness and the Groth16 prover, behind a small C ABI. Loaded through
   JNA on Android and the desktop (as `Sodium.kt` loads libsodium) and
   through cinterop on iOS (as `sodium.def`).
@@ -469,19 +470,18 @@ the repository. Every step passed for both circuits.
   prover, the artifacts' hashes; a C ABI of a few functions
   (`pp_tree_*`, `pp_prove_withdraw`, `pp_prove_commitment`,
   `pp_poseidon`), each taking and returning bytes, never logging.
-- Where it lives (D9): in this repository (`native/privacy-pools/`), built by
-  Gradle through cargo; or in its own repository, published as artifacts as
-  Myotis's natives are.
+- Where it lives (D9, owner ruling, 2026-11-11): in this repository,
+  `native/privacy-pools/`, built by Gradle through cargo.
 - **The build**: `cargo-ndk` for the four Android ABIs, the host library for
   the desktop (Linux, macOS, Windows), a static library for iOS (device and
   simulator) linked into `SerotineKit`.
 - **CI**: Rust and the NDK on `ubuntu-latest` (`ci.yml`, `android-apk.yml`),
   Rust on `macos-15` (`ios.yml`, `desktop-dmg.yml`), Windows
   (`desktop-windows-msi.yml`). `check_apk_min_api.py` must stay green.
-- **The artifacts** (24 MB raw, most of it `withdraw.zkey`): bundled in the
-  app, or fetched once on first use and checked against the pinned hash
-  (D14). Converting the `.zkey` to arkworks' form loads faster, but makes a
-  new artifact with its own hash.
+- **The artifacts** (the `.zkey`s about 19 MB, the graphs and `.vkey`s
+  under 0.3 MB): bundled in every build, pinned by sha256, never fetched (D14,
+  owner ruling, 2026-11-11). Converting the `.zkey` to arkworks' form
+  loads faster, but makes a new artifact with its own hash.
 - Tests: `cargo test` with Part 3's vectors; Kotlin tests over JNA on the
   desktop.
 
@@ -528,7 +528,8 @@ the repository. Every step passed for both circuits.
   `:domain`'s `Eip712`), the signature, the secrets, all in one call, all
   zeroed.
 - The determinism check. The cache of public values (D2).
-- docs/keys-and-signing.md amended by the owner first (D2).
+- As docs/keys-and-signing.md, *Privacy Pools note secrets*, sets it out
+  (D2, owner ruling, 2026-11-11).
 - Tests against Part 3's vectors, and that no secret leaves the adapter (as
   the existing key-store tests do for keys).
 
@@ -606,11 +607,27 @@ which the owner runs or hands to a device session.
 All the owner's. D1 to D10 are docs/kohaku.md's; this page adds D11 to D15.
 Each is recorded as decided before its code lands.
 
+**Decided** (owner rulings, 2026-11-11, recorded in the rule files):
+
+- **D2: yes.** The secrets and the proving stay inside the key-store
+  adapter; only public values leave it; the public values may be cached
+  (`.claude/rules/trust.md`, *Privacy Pools note secrets are key material*;
+  docs/keys-and-signing.md, *Privacy Pools note secrets*).
+- **D9: in this repository.** The native library lives under
+  `native/privacy-pools/`, built by Gradle and CI (docs/architecture.md and
+  `.claude/rules/architecture.md`, *Native code*). The prover stack is Part
+  0's, unless Part 2 finds otherwise.
+- **D11: Kohaku's derivation.** Not 0xbow's (`.claude/rules/trust.md`;
+  docs/keys-and-signing.md).
+- **D14: bundled.** In every build, pinned by sha256, never fetched
+  (`.claude/rules/data-sources.md`, *Privacy Pools' circuit artifacts are
+  bundled*).
+- **D3, in part: Privacy Pools first** (the owner's direction, 2026-11-10).
+  Tornado Cash stays out of this plan.
+
+**Open:**
+
 - **D1. The definition** of "Kohaku compliant" (docs/kohaku.md).
-- **D2. Secrets and proving in the key-store adapter**, and the cache of
-  public note values that lets discovery run without an unlock.
-- **D3. Privacy Pools first**, before Railgun. Tornado Cash: not in this
-  plan.
 - **D4. How a withdrawal is paid for**: 0xbow's relayer (which one, on what
   terms), several relayers, self-paid from an account the user names, or
   the ERC-4337 paymaster. And whether a relayer is reached over Tor later.
@@ -620,21 +637,11 @@ Each is recorded as decided before its code lands.
 - **D7. Pools read from their deployment**, outside "since added"; and
   whether following them is a per-network opt-in, given the download.
 - **D8. The account index**: 0, one private account per phrase and network.
-- **D9. Where the native library lives**: in this repository, built by
-  Gradle and CI, or in its own repository, published as artifacts. And
-  the prover stack after Part 0.
 - **D10. Merging the parts** into `feature/privacy-pools` by their author.
-- **D11. Whose derivation**: Kohaku's (any Kohaku wallet restores the same
-  notes) or 0xbow's SDK (privacypools.com restores them). They find
-  disjoint notes. Kohaku's is proposed, as the plan's reason is Kohaku
-  compliance.
 - **D12. The upgradeable Entrypoint**: pin its implementation and grey out
   deposit and relayed withdrawal when it moves, as proposed.
 - **D13. Which assets**: ETH first, then USDC and USDT (Kohaku's three), or
   more of Ethereum's fourteen pools.
-- **D14. The circuit artifacts**: about 24 MB, bundled in every build, or
-  fetched once on first use from a pinned source and checked against the
-  pinned hashes.
 - **D15. Licences**: the verifiers and circomlib are GPL-3.0, the rest of
   0xbow's code Apache-2.0, Kohaku MIT; Punicus is GPL-3.0. Compatible as
   far as this plan reads them; the App Store question for GPL code is the

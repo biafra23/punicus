@@ -240,6 +240,27 @@ is the owner's decision, never a PR author's. Today the list has one entry:
   - Open, the owner's to decide: whether Create account, one screen using
     both legs of the path, is within the entry (#40).
 
+### Privacy Pools note secrets are key material
+
+(Owner rulings, 2026-11-11, docs/privacy-pools.md D2 and D11;
+docs/keys-and-signing.md, *Privacy Pools note secrets*.)
+
+- **Kohaku's derivation**: the key at `m/28784'/1'/<accountIndex>'`, a note's
+  secrets from its EIP-712 signature (docs/kohaku.md, *Privacy Pools note
+  secrets*). Not 0xbow's: a phrase used on privacypools.com restores no
+  notes here.
+- The key, the note signature, the nullifier and the secret exist only
+  inside the key-store adapter, inside one call, as byte arrays zeroed
+  before it returns. They are not an exception to *Key material*: they
+  follow it.
+- **Proving runs inside that call**: the adapter hands the secrets to the
+  native prover (docs/architecture.md, *Native code*), which zeroes its
+  witness and never logs an input.
+- **Only public values leave the adapter**: a precommitment, a nullifier
+  hash, a commitment, a finished and verified proof.
+- **Those public values may be cached**, so that discovery runs without an
+  unlock. They are not key material. The cache never holds a secret.
+
 ## How keys are held
 
 **docs/keys-and-signing.md is the contract** (owner decisions, 2026-10-15).
