@@ -119,7 +119,8 @@ modules, an Android SDK (`ANDROID_HOME`, or `sdk.dir` in a git-ignored
 `local.properties`) with the NDK `gradle/libs.versions.toml` pins and rustup's
 four Android targets (`native/privacy-pools/scripts/android-toolchain.sh`
 installs both); `-PskipPrivacyPoolsAndroid` builds the
-APK without the Privacy Pools library. `-PprivacyPoolsProving` adds the Privacy Pools proving
+APK without the Privacy Pools library. On a Mac, the iOS targets also need
+rustup's `aarch64-apple-ios` and `aarch64-apple-ios-sim`. `-PprivacyPoolsProving` adds the Privacy Pools proving
 tests, which fetch the circuits' pinned keys (about 19 MB). The iOS targets of the shared
 modules and the iOS app build on macOS only and are skipped elsewhere. The
 team id (Xcode > Settings > Accounts) signs the iOS app for a device; the

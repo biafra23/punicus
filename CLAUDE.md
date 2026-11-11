@@ -62,7 +62,7 @@ it names for your task.
 # Android lint, the debug + release APKs. Needs JDK 21, an Android SDK (ANDROID_HOME, or
 # sdk.dir in a git-ignored local.properties) with the NDK libs.versions.toml pins, and Rust
 # (rustup, with the Android targets: native/privacy-pools/scripts/android-toolchain.sh) for native/.
-# The iOS targets build on macOS only.
+# The iOS targets build on macOS only, and need rustup's aarch64-apple-ios and aarch64-apple-ios-sim.
 ./gradlew build
 ./gradlew build -PprivacyPoolsProving   # also the Privacy Pools proving tests (fetches ~19 MB of keys)
 ./gradlew :ui:desktopTest                                                   # one module's tests

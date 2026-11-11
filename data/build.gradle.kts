@@ -22,15 +22,15 @@ plugins {
     alias(libs.plugins.kotlin.serialization)
 }
 
+/** Where buildPrivacyPools<Target> leaves the iOS static library of [target] (iosArm64, iosSimulatorArm64). */
+fun privacyPoolsIosOut(target: String): File =
+    layout.buildDirectory.dir("generated/privacy-pools/ios/$target").get().asFile
+
 // The Reown project IDs WalletConnect connects with (docs/walletconnect.md, ruling 2): never committed,
 // passed as Gradle properties (from the CI secret or variable, or ~/.gradle/gradle.properties locally), one
 // for debug builds and one for release builds (for now the same ID: owner ruling, 2026-11-05). A build
 // without one has dApp connections switched off and says so. An ID is letters and digits: anything else
 // fails the build rather than reach the code.
-/** Where buildPrivacyPools<Target> leaves the iOS static library of [target] (iosArm64, iosSimulatorArm64). */
-fun privacyPoolsIosOut(target: String): File =
-    layout.buildDirectory.dir("generated/privacy-pools/ios/$target").get().asFile
-
 val generateWalletConnectBuildInfo by tasks.registering {
     val outDir = layout.buildDirectory.dir("generated/walletConnect/kotlin")
     // Trimmed: a secret pasted with a trailing newline or space is still the same ID.
@@ -89,7 +89,14 @@ kotlin {
             includeDirs(rootProject.layout.projectDirectory.dir("native/privacy-pools/include"))
             extraOpts("-libraryPath", privacyPoolsIosOut(target.name).absolutePath)
             val build = "buildPrivacyPools" + target.name.replaceFirstChar { it.uppercase() }
-            tasks.matching { it.name == interopProcessingTaskName }.configureEach { dependsOn(build) }
+            val archive = privacyPoolsIosOut(target.name)
+            tasks.matching { it.name == interopProcessingTaskName }.configureEach {
+                dependsOn(build)
+                // The archive by content, not only the option naming its directory: a rebuilt library
+                // makes the klib (and the framework) out of date.
+                inputs.files(archive).withPropertyName("privacyPoolsArchive")
+                    .withPathSensitivity(PathSensitivity.RELATIVE)
+            }
         }
     }
 
@@ -398,7 +405,11 @@ if (providers.gradleProperty("privacyPoolsProving").isPresent) {
         outputs.dir(privacyPoolsDir.dir("artifacts"))
     }
     // The iOS simulator's tests read the same keys (PrivacyPoolsIosTest).
-    tasks.matching { it.name == "iosSimulatorArm64Test" }.configureEach { dependsOn(fetchPrivacyPoolsArtifacts) }
+    tasks.matching { it.name == "iosSimulatorArm64Test" }.configureEach {
+        dependsOn(fetchPrivacyPoolsArtifacts)
+        inputs.dir(privacyPoolsDir.dir("artifacts")).withPropertyName("privacyPoolsArtifacts")
+            .withPathSensitivity(PathSensitivity.RELATIVE)
+    }
     tasks.matching { it.name == "desktopTest" }.configureEach {
         dependsOn(fetchPrivacyPoolsArtifacts)
         (this as Test).systemProperty("serotine.privacyPoolsProving", "true")
@@ -618,10 +629,11 @@ if (skipPrivacyPoolsAndroid) {
 // rustup's two iOS targets (aarch64-apple-ios, aarch64-apple-ios-sim); off a Mac nothing runs, as
 // the iOS targets are disabled there.
 val isMacHost = "mac" in System.getProperty("os.name").lowercase()
-val privacyPoolsIosDeploymentTarget: String = run {
+// Read only when an iOS build runs, so that a reworded project.yml cannot break any other build.
+val privacyPoolsIosDeploymentTarget: Provider<String> = providers.provider {
     val spec = rootProject.layout.projectDirectory.file("ios-app/xcode/project.yml").asFile
-    Regex("""iOS:\s*"([0-9.]+)"""").find(spec.readText())?.groupValues?.get(1)
-        ?: error("no iOS deploymentTarget in ${spec.path}")
+    Regex("""iOS:\s*"?([0-9][0-9.]*)"?""").find(spec.readText())?.groupValues?.get(1)
+        ?: throw GradleException("no iOS deploymentTarget in ${spec.path}: buildPrivacyPoolsIos* need the app's")
 }
 mapOf("iosArm64" to "aarch64-apple-ios", "iosSimulatorArm64" to "aarch64-apple-ios-sim").forEach { (target, triple) ->
     tasks.register<Exec>("buildPrivacyPools" + target.replaceFirstChar { it.uppercase() }) {
@@ -641,7 +653,7 @@ mapOf("iosArm64" to "aarch64-apple-ios", "iosSimulatorArm64" to "aarch64-apple-i
         val out = privacyPoolsIosOut(target)
         outputs.dir(out)
         workingDir(privacyPoolsDir)
-        environment("IPHONEOS_DEPLOYMENT_TARGET", privacyPoolsIosDeploymentTarget)
+        doFirst { environment("IPHONEOS_DEPLOYMENT_TARGET", privacyPoolsIosDeploymentTarget.get()) }
         commandLine(
             "scripts/build-ios.sh", triple,
             layout.buildDirectory.dir("privacy-pools-cargo").get().asFile.absolutePath, out.absolutePath,
@@ -655,6 +667,8 @@ mapOf("iosArm64" to "aarch64-apple-ios", "iosSimulatorArm64" to "aarch64-apple-i
 val generatePrivacyPoolsIosTestEnv by tasks.registering {
     val outDir = layout.buildDirectory.dir("generated/privacy-pools/iosTestEnv/kotlin")
     val dir = privacyPoolsDir.asFile.absolutePath
+    // As a Kotlin string literal: the path's backslashes, quotes and dollar signs escaped.
+    val literal = dir.replace("\\", "\\\\").replace("\"", "\\\"").replace("$", "\\$")
     val proving = providers.gradleProperty("privacyPoolsProving").isPresent
     inputs.property("dir", dir)
     inputs.property("proving", proving)
@@ -668,7 +682,7 @@ val generatePrivacyPoolsIosTestEnv by tasks.registering {
             package eth.serotine.data.privacypools
 
             /** native/privacy-pools, where the tests read the vectors, graphs and artifacts. */
-            internal const val PRIVACY_POOLS_DIR: String = "${dir.replace("\\", "\\\\")}"
+            internal const val PRIVACY_POOLS_DIR: String = "$literal"
 
             /** Whether the build fetched the proving keys (-PprivacyPoolsProving), so the proving tests run. */
             internal const val PRIVACY_POOLS_PROVING: Boolean = $proving
@@ -677,3 +691,10 @@ val generatePrivacyPoolsIosTestEnv by tasks.registering {
     }
 }
 kotlin.sourceSets.getByName("iosTest").kotlin.srcDir(generatePrivacyPoolsIosTestEnv)
+// What PrivacyPoolsIosTest reads through that path, which Gradle tracks as a string, not as files.
+tasks.matching { it.name == "iosSimulatorArm64Test" }.configureEach {
+    inputs.dir(privacyPoolsDir.dir("tests/vectors")).withPropertyName("privacyPoolsVectors")
+        .withPathSensitivity(PathSensitivity.RELATIVE)
+    inputs.dir(privacyPoolsDir.dir("graphs")).withPropertyName("privacyPoolsGraphs")
+        .withPathSensitivity(PathSensitivity.RELATIVE)
+}

@@ -4,6 +4,21 @@ package eth.serotine.data.privacypools
 // desktop (jvmSharedMain, PrivacyPoolsNative), cinterop's on iOS (iosMain). Plain values, no native
 // memory: every buffer that held an input is cleared by the binding before one of these is made.
 
+/** The sizes of the library's C ABI (`src/ffi.rs`), which both bindings lay their buffers out by. */
+internal object PoolAbi {
+    /** A field element's width. */
+    const val FIELD_BYTES = 32
+
+    /** The deepest tree the circuits take. */
+    const val MAX_DEPTH = 32
+
+    /** A proof's width: eight base-field elements in the Solidity verifier's order. */
+    const val PROOF_BYTES = 8 * 32
+
+    /** `TREE_ALLOW_DUPLICATES`, the association set's tree flag; 0 refuses a repeated leaf. */
+    const val TREE_ALLOW_DUPLICATES = 1
+}
+
 /** Why a call of the native library was refused: its `Error` numbers (`src/lib.rs`), and [UNAVAILABLE]. */
 internal enum class NativeError(val code: Int) {
     UNAVAILABLE(-1),

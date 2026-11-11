@@ -29,6 +29,12 @@ esac
 
 here="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$here"
+# The target first, with the command that adds it: cargo's own error names neither.
+rustup target list --installed | grep -qx "$triple" || {
+  echo "rustup lacks the target $triple: run \`rustup target add aarch64-apple-ios aarch64-apple-ios-sim\`" >&2
+  echo "in native/privacy-pools (the iOS build of :data needs both)" >&2
+  exit 1
+}
 cargo rustc --release --lib --locked --crate-type staticlib --target "$triple" --target-dir "$target_dir"
 built="$target_dir/$triple/release/libprivacy_pools.a"
 

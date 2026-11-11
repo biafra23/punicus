@@ -126,16 +126,16 @@ internal object PrivacyPoolsNative {
     private const val STALE_AFTER_MS = 60 * 60 * 1000L
 
     /** A field element's width. */
-    const val FIELD_BYTES = 32
+    const val FIELD_BYTES = PoolAbi.FIELD_BYTES
 
     /** The deepest tree the circuits take. */
-    const val MAX_DEPTH = 32
+    const val MAX_DEPTH = PoolAbi.MAX_DEPTH
 
     /** A proof's width: eight base-field elements in the Solidity verifier's order. */
-    const val PROOF_BYTES = 8 * 32
+    const val PROOF_BYTES = PoolAbi.PROOF_BYTES
 
     /** `TREE_ALLOW_DUPLICATES`, the association set's tree flag; 0 refuses a repeated leaf. */
-    const val TREE_ALLOW_DUPLICATES = 1
+    const val TREE_ALLOW_DUPLICATES = PoolAbi.TREE_ALLOW_DUPLICATES
 }
 
 /**
