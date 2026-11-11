@@ -10,7 +10,10 @@ page and the rules under `.claude/` (their short form in CLAUDE.md) disagree,
 the rules win and this page is fixed.
 
 Read at Kohaku `8c83d64` (2026-11-02), kohaku-rs's `main` of the same week
-and Myotis `5578e75` (2026-11-03). The facts below are from those commits.
+and Myotis `5578e75` (2026-11-03). The facts below are from those commits,
+except where a section names a later read: *Why a seed at all* (Myotis
+`dc3a1c0`, 2026-11-10), *How walletbeat rates it* (walletbeat `dc05991`,
+2026-11-10) and *Existing implementations* (its own commits, 2026-11-10).
 
 ## What "compliant" means here
 
@@ -167,6 +170,34 @@ The port mirrors `packages/plugins/src/base.ts`:
   asset, chain or account; invalid address; insufficient balance;
   multi-asset not supported; transfer not supported.
 
+### What "no private transfer" means
+
+- A private transfer moves value from one shielded note to another inside
+  the pool. On chain, the amount, the sender and the recipient stay hidden.
+  Railgun has it: a payment to a `0zk…` address.
+- Privacy Pools and Tornado Cash have none. Funds leave the pool only by a
+  withdrawal to a public address, and its amount and recipient are public.
+- Privacy Pools' ragequit is the exception to what follows: it returns a
+  deposit to the address that made it, in public and linked to it. A
+  deposit the association set has not approved has no other way out.
+- The recipient need not be the user's own. A withdrawal straight to a payee
+  is a payment whose sender stays private.
+- The link between a deposit and its withdrawal is broken cryptographically,
+  not hoped away. The proof shows that some deposit of the set is spent,
+  never which one. On Privacy Pools the set is the deposits the association
+  set approved.
+- What links them again is the user's own behaviour:
+  - **Gas.** A fresh address holds no ETH. Funding it from a known account
+    links the two. That is what the relayer or bundler is for (D4).
+  - **Amount and timing.** Privacy Pools takes any amount, so the same odd
+    amount out soon after it went in is easy to match. A partial withdrawal
+    with change left in the pool, a round amount and time help. Tornado
+    Cash's fixed denominations avoid matching by amount by design, not by
+    timing.
+  - **What follows.** Sending the funds back to a known account, or to an
+    exchange account in the user's name, links them again.
+  - **The IP address**, which the relayer or the bundler sees (D4).
+
 ### The root checks
 
 - **Railgun:** the contract records every root a tree has ever had
@@ -281,8 +312,10 @@ deployment (D7).
 ### What Punicus can do today
 
 - **Watch:** yes. `LogIndex.configure(network, listOf(LogWatch(
-  LogWatchKey.Emitter(contract), deployBlock)), emptyList())` is exactly the
-  engine's address entry. `EngineLogIndex.logs` serves it and refuses a range
+  LogWatchKey.Emitter(contract), deployBlock)), emptyList(), walkPaused)` is
+  exactly the engine's address entry. `walkPaused` is per network, not per
+  entry: a pool's follower and `FollowAccountLogs` share it, so both must
+  say the same. `EngineLogIndex.logs` serves it and refuses a range
   below its start (`BeforeStart`).
 - `FollowAccountLogs` unwatches only accounts that left the wallet
   (`AccountLogs.kt`, `gone`). It leaves a pool's entry alone.
@@ -292,20 +325,70 @@ deployment (D7).
   `LogIndex` port has no import. On iOS, Myotis's typed `ChainHandle` has no
   import either; only `RustEngine.importLogIndexFiles` does.
 
-### Why Railgun needs an import, even on Sepolia
+### Why a seed at all: the walk is possible, but not affordable
 
-- Mainnet's `logsBloom` is so full that 85–95 % of blocks look like
-  candidates (Myotis `docs/seeded-log-histories.md`). The walk then fetches
-  nearly every block's receipts, and Myotis calls Railgun's walk a
+The walk back to a contract's deployment is always possible in principle,
+and it is verified all the way. A seed does not make anything more correct:
+it adds trust in its publisher. It is there for cost and for availability.
+Read at Myotis `dc3a1c0` (2026-11-10).
+
+- **The logs are small; proving none is missing is not.** Today's mainnet
+  demo seed holds Railgun's history to block 26,097,965 in about 438,000
+  logs, 261 MB (*What it must hold*; Myotis `docs/railgun-android.md`).
+- A block is skipped only when its `logsBloom` rules the contract out.
+  Mainnet blocks carry 2,000 or more bloom elements, each setting 3 of 2,048
+  bits. So 85–95 % of blocks match even an address that never appears, and
+  each match is settled only by the block's complete receipts
+  (`docs/seeded-log-histories.md`).
+- Myotis estimates those receipts, at 100–200 KB a block, at about 1 TB for
+  a range of about 9M blocks, unmeasured
+  (`docs/logindex-verified-bundle-design.md`). It calls Railgun's walk a
   multi-day download.
-- Railgun's history is 6M blocks deep even on Sepolia. Its balance is shown
-  from an imported seed, with Myotis walking and verifying everything above
-  the seed's top (Railgun part 4).
+- Every header back to the deployment is fetched as well. At roughly 600
+  bytes a header, an estimate, that is about 7 GB for Railgun's 11.4M blocks
+  on Ethereum, about 3.6 GB for its 6M on Sepolia and about 2 GB for Privacy
+  Pools' 3.6M on Sepolia.
+- **Peers may no longer hold the data.** Under EIP-4444's history expiry,
+  execution clients may drop old block bodies and receipts over the `eth`
+  protocol, pre-Merge history first, and many nodes do.
+  - Railgun (block 14,737,691) and Tornado Cash (from about 9.1M) were
+    deployed before the Merge (block 15,537,394). Myotis's own seed generator
+    needs a node that still holds pre-Merge receipts (`docs/railgun-poc.md`).
+  - Myotis has no fallback for expired history, and the Portal Network is
+    abandoned. The walk then stalls rather than fails, and that range is
+    never covered (`docs/eth-getlogs-design.md`).
+  - So a balance from the walk alone over expired history would stay
+    "syncing" for good (*Only over complete coverage*). `LogsReading.NotCovered`
+    does not tell a stalled walk from a slow one.
+  - Privacy Pools (from block 22,153,713) is after the Merge and not affected
+    today. A rolling expiry of about a year would reach it too.
+- **Sepolia has neither problem to that degree**, an inference, not a
+  measurement:
+  - its blocks carry far fewer logs than mainnet's, so its blooms should be
+    sparse and a walk should fetch receipts for a small share of blocks;
+  - Railgun (from 5,784,774) and Privacy Pools (from 8,461,453) were deployed
+    there long after Sepolia's Merge in 2022, so pre-Merge expiry does not
+    touch them.
+- So on Sepolia a walk is a question of time and download, not of
+  feasibility, and walking only is one of D6's answers. Under the
+  heavy-download rule it waits for an unmetered connection. How long it
+  takes is not measured yet: Privacy Pools' part 2 measures its own walk
+  there.
+
+### Why the plan imports Railgun's history, even on Sepolia
+
+A proposal, pending D6 (#101's recommendation). Walking only stays D6's
+other answer (*Why a seed at all*).
+
+- On Ethereum, the walk is a multi-day download (*Why a seed at all*).
+- Railgun's history is 6M blocks deep even on Sepolia. The plan shows its
+  balance from an imported seed, labelled as seeded, with Myotis walking and
+  verifying everything above the seed's top (Railgun part 4).
 - An import must not be followed by a push of Punicus's own entry for the
   proxy from a lower block: the engine keeps the lower block, and the band
   below the seed would be refused until walked (#101).
 - Privacy Pools' Sepolia history is about 3.6M blocks; whether its walk is
-  bearable is measured by its part 3.
+  bearable is measured by its part 2.
 
 ### What an import must respect
 
@@ -331,6 +414,209 @@ From Myotis's ruling on seeded histories (2026-09-25,
 - An import is merged by clamping every entry's coverage to the lowest top
   among the sources. A seed that ends below the head pulls the accounts'
   history coverage down with it until the gap is walked again.
+
+## How walletbeat rates it
+
+[Walletbeat](https://github.com/walletbeat/walletbeat) rates wallets, and
+its *Private token transfers* attribute is where this plan shows. Read at
+walletbeat `dc05991` (2026-11-10):
+`src/schema/attributes/privacy/private-transfers.ts` and
+`src/schema/features/privacy/transaction-privacy.ts`. What it rates is
+walletbeat's, not a rule here.
+
+### What it recognizes
+
+- Four technologies: ERC-5564 stealth addresses, Tornado Cash Nova,
+  Privacy Pools and Railgun.
+- **Tornado Cash classic is not among them.** Nova, the variant with
+  transfers inside the pool, is. The Tornado Cash of D3 is classic, so it
+  would earn nothing there.
+- **The default send decides first.** A wallet whose default transfer of
+  ETH or an ERC-20 is public fails ("not the default"), whatever it
+  integrates. A private technology as the default, or the user's explicit
+  choice on every send (`EXPLICIT_CHOICE`), avoids that.
+- **The worst integration sets the rating.** With several technologies
+  supported, the ratings merge to the worst one. A half-built protocol
+  pulls a complete one down.
+- None of the wallets walletbeat lists is marked as supporting Privacy Pools
+  today.
+
+### What a pass needs, for Privacy Pools
+
+Each missing item lowers the rating, in this order:
+
+- the Ether pool and the USDC pool on Ethereum;
+- ragequit;
+- deposit data that can be exported and imported, and no custodian that can
+  read it or that an export depends on. Punicus derives the secrets from the
+  recovery phrase and stores none, so the same words restore them in any
+  Kohaku wallet (*Privacy Pools note secrets*). Whether walletbeat counts
+  that as export and import is its reviewers' call;
+- a withdrawal through a relayer. A withdrawal without one is rated not
+  private: the account that pays the gas is public. A default relayer that
+  learns the IP address is rated not private too (D4);
+- a warning against operations in quick succession;
+- encrypted deposit data held by a custodian who learns the IP address
+  leaves the integration "relying on an external provider".
+
+### What a pass needs, for Railgun
+
+Private transfers between 0zk addresses (part 5); a warning about the
+correlation of a shield, of an unshield to the user's own addresses, and of
+operations in quick succession; the tree synced and decrypted on the
+device, as Punicus plans it; a broadcaster that does not learn the IP
+address, broadcasting being the default over self-relay (D4). A warning
+about sharing a viewing key is noted, not required.
+
+### What it means for this plan
+
+- A Railgun that shields only (parts 1 to 4) or a Privacy Pools without
+  relayed withdrawals is an incomplete integration to walletbeat, and,
+  under the worst-rating merge, lowers a complete one beside it.
+- Punicus's send is public by default today, so the attribute fails until
+  the send screen makes the choice explicit or a private send the default.
+  That is a screen decision, docs/wallet-ux.md's and the owner's.
+
+## Existing implementations
+
+What D9 can build on. None is mature, and none is in Java or Kotlin.
+Read on 2026-11-10: kohaku-rs `dd5ded2` and its `feat/kohaku-railgun`
+branch at `287e862`, railgun-rust `e9a0e74`, Kohaku `886f72d`.
+
+| Protocol | Rust | Java or Kotlin |
+|---|---|---|
+| Tornado Cash classic | kohaku-rs `kohaku-tornadocash` on `master` | none |
+| Railgun | kohaku-rs `feat/kohaku-railgun`, unmerged; railgun-rust, third party | none |
+| Privacy Pools | none | none |
+| Tornado Cash Nova | none | none |
+
+- **kohaku-rs** ([ethereum/kohaku-rs](https://github.com/ethereum/kohaku-rs))
+  says of itself: "NOT READY FOR PRODUCTION USE. Packages contain UNAUDITED
+  CODE."
+  - `kohaku-tornadocash`: deposit and withdrawal, event syncing, the Merkle
+    tree, relayed and paymaster-sponsored (ERC-4337) withdrawals. It proves
+    with `websnark-rs` and bundles the circuit files, about 9.3 MiB
+    compressed. Its benchmark: 1.4 s a proof natively, 0.5 s in parallel, on
+    a desktop CPU.
+  - `feat/kohaku-railgun`, last commit 2026-11-09: the wallet, UTXO
+    indexing, shielding, spend selection and proofs, with PPOI, a paymaster
+    and syncers as separate crates. The core contacts no PPOI service, and a
+    consumer supplies the syncer (`UtxoSyncer`).
+- **railgun-rust**
+  ([triamazikamno/railgun-rust](https://github.com/triamazikamno/railgun-rust)),
+  MIT: about 205 commits since 2026-01-20, every crate at 0.1.0, no README.
+  It has the only Rust client of the Waku broadcasters, and PPOI. kohaku-rs
+  takes PPOI test fixtures from it.
+- **Privacy Pools** has a full client only in Kohaku's TypeScript, with
+  Kohaku's TypeScript Poseidon and Lean IMT packages. Nothing in kohaku-rs,
+  on any branch.
+- **Nova** has no code in Kohaku or kohaku-rs.
+- Myotis has no client of any of them. Its Railgun proof of concept serves
+  logs to an outside wallet over local JSON-RPC (`docs/railgun-poc.md`).
+
+What it means for D9, for the owner to weigh:
+
+- Rust is where the work is, and Punicus links Rust as it links the Myotis
+  natives. Kotlin would start from nothing, the prover included.
+- Railgun on kohaku-rs's branch would also keep Punicus on Kohaku's own code,
+  as *Following Kohaku* wants, once the branch is merged.
+- Privacy Pools has the least code to build on, and its prover is the open
+  part. Kohaku proves it with snarkjs, from circom's WebAssembly witness
+  generators and `.zkey` proving keys
+  (`@fatsolutions/privacy-pools-core-circuits` 1.0.5: `withdraw` and
+  `commitment`). `kohaku-tornadocash` proves with `websnark-rs` from a
+  `circuit.bin` of Tornado Cash's older circom, so it is unlikely to take
+  these as they are; a Rust witness generator for circom 2 is needed.
+- Every client above reads chain data over JSON-RPC or from an indexer.
+  Punicus's adapter supplies the verified log index and verified calls in
+  their place; a pluggable syncer is where that fits.
+
+### What the clients ask of the node
+
+Read in Kohaku `886f72d` (`packages/provider`, `packages/privacy-pools`,
+`packages/tornado-cash`) and kohaku-rs (`crates/tornadocash`; on
+`feat/kohaku-railgun`, `crates/railgun-sync`), against Myotis `dc3a1c0`'s
+verified methods (`docs/implementation-status.md`).
+
+- **Every standard method is one Myotis serves**: Kohaku's provider
+  interface is `eth_getLogs`, `eth_call`, `eth_blockNumber`,
+  `eth_getBalance`, `eth_getCode`, `eth_getTransactionReceipt`,
+  `eth_estimateGas`, `eth_gasPrice`, `eth_getTransactionCount`, and through
+  `request` `eth_getBlockByNumber`, `eth_feeHistory`,
+  `eth_maxPriorityFeePerGas` and `eth_chainId`.
+- **Within Myotis's limits:**
+  - `eth_getLogs` answers only for an entry of the log index. Punicus
+    watches each pool (*What it must hold*).
+  - `eth_call` reads at the head. The clients call at `latest`.
+  - `eth_getBlockByNumber` reaches 512 blocks below the head.
+  - A transaction or receipt by hash is found in the recent blocks only.
+- **Tornado Cash classic:** nothing beyond these.
+- **Privacy Pools: one read beyond them.** `syncHistoryTimestampsThunk.ts`
+  dates the history by headers on a grid back to the Entrypoint's
+  deployment, about 130 on mainnet by its own comment. Myotis refuses those
+  older than 512 blocks. Only the history's dates depend on it, never a
+  balance or a spend. Punicus dates by block until the engine reports a
+  log's time (docs/embedding-myotis.md, *History*).
+- **Railgun: the TXID tree has no RPC syncer.** The note history has one
+  (`RpcSyncer`; the default composes Subsquid's indexer with an RPC tail).
+  The TXID tree, which every PPOI proof is built against, has only
+  `SubsquidSyncer` (`railgun-sync/src/subsquid.rs`). A spend with a PPOI
+  proof then rests on an indexer, which *Verified, or not available* rules
+  out unless D4 says otherwise.
+  - Why there is no RPC syncer is an inference, not checked against the
+    contract: a TXID rests on the `transact` call's input, which no log
+    carries, and Myotis finds old transactions by hash nowhere.
+- **Nova** has no client to read. Its outputs are in logs, so logs and
+  `eth_call` would likely do: an inference.
+- **Not node methods:** the gas sponsoring in Kohaku's Privacy Pools and
+  Tornado Cash calls a bundler's `eth_sendUserOperation`,
+  `eth_estimateUserOperationGas` and `pimlico_getUserOperationGasPrice`.
+  With the association set (0xbow's API or IPFS) and the optional
+  `saga-log-source` indexer, these are services for D4 and D5, not gaps in
+  Myotis.
+
+### Privacy Pools in Rust
+
+What a client in Rust takes, piece by piece:
+
+- **Small:**
+  - the note secrets: a BIP-32 key, an EIP-712 signature and keccak, from
+    standard crates;
+  - Poseidon over BN254 as circom computes it: TACEO's `poseidon-rust`,
+    vendored on kohaku-rs's Railgun branch, or another circom-compatible
+    crate;
+  - the Lean IMT, for the state tree and the association set's tree:
+    kohaku-rs's generic `kohaku-merkle-tree`, or a small one of its own;
+  - the events, `Deposited`, `Withdrawn`, `Ragequit`, `LeafInserted` and
+    `RootUpdated`;
+  - discovery, the root checks and the balance, as this page pins them, with
+    Kohaku's TypeScript as the reference and the source of the vectors;
+  - the association set's tree from IPFS, and the relayer or bundler
+    requests (D4, D5).
+- **The real work: the prover** for `withdraw` and `commitment`, from
+  circom 2's WebAssembly witness generators and `.zkey` keys (*What it means
+  for D9*). Options to evaluate, named here from general knowledge and not
+  checked:
+  - `ark-circom`, which runs the `.wasm` in a WebAssembly runtime: awkward
+    on iOS, which allows no code compiled at runtime;
+  - a native witness generator made at build time (iden3's `witnesscalc`,
+    or `rust-witness` / `circom-witness-rs`), proving with `ark-groth16` or
+    rapidsnark;
+  - mopro, which packages that path for Android and iOS.
+
+  Whichever it is, its proofs must match snarkjs's on Kohaku's vectors.
+- So the first step is a spike: one `withdraw` and one `commitment` proved
+  in Rust on Android and iOS, checked against snarkjs. The rest is routine
+  beside it.
+
+Compared with the others in Rust:
+
+- **Tornado Cash classic** is built (`kohaku-tornadocash`). What is left is
+  integration: the verified log index in place of its syncing, and D3.
+- **Railgun** is the most to build, but two codebases exist, so the work is
+  adopting one. Its TXID tree is the gap above.
+- **Nova** is about Privacy Pools' size plus encrypted outputs and key
+  registration, with no code and no Kohaku reference.
 
 ## Following Kohaku
 
@@ -482,12 +768,22 @@ match:
   `config.ts`, `utils.ts`, `verification/root-verification.ts`,
   `state/thunks/discoverUserSecretsThunk.ts`, `data/ipfsAsp.service.ts`,
   `data/saga-log-source.ts`; `packages/tornado-cash/src/account/`;
-  `packages/railgun/README.md`.
-- kohaku-rs: `README.md`, `crates/tornadocash/`.
+  `packages/railgun/README.md`; `packages/provider/src/provider.ts`;
+  `packages/privacy-pools/src/data/`,
+  `state/thunks/syncHistoryTimestampsThunk.ts`;
+  `packages/tornado-cash/src/data/`.
+- kohaku-rs: `README.md`, `crates/tornadocash/`; on `feat/kohaku-railgun`,
+  `crates/railgun/README.md`, `crates/railgun-poi/` and
+  `crates/railgun-sync/`.
+- `@fatsolutions/privacy-pools-core-circuits` 1.0.5 (npm): its artifacts.
+- railgun-rust: `crates/`, `Cargo.toml`.
 - Kohaku's roadmap: <https://notes.ethereum.org/@niard/KohakuRoadmap>.
 - Myotis: `docs/eth-getlogs-design.md`, `docs/seeded-log-histories.md`,
   `docs/railgun-poc.md`, `docs/railgun-android.md`,
-  `docs/privacy-and-tor.md`,
+  `docs/privacy-and-tor.md`, `docs/logindex-verified-bundle-design.md`,
+  `docs/implementation-status.md`,
   `myotis-api/src/main/java/io/myotis/api/ChainHandle.java`.
+- walletbeat: `src/schema/attributes/privacy/private-transfers.ts`,
+  `src/schema/features/privacy/transaction-privacy.ts`.
 - Punicus issue #101 (Railgun), which read `Railgun-Privacy/contract` and
   `@railgun-community/engine` 9.9.1 and `wallet` 10.8.6.
