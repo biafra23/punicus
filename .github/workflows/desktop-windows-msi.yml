@@ -233,7 +233,9 @@ jobs:
           if ($jars.Count -ne 1) { Fail "expected exactly one data-desktop jar in the msi, found $($jars.Count)" }
           $zip = [System.IO.Compression.ZipFile]::OpenRead($jars[0].FullName)
           try {
-            $libs = @($zip.Entries | Where-Object { $_.Name -eq 'privacy_pools.dll' })
+            # Every entry naming the library, under any prefix and with any extension (an import
+            # library, a .pdb), as the dmg and deb checks count them.
+            $libs = @($zip.Entries | Where-Object { $_.FullName -like '*privacy_pools*' })
             if ($libs.Count -ne 1 -or $libs[0].FullName -ne 'win32-x86-64/privacy_pools.dll') {
               Fail "the data jar must carry win32-x86-64/privacy_pools.dll alone, found: $($libs.FullName -join ', ')"
             }

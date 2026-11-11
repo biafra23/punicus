@@ -86,14 +86,20 @@ internal object PrivacyPoolsNative {
         val stream = PrivacyPoolsNative::class.java.classLoader?.getResourceAsStream(resource) ?: return null
         val suffix = "." + resource.substringAfterLast('.')
         // Windows cannot delete a library a process has loaded, so deleteOnExit leaves each run's copy
-        // behind there: the copies earlier runs left are removed first. One a running process holds
-        // stays, as Windows refuses to delete it. The temporary directory is the user's own there.
-        if (Platform.isWindows()) {
-            File(System.getProperty("java.io.tmpdir")).listFiles { f ->
-                f.name.startsWith(TEMP_PREFIX) && f.name.endsWith(suffix)
-            }?.forEach { it.delete() }
+        // behind there. The copies live in a directory of their own, in the user's own temporary
+        // directory, and those older than an hour are removed first: never one another process has
+        // just written and not loaded yet, and Windows refuses to delete one a process holds.
+        val dir = if (Platform.isWindows()) {
+            File(System.getProperty("java.io.tmpdir"), TEMP_PREFIX).also { d ->
+                d.mkdirs()
+                val stale = System.currentTimeMillis() - STALE_AFTER_MS
+                d.listFiles { f -> f.name.endsWith(suffix) && f.lastModified() < stale }?.forEach { it.delete() }
+            }
+        } else {
+            null
         }
-        val file: File = Files.createTempFile(TEMP_PREFIX, suffix).toFile()
+        val file: File = (dir?.let { Files.createTempFile(it.toPath(), TEMP_PREFIX, suffix) }
+            ?: Files.createTempFile(TEMP_PREFIX, suffix)).toFile()
         file.deleteOnExit()
         stream.use { input -> file.outputStream().use { input.copyTo(it) } }
         return file.absolutePath
@@ -102,6 +108,8 @@ internal object PrivacyPoolsNative {
     private const val NAME = "privacy_pools"
 
     private const val TEMP_PREFIX = "punicus-privacy-pools"
+
+    private const val STALE_AFTER_MS = 60 * 60 * 1000L
 
     /** A field element's width. */
     const val FIELD_BYTES = 32

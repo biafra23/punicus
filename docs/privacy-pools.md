@@ -533,11 +533,13 @@ of 2b on one more host, and iOS needs a link step and a binding of its own.
   (`desktop-dmg.yml`, `desktop-linux-deb.yml`); `ci.yml` runs them on Linux
   x86-64.
 - **2d, as built**: `buildPrivacyPoolsHost` builds `privacy_pools.dll` for
-  `x86_64-pc-windows-msvc` (or `aarch64-pc-windows-msvc`), staged under
-  JNA's `win32-x86-64/` (`win32-aarch64/`). The proving keys' fetch runs
-  through Git for Windows' `bash`. Windows cannot delete a loaded library,
-  so the binding removes the copies earlier runs left before it copies its
-  own. `desktop-windows-msi.yml` runs the binding's tests, proving
+  `x86_64-pc-windows-msvc`, staged under JNA's `win32-x86-64/`. Windows on
+  arm64 is left out, as the msi is: nothing builds or tests it, and there
+  the binding answers `UNAVAILABLE`. The proving keys' fetch runs through
+  Git for Windows' `bash`, found on `PATH` outside the Windows directory
+  (where a bare `bash` is WSL's). Windows cannot delete a loaded library,
+  so the binding keeps its copies in a directory of their own and removes
+  those older than an hour before it copies its own. `desktop-windows-msi.yml` runs the binding's tests, proving
   included, and checks that the msi's `data-desktop` jar carries the DLL
   once, as an x64 PE image. Its pull-request trigger now also follows
   `data/build.gradle.kts` and `native/privacy-pools/`.
