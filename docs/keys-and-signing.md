@@ -634,7 +634,7 @@ the key-store adapter, inside one call, zeroed afterwards.
     that wipes every block it frees. It costs a `memset` per free, and on
     iOS, where this library is linked beside the Myotis engine's, another
     Rust static library, it must not clash with that one's allocator. Part
-    2d checks that; until then the copies stand as said here.
+    2e checks that; until then the copies stand as said here.
 - **The determinism check.** The first note signed in a call is signed
   twice; a mismatch refuses the call. Secrets are derived again at every
   use and never stored.

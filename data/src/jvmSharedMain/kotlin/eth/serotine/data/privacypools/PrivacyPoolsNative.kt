@@ -84,13 +84,24 @@ internal object PrivacyPoolsNative {
         if (Platform.isAndroid()) return NAME
         val resource = "${Platform.RESOURCE_PREFIX}/${System.mapLibraryName(NAME)}"
         val stream = PrivacyPoolsNative::class.java.classLoader?.getResourceAsStream(resource) ?: return null
-        val file: File = Files.createTempFile("punicus-privacy-pools", "." + resource.substringAfterLast('.')).toFile()
+        val suffix = "." + resource.substringAfterLast('.')
+        // Windows cannot delete a library a process has loaded, so deleteOnExit leaves each run's copy
+        // behind there: the copies earlier runs left are removed first. One a running process holds
+        // stays, as Windows refuses to delete it. The temporary directory is the user's own there.
+        if (Platform.isWindows()) {
+            File(System.getProperty("java.io.tmpdir")).listFiles { f ->
+                f.name.startsWith(TEMP_PREFIX) && f.name.endsWith(suffix)
+            }?.forEach { it.delete() }
+        }
+        val file: File = Files.createTempFile(TEMP_PREFIX, suffix).toFile()
         file.deleteOnExit()
         stream.use { input -> file.outputStream().use { input.copyTo(it) } }
         return file.absolutePath
     }
 
     private const val NAME = "privacy_pools"
+
+    private const val TEMP_PREFIX = "punicus-privacy-pools"
 
     /** A field element's width. */
     const val FIELD_BYTES = 32

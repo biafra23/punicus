@@ -29,6 +29,9 @@ on:
       - "desktop-app/src/main/kotlin/eth/serotine/desktop/Main.kt"
       - "build.gradle.kts"
       - "gradle/libs.versions.toml"
+      # The Privacy Pools library the msi carries in :data's jar, and the build that makes it.
+      - "data/build.gradle.kts"
+      - "native/privacy-pools/**"
   # Any branch, on demand from the Actions tab.
   workflow_dispatch:
 
@@ -145,6 +148,18 @@ jobs:
             || { echo "::error::could not read the release version (got '$version')"; exit 1; }
           echo "RELEASE_VERSION=$version" >> "$GITHUB_ENV"
 
+      # The Privacy Pools binding's tests, proving included, against the DLL this job built
+      # (data/build.gradle.kts, buildPrivacyPoolsHost): no other job loads it on Windows.
+      - name: Run the Privacy Pools binding's tests on Windows
+        run: |
+          GRADLE_ARGS=(
+            -Porg.gradle.java.installations.auto-detect=false
+            -Porg.gradle.java.installations.auto-download=false
+            "-Porg.gradle.java.installations.paths=$JAVA_HOME"
+          )
+          ./gradlew :data:desktopTest --tests 'eth.serotine.data.privacypools.*' -PprivacyPoolsProving \
+            --stacktrace "${GRADLE_ARGS[@]}"
+
       # Compose names the output Punicus-<packageVersion>.msi; rename it to the
       # arch-tagged name, like the dmgs and debs. Exactly one, or fail.
       - name: Tag .msi with architecture
@@ -211,7 +226,24 @@ jobs:
             Write-Output ("{0}: PE machine 0x{1:X4} ({2})" -f $name, $machine, $hits[0].FullName.Substring($ex.Length))
             if ($machine -ne 0x8664) { Fail ("{0} is PE machine 0x{1:X4}, not x64 (0x8664)" -f $name, $machine) }
           }
-          Write-Output "OK: x64 msi $version carries an x64 launcher and JVM"
+          # The Privacy Pools library rides in :data's jar, under JNA's prefix for x64 Windows
+          # (buildPrivacyPoolsHost, data/build.gradle.kts): there exactly once, an x64 PE image.
+          Add-Type -AssemblyName System.IO.Compression.FileSystem
+          $jars = @(Get-ChildItem -Path $ex -Recurse -File -Filter 'data-desktop*.jar')
+          if ($jars.Count -ne 1) { Fail "expected exactly one data-desktop jar in the msi, found $($jars.Count)" }
+          $zip = [System.IO.Compression.ZipFile]::OpenRead($jars[0].FullName)
+          try {
+            $libs = @($zip.Entries | Where-Object { $_.Name -eq 'privacy_pools.dll' })
+            if ($libs.Count -ne 1 -or $libs[0].FullName -ne 'win32-x86-64/privacy_pools.dll') {
+              Fail "the data jar must carry win32-x86-64/privacy_pools.dll alone, found: $($libs.FullName -join ', ')"
+            }
+            $dll = Join-Path $env:RUNNER_TEMP 'privacy_pools.dll'
+            [System.IO.Compression.ZipFileExtensions]::ExtractToFile($libs[0], $dll, $true)
+          } finally { $zip.Dispose() }
+          $machine = Get-PeMachine $dll
+          Write-Output ("privacy_pools.dll: PE machine 0x{0:X4}" -f $machine)
+          if ($machine -ne 0x8664) { Fail ("privacy_pools.dll is PE machine 0x{0:X4}, not x64 (0x8664)" -f $machine) }
+          Write-Output "OK: x64 msi $version carries an x64 launcher, JVM and Privacy Pools library"
 
       # Install the msi the way a user would (per user, no admin prompt), start
       # the installed app, require that it is still running a while later, and

@@ -392,8 +392,9 @@ own: nothing is shown to the user before Part 7.
 | 1 | This page, the decisions as rulings | the owner | yes |
 | 2a | The native library (done, #289) | D9, D14 | yes |
 | 2b | Its Kotlin binding and the desktop build (done, #291) | D9 | yes |
-| 2c | The Android build (NDK) | D9 | CI only |
-| 2d | The iOS build and Windows | D9 | CI only |
+| 2c | The Android build (NDK) (done, #292) | D9 | CI only |
+| 2d | The Windows build | D9 | CI only |
+| 2e | The iOS build | D9 | CI only |
 | 3 | Test vectors from Kohaku | D1, D11 | yes |
 | 4 | Pools in the log index | D7 | yes, unit tests |
 | 5 | Pool state and root checks | D5 | yes, unit tests |
@@ -475,11 +476,13 @@ the repository. Every step passed for both circuits.
 
 ### Part 2: the native library and its build
 
-In four parts: 2a the crate and its tests (#289); 2b its Kotlin binding
+In five parts: 2a the crate and its tests (#289); 2b its Kotlin binding
 through JNA and the desktop build, Gradle building the library with cargo
 and the binding's tests running on the desktop JVM (#291); 2c the four Android
-ABIs with the NDK's clang (`zstd-sys` compiles C); 2d the iOS static
-library through cinterop, and Windows.
+ABIs with the NDK's clang (`zstd-sys` compiles C; #292); 2d the Windows
+desktop library; 2e the iOS static library through cinterop. The plan's
+"2d, iOS and Windows" was split in two at 2d: Windows is the desktop build
+of 2b on one more host, and iOS needs a link step and a binding of its own.
 
 - The crate: Poseidon (circomlib's constants), the Lean IMT, the witness, the
   prover, the artifacts' hashes; a C ABI of a few functions
@@ -529,6 +532,27 @@ library through cinterop, and Windows.
   The desktop installers run the binding's tests in each leg they build
   (`desktop-dmg.yml`, `desktop-linux-deb.yml`); `ci.yml` runs them on Linux
   x86-64.
+- **2d, as built**: `buildPrivacyPoolsHost` builds `privacy_pools.dll` for
+  `x86_64-pc-windows-msvc` (or `aarch64-pc-windows-msvc`), staged under
+  JNA's `win32-x86-64/` (`win32-aarch64/`). The proving keys' fetch runs
+  through Git for Windows' `bash`. Windows cannot delete a loaded library,
+  so the binding removes the copies earlier runs left before it copies its
+  own. `desktop-windows-msi.yml` runs the binding's tests, proving
+  included, and checks that the msi's `data-desktop` jar carries the DLL
+  once, as an x64 PE image. Its pull-request trigger now also follows
+  `data/build.gradle.kts` and `native/privacy-pools/`.
+- **2e, what it must solve**: both this library and the Myotis engine are
+  Rust static libraries linked into one iOS framework. The engine's
+  `libmyotis_engine.a` (0.1.20, its cinterop klib) exports
+  `_rust_eh_personality` and compiler-rt's builtins unmangled, and each
+  library carries its own standard library. Built the same way, this
+  library would define the same symbols, which the link refuses as
+  duplicates. The plan: a relocatable link (`ld -r`) with an exported
+  symbols list of the six `pp_*` functions before archiving, which turns
+  every other symbol local, so nothing of this library's can collide. It
+  also answers the allocator question of docs/keys-and-signing.md: a
+  wiping global allocator in this library stays local to it and cannot
+  clash with the engine's. Only CI's macOS runners can build and test it.
 - **2c, R8**: once R8 runs on the APK, `PrivacyPoolsNative.Library` needs a
   keep rule beside `Sodium`'s (`android-app/build.gradle.kts`). A renamed
   method fails at the call with an `UnsatisfiedLinkError`, not as
