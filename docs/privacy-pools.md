@@ -494,9 +494,14 @@ library through cinterop, and Windows.
   per ABI the app ships (arm64-v8a, armeabi-v7a, x86, x86_64), with the
   NDK's clang as linker and as `zstd-sys`'s C compiler, at the app's minSdk.
   It puts the libraries into `:data`'s jniLibs.
-  - No `cargo-ndk`: the four variables per target it would set are set by
-    the task, so a build needs only the NDK and rustup's four Android
-    targets, and no other tool to pin.
+  - No `cargo-ndk`: the task sets what it would, clang itself with
+    `--target` as linker and C compiler and the flags in
+    `CARGO_ENCODED_RUSTFLAGS`, which an inherited `RUSTFLAGS` cannot
+    override. A build needs only the NDK and rustup's four Android targets,
+    which `native/privacy-pools/scripts/android-toolchain.sh` installs, and
+    no other tool to pin.
+  - An Android Studio deploy builds only the device's ABI; every other
+    build, CI's among them, builds all four.
   - The NDK is pinned (`gradle/libs.versions.toml`, `ndk`: r28, which
     aligns to 16 KB pages by default). The task passes the 16 KB alignment
     to the linker anyway and fails on any LOAD segment that is not 16 KB

@@ -37,6 +37,7 @@ android {
         // JNA's AAR also carries stubs for armeabi and MIPS, which Android dropped long ago;
         // this keeps them out of the APK. (Which of the four to ship is the owner's APK-size
         // call: the engine library has only arm64-v8a and x86_64, the key store runs on all four.)
+        // :data's privacyPoolsAndroidAbis builds the Privacy Pools library for the same four.
         ndk {
             abiFilters += setOf("arm64-v8a", "armeabi-v7a", "x86", "x86_64")
         }

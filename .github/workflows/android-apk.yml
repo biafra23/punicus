@@ -97,16 +97,9 @@ jobs:
 
       # :data cross-compiles the Privacy Pools library for Android's four ABIs (buildPrivacyPoolsAndroid,
       # data/build.gradle.kts) with the NDK gradle/libs.versions.toml pins and rustup's Android targets.
-      # The runner's SDK need not carry that NDK: sdkmanager installs it, and does nothing if it is there.
+      # The runner's SDK need not carry that NDK: the script installs both, and does nothing if they are there.
       - name: Android toolchain for the Privacy Pools library
-        run: |
-          set -euo pipefail
-          ndk=$(sed -n 's/^ndk = "\(.*\)"$/\1/p' gradle/libs.versions.toml)
-          [ -n "$ndk" ] || { echo "::error::no ndk pin in gradle/libs.versions.toml"; exit 1; }
-          "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --install "ndk;$ndk" > /dev/null
-          [ -f "$ANDROID_HOME/ndk/$ndk/source.properties" ] || { echo "::error::NDK $ndk did not install"; exit 1; }
-          cd native/privacy-pools
-          rustup target add aarch64-linux-android armv7-linux-androideabi i686-linux-android x86_64-linux-android
+        run: native/privacy-pools/scripts/android-toolchain.sh
 
       # The ubuntu-latest runner ships an Android SDK via $ANDROID_HOME, which
       # AGP picks up automatically when local.properties is absent.
