@@ -243,13 +243,19 @@ is the owner's decision, never a PR author's. Today the list has one entry:
 
 ### Privacy Pools note secrets are key material
 
-(Owner rulings, 2026-11-11, docs/privacy-pools.md D2 and D11;
-docs/keys-and-signing.md, *Privacy Pools note secrets*.)
+(Owner rulings, 2026-11-11, docs/privacy-pools.md D2 and D11, D11 as
+amended the same day; docs/keys-and-signing.md, *Privacy Pools note
+secrets*.)
 
-- **Kohaku's derivation**: the key at `m/28784'/1'/<accountIndex>'`, a note's
-  secrets from its EIP-712 signature (docs/kohaku.md, *Privacy Pools note
-  secrets*). Not 0xbow's: a phrase used on privacypools.com restores no
-  notes here.
+- **New deposits take Kohaku's derivation**: the key at
+  `m/28784'/1'/<accountIndex>'`, a note's secrets from its EIP-712 signature
+  (docs/kohaku.md, *Privacy Pools note secrets*).
+- **Notes of 0xbow's derivation are found and spent too** (D11 amended,
+  2026-11-11): the notes privacypools.com made from the same phrase, under
+  its current and its legacy keys. Their change notes keep 0xbow's
+  derivation, so its app still finds them. No new deposit takes it.
+- Every derivation's master values, keys and signatures are key material,
+  as the notes' nullifiers and secrets are.
 - The key, the note signature, the nullifier and the secret exist only
   inside the key-store adapter, inside one call, as byte arrays zeroed
   before it returns. They are not an exception to *Key material*: they

@@ -582,15 +582,15 @@ its KDoc and returns it as a result the UI shows as state.
 
 ## Privacy Pools note secrets
 
-(Owner rulings, 2026-11-11, docs/privacy-pools.md D2 and D11. Not built;
-docs/privacy-pools.md, Part 6, builds it.)
+(Owner rulings, 2026-11-11, docs/privacy-pools.md D2 and D11, D11 as
+amended the same day. Not built; docs/privacy-pools.md, Part 6, builds it.)
 
 A Privacy Pools note is spent with secrets derived from the recovery phrase.
 They are key material, held to rules 1 to 9 like the account keys: inside
 the key-store adapter, inside one call, zeroed afterwards.
 
-- **Kohaku's derivation** (D11; docs/kohaku.md, *Privacy Pools note
-  secrets*):
+- **Kohaku's derivation, for every new deposit** (D11; docs/kohaku.md,
+  *Privacy Pools note secrets*):
   - the signing key at `m/28784'/1'/<accountIndex>'` of the envelope's seed,
     secp256k1 BIP-32 (the account index is D8's);
   - a note's signature: libsecp256k1, RFC 6979's nonce, over the EIP-712
@@ -600,8 +600,29 @@ the key-store adapter, inside one call, zeroed afterwards.
     (`Eip712`), as every digest a signer signs is;
   - `rs = r ‖ low-s`; the nullifier and the secret are the first 31 bytes of
     `keccak256("nullifier" ‖ rs)` and `keccak256("salt" ‖ rs)`.
-  - 0xbow's own derivation (its SDK, privacypools.com) is not followed: the
-    two find disjoint notes.
+- **0xbow's derivation, to find and spend the notes privacypools.com made
+  from the same phrase** (D11 amended, 2026-11-11; 0xbow
+  `privacy-pools-core`, `packages/sdk/src/crypto.ts` and
+  `core/account.service.ts`). The two derivations find disjoint notes; a
+  restore runs both.
+  - The master nullifier is Poseidon of the private key at
+    `m/44'/60'/0'/0/0`, the master secret Poseidon of the one at
+    `m/44'/60'/1'/0/0`, each read as an integer. The first is the phrase's
+    first account key here too: it is derived inside the call, as for
+    signing, and zeroed with the rest.
+  - The **legacy** keys read that integer through a JavaScript float
+    (`bytesToNumber`), which keeps only its top 53 bits or so; the current
+    ones read it whole (`bytesToBigInt`). Both are derived, as notes of
+    both exist. The exact reduction is matched by vectors from 0xbow's SDK
+    (Part 3).
+  - A deposit's nullifier and secret: Poseidon(master, scope, index), its
+    index counted per pool. A change note's: Poseidon(master, label, k).
+  - A note's change note keeps the derivation of its deposit, so 0xbow's app
+    still finds it. No new deposit takes 0xbow's derivation.
+  - 0xbow moves a legacy note to the current keys by a withdrawal of 0; the
+    discovery follows that link, as its SDK does.
+  - The master values are key material: never cached, derived again at
+    every use.
 - **One call, all inside** (D2). A `PoolKeychain` call opens the envelope as
   `sign` does, derives the key, signs the note digests it needs, hashes the
   signatures into the secrets, and then does one of two things:

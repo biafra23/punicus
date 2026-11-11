@@ -733,8 +733,9 @@ match:
 - D9, for Privacy Pools: Rust, in this repository.
 - D10, for Privacy Pools: yes, the parts merged by their author into
   `feature/privacy-pools` once CI is green and every comment answered.
-- docs/privacy-pools.md's D11 (Kohaku's derivation, not 0xbow's) and D14
-  (the circuit artifacts bundled).
+- docs/privacy-pools.md's D11 (Kohaku's derivation for new deposits, and the
+  notes of 0xbow's derivation found and spent too, as amended 2026-11-11) and
+  D14 (the circuit artifacts bundled).
 
 **Open**, with what is left of D2, D3 and D9:
 

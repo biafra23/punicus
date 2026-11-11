@@ -154,15 +154,20 @@ docs/kohaku.md *Privacy Pools note secrets* pins it:
 - the deposit note at `secretIndex` 0, the k-th change note at k;
 - the deposit index counted **per Entrypoint**, across all its pools.
 
-**It is not 0xbow's.** 0xbow's SDK and privacypools.com derive
-`Poseidon(master, scope, index)` from two HD keys (`sdk/src/crypto.ts:39-107`).
-A phrase used there finds nothing here, and the other way round. Punicus
-follows Kohaku's (D11, owner ruling, 2026-11-11).
+**0xbow's derivation is a second one.** 0xbow's SDK and privacypools.com
+derive `Poseidon(master, scope, index)` from two HD keys
+(`sdk/src/crypto.ts:39-107`), in a current and a legacy version. The two
+families find disjoint notes. Punicus makes new deposits with Kohaku's, and
+finds and spends 0xbow's too, so a phrase used on privacypools.com restores
+here (D11, owner ruling, 2026-11-11, amended the same day; the detail is
+docs/keys-and-signing.md, *Privacy Pools note secrets*).
 
 ### Discovery and balance
 
 - **Deposits**: index 0, 1, 2… until the first precommitment no `Deposited`
-  carries. Gap limit 0.
+  carries. Gap limit 0. That is Kohaku's rule; 0xbow's notes (D11) are found
+  per pool, from index 0, until 10 indices in a row are missing, under its
+  current and its legacy keys, and through its migrations.
 - **Change notes**: for each deposit, while a `Withdrawn` carries the newest
   note's nullifier hash, the next note.
 - **Balance** of a deposit: its value less every withdrawal of its lineage;
@@ -495,6 +500,11 @@ the repository. Every step passed for both circuits.
   and secret indices; scopes, labels and contexts; trees and roots for
   fixed leaf sets; discovery results over a fixed log set; and snarkjs's
   witnesses and public signals for both circuits.
+- The same for 0xbow's derivation (D11), from 0xbow's SDK at its pinned
+  commit: the master values under the current and the legacy keys, deposit
+  and change-note secrets for a grid of scopes, labels and indices, and
+  discovery over a fixed log set with gaps and a legacy-to-current
+  migration.
 - `:data`'s and the crate's tests check against it, and that it names the
   pins, so a mismatch fails `./gradlew build`.
 
@@ -527,6 +537,12 @@ the repository. Every step passed for both circuits.
 - `PoolKeychain` in `EnvelopeKeyStore`: the path, the EIP-712 digest (from
   `:domain`'s `Eip712`), the signature, the secrets, all in one call, all
   zeroed.
+- 0xbow's derivation beside it (D11): the master values from the two HD keys,
+  current and legacy, and the per-pool and per-label secrets. Each deposit
+  remembers which derivation found it, so its change notes keep it.
+- Discovery runs both: Kohaku's per Entrypoint with no gap, 0xbow's per pool
+  with its gap of 10 and its migrations. A legacy note is labelled as made
+  under 0xbow's older keys.
 - The determinism check. The cache of public values (D2).
 - As docs/keys-and-signing.md, *Privacy Pools note secrets*, sets it out
   (D2, owner ruling, 2026-11-11).
@@ -619,7 +635,10 @@ D3's direction of 2026-11-10):
   `.claude/rules/architecture.md`, *Native code*). The prover stack is Part
   0's. If Part 2 finds it does not hold, the owner decides the change on
   Part 2's PR.
-- **D11: Kohaku's derivation.** Not 0xbow's (`.claude/rules/trust.md`;
+- **D11: Kohaku's derivation for new deposits; 0xbow's notes found and spent
+  too** (amended 2026-11-11 from "Kohaku's, not 0xbow's": the owner chose
+  option B, reading both families and writing Kohaku's). A 0xbow note's
+  change notes keep 0xbow's derivation (`.claude/rules/trust.md`;
   docs/keys-and-signing.md).
 - **D14: bundled.** In every build, pinned by sha256, never fetched
   (`.claude/rules/data-sources.md`, *Privacy Pools' circuit artifacts are
