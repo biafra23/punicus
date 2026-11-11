@@ -239,32 +239,49 @@ if (providers.gradleProperty("cowApiNetwork").isPresent) {
 // (eth.serotine.data.privacypools.PrivacyPoolsNative). The release profile's LTO applies, as the
 // crate is built as a cdylib alone (its Cargo.toml says why). Building :data for the desktop needs
 // Rust (rustup; native/privacy-pools/rust-toolchain.toml names the toolchain).
+//
+// Hosts: Linux and macOS, on x86-64 or arm64. Anywhere else, Windows included until Part 2d, the
+// library is not built and is not in the build: the binding answers UNAVAILABLE, and its tests say
+// they did not run. Never a library staged under another platform's name.
 val privacyPoolsDir: Directory = rootProject.layout.projectDirectory.dir("native/privacy-pools")
 val privacyPoolsHostResources = layout.buildDirectory.dir("generated/privacy-pools/host-resources")
-val privacyPoolsJnaPrefix: String = run {
+val privacyPoolsJnaPrefix: String? = run {
     val os = System.getProperty("os.name").lowercase()
     val arch = when (System.getProperty("os.arch").lowercase()) {
         "aarch64", "arm64" -> "aarch64"
-        else -> "x86-64"
+        "amd64", "x86_64" -> "x86-64"
+        else -> return@run null
     }
     when {
         "mac" in os -> "darwin-$arch"
-        "win" in os -> "win32-$arch"
-        else -> "linux-$arch"
+        "linux" in os -> "linux-$arch"
+        else -> null
     }
 }
-val privacyPoolsLibraryName: String = when {
-    privacyPoolsJnaPrefix.startsWith("darwin") -> "libprivacy_pools.dylib"
-    privacyPoolsJnaPrefix.startsWith("win32") -> "privacy_pools.dll"
-    else -> "libprivacy_pools.so"
+val privacyPoolsLibraryName = if (privacyPoolsJnaPrefix?.startsWith("darwin") == true) {
+    "libprivacy_pools.dylib"
+} else {
+    "libprivacy_pools.so"
 }
 val buildPrivacyPoolsHost by tasks.registering(Exec::class) {
     group = "build"
     description = "Build the native Privacy Pools library for this host (cargo, release, cdylib)"
+    val prefix = privacyPoolsJnaPrefix
+    onlyIf("the host is Linux or macOS on x86-64 or arm64") { prefix != null }
+    if (prefix == null) {
+        logger.warn(
+            "Punicus: the Privacy Pools library is not built on ${System.getProperty("os.name")}/" +
+                "${System.getProperty("os.arch")}; it is unavailable in this build (docs/privacy-pools.md, Part 2d)",
+        )
+    }
     val cargoTarget = layout.buildDirectory.dir("privacy-pools-cargo")
     inputs.dir(privacyPoolsDir.dir("src"))
     inputs.dir(privacyPoolsDir.dir("graphs"))
-    inputs.files(privacyPoolsDir.file("Cargo.toml"), privacyPoolsDir.file("Cargo.lock"))
+    inputs.files(
+        privacyPoolsDir.file("Cargo.toml"),
+        privacyPoolsDir.file("Cargo.lock"),
+        privacyPoolsDir.file("rust-toolchain.toml"),
+    )
     outputs.dir(privacyPoolsHostResources)
     workingDir(privacyPoolsDir)
     commandLine(
@@ -272,7 +289,7 @@ val buildPrivacyPoolsHost by tasks.registering(Exec::class) {
         "--target-dir", cargoTarget.get().asFile.absolutePath,
     )
     val built = cargoTarget.map { it.file("release/$privacyPoolsLibraryName") }
-    val staged = privacyPoolsHostResources.map { it.file("$privacyPoolsJnaPrefix/$privacyPoolsLibraryName") }
+    val staged = privacyPoolsHostResources.map { it.file("$prefix/$privacyPoolsLibraryName") }
     doLast {
         val target = staged.get().asFile
         target.parentFile.mkdirs()
@@ -281,19 +298,26 @@ val buildPrivacyPoolsHost by tasks.registering(Exec::class) {
 }
 kotlin.sourceSets.getByName("desktopMain").resources.srcDir(privacyPoolsHostResources)
 tasks.matching { it.name == "desktopProcessResources" }.configureEach { dependsOn(buildPrivacyPoolsHost) }
-
-// The circuits' pinned proving and verification keys, for the binding's proving tests: fetched by
-// the crate's own script, which refuses any file whose hash is not the pinned one, and does nothing
-// once they are present (native/privacy-pools/README.md; where a release build takes them from is
-// docs/privacy-pools.md's D14a, still open).
-val fetchPrivacyPoolsArtifacts by tasks.registering(Exec::class) {
-    group = "verification"
-    description = "Fetch the pinned Privacy Pools circuit keys into native/privacy-pools/artifacts"
-    workingDir(privacyPoolsDir)
-    commandLine("scripts/fetch-artifacts.sh")
-    outputs.dir(privacyPoolsDir.dir("artifacts"))
-}
 tasks.matching { it.name == "desktopTest" }.configureEach {
-    dependsOn(fetchPrivacyPoolsArtifacts)
     (this as Test).systemProperty("serotine.privacyPoolsDir", privacyPoolsDir.asFile.absolutePath)
+    systemProperty("serotine.privacyPoolsBuilt", (privacyPoolsJnaPrefix != null).toString())
+}
+
+// The binding's proving tests need the circuits' pinned keys, about 19 MB from the npm registry, so
+// they run only with -PprivacyPoolsProving (CI passes it): the crate's own script fetches them and
+// refuses any file whose hash is not the pinned one, and does nothing once they are present
+// (native/privacy-pools/README.md; where a release build takes them from is docs/privacy-pools.md's
+// D14a, still open). Without it, those tests say they did not run.
+if (providers.gradleProperty("privacyPoolsProving").isPresent) {
+    val fetchPrivacyPoolsArtifacts by tasks.registering(Exec::class) {
+        group = "verification"
+        description = "Fetch the pinned Privacy Pools circuit keys into native/privacy-pools/artifacts"
+        workingDir(privacyPoolsDir)
+        commandLine("scripts/fetch-artifacts.sh")
+        outputs.dir(privacyPoolsDir.dir("artifacts"))
+    }
+    tasks.matching { it.name == "desktopTest" }.configureEach {
+        dependsOn(fetchPrivacyPoolsArtifacts)
+        (this as Test).systemProperty("serotine.privacyPoolsProving", "true")
+    }
 }

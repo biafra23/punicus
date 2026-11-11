@@ -63,7 +63,7 @@ internal object PrivacyPoolsNative {
         try {
             Native.load("privacy_pools", Library::class.java)
         } catch (e: Throwable) {
-            println("Punicus: the Privacy Pools library cannot be loaded (${e::class.simpleName})")
+            System.err.println("Punicus: the Privacy Pools library cannot be loaded (${e::class.simpleName})")
             null
         }
     }
@@ -162,8 +162,11 @@ internal class PrivacyPools(private val library: PrivacyPoolsNative.Library? = P
         return withFields(leaves) { packed ->
             Memory(PrivacyPoolsNative.FIELD_BYTES.toLong()).cleared { root ->
                 Memory(4).cleared { depth ->
-                    val status = lib.pp_lean_imt_root(packed, SizeT(leaves.size.toLong()), flags(allowDuplicates), root, depth)
-                    answer(status) { TreeRoot(root.getByteArray(0, PrivacyPoolsNative.FIELD_BYTES), depth.getInt(0)) }
+                    val count = SizeT(leaves.size.toLong())
+                    val status = lib.pp_lean_imt_root(packed, count, flags(allowDuplicates), root, depth)
+                    answer(status) {
+                        TreeRoot(root.getByteArray(0, PrivacyPoolsNative.FIELD_BYTES), depth.getInt(0))
+                    }
                 }
             }
         }
@@ -185,7 +188,9 @@ internal class PrivacyPools(private val library: PrivacyPoolsNative.Library? = P
                         answer(status) {
                             InclusionProof(
                                 root.getByteArray(0, width),
-                                List(PrivacyPoolsNative.MAX_DEPTH) { siblings.getByteArray((it * width).toLong(), width) },
+                                List(PrivacyPoolsNative.MAX_DEPTH) {
+                                    siblings.getByteArray((it * width).toLong(), width)
+                                },
                                 path.getLong(0),
                             )
                         }
@@ -195,12 +200,17 @@ internal class PrivacyPools(private val library: PrivacyPoolsNative.Library? = P
         }
     }
 
-    /** Loads [circuit] from its pinned `.zkey` and witness graph; the library refuses either if its sha256 differs. */
+    /**
+     * Loads [circuit] from its pinned `.zkey` and witness graph; the library refuses either if its
+     * sha256 differs, and an empty one is refused here. Both are public: their native copies are
+     * freed, not cleared.
+     */
     fun prover(circuit: PoolCircuit, zkey: ByteArray, graph: ByteArray): NativeResult<PoolProver> {
         val lib = library ?: return NativeResult.Refused(NativeError.UNAVAILABLE)
-        return Memory(zkey.size.toLong()).cleared { z ->
+        if (zkey.isEmpty() || graph.isEmpty()) return NativeResult.Refused(NativeError.BAD_ARTIFACT)
+        return Memory(zkey.size.toLong()).freed { z ->
             z.write(0, zkey, 0, zkey.size)
-            Memory(graph.size.toLong()).cleared { g ->
+            Memory(graph.size.toLong()).freed { g ->
                 g.write(0, graph, 0, graph.size)
                 Memory(4).cleared { status ->
                     status.setInt(0, -1)
@@ -219,7 +229,8 @@ internal class PrivacyPools(private val library: PrivacyPoolsNative.Library? = P
         }
     }
 
-    private fun flags(allowDuplicates: Boolean): Int = if (allowDuplicates) PrivacyPoolsNative.TREE_ALLOW_DUPLICATES else 0
+    private fun flags(allowDuplicates: Boolean): Int =
+        if (allowDuplicates) PrivacyPoolsNative.TREE_ALLOW_DUPLICATES else 0
 }
 
 /**
@@ -264,6 +275,14 @@ internal class PoolProver(
         handle = null
     }
 }
+
+/** Runs [block] with [this] native buffer of public data, and frees it afterwards, whatever happens. */
+private inline fun <R> Memory.freed(block: (Memory) -> R): R =
+    try {
+        block(this)
+    } finally {
+        close()
+    }
 
 /** Runs [block] with [this] native buffer, and clears and frees it afterwards, whatever happens. */
 private inline fun <R> Memory.cleared(block: (Memory) -> R): R =

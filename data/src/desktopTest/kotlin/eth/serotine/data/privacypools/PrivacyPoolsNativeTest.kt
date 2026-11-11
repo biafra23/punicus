@@ -7,7 +7,6 @@ import kotlin.test.assertContentEquals
 import kotlin.test.assertEquals
 import kotlin.test.assertIs
 import kotlin.test.assertNotNull
-import kotlin.test.assertTrue
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonObject
@@ -21,10 +20,23 @@ import kotlinx.serialization.json.jsonPrimitive
  * The library is the one `buildPrivacyPoolsHost` builds for this host; the proving keys are those
  * `fetchPrivacyPoolsArtifacts` fetched and pinned. The library's own tests cover its cryptography;
  * these cover the mapping: every call, its buffers and its refusals.
+ *
+ * On a host the library is not built for (`serotine.privacyPoolsBuilt`), and for the proving tests
+ * without `-PprivacyPoolsProving` (they need the network for the keys), a test says it did not run.
  */
 class PrivacyPoolsNativeTest {
     private val dir = File(assertNotNull(System.getProperty("serotine.privacyPoolsDir"), "run through Gradle"))
     private val pools = PrivacyPools()
+    private val built = System.getProperty("serotine.privacyPoolsBuilt") == "true"
+    private val proving = System.getProperty("serotine.privacyPoolsProving") == "true"
+
+    private fun runs(): Boolean = built.also { if (!it) println("not run: no Privacy Pools library on this host") }
+
+    private fun proves(): Boolean =
+        (runs() && proving).also { if (built && !it) println("not run: needs -PprivacyPoolsProving") }
+
+    private fun hex(fields: List<ByteArray>): List<String> =
+        fields.map { f -> f.joinToString("") { "%02x".format(it) } }
 
     private fun vector(name: String) = Json.parseToJsonElement(File(dir, "tests/vectors/$name").readText())
 
@@ -48,11 +60,13 @@ class PrivacyPoolsNativeTest {
 
     @Test
     fun the_library_is_built_in() {
+        if (!runs()) return
         assertNotNull(PrivacyPoolsNative.library, "buildPrivacyPoolsHost should have put it on the classpath")
     }
 
     @Test
     fun hashes_as_the_reference_does() {
+        if (!runs()) return
         val input = vector("commitment.input.json").jsonObject
         val expected = vector("expected-outputs.json").jsonObject.getValue("commitment").jsonObject
         assertContentEquals(expected.element("nullifierHash"), ok(pools.poseidon(listOf(input.element("nullifier")))))
@@ -63,6 +77,7 @@ class PrivacyPoolsNativeTest {
 
     @Test
     fun refuses_bad_hash_inputs() {
+        if (!runs()) return
         assertEquals(NativeError.BAD_LENGTH, refused(pools.poseidon(emptyList())))
         assertEquals(NativeError.BAD_ARITY, refused(pools.poseidon(List(4) { toField(1) })))
         assertEquals(NativeError.BAD_LENGTH, refused(pools.poseidon(listOf(ByteArray(31)))))
@@ -76,18 +91,20 @@ class PrivacyPoolsNativeTest {
 
     @Test
     fun builds_the_reference_state_tree() {
+        if (!runs()) return
         val withdraw = vector("withdraw.input.json").jsonObject
         val root = ok(pools.leanImtRoot(stateLeaves(), allowDuplicates = false))
         assertContentEquals(withdraw.element("stateRoot"), root.root)
         assertEquals(3, root.depth)
         val proof = ok(pools.leanImtProof(stateLeaves(), 6, allowDuplicates = false))
         assertContentEquals(withdraw.element("stateRoot"), proof.root)
-        withdraw.elements("stateSiblings").zip(proof.siblings).forEach { (want, got) -> assertContentEquals(want, got) }
+        assertEquals(hex(withdraw.elements("stateSiblings")), hex(proof.siblings))
         assertEquals(withdraw.getValue("stateIndex").jsonPrimitive.content.toLong(), proof.index)
     }
 
     @Test
     fun repeated_leaves_follow_the_flag() {
+        if (!runs()) return
         val leaves = listOf(p1(1), p1(1))
         assertEquals(NativeError.DUPLICATE_LEAF, refused(pools.leanImtRoot(leaves, allowDuplicates = false)))
         ok(pools.leanImtRoot(leaves, allowDuplicates = true))
@@ -108,14 +125,13 @@ class PrivacyPoolsNativeTest {
 
     @Test
     fun proves_the_commitment_circuit() {
+        if (!proves()) return
         val input = vector("commitment.input.json").jsonObject
         prover(PoolCircuit.COMMITMENT, "commitment").use { prover ->
             val packed = pack(listOf("value", "label", "nullifier", "secret").map { input.element(it) })
             val proved = ok(prover.prove(packed))
             assertEquals(PrivacyPoolsNative.PROOF_BYTES, proved.proof.size)
-            publicSignals("commitment.public.json").zip(proved.publicSignals).forEach { (want, got) ->
-                assertContentEquals(want, got)
-            }
+            assertEquals(hex(publicSignals("commitment.public.json")), hex(proved.publicSignals))
         }
     }
 
@@ -125,17 +141,17 @@ class PrivacyPoolsNativeTest {
             "withdrawnValue", "stateRoot", "stateTreeDepth", "ASPRoot", "ASPTreeDepth", "context", "label",
             "existingValue", "existingNullifier", "existingSecret", "newNullifier", "newSecret",
         ).map { w.element(it) }
-        return scalars + w.elements("stateSiblings") + w.element("stateIndex") + w.elements("ASPSiblings") + w.element("ASPIndex")
+        return scalars + w.elements("stateSiblings") + w.element("stateIndex") +
+            w.elements("ASPSiblings") + w.element("ASPIndex")
     }
 
     @Test
     fun proves_the_withdraw_circuit_and_refuses_a_wrong_root() {
+        if (!proves()) return
         prover(PoolCircuit.WITHDRAW, "withdraw").use { prover ->
             val inputs = withdrawInputs()
             val proved = ok(prover.prove(pack(inputs)))
-            publicSignals("withdraw.public.json").zip(proved.publicSignals).forEach { (want, got) ->
-                assertContentEquals(want, got)
-            }
+            assertEquals(hex(publicSignals("withdraw.public.json")), hex(proved.publicSignals))
             val wrongRoot = inputs.toMutableList().also { it[1] = toField(12345) }
             assertEquals(NativeError.PROOF_REJECTED, refused(prover.prove(pack(wrongRoot))))
             assertEquals(NativeError.BAD_LENGTH, refused(prover.prove(ByteArray(32))))
@@ -144,6 +160,7 @@ class PrivacyPoolsNativeTest {
 
     @Test
     fun refuses_an_artifact_that_is_not_pinned() {
+        if (!proves()) return
         val zkey = File(dir, "artifacts/commitment.zkey").readBytes().also { it[100] = (it[100] + 1).toByte() }
         val graph = File(dir, "graphs/commitment.O1.graph.bin").readBytes()
         assertEquals(NativeError.ARTIFACT_MISMATCH, refused(pools.prover(PoolCircuit.COMMITMENT, zkey, graph)))
@@ -151,9 +168,10 @@ class PrivacyPoolsNativeTest {
 
     @Test
     fun a_closed_prover_refuses() {
+        if (!proves()) return
         val prover = prover(PoolCircuit.COMMITMENT, "commitment")
         prover.close()
         prover.close()
-        assertTrue(prover.prove(ByteArray(4 * 32)) is NativeResult.Refused)
+        assertEquals(NativeError.NULL_POINTER, refused(prover.prove(ByteArray(4 * 32))))
     }
 }
