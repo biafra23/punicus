@@ -241,8 +241,9 @@ if (providers.gradleProperty("cowApiNetwork").isPresent) {
 // docs/privacy-pools.md, Part 2), built by cargo for this host and put on the desktop's classpath
 // under JNA's resource prefix (`linux-x86-64/`, `darwin-aarch64/`, …), where the binding takes it from
 // and loads it by its absolute path (eth.serotine.data.privacypools.PrivacyPoolsNative). The release
-// profile's LTO applies, as the crate is built as a cdylib alone (its Cargo.toml says why). Building :data for the desktop needs
-// Rust (rustup; native/privacy-pools/rust-toolchain.toml names the toolchain).
+// profile's LTO applies, as the crate is built as a cdylib alone (its Cargo.toml says why). Building
+// :data for the desktop needs Rust (rustup; native/privacy-pools/rust-toolchain.toml names the
+// toolchain).
 //
 // Hosts: Linux and macOS, on x86-64 or arm64. Anywhere else, Windows included until Part 2d, the
 // library is not built and is not in the build: the binding answers UNAVAILABLE, and its tests are
@@ -366,7 +367,7 @@ if (providers.gradleProperty("privacyPoolsProving").isPresent) {
 
 // The library for Android (docs/privacy-pools.md, Part 2c): one cdylib per ABI the app ships
 // (android-app's abiFilters), cross-compiled by cargo with the NDK's clang as linker and as the C
-// compiler `zstd-sys` needs, at the app's minSdk, and put into :data's jniLibs, where the APK takes
+// compiler `zstd-sys` and `blake3` need, at the app's minSdk, and put into :data's jniLibs, where the APK takes
 // it from and the binding loads it by name (PrivacyPoolsNative). No cargo-ndk: the four variables per
 // target it would set are set here, so the NDK and rustup's Android targets are all a build needs.
 // Every LOAD segment is aligned to 16 KB, as Android 15's 16 KB-page devices need, and checked.
@@ -464,7 +465,7 @@ abstract class BuildPrivacyPoolsAndroid @Inject constructor(private val exec: Ex
                 environment("CARGO_TARGET_${key.uppercase()}_LINKER", clang.absolutePath)
                 // The encoded form, which cargo prefers to every other source of flags: an inherited
                 // RUSTFLAGS can neither drop these nor add its own. With --target, a build script
-                // (zstd-sys's, for the host) gets none of them.
+                // (zstd-sys's and blake3's, for the host) gets none of them.
                 environment(
                     "CARGO_ENCODED_RUSTFLAGS",
                     // --no-undefined, as the NDK's own build systems pass for every shared library: a

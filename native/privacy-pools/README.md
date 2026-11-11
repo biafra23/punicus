@@ -77,7 +77,7 @@ Where the build takes the proving keys from is still open (docs/privacy-pools.md
 whose hash is not pinned. The tests read the fetched files and nothing else; the network is the
 script's, run as a step before them. The app never fetches them (D14).
 
-`circom-witness-rs` depends on `zstd-sys`, which compiles C: a build for Android or iOS needs that
+`circom-witness-rs` depends on `zstd-sys` and `blake3`, which compile C: a build for Android or iOS needs that
 platform's C compiler: the NDK's clang, which `:data`'s `buildPrivacyPoolsAndroid` passes to
 cargo for each Android target, and Xcode's.
 

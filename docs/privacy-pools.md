@@ -391,7 +391,7 @@ own: nothing is shown to the user before Part 7.
 | 0 | Prover spike: done on the desktop | — | yes (desktop) |
 | 1 | This page, the decisions as rulings | the owner | yes |
 | 2a | The native library (done, #289) | D9, D14 | yes |
-| 2b | Its Kotlin binding and the desktop build | D9 | yes |
+| 2b | Its Kotlin binding and the desktop build (done, #291) | D9 | yes |
 | 2c | The Android build (NDK) | D9 | CI only |
 | 2d | The iOS build and Windows | D9 | CI only |
 | 3 | Test vectors from Kohaku | D1, D11 | yes |
@@ -492,7 +492,8 @@ library through cinterop, and Windows.
   linked into `SerotineKit`.
 - **2c, as built**: `:data`'s `buildPrivacyPoolsAndroid` runs one cargo build
   per ABI the app ships (arm64-v8a, armeabi-v7a, x86, x86_64), with the
-  NDK's clang as linker and as `zstd-sys`'s C compiler, at the app's minSdk.
+  NDK's clang as linker and as the C compiler of `zstd-sys` and `blake3`
+  (both through `circom-witness-rs`), at the app's minSdk.
   It puts the libraries into `:data`'s jniLibs.
   - No `cargo-ndk`: the task sets what it would, clang itself with
     `--target` as linker and C compiler and the flags in
@@ -510,8 +511,15 @@ library through cinterop, and Windows.
     them. `-PskipPrivacyPoolsAndroid` builds the APK without the library,
     saying so, and the binding answers `UNAVAILABLE` there. No workflow
     passes it.
-  - The cost: about 2 to 3.5 MB per ABI, 10.9 MB in all, stored
-    uncompressed in the universal APK; a device installs its own ABI's.
+  - The cost: 2.1 MB (arm64-v8a) to 3.6 MB (x86) per ABI, 10.9 MB in all,
+    on every device. Punicus ships one universal APK, and at minSdk 29 its
+    libraries stay uncompressed inside it and load from there: every
+    install carries all four copies, in the download and on disk. Only ABI
+    splits or an app bundle would bring that down to one.
+  - The engine ships arm64-v8a and x86_64 only, so on armeabi-v7a and x86
+    the app has no light client and no pool state to prove against: the
+    two 32-bit copies (5.9 MB) serve nothing there today. Which ABIs ship
+    is the owner's call (the comment at `android-app`'s `abiFilters`).
   - `android-apk.yml` checks each APK for the library in every ABI it
     ships, built for that ABI. Nothing runs it on a device yet: the
     first Android code that calls it comes with Part 6.

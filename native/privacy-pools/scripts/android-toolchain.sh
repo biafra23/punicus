@@ -14,10 +14,27 @@ root="$(cd "$here/../.." && pwd)"
 ndk=$(sed -n 's/^ndk = "\(.*\)"$/\1/p' "$root/gradle/libs.versions.toml")
 [ -n "$ndk" ] || { echo "no ndk pin in gradle/libs.versions.toml" >&2; exit 1; }
 : "${ANDROID_HOME:?set ANDROID_HOME to the Android SDK}"
-sdkmanager="$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"
-[ -x "$sdkmanager" ] || { echo "no sdkmanager at $sdkmanager" >&2; exit 1; }
-"$sdkmanager" --install "ndk;$ndk" > /dev/null
-[ -f "$ANDROID_HOME/ndk/$ndk/source.properties" ] || { echo "NDK $ndk did not install" >&2; exit 1; }
+# sdkmanager only when the NDK is missing: an SDK from Android Studio may have no cmdline-tools, and
+# the targets below still need adding there.
+if [ ! -f "$ANDROID_HOME/ndk/$ndk/source.properties" ]; then
+  sdkmanager="$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"
+  [ -x "$sdkmanager" ] || {
+    echo "NDK $ndk is not installed, and there is no sdkmanager at $sdkmanager to install it" >&2
+    echo "(install the SDK's command-line tools, or the NDK from Android Studio's SDK Manager)" >&2
+    exit 1
+  }
+  # Its output only when it fails, so that a refusal (a licence not yet accepted) says why. stdin is
+  # closed: a licence prompt ends the install instead of waiting for an answer nobody sees.
+  log=$(mktemp)
+  if ! "$sdkmanager" --install "ndk;$ndk" < /dev/null > "$log" 2>&1 \
+      || [ ! -f "$ANDROID_HOME/ndk/$ndk/source.properties" ]; then
+    cat "$log" >&2
+    rm -f "$log"
+    echo "NDK $ndk did not install (accept the SDK's licences with \`sdkmanager --licenses\` first?)" >&2
+    exit 1
+  fi
+  rm -f "$log"
+fi
 echo "NDK $ndk at $ANDROID_HOME/ndk/$ndk"
 
 # The Rust targets of data/build.gradle.kts's privacyPoolsAndroidAbis, in the same order.
