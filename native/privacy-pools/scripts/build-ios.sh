@@ -35,15 +35,18 @@ rustup target list --installed | grep -qx "$triple" || {
   echo "in native/privacy-pools (the iOS build of :data needs both)" >&2
   exit 1
 }
+# -fno-common for the C that zstd-sys and blake3 compile: a tentative definition (zstd's
+# `int g_ZSTD_threading_useless_symbol;`) is otherwise a common symbol, which carries no visibility,
+# so zstd-sys's -fvisibility=hidden misses it and ld -r keeps it global. As a definition it is hidden,
+# and ld -r makes it local with the rest. (Xcode's ld-prime has no -d to define commons instead.)
+export "CFLAGS_${triple//-/_}=-fno-common"
 cargo rustc --release --lib --locked --crate-type staticlib --target "$triple" --target-dir "$target_dir"
 built="$target_dir/$triple/release/libprivacy_pools.a"
 
 work=$(mktemp -d)
 trap 'rm -rf "$work"' EXIT
-# Every member of cargo's archive, merged into one object; only the listed symbols stay global. -d
-# defines the common symbols C's tentative definitions make (zstd's g_ZSTD_threading_useless_symbol
-# among them), which ld -r would otherwise keep as commons, global and outside the list.
-xcrun --sdk "$sdk" ld -r -d -arch arm64 -exported_symbols_list "$here/ios-exports.txt" \
+# Every member of cargo's archive, merged into one object; only the listed symbols stay global.
+xcrun --sdk "$sdk" ld -r -arch arm64 -exported_symbols_list "$here/ios-exports.txt" \
   -all_load "$built" -o "$work/privacy_pools.o"
 mkdir -p "$out"
 rm -f "$out/libprivacy_pools.a"
