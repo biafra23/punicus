@@ -35,13 +35,7 @@ rustup target list --installed | grep -qx "$triple" || {
   echo "in native/privacy-pools (the iOS build of :data needs both)" >&2
   exit 1
 }
-# Machine code only, no LLVM bitcode: Xcode's linker and nm read bitcode with Apple's LLVM, which is
-# older than rustc's and refuses its bitcode ("Unknown attribute kind", seen on macos-15 with Xcode
-# 16.4). So no LTO here (it would keep bitcode in the archive) and no embedded bitcode; the app's
-# link dead-strips what this library does not use. The encoded flags reach only the target with
-# --target, not the build scripts of zstd-sys and blake3.
-CARGO_PROFILE_RELEASE_LTO=off CARGO_ENCODED_RUSTFLAGS="-Cembed-bitcode=no" \
-  cargo rustc --release --lib --locked --crate-type staticlib --target "$triple" --target-dir "$target_dir"
+cargo rustc --release --lib --locked --crate-type staticlib --target "$triple" --target-dir "$target_dir"
 built="$target_dir/$triple/release/libprivacy_pools.a"
 
 work=$(mktemp -d)
@@ -53,8 +47,12 @@ mkdir -p "$out"
 rm -f "$out/libprivacy_pools.a"
 xcrun --sdk "$sdk" libtool -static -o "$out/libprivacy_pools.a" "$work/privacy_pools.o"
 
-# The guarantee itself: the archive defines exactly the six functions as globals.
-got=$(xcrun --sdk "$sdk" nm -gU "$out/libprivacy_pools.a" | awk 'NF == 3 { print $3 }' | sort)
+# The guarantee itself: the archive defines exactly the six functions as globals. --no-llvm-bc: the
+# objects of rustup's prebuilt standard library carry embedded bitcode (__LLVM,__bitcode), which
+# ld -r keeps; linkers ignore it, but Xcode's nm would read the symbols from it, with an LLVM older
+# than rustc's, and fail ("Unknown attribute kind", Xcode 16.4). The machine code's own symbol
+# table is the one the app's link resolves against.
+got=$(xcrun --sdk "$sdk" nm --no-llvm-bc -gU "$out/libprivacy_pools.a" | awk 'NF == 3 { print $3 }' | sort)
 want=$(sort "$here/ios-exports.txt")
 if [ "$got" != "$want" ]; then
   echo "libprivacy_pools.a ($triple) defines other globals than ios-exports.txt:" >&2
