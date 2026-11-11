@@ -493,6 +493,13 @@ library through cinterop, and Windows.
 - **CI**: Rust and the NDK on `ubuntu-latest` (`ci.yml`, `android-apk.yml`),
   Rust on `macos-15` (`ios.yml`, `desktop-dmg.yml`), Windows
   (`desktop-windows-msi.yml`). `check_apk_min_api.py` must stay green.
+  The desktop installers run the binding's tests in each leg they build
+  (`desktop-dmg.yml`, `desktop-linux-deb.yml`); `ci.yml` runs them on Linux
+  x86-64.
+- **2c, R8**: once R8 runs on the APK, `PrivacyPoolsNative.Library` needs a
+  keep rule beside `Sodium`'s (`android-app/build.gradle.kts`). A renamed
+  method fails at the call with an `UnsatisfiedLinkError`, not as
+  `UNAVAILABLE`.
 - **The artifacts** (the `.zkey`s about 19 MB, the graphs and `.vkey`s
   under 0.3 MB): bundled in every build, pinned by sha256, never fetched (D14,
   owner ruling, 2026-11-11). Converting the `.zkey` to arkworks' form

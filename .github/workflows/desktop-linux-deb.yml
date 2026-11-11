@@ -91,6 +91,11 @@ jobs:
           echo "::error::DEB build failed after 3 attempts"
           exit 1
 
+      # The Privacy Pools binding's tests, proving included, against the library this leg built:
+      # ci.yml runs them on x86-64 alone, so the arm64 leg is the only one on aarch64 Linux.
+      - name: Run the Privacy Pools binding's tests (${{ matrix.arch }})
+        run: ./gradlew :data:desktopTest --tests 'eth.serotine.data.privacypools.*' -PprivacyPoolsProving --stacktrace
+
       # jpackage names the output serotine_<version>_<debarch>.deb; rename it to the
       # arch-only artifact name Punicus-<arch>.deb (the publish job adds the tag for
       # the release asset). Assert exactly one deb — zero or multiple should fail

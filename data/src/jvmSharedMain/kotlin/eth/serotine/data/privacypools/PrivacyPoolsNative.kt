@@ -13,8 +13,9 @@ import java.nio.file.Files
  * *Native code*) through JNA: circomlib's Poseidon, zk-kit's Lean IMT, and Groth16 proofs of the
  * `withdraw` and `commitment` circuits, every proof verified by the library before it is returned.
  *
- * Field elements are 32 big-endian bytes below `p`. Every buffer that crosses the boundary is a
- * native [Memory] this class clears after the call, so no copy of a secret is left in one; the
+ * Field elements are 32 big-endian bytes below `p`. Every buffer that crosses the boundary and may
+ * hold a secret is a native [Memory] this class clears after the call, so no copy of a secret is
+ * left in one (the public `.zkey` and graph are freed uncleared); the
  * caller's own arrays are the caller's to zero (docs/keys-and-signing.md, *Privacy Pools note
  * secrets*). Nothing here logs an input.
  *

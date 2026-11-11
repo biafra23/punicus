@@ -155,6 +155,14 @@ jobs:
           GRADLE_ARGS="-Porg.gradle.java.installations.auto-detect=false -Porg.gradle.java.installations.auto-download=false -Porg.gradle.java.installations.paths=$JAVA_HOME"
           ./gradlew :ui:desktopTest --stacktrace $GRADLE_ARGS
 
+      # The Privacy Pools binding's tests, proving included, against the library this leg built and
+      # under this leg's JVM: ci.yml runs them on Linux x86-64 alone, so only here does a dylib load,
+      # and in the x64 leg the x86_64 one under Rosetta 2 (data/build.gradle.kts, buildPrivacyPoolsHost).
+      - name: Run the Privacy Pools binding's tests on macOS (${{ matrix.arch }})
+        run: |
+          GRADLE_ARGS="-Porg.gradle.java.installations.auto-detect=false -Porg.gradle.java.installations.auto-download=false -Porg.gradle.java.installations.paths=$JAVA_HOME"
+          ./gradlew :data:desktopTest --tests 'eth.serotine.data.privacypools.*' -PprivacyPoolsProving --stacktrace $GRADLE_ARGS
+
       # Compose names both arches' output the same (Punicus-<packageVersion>.dmg);
       # rename so the downloaded file itself states the architecture. Assert exactly
       # one — two differently-versioned leftovers must not ship an arbitrary pick.
