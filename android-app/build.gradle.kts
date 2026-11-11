@@ -91,7 +91,9 @@ android {
             // Turning this on needs keep rules first: for libsecp256k1's reflectively loaded
             // JNI binding (see data/build.gradle.kts), and for JNA, whose AAR ships none —
             // `-keep class com.sun.jna.** { *; }` plus the envelope's own mapping,
-            // `-keep class eth.serotine.data.keys.Sodium$* { *; }`; and for the engine, whose
+            // `-keep class eth.serotine.data.keys.Sodium$* { *; }`, and the Privacy Pools
+            // library's, `-keep class eth.serotine.data.privacypools.PrivacyPoolsNative$* { *; }`
+            // (a renamed method fails at its call, not as UNAVAILABLE); and for the engine, whose
             // AAR ships no rules either, `-keep class io.myotis.** { *; }`. Without them the key
             // store and the light client report themselves unavailable in a minified build.
             isMinifyEnabled = false

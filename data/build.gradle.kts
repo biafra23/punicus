@@ -12,6 +12,10 @@
 // which only an Android target does. Nothing in commonMain may import android.*
 // regardless — platform code goes into androidMain / desktopMain / iosMain.
 
+import java.io.ByteArrayOutputStream
+import javax.inject.Inject
+import org.gradle.process.ExecOperations
+
 plugins {
     alias(libs.plugins.kotlin.multiplatform)
     alias(libs.plugins.android.library)
@@ -274,6 +278,12 @@ val privacyPoolsLibraryName = if (privacyPoolsJnaPrefix?.startsWith("darwin") ==
 } else {
     "libprivacy_pools.so"
 }
+// The toolchain's version, read in the crate (its rust-toolchain.toml picks the toolchain), and only
+// when a task that builds the library runs: an input of both builds, so a new stable rebuilds them.
+val privacyPoolsRustc: Provider<String> = providers.exec {
+    workingDir(privacyPoolsDir)
+    commandLine("rustc", "--version")
+}.standardOutput.asText.map { it.trim() }
 val buildPrivacyPoolsHost by tasks.registering(Exec::class) {
     group = "build"
     description = "Build the native Privacy Pools library for this host (cargo, release, cdylib)"
@@ -288,6 +298,8 @@ val buildPrivacyPoolsHost by tasks.registering(Exec::class) {
     val cargoTarget = layout.buildDirectory.dir("privacy-pools-cargo")
     // The graphs are not an input: the library takes one at run time (Prover::new), and has no build.rs.
     inputs.dir(privacyPoolsDir.dir("src"))
+    // Not where the library is not built: there rustc need not exist.
+    if (prefix != null) inputs.property("rustcVersion", privacyPoolsRustc)
     inputs.files(
         privacyPoolsDir.file("Cargo.toml"),
         privacyPoolsDir.file("Cargo.lock"),
@@ -343,5 +355,173 @@ if (providers.gradleProperty("privacyPoolsProving").isPresent) {
         (this as Test).systemProperty("serotine.privacyPoolsProving", "true")
         inputs.dir(privacyPoolsDir.dir("artifacts")).withPropertyName("privacyPoolsArtifacts")
             .withPathSensitivity(PathSensitivity.RELATIVE)
+    }
+}
+
+// The library for Android (docs/privacy-pools.md, Part 2c): one cdylib per ABI the app ships
+// (android-app's abiFilters), cross-compiled by cargo with the NDK's clang as linker and as the C
+// compiler `zstd-sys` needs, at the app's minSdk, and put into :data's jniLibs, where the APK takes
+// it from and the binding loads it by name (PrivacyPoolsNative). No cargo-ndk: the four variables per
+// target it would set are set here, so the NDK and rustup's Android targets are all a build needs.
+// Every LOAD segment is aligned to 16 KB, as Android 15's 16 KB-page devices need, and checked.
+//
+// Needs the pinned NDK (libs.versions.toml's `ndk`, under the SDK's ndk/ directory) and rustup's
+// four Android targets; without them the build fails and says how to get them. `-PskipPrivacyPoolsAndroid`
+// builds without the library instead, saying so: such an APK answers UNAVAILABLE to every call, so
+// no workflow that builds an APK to ship passes it.
+val privacyPoolsAndroidAbis: Map<String, String> = linkedMapOf(
+    "arm64-v8a" to "aarch64-linux-android",
+    "armeabi-v7a" to "armv7-linux-androideabi",
+    "x86" to "i686-linux-android",
+    "x86_64" to "x86_64-linux-android",
+)
+
+/** Builds the Android libraries of native/privacy-pools, one cargo build per ABI, into [outputDir]. */
+abstract class BuildPrivacyPoolsAndroid @Inject constructor(private val exec: ExecOperations) : DefaultTask() {
+    /** The crate: its sources and manifests are the inputs, its directory the working one. */
+    @get:Internal
+    abstract val crateDir: DirectoryProperty
+
+    @get:InputFiles
+    @get:PathSensitive(PathSensitivity.RELATIVE)
+    abstract val crateInputs: ConfigurableFileCollection
+
+    /** cargo's target directory, shared with the desktop build's. */
+    @get:Internal
+    abstract val cargoTargetDir: DirectoryProperty
+
+    /** The NDK's root directory. */
+    @get:Internal
+    abstract val ndkDir: DirectoryProperty
+
+    /** The NDK version, as its source.properties states it: a different NDK builds again. */
+    @get:Input
+    abstract val ndkVersion: Property<String>
+
+    /** ABI to Rust target triple. */
+    @get:Input
+    abstract val abis: MapProperty<String, String>
+
+    /** The API level the libraries are linked against: the app's minSdk. */
+    @get:Input
+    abstract val apiLevel: Property<Int>
+
+    /** The toolchain's `rustc --version`: a new stable builds again, as a new NDK does. */
+    @get:Input
+    abstract val rustcVersion: Property<String>
+
+    @get:OutputDirectory
+    abstract val outputDir: DirectoryProperty
+
+    @TaskAction
+    fun build() {
+        val ndk = ndkDir.get().asFile
+        val os = System.getProperty("os.name").lowercase()
+        val host = when {
+            "mac" in os -> "darwin-x86_64" // the NDK's macOS toolchain is universal under this name
+            "win" in os -> "windows-x86_64"
+            else -> "linux-x86_64"
+        }
+        val bin = ndk.resolve("toolchains/llvm/prebuilt/$host/bin")
+        val exe = if ("win" in os) ".exe" else ""
+        val script = if ("win" in os) ".cmd" else ""
+        val ar = bin.resolve("llvm-ar$exe")
+        val readelf = bin.resolve("llvm-readelf$exe")
+        check(ar.isFile && readelf.isFile) { "the NDK at $ndk has no LLVM toolchain for $host" }
+        val crate = crateDir.get().asFile
+        val installed = ByteArrayOutputStream().also { out ->
+            exec.exec {
+                workingDir(crate)
+                commandLine("rustup", "target", "list", "--installed")
+                standardOutput = out
+            }
+        }.toString().lines().map { it.trim() }
+        val missing = abis.get().values.filterNot { it in installed }
+        check(missing.isEmpty()) {
+            "rustup lacks the Android targets ${missing.joinToString()}: run `rustup target add " +
+                "${missing.joinToString(" ")}` in native/privacy-pools (or build with -PskipPrivacyPoolsAndroid, " +
+                "which leaves the Privacy Pools library out of the APK)"
+        }
+        val out = outputDir.get().asFile
+        out.deleteRecursively()
+        abis.get().forEach { (abi, triple) ->
+            // The clang driver names armv7's target armv7a; every other one is the Rust triple.
+            val clangTarget = if (triple.startsWith("armv7")) "armv7a-linux-androideabi" else triple
+            val clang = bin.resolve("$clangTarget${apiLevel.get()}-clang$script")
+            check(clang.isFile) { "the NDK at $ndk has no $clang" }
+            val key = triple.replace('-', '_')
+            exec.exec {
+                workingDir(crate)
+                environment("CARGO_TARGET_${key.uppercase()}_LINKER", clang.absolutePath)
+                environment("CARGO_TARGET_${key.uppercase()}_RUSTFLAGS", "-C link-arg=-Wl,-z,max-page-size=16384")
+                environment("CC_$key", clang.absolutePath)
+                environment("AR_$key", ar.absolutePath)
+                commandLine(
+                    "cargo", "rustc", "--release", "--lib", "--locked", "--crate-type", "cdylib",
+                    "--target", triple, "--target-dir", cargoTargetDir.get().asFile.absolutePath,
+                )
+            }
+            val built = cargoTargetDir.get().asFile.resolve("$triple/release/libprivacy_pools.so")
+            val staged = out.resolve("$abi/libprivacy_pools.so")
+            staged.parentFile.mkdirs()
+            built.copyTo(staged, overwrite = true)
+            // Every LOAD segment 16 KB-aligned, or a 16 KB-page device refuses the library.
+            val headers = ByteArrayOutputStream().also { o ->
+                exec.exec {
+                    commandLine(readelf.absolutePath, "--program-headers", "--wide", staged.absolutePath)
+                    standardOutput = o
+                }
+            }.toString()
+            val loads = headers.lines().filter { it.trim().startsWith("LOAD") }
+            check(loads.isNotEmpty() && loads.all { it.trim().split(Regex("\\s+")).last() == "0x4000" }) {
+                "$abi's libprivacy_pools.so has a LOAD segment not aligned to 16 KB:\n${loads.joinToString("\n")}"
+            }
+        }
+    }
+}
+
+val skipPrivacyPoolsAndroid = providers.gradleProperty("skipPrivacyPoolsAndroid").isPresent
+val privacyPoolsNdkVersion: String = libs.versions.ndk.get()
+val buildPrivacyPoolsAndroid by tasks.registering(BuildPrivacyPoolsAndroid::class) {
+    group = "build"
+    description = "Build the native Privacy Pools library for Android's four ABIs (cargo, release, the NDK's clang)"
+    crateDir.set(privacyPoolsDir)
+    crateInputs.from(
+        privacyPoolsDir.dir("src"),
+        privacyPoolsDir.file("Cargo.toml"),
+        privacyPoolsDir.file("Cargo.lock"),
+        privacyPoolsDir.file("rust-toolchain.toml"),
+    )
+    cargoTargetDir.set(layout.buildDirectory.dir("privacy-pools-cargo"))
+    val sdk = androidComponents.sdkComponents.sdkDirectory
+    val ndk = sdk.map { it.dir("ndk/$privacyPoolsNdkVersion") }
+    ndkDir.set(ndk)
+    ndkVersion.set(
+        ndk.map { dir ->
+            val props = dir.file("source.properties").asFile
+            check(props.isFile) {
+                "no NDK $privacyPoolsNdkVersion under ${sdk.get().asFile}: install it with " +
+                    "`sdkmanager --install \"ndk;$privacyPoolsNdkVersion\"` (or build with " +
+                    "-PskipPrivacyPoolsAndroid, which leaves the Privacy Pools library out of the APK)"
+            }
+            props.readLines().firstOrNull { it.startsWith("Pkg.Revision") }?.substringAfter('=')?.trim() ?: "unknown"
+        },
+    )
+    abis.set(privacyPoolsAndroidAbis)
+    rustcVersion.set(privacyPoolsRustc)
+    apiLevel.set(android.defaultConfig.minSdk ?: error("no minSdk"))
+    outputDir.set(layout.buildDirectory.dir("generated/privacy-pools/jniLibs"))
+}
+if (skipPrivacyPoolsAndroid) {
+    logger.warn(
+        "Punicus: -PskipPrivacyPoolsAndroid: the Android build leaves the Privacy Pools library out; " +
+            "every call of it answers UNAVAILABLE in that APK",
+    )
+} else {
+    androidComponents.onVariants { variant ->
+        variant.sources.jniLibs?.addGeneratedSourceDirectory(
+            buildPrivacyPoolsAndroid,
+            BuildPrivacyPoolsAndroid::outputDir,
+        )
     }
 }

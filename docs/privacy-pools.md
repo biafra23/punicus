@@ -477,7 +477,7 @@ the repository. Every step passed for both circuits.
 
 In four parts: 2a the crate and its tests (#289); 2b its Kotlin binding
 through JNA and the desktop build, Gradle building the library with cargo
-and the binding's tests running on the desktop JVM; 2c the four Android
+and the binding's tests running on the desktop JVM (#291); 2c the four Android
 ABIs with the NDK's clang (`zstd-sys` compiles C); 2d the iOS static
 library through cinterop, and Windows.
 
@@ -487,9 +487,29 @@ library through cinterop, and Windows.
   `pp_poseidon`), each taking and returning bytes, never logging.
 - Where it lives (D9, owner ruling, 2026-11-11): in this repository,
   `native/privacy-pools/`, built by Gradle through cargo.
-- **The build**: `cargo-ndk` for the four Android ABIs, the host library for
-  the desktop (Linux, macOS, Windows), a static library for iOS (device and
-  simulator) linked into `SerotineKit`.
+- **The build**: the four Android ABIs, the host library for the desktop
+  (Linux, macOS, Windows), a static library for iOS (device and simulator)
+  linked into `SerotineKit`.
+- **2c, as built**: `:data`'s `buildPrivacyPoolsAndroid` runs one cargo build
+  per ABI the app ships (arm64-v8a, armeabi-v7a, x86, x86_64), with the
+  NDK's clang as linker and as `zstd-sys`'s C compiler, at the app's minSdk.
+  It puts the libraries into `:data`'s jniLibs.
+  - No `cargo-ndk`: the four variables per target it would set are set by
+    the task, so a build needs only the NDK and rustup's four Android
+    targets, and no other tool to pin.
+  - The NDK is pinned (`gradle/libs.versions.toml`, `ndk`: r28, which
+    aligns to 16 KB pages by default). The task passes the 16 KB alignment
+    to the linker anyway and fails on any LOAD segment that is not 16 KB
+    aligned, as Android 15's 16 KB-page devices need.
+  - Without the NDK or the targets the build fails and says how to get
+    them. `-PskipPrivacyPoolsAndroid` builds the APK without the library,
+    saying so, and the binding answers `UNAVAILABLE` there. No workflow
+    passes it.
+  - The cost: about 2 to 3.5 MB per ABI, 10.9 MB in all, stored
+    uncompressed in the universal APK; a device installs its own ABI's.
+  - `android-apk.yml` checks each APK for the library in every ABI it
+    ships, built for that ABI. Nothing runs it on a device yet: the
+    first Android code that calls it comes with Part 6.
 - **CI**: Rust and the NDK on `ubuntu-latest` (`ci.yml`, `android-apk.yml`),
   Rust on `macos-15` (`ios.yml`, `desktop-dmg.yml`), Windows
   (`desktop-windows-msi.yml`). `check_apk_min_api.py` must stay green.

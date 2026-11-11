@@ -78,7 +78,13 @@ whose hash is not pinned. The tests read the fetched files and nothing else; the
 script's, run as a step before them. The app never fetches them (D14).
 
 `circom-witness-rs` depends on `zstd-sys`, which compiles C: a build for Android or iOS needs that
-platform's C compiler (the NDK's clang through cargo-ndk, Xcode's).
+platform's C compiler: the NDK's clang, which `:data`'s `buildPrivacyPoolsAndroid` passes to
+cargo for each Android target, and Xcode's.
+
+`:data` builds it for Android's four ABIs (`buildPrivacyPoolsAndroid`, into its jniLibs), with
+the NDK `gradle/libs.versions.toml` pins and rustup's targets: `rustup target add
+aarch64-linux-android armv7-linux-androideabi i686-linux-android x86_64-linux-android`.
+`-PskipPrivacyPoolsAndroid` leaves it out of the APK.
 
 ## Licences
 

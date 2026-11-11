@@ -89,6 +89,25 @@ jobs:
       - name: Make gradlew executable
         run: chmod +x gradlew
 
+      # The Privacy Pools library's cargo build (data/build/privacy-pools-cargo), keyed on Cargo.lock.
+      - name: Cache cargo for the Privacy Pools library
+        uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
+        with:
+          workspaces: native/privacy-pools -> ../../data/build/privacy-pools-cargo
+
+      # :data cross-compiles the Privacy Pools library for Android's four ABIs (buildPrivacyPoolsAndroid,
+      # data/build.gradle.kts) with the NDK gradle/libs.versions.toml pins and rustup's Android targets.
+      # The runner's SDK need not carry that NDK: sdkmanager installs it, and does nothing if it is there.
+      - name: Android toolchain for the Privacy Pools library
+        run: |
+          set -euo pipefail
+          ndk=$(sed -n 's/^ndk = "\(.*\)"$/\1/p' gradle/libs.versions.toml)
+          [ -n "$ndk" ] || { echo "::error::no ndk pin in gradle/libs.versions.toml"; exit 1; }
+          "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --install "ndk;$ndk" > /dev/null
+          [ -f "$ANDROID_HOME/ndk/$ndk/source.properties" ] || { echo "::error::NDK $ndk did not install"; exit 1; }
+          cd native/privacy-pools
+          rustup target add aarch64-linux-android armv7-linux-androideabi i686-linux-android x86_64-linux-android
+
       # The ubuntu-latest runner ships an Android SDK via $ANDROID_HOME, which
       # AGP picks up automatically when local.properties is absent.
       #
@@ -112,6 +131,36 @@ jobs:
           done
           echo "::error::APK build failed after 3 attempts"
           exit 1
+
+      # The Privacy Pools library (data/build.gradle.kts, buildPrivacyPoolsAndroid) in every ABI the
+      # APK ships, the ABIs JNA's stub marks, and built for that ABI: a missing or mislabelled one would
+      # only show on a device, as Privacy Pools answering UNAVAILABLE.
+      - name: Verify the Privacy Pools library in the APKs
+        run: |
+          set -euo pipefail
+          for variant in debug release; do
+            apk=$(ls android-app/build/outputs/apk/$variant/*.apk | head -n1)
+            # Listed once into a file: `unzip | grep -q` fails under pipefail when grep stops early.
+            unzip -Z1 "$apk" > "$RUNNER_TEMP/apk-entries.txt"
+            abis=$(sed -n 's#^lib/\([^/]*\)/libjnidispatch\.so$#\1#p' "$RUNNER_TEMP/apk-entries.txt" | sort)
+            [ -n "$abis" ] || { echo "::error::no native libraries in the $variant APK"; exit 1; }
+            for abi in $abis; do
+              grep -qx "lib/$abi/libprivacy_pools.so" "$RUNNER_TEMP/apk-entries.txt" \
+                || { echo "::error::the $variant APK has no lib/$abi/libprivacy_pools.so"; exit 1; }
+              case "$abi" in
+                arm64-v8a)   want="ARM aarch64" ;;
+                armeabi-v7a) want="ARM, EABI5" ;;
+                x86)         want="Intel 80386" ;;
+                x86_64)      want="x86-64" ;;
+                *) echo "::error::the $variant APK ships an unknown ABI '$abi'"; exit 1 ;;
+              esac
+              unzip -p "$apk" "lib/$abi/libprivacy_pools.so" > "$RUNNER_TEMP/libprivacy_pools.so"
+              info=$(file -b "$RUNNER_TEMP/libprivacy_pools.so")
+              echo "$variant $abi: $info"
+              echo "$info" | grep -q "$want" \
+                || { echo "::error::the $variant APK's lib/$abi/libprivacy_pools.so is not $want: $info"; exit 1; }
+            done
+          done
 
       # minSdk JDK-API gate — enforcement for CLAUDE.md's "minSdk 29 JDK-API
       # budget"; the script's docstring is the full story. The platform install
