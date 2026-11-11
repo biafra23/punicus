@@ -79,18 +79,51 @@ internal object PrivacyPoolsNative {
     /**
      * What to load: the bare name on Android; on the desktop, the absolute path of a private copy of
      * the built-in resource (a temporary file only its owner can write), or null when there is none.
+     *
+     * Only its owner can write it: on Linux and macOS because `Files.createTempFile` makes it so; on
+     * Windows, which sets no ACL on it, because the temporary directory is the user's own (`%TEMP%`
+     * under the profile), as it is by default. A `TEMP` pointed at a directory others can write
+     * would weaken that.
      */
     private fun libraryPath(): String? {
         if (Platform.isAndroid()) return NAME
         val resource = "${Platform.RESOURCE_PREFIX}/${System.mapLibraryName(NAME)}"
         val stream = PrivacyPoolsNative::class.java.classLoader?.getResourceAsStream(resource) ?: return null
-        val file: File = Files.createTempFile("punicus-privacy-pools", "." + resource.substringAfterLast('.')).toFile()
+        val suffix = "." + resource.substringAfterLast('.')
+        // Windows cannot delete a library a process has loaded, so deleteOnExit leaves each run's copy
+        // behind there. The copies live in a directory of their own, in the user's own temporary
+        // directory, and those older than an hour are removed first: never one another process has
+        // just written and not loaded yet, and Windows refuses to delete one a process holds.
+        val dir = if (Platform.isWindows()) {
+            File(System.getProperty("java.io.tmpdir"), TEMP_PREFIX)
+                .takeIf { d -> (d.isDirectory || d.mkdirs()) && d.isDirectory }
+                ?.also { d -> removeStaleCopies(d, suffix, System.currentTimeMillis()) }
+        } else {
+            null
+        }
+        val file: File = (dir?.let { Files.createTempFile(it.toPath(), TEMP_PREFIX, suffix) }
+            ?: Files.createTempFile(TEMP_PREFIX, suffix)).toFile()
         file.deleteOnExit()
         stream.use { input -> file.outputStream().use { input.copyTo(it) } }
         return file.absolutePath
     }
 
+    /**
+     * Deletes the files in [dir] ending in [suffix] last written more than an hour before [now]: the
+     * copies earlier runs left. A younger one, or one of another suffix, stays; so does one the
+     * platform refuses to delete (on Windows, one a running process has loaded).
+     */
+    internal fun removeStaleCopies(dir: File, suffix: String, now: Long) {
+        val stale = now - STALE_AFTER_MS
+        dir.listFiles { f -> f.isFile && f.name.endsWith(suffix) && f.lastModified() < stale }
+            ?.forEach { it.delete() }
+    }
+
     private const val NAME = "privacy_pools"
+
+    private const val TEMP_PREFIX = "punicus-privacy-pools"
+
+    private const val STALE_AFTER_MS = 60 * 60 * 1000L
 
     /** A field element's width. */
     const val FIELD_BYTES = 32

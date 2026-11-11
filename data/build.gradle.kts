@@ -245,11 +245,13 @@ if (providers.gradleProperty("cowApiNetwork").isPresent) {
 // :data for the desktop needs Rust (rustup; native/privacy-pools/rust-toolchain.toml names the
 // toolchain).
 //
-// Hosts: Linux and macOS, on x86-64 or arm64. Anywhere else, Windows included until Part 2d, the
-// library is not built and is not in the build: the binding answers UNAVAILABLE, and its tests are
-// skipped. Never a library staged under another platform's name.
+// Hosts: Linux and macOS on x86-64 or arm64, and Windows on x86-64 (the MSVC toolchain, rustup's
+// default there; the msi is x64 only, and nothing builds or tests Windows on arm64). Anywhere else
+// the library is not built and is not in the build: the binding answers UNAVAILABLE, and its tests
+// are skipped. Never a library staged under another platform's name.
 val privacyPoolsDir: Directory = rootProject.layout.projectDirectory.dir("native/privacy-pools")
 val privacyPoolsHostResources = layout.buildDirectory.dir("generated/privacy-pools/host-resources")
+val isWindowsHost = "windows" in System.getProperty("os.name").lowercase()
 val privacyPoolsJnaPrefix: String? = run {
     val os = System.getProperty("os.name").lowercase()
     val arch = when (System.getProperty("os.arch").lowercase()) {
@@ -260,6 +262,7 @@ val privacyPoolsJnaPrefix: String? = run {
     when {
         "mac" in os -> "darwin-$arch"
         "linux" in os -> "linux-$arch"
+        isWindowsHost && arch == "x86-64" -> "win32-$arch"
         else -> null
     }
 }
@@ -272,12 +275,14 @@ val privacyPoolsCargoTarget: String? = when (privacyPoolsJnaPrefix) {
     "linux-aarch64" -> "aarch64-unknown-linux-gnu"
     "darwin-x86-64" -> "x86_64-apple-darwin"
     "darwin-aarch64" -> "aarch64-apple-darwin"
+    "win32-x86-64" -> "x86_64-pc-windows-msvc"
     else -> null
 }
-val privacyPoolsLibraryName = if (privacyPoolsJnaPrefix?.startsWith("darwin") == true) {
-    "libprivacy_pools.dylib"
-} else {
-    "libprivacy_pools.so"
+// cargo's name for the cdylib, which is also what System.mapLibraryName gives the binding to look for.
+val privacyPoolsLibraryName = when {
+    privacyPoolsJnaPrefix?.startsWith("darwin") == true -> "libprivacy_pools.dylib"
+    privacyPoolsJnaPrefix?.startsWith("win32") == true -> "privacy_pools.dll"
+    else -> "libprivacy_pools.so"
 }
 // The toolchain's version, read in the crate (its rust-toolchain.toml picks the toolchain), and only
 // when a task that builds the library runs: an input of both builds, so a new stable rebuilds them.
@@ -295,11 +300,11 @@ val buildPrivacyPoolsHost by tasks.registering(Exec::class) {
     group = "build"
     description = "Build the native Privacy Pools library for this host (cargo, release, cdylib)"
     val prefix = privacyPoolsJnaPrefix
-    onlyIf("the host is Linux or macOS on x86-64 or arm64") { prefix != null }
+    onlyIf("the host is Linux or macOS on x86-64 or arm64, or Windows on x86-64") { prefix != null }
     if (prefix == null) {
         logger.warn(
             "Punicus: the Privacy Pools library is not built on ${System.getProperty("os.name")}/" +
-                "${System.getProperty("os.arch")}; it is unavailable in this build (docs/privacy-pools.md, Part 2d)",
+                "${System.getProperty("os.arch")}; it is unavailable in this build (docs/privacy-pools.md, Part 2)",
         )
     }
     val cargoTarget = layout.buildDirectory.dir("privacy-pools-cargo")
@@ -352,7 +357,29 @@ if (providers.gradleProperty("privacyPoolsProving").isPresent) {
         group = "verification"
         description = "Fetch the pinned Privacy Pools circuit keys into native/privacy-pools/artifacts"
         workingDir(privacyPoolsDir)
-        commandLine("scripts/fetch-artifacts.sh")
+        // Through Git for Windows' bash on Windows, which cannot execute a .sh itself (Git brings bash,
+        // curl, tar and sha256sum, all the script uses). Never a bare "bash": CreateProcess looks in
+        // System32 before PATH, where it is WSL's launcher, as is the Store WSL's alias in WindowsApps.
+        // Git's own first, beside a git.exe on PATH (a default install puts only Git\cmd there, its
+        // bash being in Git\bin), then a bash.exe on PATH outside those two places (Git Bash's own PATH).
+        if (isWindowsHost) {
+            doFirst {
+                val path = System.getenv("PATH").orEmpty().split(File.pathSeparator).filter { it.isNotBlank() }
+                val besideGit = path.map { File(it) }.filter { File(it, "git.exe").isFile }
+                    .map { it.resolve("../bin/bash.exe").normalize() }
+                val windowsDir = System.getenv("SystemRoot") ?: "C:\\Windows"
+                val onPath = path
+                    .filterNot { it.startsWith(windowsDir, ignoreCase = true) || "WindowsApps" in it }
+                    .map { File(it, "bash.exe") }
+                val bash = (besideGit + onPath).firstOrNull { it.isFile } ?: throw GradleException(
+                    "Git for Windows' bash.exe is not found (beside git.exe, or on PATH outside $windowsDir " +
+                        "and WindowsApps): run the build from Git Bash, or put Git's bin directory on PATH",
+                )
+                commandLine(bash.absolutePath, "scripts/fetch-artifacts.sh")
+            }
+        } else {
+            commandLine("scripts/fetch-artifacts.sh")
+        }
         // The script holds the pins: when they move, it runs again.
         inputs.file(privacyPoolsDir.file("scripts/fetch-artifacts.sh"))
         outputs.dir(privacyPoolsDir.dir("artifacts"))
