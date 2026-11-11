@@ -258,6 +258,17 @@ val privacyPoolsJnaPrefix: String? = run {
         else -> null
     }
 }
+// The cargo target of that same reading of the JVM's os.arch, passed to cargo explicitly: the JVM can
+// run on another architecture than rustup's default host (the Intel dmg's x86_64 JDK under Rosetta 2
+// on an arm64 runner), and a library must be built for the prefix it is staged under. A target
+// rustup does not have fails the build, never ships the host's library under the other name.
+val privacyPoolsCargoTarget: String? = when (privacyPoolsJnaPrefix) {
+    "linux-x86-64" -> "x86_64-unknown-linux-gnu"
+    "linux-aarch64" -> "aarch64-unknown-linux-gnu"
+    "darwin-x86-64" -> "x86_64-apple-darwin"
+    "darwin-aarch64" -> "aarch64-apple-darwin"
+    else -> null
+}
 val privacyPoolsLibraryName = if (privacyPoolsJnaPrefix?.startsWith("darwin") == true) {
     "libprivacy_pools.dylib"
 } else {
@@ -284,14 +295,18 @@ val buildPrivacyPoolsHost by tasks.registering(Exec::class) {
     )
     outputs.dir(privacyPoolsHostResources)
     workingDir(privacyPoolsDir)
+    val triple = privacyPoolsCargoTarget
     commandLine(
         "cargo", "rustc", "--release", "--lib", "--locked", "--crate-type", "cdylib",
-        "--target-dir", cargoTarget.get().asFile.absolutePath,
+        "--target", triple ?: "none", "--target-dir", cargoTarget.get().asFile.absolutePath,
     )
-    val built = cargoTarget.map { it.file("release/$privacyPoolsLibraryName") }
-    val staged = privacyPoolsHostResources.map { it.file("$prefix/$privacyPoolsLibraryName") }
+    val built = cargoTarget.map { it.file("$triple/release/$privacyPoolsLibraryName") }
+    val root = privacyPoolsHostResources
     doLast {
-        val target = staged.get().asFile
+        // Only this build's library: one staged under an earlier prefix would stay in the jar.
+        val dir = root.get().asFile
+        dir.deleteRecursively()
+        val target = dir.resolve("$prefix/$privacyPoolsLibraryName")
         target.parentFile.mkdirs()
         built.get().asFile.copyTo(target, overwrite = true)
     }
