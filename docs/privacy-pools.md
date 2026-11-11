@@ -538,11 +538,16 @@ the repository. Every step passed for both circuits.
   `:domain`'s `Eip712`), the signature, the secrets, all in one call, all
   zeroed.
 - 0xbow's derivation beside it (D11): the master values from the two HD keys,
-  current and legacy, and the per-pool and per-label secrets. Each deposit
-  remembers which derivation found it, so its change notes keep it.
+  current and legacy, and the per-pool and per-label secrets. Each note
+  remembers which derivation and key version found it. Its change note
+  takes Kohaku's for a Kohaku note, and 0xbow's current keys for a 0xbow
+  note: at the next index under current keys, at index 0 after a legacy
+  note, as 0xbow's migration writes it. Nothing is written under the legacy
+  keys.
 - Discovery runs both: Kohaku's per Entrypoint with no gap, 0xbow's per pool
-  with its gap of 10 and its migrations. A legacy note is labelled as made
-  under 0xbow's older keys.
+  with its gap of 10 and its migrations. A legacy note is labelled as held
+  by 0xbow's weak older keys (about 53 bits), with the offer to move it: a
+  withdrawal, of all of it or a part, puts the rest under the current keys.
 - The determinism check. The cache of public values (D2).
 - As docs/keys-and-signing.md, *Privacy Pools note secrets*, sets it out
   (D2, owner ruling, 2026-11-11).

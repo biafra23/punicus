@@ -253,7 +253,13 @@ secrets*.)
 - **Notes of 0xbow's derivation are found and spent too** (D11 amended,
   2026-11-11): the notes privacypools.com made from the same phrase, under
   its current and its legacy keys. Their change notes keep 0xbow's
-  derivation, so its app still finds them. No new deposit takes it.
+  derivation, so its app still finds them, and always under its current
+  keys: the change of a legacy note goes to the current keys at index 0,
+  as 0xbow's own migration does. No commitment is written under the legacy
+  keys, and no new deposit takes 0xbow's derivation.
+- **0xbow's legacy keys are weak** (about 53 bits of each key survive its
+  float conversion). A legacy note is shown as such, and the user is offered
+  to move it.
 - Every derivation's master values, keys and signatures are key material,
   as the notes' nullifiers and secrets are.
 - The key, the note signature, the nullifier and the secret exist only

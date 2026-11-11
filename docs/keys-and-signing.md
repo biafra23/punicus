@@ -615,12 +615,27 @@ the key-store adapter, inside one call, zeroed afterwards.
     ones read it whole (`bytesToBigInt`). Both are derived, as notes of
     both exist. The exact reduction is matched by vectors from 0xbow's SDK
     (Part 3).
+  - **The legacy keys are weak.** Each legacy master value is one of about
+    2^53. A spent note publishes its nullifier hash, a function of the
+    master nullifier and public values alone, so the master values can be
+    searched for, and one search tests every phrase at once. A legacy note is
+    not held by secrets of the strength rules 1 to 9 assume. The screen
+    says so, and offers to move it: any withdrawal moves its remainder to
+    the current keys (next bullet).
   - A deposit's nullifier and secret: Poseidon(master, scope, index), its
     index counted per pool. A change note's: Poseidon(master, label, k).
-  - A note's change note keeps the derivation of its deposit, so 0xbow's app
-    still finds it. No new deposit takes 0xbow's derivation.
-  - 0xbow moves a legacy note to the current keys by a withdrawal of 0; the
-    discovery follows that link, as its SDK does.
+  - **A change note never takes the legacy keys.** The change of a note
+    under 0xbow's current keys takes the current keys at the next index.
+    The change of a legacy note takes the current keys at index 0: that is
+    0xbow's own migration, and its SDK finds it there
+    (`core/account.service.ts`, `_discoverMigratedCommitments`: a
+    withdrawal whose new commitment does not fit the legacy keys is a
+    migration, found under the current keys at withdrawal index 0). So a
+    lineage's change notes follow the note they spend, migrated or not, and
+    0xbow's app still finds every one. No new deposit takes 0xbow's
+    derivation.
+  - 0xbow moves a legacy note to the current keys by a withdrawal, of 0 or
+    of a part; the discovery follows that link, as its SDK does.
   - The master values are key material: never cached, derived again at
     every use.
 - **One call, all inside** (D2). A `PoolKeychain` call opens the envelope as
