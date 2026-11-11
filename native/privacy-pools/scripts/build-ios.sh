@@ -40,8 +40,10 @@ built="$target_dir/$triple/release/libprivacy_pools.a"
 
 work=$(mktemp -d)
 trap 'rm -rf "$work"' EXIT
-# Every member of cargo's archive, merged into one object; only the listed symbols stay global.
-xcrun --sdk "$sdk" ld -r -arch arm64 -exported_symbols_list "$here/ios-exports.txt" \
+# Every member of cargo's archive, merged into one object; only the listed symbols stay global. -d
+# defines the common symbols C's tentative definitions make (zstd's g_ZSTD_threading_useless_symbol
+# among them), which ld -r would otherwise keep as commons, global and outside the list.
+xcrun --sdk "$sdk" ld -r -d -arch arm64 -exported_symbols_list "$here/ios-exports.txt" \
   -all_load "$built" -o "$work/privacy_pools.o"
 mkdir -p "$out"
 rm -f "$out/libprivacy_pools.a"
