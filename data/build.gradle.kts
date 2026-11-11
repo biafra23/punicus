@@ -300,7 +300,7 @@ val buildPrivacyPoolsHost by tasks.registering(Exec::class) {
     group = "build"
     description = "Build the native Privacy Pools library for this host (cargo, release, cdylib)"
     val prefix = privacyPoolsJnaPrefix
-    onlyIf("the host is Linux, macOS or Windows on x86-64 or arm64") { prefix != null }
+    onlyIf("the host is Linux or macOS on x86-64 or arm64, or Windows on x86-64") { prefix != null }
     if (prefix == null) {
         logger.warn(
             "Punicus: the Privacy Pools library is not built on ${System.getProperty("os.name")}/" +
@@ -358,16 +358,23 @@ if (providers.gradleProperty("privacyPoolsProving").isPresent) {
         description = "Fetch the pinned Privacy Pools circuit keys into native/privacy-pools/artifacts"
         workingDir(privacyPoolsDir)
         // Through Git for Windows' bash on Windows, which cannot execute a .sh itself (Git brings bash,
-        // curl, tar and sha256sum, all the script uses). Found on PATH here, skipping the Windows
-        // directory: CreateProcess looks in System32 before PATH, where a bare "bash" is WSL's launcher.
+        // curl, tar and sha256sum, all the script uses). Never a bare "bash": CreateProcess looks in
+        // System32 before PATH, where it is WSL's launcher, as is the Store WSL's alias in WindowsApps.
+        // Git's own first, beside a git.exe on PATH (a default install puts only Git\cmd there, its
+        // bash being in Git\bin), then a bash.exe on PATH outside those two places (Git Bash's own PATH).
         if (isWindowsHost) {
             doFirst {
+                val path = System.getenv("PATH").orEmpty().split(File.pathSeparator).filter { it.isNotBlank() }
+                val besideGit = path.map { File(it) }.filter { File(it, "git.exe").isFile }
+                    .map { it.resolve("../bin/bash.exe").normalize() }
                 val windowsDir = System.getenv("SystemRoot") ?: "C:\\Windows"
-                val bash = System.getenv("PATH").orEmpty().split(File.pathSeparator)
-                    .filterNot { it.startsWith(windowsDir, ignoreCase = true) }
+                val onPath = path
+                    .filterNot { it.startsWith(windowsDir, ignoreCase = true) || "WindowsApps" in it }
                     .map { File(it, "bash.exe") }
-                    .firstOrNull { it.isFile }
-                    ?: throw GradleException("no bash.exe on PATH outside $windowsDir: install Git for Windows")
+                val bash = (besideGit + onPath).firstOrNull { it.isFile } ?: throw GradleException(
+                    "Git for Windows' bash.exe is not found (beside git.exe, or on PATH outside $windowsDir " +
+                        "and WindowsApps): run the build from Git Bash, or put Git's bin directory on PATH",
+                )
                 commandLine(bash.absolutePath, "scripts/fetch-artifacts.sh")
             }
         } else {

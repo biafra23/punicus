@@ -79,6 +79,11 @@ internal object PrivacyPoolsNative {
     /**
      * What to load: the bare name on Android; on the desktop, the absolute path of a private copy of
      * the built-in resource (a temporary file only its owner can write), or null when there is none.
+     *
+     * Only its owner can write it: on Linux and macOS because `Files.createTempFile` makes it so; on
+     * Windows, which sets no ACL on it, because the temporary directory is the user's own (`%TEMP%`
+     * under the profile), as it is by default. A `TEMP` pointed at a directory others can write
+     * would weaken that.
      */
     private fun libraryPath(): String? {
         if (Platform.isAndroid()) return NAME
@@ -90,10 +95,9 @@ internal object PrivacyPoolsNative {
         // directory, and those older than an hour are removed first: never one another process has
         // just written and not loaded yet, and Windows refuses to delete one a process holds.
         val dir = if (Platform.isWindows()) {
-            File(System.getProperty("java.io.tmpdir"), TEMP_PREFIX).also { d ->
-                d.mkdirs()
-                removeStaleCopies(d, suffix, System.currentTimeMillis())
-            }
+            File(System.getProperty("java.io.tmpdir"), TEMP_PREFIX)
+                .takeIf { d -> (d.isDirectory || d.mkdirs()) && d.isDirectory }
+                ?.also { d -> removeStaleCopies(d, suffix, System.currentTimeMillis()) }
         } else {
             null
         }
