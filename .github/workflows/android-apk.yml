@@ -90,10 +90,14 @@ jobs:
         run: chmod +x gradlew
 
       # The Privacy Pools library's cargo build (data/build/privacy-pools-cargo), keyed on Cargo.lock.
+      # Restored only: rust-cache keys on the job id, which ci.yml's build job shares, and that job's
+      # entry holds the desktop target too. Saved from here, this job's smaller entry could take the
+      # key first and leave ci.yml compiling the desktop build's dependencies on every run.
       - name: Cache cargo for the Privacy Pools library
         uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
         with:
           workspaces: native/privacy-pools -> ../../data/build/privacy-pools-cargo
+          save-if: false
 
       # :data cross-compiles the Privacy Pools library for Android's four ABIs (buildPrivacyPoolsAndroid,
       # data/build.gradle.kts) with the NDK gradle/libs.versions.toml pins and rustup's Android targets.
@@ -140,20 +144,24 @@ jobs:
             for abi in $abis; do
               grep -qx "lib/$abi/libprivacy_pools.so" "$RUNNER_TEMP/apk-entries.txt" \
                 || { echo "::error::the $variant APK has no lib/$abi/libprivacy_pools.so"; exit 1; }
-              # Extended regexes over file(1)'s words, which differ between its versions: the
-              # runner's names x86 "Intel i386", older ones "Intel 80386".
+              # The ELF header's class (byte 4: 1 for 32-bit, 2 for 64-bit) and e_machine (two bytes at
+              # 18, little-endian as all four ABIs are), not file(1)'s words, which change between its
+              # versions (x86 is "Intel 80386" in some, "Intel i386" in the runner's).
               case "$abi" in
-                arm64-v8a)   want="^ELF 64-bit .*ARM aarch64" ;;
-                armeabi-v7a) want="^ELF 32-bit .*ARM, EABI5" ;;
-                x86)         want="^ELF 32-bit .*Intel (80386|i386)" ;;
-                x86_64)      want="^ELF 64-bit .*x86-64" ;;
+                arm64-v8a)   want="2 183" ;;  # ELFCLASS64, EM_AARCH64
+                armeabi-v7a) want="1 40" ;;   # ELFCLASS32, EM_ARM
+                x86)         want="1 3" ;;    # ELFCLASS32, EM_386
+                x86_64)      want="2 62" ;;   # ELFCLASS64, EM_X86_64
                 *) echo "::error::the $variant APK ships an unknown ABI '$abi'"; exit 1 ;;
               esac
-              unzip -p "$apk" "lib/$abi/libprivacy_pools.so" > "$RUNNER_TEMP/libprivacy_pools.so"
-              info=$(file -b "$RUNNER_TEMP/libprivacy_pools.so")
-              echo "$variant $abi: $info"
-              echo "$info" | grep -Eq "$want" \
-                || { echo "::error::the $variant APK's lib/$abi/libprivacy_pools.so is not $want: $info"; exit 1; }
+              lib="$RUNNER_TEMP/libprivacy_pools.so"
+              unzip -p "$apk" "lib/$abi/libprivacy_pools.so" > "$lib"
+              [ "$(head -c 4 "$lib" | od -An -tx1 | tr -d ' ')" = "7f454c46" ] \
+                || { echo "::error::the $variant APK's lib/$abi/libprivacy_pools.so is not an ELF file"; exit 1; }
+              got="$(od -An -tu1 -j4 -N1 "$lib" | tr -d ' ') $(od -An -tu2 -j18 -N2 "$lib" | tr -d ' ')"
+              echo "$variant $abi: ELF class and machine $got"
+              [ "$got" = "$want" ] \
+                || { echo "::error::the $variant APK's lib/$abi/libprivacy_pools.so has ELF class and machine $got, not $want"; exit 1; }
             done
           done
 

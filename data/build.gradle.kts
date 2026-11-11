@@ -467,8 +467,13 @@ abstract class BuildPrivacyPoolsAndroid @Inject constructor(private val exec: Ex
                 // (zstd-sys's, for the host) gets none of them.
                 environment(
                     "CARGO_ENCODED_RUSTFLAGS",
-                    listOf("-Clink-arg=--target=$clangTarget", "-Clink-arg=-Wl,-z,max-page-size=16384")
-                        .joinToString("\u001f"),
+                    // --no-undefined, as the NDK's own build systems pass for every shared library: a
+                    // symbol the API level or the toolchain lacks fails here, not at dlopen on a phone.
+                    listOf(
+                        "-Clink-arg=--target=$clangTarget",
+                        "-Clink-arg=-Wl,-z,max-page-size=16384",
+                        "-Clink-arg=-Wl,--no-undefined",
+                    ).joinToString("\u001f"),
                 )
                 environment("CC_$key", clang.absolutePath)
                 environment("CFLAGS_$key", "--target=$clangTarget")
@@ -482,13 +487,21 @@ abstract class BuildPrivacyPoolsAndroid @Inject constructor(private val exec: Ex
             val staged = out.resolve("$abi/libprivacy_pools.so")
             staged.parentFile.mkdirs()
             built.copyTo(staged, overwrite = true)
-            // Every LOAD segment 16 KB-aligned, or a 16 KB-page device refuses the library.
+            // Every LOAD segment 16 KB-aligned, or a 16 KB-page device refuses the library; and it
+            // needs the platform's C libraries alone, which every device has.
             val headers = ByteArrayOutputStream().also { o ->
                 exec.exec {
-                    commandLine(readelf.absolutePath, "--program-headers", "--wide", staged.absolutePath)
+                    commandLine(
+                        readelf.absolutePath, "--program-headers", "--dynamic", "--wide", staged.absolutePath,
+                    )
                     standardOutput = o
                 }
             }.toString()
+            val needed = Regex("\\(NEEDED\\).*\\[(.+)\\]").findAll(headers).map { it.groupValues[1] }.toList()
+            val platform = setOf("libc.so", "libdl.so", "libm.so", "liblog.so")
+            check(needed.isNotEmpty() && needed.all { it in platform }) {
+                "$abi's libprivacy_pools.so needs ${needed - platform} besides the platform's $platform"
+            }
             val loads = headers.lines().filter { it.trim().startsWith("LOAD") }
             val aligned = loads.all { line ->
                 line.trim().split(Regex("\\s+")).last().removePrefix("0x").toLongOrNull(16)
