@@ -1,0 +1,25 @@
+name: Native graphs
+
+# Rebuilds the Privacy Pools witness graphs (native/privacy-pools/graphs/) from their pinned sources
+# and fails unless each equals the committed one byte for byte (native/privacy-pools/scripts/
+# build-graphs.sh; docs/privacy-pools.md, Part 0). The builder is GPL-3.0 and takes minutes to
+# compile, so this runs on demand and weekly rather than on every PR: a wrong graph cannot reach a
+# user unnoticed in between, as the library verifies every proof it makes against the pinned key.
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "17 4 * * 1"
+
+jobs:
+  rebuild:
+    name: Rebuild the witness graphs
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+
+      - name: Rebuild and compare
+        working-directory: native/privacy-pools
+        run: scripts/build-graphs.sh

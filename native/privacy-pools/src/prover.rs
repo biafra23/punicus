@@ -18,7 +18,7 @@ use rand::rngs::OsRng;
 use ruint::aliases::U256;
 use taceo_circom_types::{groth16::Zkey, CheckElement};
 use taceo_groth16::{CircomReduction, ConstraintMatrices, Groth16};
-use zeroize::Zeroize;
+use zeroize::{Zeroize, Zeroizing};
 
 use crate::{
     artifacts::{self, Circuit},
@@ -117,6 +117,11 @@ impl Prover {
         self.circuit
     }
 
+    /// The verifying key every proof is checked against: the one inside the pinned `.zkey`.
+    pub fn verifying_key(&self) -> &ark_groth16::VerifyingKey<Bn254> {
+        &self.key.vk
+    }
+
     /// Proves the `commitment` circuit (a ragequit).
     pub fn prove_commitment(&self, inputs: &CommitmentInputs) -> Result<Proved, Error> {
         if self.circuit != Circuit::Commitment {
@@ -158,36 +163,35 @@ impl Prover {
     /// The witness from the graph, through buffers this crate owns and wipes: the signals, the
     /// graph's input buffer and its output. (`circom_witness_rs::calculate_witness` would take
     /// the signals by value and drop them unwiped.)
+    ///
+    /// Each buffer is held in a [Zeroizing], so it is wiped on every path: an early return, and a
+    /// panic in third-party code that `ffi::guard` catches.
     fn prove(&self, signals: Signals) -> Result<Proved, Error> {
         let names: Vec<String> = signals.0.keys().cloned().collect();
         let mapping = circom_witness_rs::try_get_input_mapping(&names, &self.graph).map_err(|_| Error::Witness)?;
-        let mut buffer = circom_witness_rs::get_inputs_buffer(circom_witness_rs::get_inputs_size(&self.graph));
+        let mut buffer =
+            Zeroizing::new(circom_witness_rs::get_inputs_buffer(circom_witness_rs::get_inputs_size(&self.graph)));
         for (name, values) in &signals.0 {
             let start = mapping[name];
             let slot = buffer.get_mut(start..start + values.len()).ok_or(Error::Witness)?;
             slot.copy_from_slice(values);
         }
         drop(signals);
-        let computed = self.graph.evaluate(&buffer, None);
-        buffer.zeroize();
-        let mut values = computed.map_err(|_| Error::Witness)?;
-        let mut witness: Vec<Fr> = values.iter().map(u256_to_fr).collect();
-        values.zeroize();
-        let result = self.prove_witness(&witness);
-        witness.zeroize();
-        result
+        let values = Zeroizing::new(self.graph.evaluate(&buffer, None).map_err(|_| Error::Witness)?);
+        drop(buffer);
+        let witness: Zeroizing<Vec<Fr>> = Zeroizing::new(values.iter().map(u256_to_fr).collect());
+        drop(values);
+        self.prove_witness(&witness)
     }
 
     fn prove_witness(&self, witness: &[Fr]) -> Result<Proved, Error> {
         if witness.len() != self.circuit.witness_len() {
             return Err(Error::Witness);
         }
-        let mut r = Fr::rand(&mut OsRng);
-        let mut s = Fr::rand(&mut OsRng);
-        let proved = Groth16::<Bn254>::prove::<CircomReduction>(&self.key, r, s, &self.matrices, witness);
-        r.zeroize();
-        s.zeroize();
-        let proof = proved.map_err(|_| Error::Proof)?;
+        let r = Zeroizing::new(Fr::rand(&mut OsRng));
+        let s = Zeroizing::new(Fr::rand(&mut OsRng));
+        let proof = Groth16::<Bn254>::prove::<CircomReduction>(&self.key, *r, *s, &self.matrices, witness)
+            .map_err(|_| Error::Proof)?;
         let public_signals = witness[1..self.matrices.num_instance_variables].to_vec();
         let verified = ark_groth16::Groth16::<Bn254>::verify_proof(&self.verifying, &proof, &public_signals);
         if verified != Ok(true) {

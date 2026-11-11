@@ -10,13 +10,12 @@
 use std::{panic, ptr, slice};
 
 use ark_bn254::Fr;
-use zeroize::Zeroize;
 
 use crate::{
     artifacts::Circuit,
     field::{self, FIELD_BYTES},
     hash,
-    lean_imt::{LeanImt, MAX_DEPTH},
+    lean_imt::{Duplicates, LeanImt, MAX_DEPTH},
     prover::{CommitmentInputs, Proved, Prover, WithdrawInputs},
     Error,
 };
@@ -33,6 +32,10 @@ pub const WITHDRAW_INPUTS: usize = 12 + MAX_DEPTH + 1 + MAX_DEPTH + 1;
 
 /// A proof's size: eight base-field elements in the Solidity verifier's order.
 pub const PROOF_BYTES: usize = 8 * 32;
+
+/// A tree flag: allow repeated leaves, for the association set. Without it a repeated leaf is
+/// refused, as a pool's state tree does ([crate::lean_imt::Duplicates]).
+pub const TREE_ALLOW_DUPLICATES: u32 = 1;
 
 /// A loaded circuit, owned by the caller between [pp_prover_new] and [pp_prover_free].
 pub struct PpProver(Prover);
@@ -74,15 +77,15 @@ unsafe fn output<'a>(pointer: *mut u8, len: usize) -> Result<&'a mut [u8], Error
 pub unsafe extern "C" fn pp_poseidon(inputs: *const u8, count: usize, out: *mut u8) -> i32 {
     guard(|| {
         let bytes = input(inputs, count.checked_mul(FIELD_BYTES).ok_or(Error::BadLength)?)?;
-        let mut values = field::many_from_be(bytes, count)?;
+        let values = field::many_from_be(bytes, count)?; // wiped when dropped
         let hashed = hash::poseidon(&values);
-        values.zeroize();
         output(out, FIELD_BYTES)?.copy_from_slice(&field::to_be(&hashed?));
         Ok(())
     })
 }
 
-/// The root and depth of the Lean IMT of `count` leaves.
+/// The root and depth of the Lean IMT of `count` leaves; `flags` is 0 or
+/// [TREE_ALLOW_DUPLICATES].
 ///
 /// # Safety
 /// `leaves` is valid for `count * 32` bytes, `out_root` for writing 32, `out_depth` for one u32.
@@ -90,11 +93,12 @@ pub unsafe extern "C" fn pp_poseidon(inputs: *const u8, count: usize, out: *mut 
 pub unsafe extern "C" fn pp_lean_imt_root(
     leaves: *const u8,
     count: usize,
+    flags: u32,
     out_root: *mut u8,
     out_depth: *mut u32,
 ) -> i32 {
     guard(|| {
-        let tree = tree(leaves, count)?;
+        let tree = tree(leaves, count, flags)?;
         let root = tree.root().ok_or(Error::EmptyTree)?;
         if out_depth.is_null() {
             return Err(Error::NullPointer);
@@ -108,6 +112,8 @@ pub unsafe extern "C" fn pp_lean_imt_root(
 /// The inclusion proof of the leaf at `index` in the Lean IMT of `count` leaves: the root, 32
 /// siblings padded with zeros, and the compressed index the circuits take.
 ///
+/// `flags` is 0 or [TREE_ALLOW_DUPLICATES].
+///
 /// # Safety
 /// `leaves` is valid for `count * 32` bytes, `out_root` for writing 32, `out_siblings` for
 /// writing 32 * 32, `out_index` for one u64.
@@ -115,13 +121,14 @@ pub unsafe extern "C" fn pp_lean_imt_root(
 pub unsafe extern "C" fn pp_lean_imt_proof(
     leaves: *const u8,
     count: usize,
+    flags: u32,
     index: usize,
     out_root: *mut u8,
     out_siblings: *mut u8,
     out_index: *mut u64,
 ) -> i32 {
     guard(|| {
-        let proof = tree(leaves, count)?.proof(index)?;
+        let proof = tree(leaves, count, flags)?.proof(index)?;
         if out_index.is_null() {
             return Err(Error::NullPointer);
         }
@@ -136,9 +143,15 @@ pub unsafe extern "C" fn pp_lean_imt_proof(
     })
 }
 
-unsafe fn tree(leaves: *const u8, count: usize) -> Result<LeanImt, Error> {
+unsafe fn tree(leaves: *const u8, count: usize, flags: u32) -> Result<LeanImt, Error> {
+    let duplicates = match flags {
+        0 => Duplicates::Refused,
+        TREE_ALLOW_DUPLICATES => Duplicates::Allowed,
+        _ => return Err(Error::BadFlags),
+    };
     let bytes = input(leaves, count.checked_mul(FIELD_BYTES).ok_or(Error::BadLength)?)?;
-    LeanImt::new(field::many_from_be(bytes, count)?)
+    let parsed = field::many_from_be(bytes, count)?;
+    LeanImt::new(parsed.to_vec(), duplicates)
 }
 
 /// Loads `circuit` (0: commitment, 1: withdraw) from its `.zkey` and its witness graph, each
@@ -203,14 +216,20 @@ pub unsafe extern "C" fn pp_prove(
         if public_count != circuit.public_signals() {
             return Err(Error::BadLength);
         }
-        // The outputs first: a refusal costs no proof, and makes no copy of the secrets.
+        // Every refusal that can be made from the arguments alone comes before the inputs are read:
+        // it costs no proof and makes no copy of the secrets.
+        let expected = match circuit {
+            Circuit::Commitment => COMMITMENT_INPUTS,
+            Circuit::Withdraw => WITHDRAW_INPUTS,
+        };
+        if count != expected {
+            return Err(Error::BadLength);
+        }
         let proof = output(out_proof, PROOF_BYTES)?;
         let public = output(out_public, public_count * FIELD_BYTES)?;
-        let bytes = input(inputs, count.checked_mul(FIELD_BYTES).ok_or(Error::BadLength)?)?;
-        let mut values = field::many_from_be(bytes, count)?;
-        let proved = prove(prover, circuit, &values);
-        values.zeroize();
-        let proved = proved?;
+        let bytes = input(inputs, count * FIELD_BYTES)?;
+        let values = field::many_from_be(bytes, count)?; // wiped when dropped, on every path
+        let proved = prove(prover, circuit, &values)?;
         for (chunk, coordinate) in proof.chunks_exact_mut(32).zip(proved.proof.0.iter()) {
             chunk.copy_from_slice(&field::to_be(coordinate));
         }

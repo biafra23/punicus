@@ -48,6 +48,15 @@ impl Circuit {
         }
     }
 
+    /// The pinned sha256 of the circuit's `.vkey`, the published verification key. The library
+    /// verifies with the key inside the pinned `.zkey`; the tests check that the two are equal.
+    pub fn vkey_sha256(self) -> &'static str {
+        match self {
+            Self::Commitment => "7d48b4eb3dedc12fb774348287b587f0c18c3c7254cd60e9cf0f8b3636a570d8",
+            Self::Withdraw => "666bd0983b20c1611543b04f7712e067fbe8cad69f07ada8a310837ff398d21e",
+        }
+    }
+
     /// The number of public signals, outputs first.
     pub fn public_signals(self) -> usize {
         match self {

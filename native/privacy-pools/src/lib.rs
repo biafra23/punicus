@@ -13,6 +13,9 @@
 //! witness. It zeroes every buffer of its own that held one, and never logs an input
 //! (docs/keys-and-signing.md, *Privacy Pools note secrets*).
 
+// "Never logs an input", enforced: no printing anywhere in the crate (CI runs clippy with -D).
+#![deny(clippy::print_stdout, clippy::print_stderr, clippy::dbg_macro)]
+
 pub mod artifacts;
 pub mod ffi;
 pub mod field;
@@ -58,4 +61,6 @@ pub enum Error {
     Panic = 16,
     /// A tree of no leaves, which has no root.
     EmptyTree = 17,
+    /// A flag the call does not know.
+    BadFlags = 18,
 }

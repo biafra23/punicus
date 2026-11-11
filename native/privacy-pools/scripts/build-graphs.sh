@@ -4,7 +4,8 @@
 #
 # - The builder: circom-witness-rs's `circom-witness-graph-builder` at v0.5.1 (5121bdc6), which
 #   embeds circom 2.2.2. It is GPL-3.0 and runs here only; the app ships its output. Its repository
-#   commits no Cargo.lock, so its own dependencies resolve afresh: the hash check below is the gate.
+#   commits no Cargo.lock, so its own dependencies resolve afresh: the comparison at the end is the
+#   gate, and it covers every input (the builder, the sources, circomlib).
 # - The circuits: 0xbow privacy-pools-core df4bf730, packages/circuits/circuits/, the commit whose
 #   trusted-setup keys the npm package carries; circomlib 2.0.5 from npm; graphs/circuits/*.circom
 #   (the two `main` components, with the public signals the keys were made for).
@@ -12,7 +13,7 @@
 #   fit its .zkey (docs/privacy-pools.md, Part 0).
 #
 # Usage: native/privacy-pools/scripts/build-graphs.sh [out-dir]   (default: ./graphs-rebuilt)
-# Then compare: sha256sum <out-dir>/*.bin native/privacy-pools/graphs/*.bin
+# Exits non-zero unless every rebuilt graph equals the committed one byte for byte.
 set -euo pipefail
 
 here="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -41,8 +42,15 @@ cp "$here"/graphs/circuits/*.circom "$work/src/packages/circuits/circuits/main/"
 (cd "$work/src" && npm pack --silent "circomlib@$circomlib_version" >/dev/null \
   && mkdir -p node_modules/circomlib && tar -xzf "circomlib-$circomlib_version.tgz" -C node_modules/circomlib --strip-components 1)
 
+status=0
 for circuit in commitment withdraw; do
   "$builder" --O1 "$work/src/packages/circuits/circuits/main/$circuit.circom" "$out/$circuit.O1.graph.bin"
+  if cmp -s "$out/$circuit.O1.graph.bin" "$here/graphs/$circuit.O1.graph.bin"; then
+    echo "$circuit: equal to the committed graph"
+  else
+    echo "$circuit: DIFFERS from the committed graph" >&2
+    status=1
+  fi
 done
-sha256sum "$out"/*.bin
 echo "built into $out"
+exit "$status"

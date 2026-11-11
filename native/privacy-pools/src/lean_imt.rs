@@ -3,7 +3,12 @@
 //!
 //! - A node with two children is Poseidon(left, right); a node with one child is the child.
 //! - The depth is ⌈log₂ size⌉: one leaf is depth 0, and its root is the leaf.
-//! - A leaf is non-zero, below `p` (by its type) and unique.
+//! - A leaf is non-zero (the circuits read a zero sibling as "promote") and below `p` (by its
+//!   type).
+//! - A pool's state tree refuses a repeated leaf, as `InternalLeanIMT._insert` does. The
+//!   association set is not built by that contract: its leaves come from IPFS or 0xbow's API, and
+//!   its check is the rebuilt root against the verified `latestRoot()` (docs/privacy-pools.md,
+//!   Part 5). So it may hold a repeated leaf, as zk-kit's TypeScript tree allows ([Duplicates]).
 
 use std::collections::HashSet;
 
@@ -20,6 +25,15 @@ pub struct LeanImt {
     levels: Vec<Vec<Fr>>,
 }
 
+/// Whether a tree refuses a repeated leaf.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Duplicates {
+    /// A pool's state tree: the contract refuses a repeated leaf, so a list with one is wrong.
+    Refused,
+    /// The association set: built off chain, held to its root alone.
+    Allowed,
+}
+
 /// An inclusion proof as the circuits take it: the siblings padded with zeros to
 /// [MAX_DEPTH], and the index with a bit only for the levels that have a sibling.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -30,8 +44,9 @@ pub struct InclusionProof {
 }
 
 impl LeanImt {
-    /// Builds the tree. Refuses a zero leaf, a repeated leaf, and a tree deeper than [MAX_DEPTH].
-    pub fn new(leaves: Vec<Fr>) -> Result<Self, Error> {
+    /// Builds the tree. Refuses a zero leaf, a tree deeper than [MAX_DEPTH], and a repeated leaf
+    /// unless [duplicates] allows one.
+    pub fn new(leaves: Vec<Fr>, duplicates: Duplicates) -> Result<Self, Error> {
         if leaves.len() as u64 > 1u64 << MAX_DEPTH {
             return Err(Error::TreeTooDeep);
         }
@@ -40,7 +55,7 @@ impl LeanImt {
             if leaf.is_zero() {
                 return Err(Error::ZeroLeaf);
             }
-            if !seen.insert(*leaf) {
+            if duplicates == Duplicates::Refused && !seen.insert(*leaf) {
                 return Err(Error::DuplicateLeaf);
             }
         }
@@ -104,7 +119,7 @@ mod tests {
 
     #[test]
     fn one_leaf_is_its_own_root() {
-        let tree = LeanImt::new(vec![p1(1)]).unwrap();
+        let tree = LeanImt::new(vec![p1(1)], Duplicates::Refused).unwrap();
         assert_eq!(tree.depth(), 0);
         assert_eq!(tree.root(), Some(p1(1)));
         assert_eq!(tree.proof(0).unwrap().siblings, [Fr::zero(); MAX_DEPTH]);
@@ -112,7 +127,7 @@ mod tests {
 
     #[test]
     fn a_lone_node_is_promoted() {
-        let tree = LeanImt::new(vec![p1(1), p1(2), p1(3)]).unwrap();
+        let tree = LeanImt::new(vec![p1(1), p1(2), p1(3)], Duplicates::Refused).unwrap();
         assert_eq!(tree.depth(), 2);
         assert_eq!(tree.root(), Some(hash::node(hash::node(p1(1), p1(2)), p1(3))));
         // Leaf 2 has no sibling at level 0: one sibling, at level 1, and its bit says "right".
@@ -124,7 +139,9 @@ mod tests {
 
     #[test]
     fn refuses_zero_and_repeated_leaves() {
-        assert!(matches!(LeanImt::new(vec![Fr::zero()]), Err(Error::ZeroLeaf)));
-        assert!(matches!(LeanImt::new(vec![p1(1), p1(1)]), Err(Error::DuplicateLeaf)));
+        assert!(matches!(LeanImt::new(vec![Fr::zero()], Duplicates::Allowed), Err(Error::ZeroLeaf)));
+        assert!(matches!(LeanImt::new(vec![p1(1), p1(1)], Duplicates::Refused), Err(Error::DuplicateLeaf)));
+        let allowed = LeanImt::new(vec![p1(1), p1(1)], Duplicates::Allowed).unwrap();
+        assert_eq!(allowed.root(), Some(hash::node(p1(1), p1(1))));
     }
 }

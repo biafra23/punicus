@@ -609,7 +609,8 @@ the key-store adapter, inside one call, zeroed afterwards.
     hash, the commitment;
   - or proves: hands the secrets to the native prover
     (docs/architecture.md, *Native code*) and returns the proof, verified
-    against the pinned verification key before it leaves.
+    against the verifying key in the pinned `.zkey`, equal to the published
+    `.vkey`, before it leaves.
   The seed, the key, the signatures and the secrets are byte arrays zeroed
   before the call returns. The secrets cross into native code on both
   paths, as Poseidon's inputs and as the witness: the native library zeroes
