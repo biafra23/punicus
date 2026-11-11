@@ -2,8 +2,11 @@ package eth.serotine.data.privacypools
 
 import com.sun.jna.Memory
 import com.sun.jna.Native
+import com.sun.jna.Platform
 import com.sun.jna.Pointer
 import eth.serotine.data.keys.Sodium.SizeT
+import java.io.File
+import java.nio.file.Files
 
 /**
  * The native Privacy Pools library (`native/privacy-pools`, its README; docs/architecture.md,
@@ -15,8 +18,12 @@ import eth.serotine.data.keys.Sodium.SizeT
  * caller's own arrays are the caller's to zero (docs/keys-and-signing.md, *Privacy Pools note
  * secrets*). Nothing here logs an input.
  *
- * On the desktop the library comes from the classpath (`:data`'s `buildPrivacyPoolsHost`); where it
- * is not built in, [library] is null and every call answers [NativeError.UNAVAILABLE].
+ * On the desktop the library is the classpath resource `:data`'s `buildPrivacyPoolsHost` staged under
+ * JNA's prefix for this platform, and only that file: it is copied out and loaded by its absolute
+ * path, never looked up by name on the loader's path, where another library of that name could be
+ * handed the note's secrets. Where it is not built in, [library] is null and every call answers
+ * [NativeError.UNAVAILABLE]. On Android it is the APK's own, which the linker's namespace limits a
+ * bare name to.
  */
 internal object PrivacyPoolsNative {
 
@@ -61,12 +68,28 @@ internal object PrivacyPoolsNative {
     /** The library, or null when it is not built in here; loaded once. */
     val library: Library? by lazy {
         try {
-            Native.load("privacy_pools", Library::class.java)
+            libraryPath()?.let { Native.load(it, Library::class.java) }
         } catch (e: Throwable) {
             System.err.println("Punicus: the Privacy Pools library cannot be loaded (${e::class.simpleName})")
             null
         }
     }
+
+    /**
+     * What to load: the bare name on Android; on the desktop, the absolute path of a private copy of
+     * the built-in resource (a temporary file only its owner can write), or null when there is none.
+     */
+    private fun libraryPath(): String? {
+        if (Platform.isAndroid()) return NAME
+        val resource = "${Platform.RESOURCE_PREFIX}/${System.mapLibraryName(NAME)}"
+        val stream = PrivacyPoolsNative::class.java.classLoader?.getResourceAsStream(resource) ?: return null
+        val file: File = Files.createTempFile("punicus-privacy-pools", "." + resource.substringAfterLast('.')).toFile()
+        file.deleteOnExit()
+        stream.use { input -> file.outputStream().use { input.copyTo(it) } }
+        return file.absolutePath
+    }
+
+    private const val NAME = "privacy_pools"
 
     /** A field element's width. */
     const val FIELD_BYTES = 32
@@ -234,7 +257,9 @@ internal class PrivacyPools(private val library: PrivacyPoolsNative.Library? = P
 }
 
 /**
- * A loaded circuit. Not thread-safe to [close] while proving; one owner holds it and closes it.
+ * A loaded circuit. [prove] and [close] are serialized: a close waits for the proof under way, and
+ * a proof after it is refused. One owner holds it and closes it; one never closed keeps its parsed
+ * proving key for the life of the process.
  */
 internal class PoolProver(
     private val library: PrivacyPoolsNative.Library,
@@ -247,6 +272,7 @@ internal class PoolProver(
      * `src/ffi.rs`), which may hold the note's secrets: they are copied into native memory that is
      * cleared after the call. The caller zeroes [inputs] itself.
      */
+    @Synchronized
     fun prove(inputs: ByteArray): NativeResult<Proved> {
         val prover = handle ?: return NativeResult.Refused(NativeError.NULL_POINTER)
         val width = PrivacyPoolsNative.FIELD_BYTES
@@ -270,6 +296,7 @@ internal class PoolProver(
         }
     }
 
+    @Synchronized
     override fun close() {
         handle?.let { library.pp_prover_free(it) }
         handle = null

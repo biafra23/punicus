@@ -60,10 +60,12 @@ scripts/build-graphs.sh               # rebuilds graphs/ from pinned sources; fa
 cargo rustc --release --lib --locked --crate-type cdylib   # the shipped library, with LTO
 ```
 
-`:data` builds it for the desktop host through Gradle (`buildPrivacyPoolsHost`) and loads it
-through JNA (`eth.serotine.data.privacypools.PrivacyPoolsNative`); its tests run with `:data`'s
-(`./gradlew :data:desktopTest`), which fetch the proving keys first. So building `:data` for the
-desktop needs Rust.
+`:data` builds it for the desktop host through Gradle (`buildPrivacyPoolsHost`, with cargo's
+`--target` set to the JVM's architecture) and loads it through JNA
+(`eth.serotine.data.privacypools.PrivacyPoolsNative`), by the absolute path of the file it built.
+Its tests run with `:data`'s (`./gradlew :data:desktopTest`). The proving tests need the proving
+keys, so they run only with `-PprivacyPoolsProving`, which fetches the keys first; without it they
+are skipped. CI passes it. So building `:data` for the desktop needs Rust.
 
 CI runs the first four (`.github/workflows/ci.yml`, *Native library (Rust)*), and the graph rebuild
 on demand and weekly (`.github/workflows/native-graphs.yml`). The manifest declares a plain
