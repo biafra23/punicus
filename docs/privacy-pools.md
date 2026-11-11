@@ -656,9 +656,9 @@ D3's direction of 2026-11-10):
   Part 2's PR.
 - **D11: Kohaku's derivation for new deposits; 0xbow's notes found and spent
   too** (#288; amended 2026-11-11 on #290 from "Kohaku's, not 0xbow's": the
-  owner chose option B, reading both families and writing Kohaku's). A 0xbow note's
-  change notes keep 0xbow's derivation (`.claude/rules/trust.md`;
-  docs/keys-and-signing.md).
+  owner chose option B, reading both families and writing Kohaku's). A
+  0xbow note's change notes keep 0xbow's derivation, under its current keys
+  (`.claude/rules/trust.md`; docs/keys-and-signing.md).
 - **D14: bundled.** In every build, pinned by sha256, never fetched
   (`.claude/rules/data-sources.md`, *Privacy Pools' circuit artifacts are
   bundled*).

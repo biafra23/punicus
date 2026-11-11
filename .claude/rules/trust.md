@@ -265,8 +265,8 @@ secrets*.)
   returns, and in the native library that call hands it to: Kohaku's signing
   key and note signatures; 0xbow's two account keys (`m/44'/60'/0'/0/0` and
   `m/44'/60'/1'/0/0`) and its master nullifier and secret, current and
-  legacy; and every note's nullifier and secret. They are not an exception to *Key material*: they
-  follow it.
+  legacy; and every note's nullifier and secret. They are not an exception
+  to *Key material*: they follow it.
 - **Proving runs inside that call**: the adapter hands the secrets to the
   native prover (docs/architecture.md, *Native code*).
 - **The native library zeroes every buffer of its own that held a secret**,

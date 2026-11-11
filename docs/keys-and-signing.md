@@ -639,8 +639,9 @@ the key-store adapter, inside one call, zeroed afterwards.
     the current keys (next bullet).
   - A deposit's nullifier and secret: Poseidon(master, scope, index), its
     index counted per pool from 0. A change note's: Poseidon(master, label,
-    k), k counted from 0 for a deposit's first change note (`account.service.ts`,
-    `createWithdrawalSecrets`: the lineage's count of change notes so far).
+    k), k counted from 0 for a deposit's first change note
+    (`account.service.ts`, `createWithdrawalSecrets`: the lineage's count of
+    change notes so far).
   - **A change note never takes the legacy keys.** The change of a note
     under 0xbow's current keys takes the current keys at the next index.
     The change of a legacy note takes the current keys at index 0: that is
