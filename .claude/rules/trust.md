@@ -243,17 +243,30 @@ is the owner's decision, never a PR author's. Today the list has one entry:
 
 ### Privacy Pools note secrets are key material
 
-(Owner rulings, 2026-11-11, docs/privacy-pools.md D2 and D11;
-docs/keys-and-signing.md, *Privacy Pools note secrets*.)
+(Owner rulings, 2026-11-11: D2 and D11 on #288, D11 amended on #290;
+docs/privacy-pools.md; docs/keys-and-signing.md, *Privacy Pools note
+secrets*.)
 
-- **Kohaku's derivation**: the key at `m/28784'/1'/<accountIndex>'`, a note's
-  secrets from its EIP-712 signature (docs/kohaku.md, *Privacy Pools note
-  secrets*). Not 0xbow's: a phrase used on privacypools.com restores no
-  notes here.
-- The key, the note signature, the nullifier and the secret exist only
-  inside the key-store adapter, inside one call, as byte arrays zeroed
-  before it returns. They are not an exception to *Key material*: they
-  follow it.
+- **New deposits take Kohaku's derivation**: the key at
+  `m/28784'/1'/<accountIndex>'`, a note's secrets from its EIP-712 signature
+  (docs/kohaku.md, *Privacy Pools note secrets*).
+- **Notes of 0xbow's derivation are found and spent too** (D11 amended,
+  2026-11-11): the notes privacypools.com made from the same phrase, under
+  its current and its legacy keys. Their change notes keep 0xbow's
+  derivation, so its app still finds them, and always under its current
+  keys: the change of a legacy note goes to the current keys at index 0,
+  as 0xbow's own migration does. No commitment is written under the legacy
+  keys, and no new deposit takes 0xbow's derivation.
+- **0xbow's legacy keys are weak** (about 53 bits of each key survive its
+  float conversion). A legacy note is shown as such, and the user is offered
+  to move it.
+- **This key material, of both derivations,** exists only inside the
+  key-store adapter, inside one call, as byte arrays zeroed before it
+  returns, and in the native library that call hands it to: Kohaku's signing
+  key and note signatures; 0xbow's two account keys (`m/44'/60'/0'/0/0` and
+  `m/44'/60'/1'/0/0`) and its master nullifier and secret, current and
+  legacy; and every note's nullifier and secret. They are not an exception
+  to *Key material*: they follow it.
 - **Proving runs inside that call**: the adapter hands the secrets to the
   native prover (docs/architecture.md, *Native code*).
 - **The native library zeroes every buffer of its own that held a secret**,

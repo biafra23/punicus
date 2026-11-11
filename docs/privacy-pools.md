@@ -154,15 +154,20 @@ docs/kohaku.md *Privacy Pools note secrets* pins it:
 - the deposit note at `secretIndex` 0, the k-th change note at k;
 - the deposit index counted **per Entrypoint**, across all its pools.
 
-**It is not 0xbow's.** 0xbow's SDK and privacypools.com derive
-`Poseidon(master, scope, index)` from two HD keys (`sdk/src/crypto.ts:39-107`).
-A phrase used there finds nothing here, and the other way round. Punicus
-follows Kohaku's (D11, owner ruling, 2026-11-11).
+**0xbow's derivation is a second one.** 0xbow's SDK and privacypools.com
+derive `Poseidon(master, scope, index)` from two HD keys
+(`sdk/src/crypto.ts:39-107`), in a current and a legacy version. The two
+families find disjoint notes. Punicus makes new deposits with Kohaku's, and
+finds and spends 0xbow's too, so a phrase used on privacypools.com restores
+here (D11, owner ruling, 2026-11-11, amended the same day; the detail is
+docs/keys-and-signing.md, *Privacy Pools note secrets*).
 
 ### Discovery and balance
 
 - **Deposits**: index 0, 1, 2… until the first precommitment no `Deposited`
-  carries. Gap limit 0.
+  carries. Gap limit 0. That is Kohaku's rule; 0xbow's notes (D11) are found
+  per pool, from index 0, until 10 indices in a row are missing, under its
+  current and its legacy keys, and through its migrations.
 - **Change notes**: for each deposit, while a `Withdrawn` carries the newest
   note's nullifier hash, the next note.
 - **Balance** of a deposit: its value less every withdrawal of its lineage;
@@ -261,13 +266,21 @@ follows Kohaku's (D11, owner ruling, 2026-11-11).
   signature into the secrets, and either returns the note's public values or
   hands the secrets to the prover. The key, the signature and the secrets
   are byte arrays zeroed before the call returns (rule 7).
+- **And 0xbow's derivation** (D11): the same call derives the two account
+  keys `m/44'/60'/0'/0/0` and `m/44'/60'/1'/0/0`. The second is a path the
+  key store does not derive today (it derives `m/44'/60'/0'/0/i`). It hands
+  both to a native entry that rounds them for the legacy version, reduces
+  them mod `p` and hashes them with Poseidon inside the library
+  (docs/keys-and-signing.md, *Privacy Pools note secrets*).
 - **Determinism**: libsecp256k1 signs with RFC 6979. The first note of each
   unlock is signed twice, and a mismatch refuses everything.
 - **Discovery without asking for the password at every start.** Kohaku signs
   every note again each session. Punicus unlocks per signature, so that
   would ask again and again. Proposal: at an unlock, the adapter derives and
   caches the **public** values of the next N deposits and of each known
-  deposit's next change notes (N = 8 proposed). Discovery runs on the
+  deposit's next change notes (N = 8 proposed for Kohaku's discovery, which
+  stops at the first miss; 12 per pool and key version for 0xbow's, which
+  stops after 10 in a row). Discovery runs on the
   cache. It asks for the unlock only when the cache runs out, and says
   why. Public values are not key material (*Key material*). D2.
 - Signing a withdrawal or a ragequit unlocks as any signature does.
@@ -394,8 +407,8 @@ own: nothing is shown to the user before Part 7.
 | 2b | Its Kotlin binding and the desktop build (done, #291) | D9 | yes |
 | 2c | The Android build (NDK) (done, #292) | D9 | CI only |
 | 2d | The Windows build (done, #293) | D9 | CI only |
-| 2e | The iOS build | D9 | CI only |
-| 3 | Test vectors from Kohaku | D1, D11 | yes |
+| 2e | The iOS build (done, #294) | D9 | CI only |
+| 3 | Test vectors from Kohaku and 0xbow's SDK | D1, D11 | yes |
 | 4 | Pools in the log index | D7 | yes, unit tests |
 | 5 | Pool state and root checks | D5 | yes, unit tests |
 | 6 | The keychain | D2, D8, D11 | yes, unit tests |
@@ -590,6 +603,17 @@ of 2b on one more host, and iOS needs a link step and a binding of its own.
   and secret indices; scopes, labels and contexts; trees and roots for
   fixed leaf sets; discovery results over a fixed log set; and snarkjs's
   witnesses and public signals for both circuits.
+- The same for 0xbow's derivation (D11), from 0xbow's SDK at its pinned
+  commit (`privacy-pools-core` `df4bf730`): the master values under the
+  current and the legacy keys, deposit and change-note secrets for a grid
+  of scopes, labels and indices, and discovery over a fixed log set with
+  gaps and a legacy-to-current migration.
+- **Several phrases, chosen to cover every branch.** The script picks
+  phrases until, for each of the two account keys, both of these occur:
+  the legacy rounding goes up and goes down, and the key lies at or above
+  `p` and below it. One phrase would leave that to chance: an
+  implementation that truncates instead of rounding passes one phrase's
+  vectors one time in four. The file says which phrase covers which case.
 - `:data`'s and the crate's tests check against it, and that it names the
   pins, so a mismatch fails `./gradlew build`.
 
@@ -622,6 +646,17 @@ of 2b on one more host, and iOS needs a link step and a binding of its own.
 - `PoolKeychain` in `EnvelopeKeyStore`: the path, the EIP-712 digest (from
   `:domain`'s `Eip712`), the signature, the secrets, all in one call, all
   zeroed.
+- 0xbow's derivation beside it (D11): the master values from the two HD keys,
+  current and legacy, and the per-pool and per-label secrets. Each note
+  remembers which derivation and key version found it. Its change note
+  takes Kohaku's for a Kohaku note, and 0xbow's current keys for a 0xbow
+  note: at the next index under current keys, at index 0 after a legacy
+  note, as 0xbow's migration writes it. Nothing is written under the legacy
+  keys.
+- Discovery runs both: Kohaku's per Entrypoint with no gap, 0xbow's per pool
+  with its gap of 10 and its migrations. A legacy note is labelled as held
+  by 0xbow's weak older keys (about 53 bits), with the offer to move it: a
+  withdrawal, of all of it or a part, puts the rest under the current keys.
 - The determinism check. The cache of public values (D2).
 - As docs/keys-and-signing.md, *Privacy Pools note secrets*, sets it out
   (D2, owner ruling, 2026-11-11).
@@ -714,8 +749,11 @@ D3's direction of 2026-11-10):
   `.claude/rules/architecture.md`, *Native code*). The prover stack is Part
   0's. If Part 2 finds it does not hold, the owner decides the change on
   Part 2's PR.
-- **D11: Kohaku's derivation.** Not 0xbow's (`.claude/rules/trust.md`;
-  docs/keys-and-signing.md).
+- **D11: Kohaku's derivation for new deposits; 0xbow's notes found and spent
+  too** (#288; amended 2026-11-11 on #290 from "Kohaku's, not 0xbow's": the
+  owner chose option B, reading both families and writing Kohaku's). A
+  0xbow note's change notes keep 0xbow's derivation, under its current keys
+  (`.claude/rules/trust.md`; docs/keys-and-signing.md).
 - **D14: bundled.** In every build, pinned by sha256, never fetched
   (`.claude/rules/data-sources.md`, *Privacy Pools' circuit artifacts are
   bundled*).
@@ -769,6 +807,10 @@ D3's direction of 2026-11-10):
 - **The Sepolia walk is too slow.** Then D6 for Sepolia too.
 - **Kohaku is alpha and may change its derivation.** The pins move only in
   a PR that says so (docs/kohaku.md, *Following Kohaku*).
+- **0xbow changes its keys again.** It did once (the legacy keys). A note
+  made under a scheme newer than the pinned SDK is not found, and unlike
+  "syncing" that cannot be told from "no notes". The SDK's pin moves as
+  Kohaku's does, and the screen says which derivations it searched.
 - **0xbow changes the relayer's API.** It is an off-chain service: a change
   breaks withdrawals until an update, never balances or ragequit.
 - **Discovery asks for the password.** The cache of public values (D2).
@@ -780,7 +822,9 @@ D3's direction of 2026-11-10):
 - 0xbow `privacy-pools-core` `df4bf730`: `packages/contracts/src/contracts/`
   (`Entrypoint.sol`, `PrivacyPool.sol`, `State.sol`, `lib/ProofLib.sol`,
   `interfaces/`), `packages/circuits/circuits/`, `packages/relayer/src/`,
-  `packages/sdk/src/crypto.ts`, `audit/`.
+  `packages/sdk/src/crypto.ts`, `packages/sdk/src/core/account.service.ts`
+  (0xbow's discovery: its gap of 10, its key versions and migrations),
+  `audit/`.
 - Kohaku `886f72d`: `packages/privacy-pools/src/` (`account/`, `config.ts`,
   `data/`, `state/thunks/`, `plugin/`, `relayer/`, `paymaster/`),
   `packages/poseidon-lean-imt/`, `packages/plugins/src/`.
