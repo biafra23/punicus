@@ -691,8 +691,11 @@ val generatePrivacyPoolsIosTestEnv by tasks.registering {
     }
 }
 kotlin.sourceSets.getByName("iosTest").kotlin.srcDir(generatePrivacyPoolsIosTestEnv)
-// What PrivacyPoolsIosTest reads through that path, which Gradle tracks as a string, not as files.
+// What PrivacyPoolsIosTest reads through that path, which Gradle tracks as a string, not as files; and
+// each test's outcome in the log, as Kotlin/Native prints none: the CI log then shows the proving tests
+// ran on the simulator, not merely that the task passed.
 tasks.matching { it.name == "iosSimulatorArm64Test" }.configureEach {
+    (this as AbstractTestTask).testLogging { events("passed", "skipped", "failed") }
     inputs.dir(privacyPoolsDir.dir("tests/vectors")).withPropertyName("privacyPoolsVectors")
         .withPathSensitivity(PathSensitivity.RELATIVE)
     inputs.dir(privacyPoolsDir.dir("graphs")).withPropertyName("privacyPoolsGraphs")
