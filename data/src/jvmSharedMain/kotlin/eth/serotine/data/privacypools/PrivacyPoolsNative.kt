@@ -1,0 +1,288 @@
+package eth.serotine.data.privacypools
+
+import com.sun.jna.Memory
+import com.sun.jna.Native
+import com.sun.jna.Pointer
+import eth.serotine.data.keys.Sodium.SizeT
+
+/**
+ * The native Privacy Pools library (`native/privacy-pools`, its README; docs/architecture.md,
+ * *Native code*) through JNA: circomlib's Poseidon, zk-kit's Lean IMT, and Groth16 proofs of the
+ * `withdraw` and `commitment` circuits, every proof verified by the library before it is returned.
+ *
+ * Field elements are 32 big-endian bytes below `p`. Every buffer that crosses the boundary is a
+ * native [Memory] this class clears after the call, so no copy of a secret is left in one; the
+ * caller's own arrays are the caller's to zero (docs/keys-and-signing.md, *Privacy Pools note
+ * secrets*). Nothing here logs an input.
+ *
+ * On the desktop the library comes from the classpath (`:data`'s `buildPrivacyPoolsHost`); where it
+ * is not built in, [library] is null and every call answers [NativeError.UNAVAILABLE].
+ */
+internal object PrivacyPoolsNative {
+
+    /** The C ABI, `native/privacy-pools/src/ffi.rs`. Each call returns 0 or an error's number. */
+    @Suppress("FunctionName") // the library's own names
+    interface Library : com.sun.jna.Library {
+        fun pp_poseidon(inputs: Pointer, count: SizeT, out: Pointer): Int
+
+        fun pp_lean_imt_root(leaves: Pointer?, count: SizeT, flags: Int, outRoot: Pointer, outDepth: Pointer): Int
+
+        fun pp_lean_imt_proof(
+            leaves: Pointer?,
+            count: SizeT,
+            flags: Int,
+            index: SizeT,
+            outRoot: Pointer,
+            outSiblings: Pointer,
+            outIndex: Pointer,
+        ): Int
+
+        fun pp_prover_new(
+            circuit: Int,
+            zkey: Pointer,
+            zkeyLen: SizeT,
+            graph: Pointer,
+            graphLen: SizeT,
+            outStatus: Pointer,
+        ): Pointer?
+
+        fun pp_prover_free(prover: Pointer?)
+
+        fun pp_prove(
+            prover: Pointer,
+            inputs: Pointer,
+            count: SizeT,
+            outProof: Pointer,
+            outPublic: Pointer,
+            publicCount: SizeT,
+        ): Int
+    }
+
+    /** The library, or null when it is not built in here; loaded once. */
+    val library: Library? by lazy {
+        try {
+            Native.load("privacy_pools", Library::class.java)
+        } catch (e: Throwable) {
+            println("Punicus: the Privacy Pools library cannot be loaded (${e::class.simpleName})")
+            null
+        }
+    }
+
+    /** A field element's width. */
+    const val FIELD_BYTES = 32
+
+    /** The deepest tree the circuits take. */
+    const val MAX_DEPTH = 32
+
+    /** A proof's width: eight base-field elements in the Solidity verifier's order. */
+    const val PROOF_BYTES = 8 * 32
+
+    /** `TREE_ALLOW_DUPLICATES`, the association set's tree flag; 0 refuses a repeated leaf. */
+    const val TREE_ALLOW_DUPLICATES = 1
+}
+
+/** Why a call of the native library was refused: its `Error` numbers (`src/lib.rs`), and [UNAVAILABLE]. */
+internal enum class NativeError(val code: Int) {
+    UNAVAILABLE(-1),
+    BAD_LENGTH(1),
+    NOT_IN_FIELD(2),
+    BAD_ARITY(3),
+    ZERO_LEAF(4),
+    DUPLICATE_LEAF(5),
+    TREE_TOO_DEEP(6),
+    NO_SUCH_LEAF(7),
+    UNKNOWN_CIRCUIT(8),
+    ARTIFACT_MISMATCH(9),
+    BAD_ARTIFACT(10),
+    WRONG_CIRCUIT(11),
+    WITNESS(12),
+    PROOF(13),
+    PROOF_REJECTED(14),
+    NULL_POINTER(15),
+    PANIC(16),
+    EMPTY_TREE(17),
+    BAD_FLAGS(18),
+    ;
+
+    companion object {
+        /** The error of [code]; an unknown number reads as [PANIC], since nothing it returned is to be trusted. */
+        fun of(code: Int): NativeError = entries.firstOrNull { it.code == code } ?: PANIC
+    }
+}
+
+/** A call's answer: [Ok] with its value, or [Refused] with why. */
+internal sealed interface NativeResult<out T> {
+    /** The call succeeded. */
+    data class Ok<T>(val value: T) : NativeResult<T>
+
+    /** The call was refused. */
+    data class Refused(val error: NativeError) : NativeResult<Nothing>
+}
+
+/** A tree's root and depth. */
+internal class TreeRoot(val root: ByteArray, val depth: Int)
+
+/** An inclusion proof as the circuits take it: the root, 32 zero-padded siblings, the compressed index. */
+internal class InclusionProof(val root: ByteArray, val siblings: List<ByteArray>, val index: Long)
+
+/** A verified proof: its 256 bytes in the Solidity verifier's order, and the public signals, outputs first. */
+internal class Proved(val proof: ByteArray, val publicSignals: List<ByteArray>)
+
+/** The two circuits, by the library's numbers. */
+internal enum class PoolCircuit(val number: Int, val inputs: Int, val publicSignals: Int) {
+    /** `CommitmentHasher`, a ragequit's proof: value, label, nullifier, secret. */
+    COMMITMENT(0, 4, 4),
+
+    /** `Withdraw(32)`, a withdrawal's proof (`src/ffi.rs`, `WITHDRAW_INPUTS`, for the order). */
+    WITHDRAW(1, 12 + 32 + 1 + 32 + 1, 8),
+}
+
+/**
+ * The typed calls over [PrivacyPoolsNative.library]. Each copies its inputs into native memory,
+ * calls, copies the answer out, and clears every native buffer it made, whatever the outcome.
+ */
+internal class PrivacyPools(private val library: PrivacyPoolsNative.Library? = PrivacyPoolsNative.library) {
+
+    /** Poseidon of 1 to 3 field elements. */
+    fun poseidon(inputs: List<ByteArray>): NativeResult<ByteArray> {
+        val lib = library ?: return NativeResult.Refused(NativeError.UNAVAILABLE)
+        return withFields(inputs) { packed ->
+            Memory(PrivacyPoolsNative.FIELD_BYTES.toLong()).cleared { out ->
+                answer(lib.pp_poseidon(packed, SizeT(inputs.size.toLong()), out)) {
+                    out.getByteArray(0, PrivacyPoolsNative.FIELD_BYTES)
+                }
+            }
+        }
+    }
+
+    /** The root and depth of the Lean IMT of [leaves]; [allowDuplicates] for the association set. */
+    fun leanImtRoot(leaves: List<ByteArray>, allowDuplicates: Boolean): NativeResult<TreeRoot> {
+        val lib = library ?: return NativeResult.Refused(NativeError.UNAVAILABLE)
+        if (leaves.isEmpty()) return NativeResult.Refused(NativeError.EMPTY_TREE)
+        return withFields(leaves) { packed ->
+            Memory(PrivacyPoolsNative.FIELD_BYTES.toLong()).cleared { root ->
+                Memory(4).cleared { depth ->
+                    val status = lib.pp_lean_imt_root(packed, SizeT(leaves.size.toLong()), flags(allowDuplicates), root, depth)
+                    answer(status) { TreeRoot(root.getByteArray(0, PrivacyPoolsNative.FIELD_BYTES), depth.getInt(0)) }
+                }
+            }
+        }
+    }
+
+    /** The inclusion proof of the leaf at [index] in the Lean IMT of [leaves]. */
+    fun leanImtProof(leaves: List<ByteArray>, index: Int, allowDuplicates: Boolean): NativeResult<InclusionProof> {
+        val lib = library ?: return NativeResult.Refused(NativeError.UNAVAILABLE)
+        if (leaves.isEmpty()) return NativeResult.Refused(NativeError.EMPTY_TREE)
+        val width = PrivacyPoolsNative.FIELD_BYTES
+        return withFields(leaves) { packed ->
+            Memory(width.toLong()).cleared { root ->
+                Memory((PrivacyPoolsNative.MAX_DEPTH * width).toLong()).cleared { siblings ->
+                    Memory(8).cleared { path ->
+                        val status = lib.pp_lean_imt_proof(
+                            packed, SizeT(leaves.size.toLong()), flags(allowDuplicates), SizeT(index.toLong()),
+                            root, siblings, path,
+                        )
+                        answer(status) {
+                            InclusionProof(
+                                root.getByteArray(0, width),
+                                List(PrivacyPoolsNative.MAX_DEPTH) { siblings.getByteArray((it * width).toLong(), width) },
+                                path.getLong(0),
+                            )
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    /** Loads [circuit] from its pinned `.zkey` and witness graph; the library refuses either if its sha256 differs. */
+    fun prover(circuit: PoolCircuit, zkey: ByteArray, graph: ByteArray): NativeResult<PoolProver> {
+        val lib = library ?: return NativeResult.Refused(NativeError.UNAVAILABLE)
+        return Memory(zkey.size.toLong()).cleared { z ->
+            z.write(0, zkey, 0, zkey.size)
+            Memory(graph.size.toLong()).cleared { g ->
+                g.write(0, graph, 0, graph.size)
+                Memory(4).cleared { status ->
+                    status.setInt(0, -1)
+                    val handle = lib.pp_prover_new(
+                        circuit.number, z, SizeT(zkey.size.toLong()), g, SizeT(graph.size.toLong()), status,
+                    )
+                    val code = status.getInt(0)
+                    if (handle != null && code == 0) {
+                        NativeResult.Ok(PoolProver(lib, handle, circuit))
+                    } else {
+                        handle?.let { lib.pp_prover_free(it) }
+                        NativeResult.Refused(NativeError.of(code))
+                    }
+                }
+            }
+        }
+    }
+
+    private fun flags(allowDuplicates: Boolean): Int = if (allowDuplicates) PrivacyPoolsNative.TREE_ALLOW_DUPLICATES else 0
+}
+
+/**
+ * A loaded circuit. Not thread-safe to [close] while proving; one owner holds it and closes it.
+ */
+internal class PoolProver(
+    private val library: PrivacyPoolsNative.Library,
+    private var handle: Pointer?,
+    val circuit: PoolCircuit,
+) : AutoCloseable {
+
+    /**
+     * Proves [circuit] from its packed inputs ([PoolCircuit.inputs] field elements in the order of
+     * `src/ffi.rs`), which may hold the note's secrets: they are copied into native memory that is
+     * cleared after the call. The caller zeroes [inputs] itself.
+     */
+    fun prove(inputs: ByteArray): NativeResult<Proved> {
+        val prover = handle ?: return NativeResult.Refused(NativeError.NULL_POINTER)
+        val width = PrivacyPoolsNative.FIELD_BYTES
+        if (inputs.size != circuit.inputs * width) return NativeResult.Refused(NativeError.BAD_LENGTH)
+        return Memory(inputs.size.toLong()).cleared { packed ->
+            packed.write(0, inputs, 0, inputs.size)
+            Memory(PrivacyPoolsNative.PROOF_BYTES.toLong()).cleared { proof ->
+                Memory((circuit.publicSignals * width).toLong()).cleared { public ->
+                    val status = library.pp_prove(
+                        prover, packed, SizeT(circuit.inputs.toLong()), proof, public,
+                        SizeT(circuit.publicSignals.toLong()),
+                    )
+                    answer(status) {
+                        Proved(
+                            proof.getByteArray(0, PrivacyPoolsNative.PROOF_BYTES),
+                            List(circuit.publicSignals) { public.getByteArray((it * width).toLong(), width) },
+                        )
+                    }
+                }
+            }
+        }
+    }
+
+    override fun close() {
+        handle?.let { library.pp_prover_free(it) }
+        handle = null
+    }
+}
+
+/** Runs [block] with [this] native buffer, and clears and frees it afterwards, whatever happens. */
+private inline fun <R> Memory.cleared(block: (Memory) -> R): R =
+    try {
+        block(this)
+    } finally {
+        clear()
+        close()
+    }
+
+/** Packs [fields] (each 32 bytes) into one native buffer for [block]; refuses a field of another width. */
+private inline fun <T> withFields(fields: List<ByteArray>, block: (Memory) -> NativeResult<T>): NativeResult<T> {
+    val width = PrivacyPoolsNative.FIELD_BYTES
+    if (fields.isEmpty() || fields.any { it.size != width }) return NativeResult.Refused(NativeError.BAD_LENGTH)
+    return Memory((fields.size * width).toLong()).cleared { packed ->
+        fields.forEachIndexed { i, field -> packed.write((i * width).toLong(), field, 0, width) }
+        block(packed)
+    }
+}
+
+private inline fun <T> answer(status: Int, value: () -> T): NativeResult<T> =
+    if (status == 0) NativeResult.Ok(value()) else NativeResult.Refused(NativeError.of(status))

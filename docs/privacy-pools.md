@@ -390,7 +390,10 @@ own: nothing is shown to the user before Part 7.
 |---|---|---|---|
 | 0 | Prover spike: done on the desktop | — | yes (desktop) |
 | 1 | This page, the decisions as rulings | the owner | yes |
-| 2 | The native library and its build | D9, D14 | partly |
+| 2a | The native library (done, #289) | D9, D14 | yes |
+| 2b | Its Kotlin binding and the desktop build | D9 | yes |
+| 2c | The Android build (NDK) | D9 | CI only |
+| 2d | The iOS build and Windows | D9 | CI only |
 | 3 | Test vectors from Kohaku | D1, D11 | yes |
 | 4 | Pools in the log index | D7 | yes, unit tests |
 | 5 | Pool state and root checks | D5 | yes, unit tests |
@@ -471,6 +474,12 @@ the repository. Every step passed for both circuits.
   `trust.md`.
 
 ### Part 2: the native library and its build
+
+In four parts: 2a the crate and its tests (#289); 2b its Kotlin binding
+through JNA and the desktop build, Gradle building the library with cargo
+and the binding's tests running on the desktop JVM; 2c the four Android
+ABIs with the NDK's clang (`zstd-sys` compiles C); 2d the iOS static
+library through cinterop, and Windows.
 
 - The crate: Poseidon (circomlib's constants), the Lean IMT, the witness, the
   prover, the artifacts' hashes; a C ABI of a few functions

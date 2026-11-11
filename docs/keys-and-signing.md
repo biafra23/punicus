@@ -616,11 +616,25 @@ the key-store adapter, inside one call, zeroed afterwards.
   paths, as Poseidon's inputs and as the witness: the native library zeroes
   every buffer of its own that held a secret, and never logs an input.
   Nothing of it is logged, cached or turned into a `String`.
-  - **The prover's own copies.** A Groth16 prover works on copies of the
-    witness the library never holds (`ark-groth16` keeps its own vectors
-    for its multi-scalar multiplications). Whether the pinned prover zeroes
-    them, or can be made to, is checked in Part 2. Where it cannot, it is
-    said here, as the JDK's AES copy is (*What never leaves a call*).
+  - **The copies third-party code keeps** (checked in Part 2b, 2026-11-11,
+    at the pinned versions). None of these crates zeroes anything: their
+    sources hold no `zeroize` at all.
+    - `light-poseidon` 0.5.0: its permutation state, on the Poseidon path;
+    - `circom-witness-rs` 0.5.1: its evaluation memory, the graph's node
+      values, which hold every signal of the witness;
+    - `taceo-groth16` 0.2.3 and `ark-groth16`, `ark-poly` 0.6.0: the
+      witness as scalars for the multi-scalar multiplications, and the
+      quotient polynomial's coefficients computed from it, on rayon's
+      worker threads too;
+    - and stack copies anywhere in that code.
+
+    They are freed unwiped, as the JDK's AES copy of a key is (*What never
+    leaves a call*): the window is the call, and nothing of them outlives
+    it on purpose. One way to close it: a global allocator in this library
+    that wipes every block it frees. It costs a `memset` per free, and on
+    iOS, where this library is linked beside the Myotis engine's, another
+    Rust static library, it must not clash with that one's allocator. Part
+    2d checks that; until then the copies stand as said here.
 - **The determinism check.** The first note signed in a call is signed
   twice; a mismatch refuses the call. Secrets are derived again at every
   use and never stored.

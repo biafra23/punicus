@@ -38,6 +38,14 @@ jobs:
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v4
 
+      # :data builds the native Privacy Pools library with cargo (buildPrivacyPoolsHost, into
+      # data/build/privacy-pools-cargo): cache its compiled dependencies, keyed on Cargo.lock.
+      # The runner's preinstalled rustup installs the toolchain native/privacy-pools names.
+      - name: Cache cargo for the Privacy Pools library
+        uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
+        with:
+          workspaces: native/privacy-pools -> ../../data/build/privacy-pools-cargo
+
       - name: Grant execute permission for gradlew
         run: chmod +x gradlew
 

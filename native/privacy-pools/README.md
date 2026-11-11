@@ -19,8 +19,8 @@ Only `:data`'s adapters load it, through its C ABI (`src/ffi.rs`).
 - **Copies it cannot wipe.** Third-party code keeps copies of its own: `light-poseidon`'s state on
   the Poseidon path; `circom-witness-rs`'s evaluation memory (the graph's node values); and the
   prover's (`taceo-groth16`, `ark-groth16`) scalar vectors and polynomial coefficients, on rayon's
-  worker threads too, plus stack copies anywhere. Part 2b records them in docs/keys-and-signing.md,
-  with the option of an allocator that wipes every block this library frees.
+  worker threads too, plus stack copies anywhere. docs/keys-and-signing.md records them (*Privacy
+  Pools note secrets*), with the option of an allocator that wipes every block this library frees.
 - **Panics** never cross the ABI: each call answers with an error number instead.
 
 ## The ABI
@@ -59,6 +59,11 @@ cargo fmt --check
 scripts/build-graphs.sh               # rebuilds graphs/ from pinned sources; fails on a difference
 cargo rustc --release --lib --locked --crate-type cdylib   # the shipped library, with LTO
 ```
+
+`:data` builds it for the desktop host through Gradle (`buildPrivacyPoolsHost`) and loads it
+through JNA (`eth.serotine.data.privacypools.PrivacyPoolsNative`); its tests run with `:data`'s
+(`./gradlew :data:desktopTest`), which fetch the proving keys first. So building `:data` for the
+desktop needs Rust.
 
 CI runs the first four (`.github/workflows/ci.yml`, *Native library (Rust)*), and the graph rebuild
 on demand and weekly (`.github/workflows/native-graphs.yml`). The manifest declares a plain
