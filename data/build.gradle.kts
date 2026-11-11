@@ -27,6 +27,10 @@ plugins {
 // for debug builds and one for release builds (for now the same ID: owner ruling, 2026-11-05). A build
 // without one has dApp connections switched off and says so. An ID is letters and digits: anything else
 // fails the build rather than reach the code.
+/** Where buildPrivacyPools<Target> leaves the iOS static library of [target] (iosArm64, iosSimulatorArm64). */
+fun privacyPoolsIosOut(target: String): File =
+    layout.buildDirectory.dir("generated/privacy-pools/ios/$target").get().asFile
+
 val generateWalletConnectBuildInfo by tasks.registering {
     val outDir = layout.buildDirectory.dir("generated/walletConnect/kotlin")
     // Trimmed: a secret pasted with a trailing newline or space is still the same ID.
@@ -77,6 +81,15 @@ kotlin {
     listOf(iosArm64(), iosSimulatorArm64()).forEach { target ->
         target.compilations.getByName("main").cinterops.create("sodium") {
             definitionFile.set(project.file("src/nativeInterop/cinterop/sodium.def"))
+        }
+        // The Privacy Pools library (docs/privacy-pools.md, Part 2e): its header, and the static
+        // library buildPrivacyPools<Target> builds on a Mac, embedded in this cinterop's klib.
+        target.compilations.getByName("main").cinterops.create("privacyPools") {
+            definitionFile.set(project.file("src/nativeInterop/cinterop/privacyPools.def"))
+            includeDirs(rootProject.layout.projectDirectory.dir("native/privacy-pools/include"))
+            extraOpts("-libraryPath", privacyPoolsIosOut(target.name).absolutePath)
+            val build = "buildPrivacyPools" + target.name.replaceFirstChar { it.uppercase() }
+            tasks.matching { it.name == interopProcessingTaskName }.configureEach { dependsOn(build) }
         }
     }
 
@@ -384,6 +397,8 @@ if (providers.gradleProperty("privacyPoolsProving").isPresent) {
         inputs.file(privacyPoolsDir.file("scripts/fetch-artifacts.sh"))
         outputs.dir(privacyPoolsDir.dir("artifacts"))
     }
+    // The iOS simulator's tests read the same keys (PrivacyPoolsIosTest).
+    tasks.matching { it.name == "iosSimulatorArm64Test" }.configureEach { dependsOn(fetchPrivacyPoolsArtifacts) }
     tasks.matching { it.name == "desktopTest" }.configureEach {
         dependsOn(fetchPrivacyPoolsArtifacts)
         (this as Test).systemProperty("serotine.privacyPoolsProving", "true")
@@ -594,3 +609,71 @@ if (skipPrivacyPoolsAndroid) {
         )
     }
 }
+
+// The library for iOS (docs/privacy-pools.md, Part 2e): a static library per target, built on a Mac
+// by native/privacy-pools/scripts/build-ios.sh, which links it relocatably so that only its six pp_*
+// functions stay global beside the Myotis engine's own Rust static library, and checks that they
+// are. The cinterop above embeds it in its klib, and the framework the app links carries it. The
+// minimum iOS is the app's (ios-app/xcode/project.yml), read here so the two cannot drift. Needs
+// rustup's two iOS targets (aarch64-apple-ios, aarch64-apple-ios-sim); off a Mac nothing runs, as
+// the iOS targets are disabled there.
+val isMacHost = "mac" in System.getProperty("os.name").lowercase()
+val privacyPoolsIosDeploymentTarget: String = run {
+    val spec = rootProject.layout.projectDirectory.file("ios-app/xcode/project.yml").asFile
+    Regex("""iOS:\s*"([0-9.]+)"""").find(spec.readText())?.groupValues?.get(1)
+        ?: error("no iOS deploymentTarget in ${spec.path}")
+}
+mapOf("iosArm64" to "aarch64-apple-ios", "iosSimulatorArm64" to "aarch64-apple-ios-sim").forEach { (target, triple) ->
+    tasks.register<Exec>("buildPrivacyPools" + target.replaceFirstChar { it.uppercase() }) {
+        group = "build"
+        description = "Build the native Privacy Pools library for $target ($triple), its pp_* functions alone global"
+        onlyIf("the host is a Mac") { isMacHost }
+        inputs.dir(privacyPoolsDir.dir("src"))
+        inputs.files(
+            privacyPoolsDir.file("Cargo.toml"),
+            privacyPoolsDir.file("Cargo.lock"),
+            privacyPoolsDir.file("rust-toolchain.toml"),
+            privacyPoolsDir.file("ios-exports.txt"),
+            privacyPoolsDir.file("scripts/build-ios.sh"),
+        )
+        inputs.property("rustcVersion", privacyPoolsRustc)
+        inputs.property("deploymentTarget", privacyPoolsIosDeploymentTarget)
+        val out = privacyPoolsIosOut(target)
+        outputs.dir(out)
+        workingDir(privacyPoolsDir)
+        environment("IPHONEOS_DEPLOYMENT_TARGET", privacyPoolsIosDeploymentTarget)
+        commandLine(
+            "scripts/build-ios.sh", triple,
+            layout.buildDirectory.dir("privacy-pools-cargo").get().asFile.absolutePath, out.absolutePath,
+        )
+    }
+}
+
+// What the iOS tests (iosTest, PrivacyPoolsIosTest) read: where the vectors, graphs and fetched
+// artifacts are, and whether the proving tests run. Generated, as a simulator test has no system
+// properties; the simulator reads the Mac's files at that path.
+val generatePrivacyPoolsIosTestEnv by tasks.registering {
+    val outDir = layout.buildDirectory.dir("generated/privacy-pools/iosTestEnv/kotlin")
+    val dir = privacyPoolsDir.asFile.absolutePath
+    val proving = providers.gradleProperty("privacyPoolsProving").isPresent
+    inputs.property("dir", dir)
+    inputs.property("proving", proving)
+    outputs.dir(outDir)
+    doLast {
+        val f = outDir.get().file("eth/serotine/data/privacypools/PrivacyPoolsTestEnv.kt").asFile
+        f.parentFile.mkdirs()
+        f.writeText(
+            """
+            // GENERATED by :data's generatePrivacyPoolsIosTestEnv task — do not edit.
+            package eth.serotine.data.privacypools
+
+            /** native/privacy-pools, where the tests read the vectors, graphs and artifacts. */
+            internal const val PRIVACY_POOLS_DIR: String = "${dir.replace("\\", "\\\\")}"
+
+            /** Whether the build fetched the proving keys (-PprivacyPoolsProving), so the proving tests run. */
+            internal const val PRIVACY_POOLS_PROVING: Boolean = $proving
+            """.trimIndent() + "\n",
+        )
+    }
+}
+kotlin.sourceSets.getByName("iosTest").kotlin.srcDir(generatePrivacyPoolsIosTestEnv)

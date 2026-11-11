@@ -43,6 +43,11 @@ jobs:
       - name: Grant execute permission for gradlew
         run: chmod +x gradlew
 
+      # :data builds the Privacy Pools library for both iOS targets with cargo (data/build.gradle.kts,
+      # buildPrivacyPoolsIos*, native/privacy-pools/scripts/build-ios.sh): rustup's two iOS targets.
+      - name: Rust targets for the Privacy Pools library
+        run: cd native/privacy-pools && rustup target add aarch64-apple-ios aarch64-apple-ios-sim
+
       # The simulator tests run commonTest on iosSimulatorArm64 (the runner is Apple
       # silicon); the device target is compiled, and the app job links it. The shared iosMain
       # metadata is compiled too: `./gradlew build` does it on a Mac, and a declaration only
@@ -53,7 +58,9 @@ jobs:
         # resolves the iOS engine's klibs from the maven-repo branch cold).
         run: |
           for attempt in 1 2 3; do
-            ./gradlew --stacktrace \
+            # -PprivacyPoolsProving: the Privacy Pools binding's proving tests run on the simulator
+            # too (PrivacyPoolsIosTest), with the pinned keys the crate's script fetches.
+            ./gradlew --stacktrace -PprivacyPoolsProving \
               :domain:iosSimulatorArm64Test \
               :data:iosSimulatorArm64Test \
               :data:compileKotlinIosArm64 \
@@ -92,6 +99,11 @@ jobs:
 
       - name: Grant execute permission for gradlew
         run: chmod +x gradlew
+
+      # :data builds the Privacy Pools library for both iOS targets with cargo (data/build.gradle.kts,
+      # buildPrivacyPoolsIos*, native/privacy-pools/scripts/build-ios.sh): rustup's two iOS targets.
+      - name: Rust targets for the Privacy Pools library
+        run: cd native/privacy-pools && rustup target add aarch64-apple-ios aarch64-apple-ios-sim
 
       # The app's framework for a device: the static archive with the engine, libsodium and
       # libsecp256k1 in it. Retried like the job above.

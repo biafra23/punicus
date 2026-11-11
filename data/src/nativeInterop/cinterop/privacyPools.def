@@ -1,0 +1,8 @@
+# The native Privacy Pools library on iOS (docs/privacy-pools.md, Part 2e): its C ABI
+# (native/privacy-pools/include/privacy_pools.h) and the static library :data's
+# buildPrivacyPoolsIos* tasks build for each target, embedded in this cinterop's klib, as the
+# Myotis engine's is in its own. Its only global symbols are the six declared here
+# (native/privacy-pools/scripts/build-ios.sh says why).
+package = eth.serotine.data.privacypools.native
+headers = privacy_pools.h
+staticLibraries = libprivacy_pools.a

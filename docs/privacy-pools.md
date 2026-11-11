@@ -393,7 +393,7 @@ own: nothing is shown to the user before Part 7.
 | 2a | The native library (done, #289) | D9, D14 | yes |
 | 2b | Its Kotlin binding and the desktop build (done, #291) | D9 | yes |
 | 2c | The Android build (NDK) (done, #292) | D9 | CI only |
-| 2d | The Windows build | D9 | CI only |
+| 2d | The Windows build (done, #293) | D9 | CI only |
 | 2e | The iOS build | D9 | CI only |
 | 3 | Test vectors from Kohaku | D1, D11 | yes |
 | 4 | Pools in the log index | D7 | yes, unit tests |
@@ -555,6 +555,20 @@ of 2b on one more host, and iOS needs a link step and a binding of its own.
   also answers the allocator question of docs/keys-and-signing.md: a
   wiping global allocator in this library stays local to it and cannot
   clash with the engine's. Only CI's macOS runners can build and test it.
+- **2e, as built**: `native/privacy-pools/scripts/build-ios.sh` builds the
+  static library for `aarch64-apple-ios` and `aarch64-apple-ios-sim`, at the
+  app's minimum iOS (`ios-app/xcode/project.yml`), merges cargo's archive
+  into one object with `ld -r -all_load` and the exported symbols of
+  `ios-exports.txt`, archives it, and fails unless `nm -gU` shows exactly
+  the six `pp_*` functions. `:data`'s `buildPrivacyPoolsIosArm64` and
+  `buildPrivacyPoolsIosSimulatorArm64` run it on a Mac; the `privacyPools`
+  cinterop (`privacyPools.def`, `include/privacy_pools.h`) embeds the
+  library in its klib, so the framework carries it. The iOS binding
+  (`iosMain`, `PrivacyPoolsNative.ios.kt`) has the JVM one's calls, over
+  native-heap buffers it clears with `memset`, and the value types they
+  answer with now live in `commonMain` for both. `PrivacyPoolsIosTest`
+  holds it to the reference vectors on the simulator, proving included
+  (`ios.yml` passes `-PprivacyPoolsProving`).
 - **2c, R8**: once R8 runs on the APK, `PrivacyPoolsNative.Library` needs a
   keep rule beside `Sodium`'s (`android-app/build.gradle.kts`). A renamed
   method fails at the call with an `UnsatisfiedLinkError`, not as
