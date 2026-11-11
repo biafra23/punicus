@@ -7,6 +7,7 @@ paths:
   - "android-app/**/*"
   - "desktop-app/**/*"
   - "ios-app/**/*"
+  - "native/**/*"
   - "*.kts"
 ---
 
@@ -38,6 +39,14 @@ Entities and value objects (`Account`, `Address`, `AccountKind`), the ports
 - Targets desktop JVM and iOS. Deliberately NO Android target: Android
   consumers resolve its JVM variant, so nothing in it can ever import
   `android.*`.
+
+### Native code
+
+Our own native code lives in this repository (owner ruling, 2026-11-11,
+docs/privacy-pools.md D9): the Privacy Pools library in Rust, under
+`native/privacy-pools/`, built through cargo by Gradle and CI for every
+target. Only `:data`'s adapters load it, through JNA on Android and the
+desktop and through cinterop on iOS. It depends on nothing of ours.
 
 ### `data`
 

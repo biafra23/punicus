@@ -62,6 +62,13 @@ rule in code.
   heavy downloads may run `ConnectionMeter` (`eth.serotine.data.network`) and
   `MeteredDownloadsSetting` (`eth.serotine.data.settings`)) and owns
   every data source.
+- **Native code of our own lives in this repository** (owner ruling,
+  2026-11-11, docs/privacy-pools.md D9): the Privacy Pools library in Rust
+  (Poseidon, the Lean IMT, the witness and the Groth16 prover), under
+  `native/privacy-pools/`, built through cargo by Gradle and CI for every
+  target. Only `:data`'s adapters load it: through JNA on Android and the
+  desktop, as `Sodium.kt` loads libsodium, and through cinterop on iOS. It
+  depends on nothing of ours and is no Kotlin module.
 - `:ui` depends on `:domain`. A ViewModel takes **use cases**, never a
   repository, and never sees `:data`.
 - The hosts depend on `:ui` and `:data` and are the **only** places that know

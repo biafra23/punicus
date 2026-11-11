@@ -580,6 +580,76 @@ its KDoc and returns it as a result the UI shows as state.
     at the next start, the offer to restore the accounts of leftover keys
     with the wallet password, and later a "start over" reset.
 
+## Privacy Pools note secrets
+
+(Owner rulings, 2026-11-11, docs/privacy-pools.md D2 and D11. Not built;
+docs/privacy-pools.md, Part 6, builds it.)
+
+A Privacy Pools note is spent with secrets derived from the recovery phrase.
+They are key material, held to rules 1 to 9 like the account keys: inside
+the key-store adapter, inside one call, zeroed afterwards.
+
+- **Kohaku's derivation** (D11; docs/kohaku.md, *Privacy Pools note
+  secrets*):
+  - the signing key at `m/28784'/1'/<accountIndex>'` of the envelope's seed,
+    secp256k1 BIP-32 (the account index is D8's);
+  - a note's signature: libsecp256k1, RFC 6979's nonce, over the EIP-712
+    digest of `PrivacyPoolNote(uint64 depositIndex, uint64 secretIndex)` in
+    the domain "PrivacyPools Keychain", "1", the chain id, the Entrypoint and
+    `salt = keccak256("privacypools")`. The digest is computed in `:domain`
+    (`Eip712`), as every digest a signer signs is;
+  - `rs = r ‖ low-s`; the nullifier and the secret are the first 31 bytes of
+    `keccak256("nullifier" ‖ rs)` and `keccak256("salt" ‖ rs)`.
+  - 0xbow's own derivation (its SDK, privacypools.com) is not followed: the
+    two find disjoint notes.
+- **One call, all inside** (D2). A `PoolKeychain` call opens the envelope as
+  `sign` does, derives the key, signs the note digests it needs, hashes the
+  signatures into the secrets, and then does one of two things:
+  - returns each note's **public** values: the precommitment, the nullifier
+    hash, the commitment;
+  - or proves: hands the secrets to the native prover
+    (docs/architecture.md, *Native code*) and returns the proof, verified
+    against the pinned verification key before it leaves.
+  The seed, the key, the signatures and the secrets are byte arrays zeroed
+  before the call returns. The secrets cross into native code on both
+  paths, as Poseidon's inputs and as the witness: the native library zeroes
+  every buffer of its own that held a secret, and never logs an input.
+  Nothing of it is logged, cached or turned into a `String`.
+  - **The prover's own copies.** A Groth16 prover works on copies of the
+    witness the library never holds (`ark-groth16` keeps its own vectors
+    for its multi-scalar multiplications). Whether the pinned prover zeroes
+    them, or can be made to, is checked in Part 2. Where it cannot, it is
+    said here, as the JDK's AES copy is (*What never leaves a call*).
+- **The determinism check.** The first note signed in a call is signed
+  twice; a mismatch refuses the call. Secrets are derived again at every
+  use and never stored.
+- **The cache of public values** (D2). So that discovery runs without an
+  unlock, an unlock also derives the public values of the next deposits (8
+  proposed) and of each known deposit's next change notes, and stores them
+  in an app-private file, out of backups and device transfers, never logged.
+  - **What it holds** is no secret, no signature and no key: each value is
+    what the chain shows once its note is used.
+  - **What it tells** is more than any one value. A deposit's precommitment
+    next to its notes' nullifier hashes ties each withdrawal (whose
+    `Withdrawn` carries the nullifier hash), with its recipient and amount,
+    to the deposit it spends: the one link the pool hides. And it holds the
+    values of notes not used yet, so a copy of it recognizes the next
+    deposits and withdrawals as they happen.
+  - Whether an app-private file is enough for that, or the file is sealed
+    as the outbox's is (*The outbox's seal key*), is the owner's call
+    (docs/privacy-pools.md, *Open decisions*).
+  - **It serves discovery only.** A precommitment a deposit sends decides
+    who can spend that deposit, so it never comes from the cache: it is
+    derived inside the unlock that signs the deposit, and a deposit
+    carrying another one is not signed. Where the depositing account is of
+    the note's phrase, its envelope holds the seed both keys derive from,
+    so this costs no second unlock. The unlock that refills the cache
+    checks what the file held the same way, and drops what does not match.
+  - Discovery asks for an unlock only when the cache runs out, and says
+    why.
+- **Unlocks** are the account keys': the password path, or the biometric
+  path where it is on. A withdrawal and a ragequit each take one unlock.
+
 ## The outbox's seal key (lenient mode)
 
 (Owner rulings, 2026-11-06, on #258, accepting docs/lenient-mode.md,
