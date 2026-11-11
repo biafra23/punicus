@@ -69,6 +69,7 @@ target is what resolves the engine's AAR. One package per area,
 | `handoff` | `NoWalletHandoff`: the `WalletHandoff` of a platform that hands no payment link to another wallet (the desktop, iOS for now; issue #255). Android's is the host's. |
 | `walletconnect` | WalletConnect v2 (docs/walletconnect.md): its crypto over libsodium, the relay client over Ktor's WebSocket client, the wallet role of the Sign protocol, and its state, the sessions' keys among it, in a file of its own. |
 | `transfers` | The record of sent transactions and the history of them, kept for good. |
+| `privacypools` | The native Privacy Pools library through JNA (`PrivacyPoolsNative`, docs/privacy-pools.md): Poseidon, the Lean IMT and the two circuits' provers, every buffer that crosses and may hold a secret cleared. No port yet: the use cases come in the plan's later parts. |
 | `outbox` | Lenient mode's outbox (docs/lenient-mode.md): what is signed and waits for its check, a Safe signature held until its check among it, in a file sealed with a hardware key of its own, or in memory only where there is none (docs/keys-and-signing.md, *The outbox's seal key*). |
 | `history` | Where each account's history starts. |
 | `network` | What the device's connection costs: metered or not, as Android's `ConnectivityManager` and iOS's `NWPathMonitor` say; the desktop reports none. |

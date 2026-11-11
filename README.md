@@ -113,8 +113,11 @@ brew install xcodegen
 cd ios-app/xcode && SEROTINE_DEVELOPMENT_TEAM=<team id> xcodegen generate && open Serotine.xcodeproj
 ```
 
-Needs JDK 21 and, for the Android modules, an Android SDK (`ANDROID_HOME`, or
-`sdk.dir` in a git-ignored `local.properties`). The iOS targets of the shared
+Needs JDK 21, Rust (rustup; `native/privacy-pools/rust-toolchain.toml` names
+the toolchain) for the native Privacy Pools library, and, for the Android
+modules, an Android SDK (`ANDROID_HOME`, or `sdk.dir` in a git-ignored
+`local.properties`). `-PprivacyPoolsProving` adds the Privacy Pools proving
+tests, which fetch the circuits' pinned keys (about 19 MB). The iOS targets of the shared
 modules and the iOS app build on macOS only and are skipped elsewhere. The
 team id (Xcode > Settings > Accounts) signs the iOS app for a device; the
 simulator needs none.

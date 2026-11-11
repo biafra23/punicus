@@ -111,6 +111,13 @@ jobs:
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v4
 
+      # :data builds the Privacy Pools library for the JVM's architecture, with an explicit
+      # cargo target (data/build.gradle.kts, buildPrivacyPoolsHost): the x64 leg's x86_64 JDK
+      # needs rustup's x86_64-apple-darwin target, which the arm64 runner lacks by default.
+      - name: Add the x86_64 Rust target (x64 cross-build)
+        if: matrix.arch == 'x64'
+        run: rustup target add x86_64-apple-darwin
+
       - name: Make gradlew executable
         run: chmod +x gradlew
 
@@ -147,6 +154,14 @@ jobs:
         run: |
           GRADLE_ARGS="-Porg.gradle.java.installations.auto-detect=false -Porg.gradle.java.installations.auto-download=false -Porg.gradle.java.installations.paths=$JAVA_HOME"
           ./gradlew :ui:desktopTest --stacktrace $GRADLE_ARGS
+
+      # The Privacy Pools binding's tests, proving included, against the library this leg built and
+      # under this leg's JVM: ci.yml runs them on Linux x86-64 alone, so only here does a dylib load,
+      # and in the x64 leg the x86_64 one under Rosetta 2 (data/build.gradle.kts, buildPrivacyPoolsHost).
+      - name: Run the Privacy Pools binding's tests on macOS (${{ matrix.arch }})
+        run: |
+          GRADLE_ARGS="-Porg.gradle.java.installations.auto-detect=false -Porg.gradle.java.installations.auto-download=false -Porg.gradle.java.installations.paths=$JAVA_HOME"
+          ./gradlew :data:desktopTest --tests 'eth.serotine.data.privacypools.*' -PprivacyPoolsProving --stacktrace $GRADLE_ARGS
 
       # Compose names both arches' output the same (Punicus-<packageVersion>.dmg);
       # rename so the downloaded file itself states the architecture. Assert exactly
@@ -204,6 +219,24 @@ jobs:
           done
           app=$(find "$mnt" -maxdepth 1 -type d -name '*.app' | head -n1)
           [ -n "$app" ] || { echo "::error::no .app bundle at the root of $dmg"; exit 1; }
+          # The Privacy Pools library rides in :data's jar, under JNA's prefix for the dmg's arch
+          # (buildPrivacyPoolsHost, data/build.gradle.kts): built for another arch, or staged under
+          # another prefix, it would never load. No app code loads it yet, so it is not signed here.
+          case "${{ matrix.arch }}" in
+            x64)   pp_entry=darwin-x86-64/libprivacy_pools.dylib ;;
+            arm64) pp_entry=darwin-aarch64/libprivacy_pools.dylib ;;
+          esac
+          pp_jar=$(find "$app" -type f -name 'data-desktop*.jar' | head -n1 || true)
+          [ -n "$pp_jar" ] || { echo "::error::no data-desktop jar in the dmg — bundle layout changed?"; exit 1; }
+          pp_dir=$(mktemp -d)
+          unzip -q "$pp_jar" "$pp_entry" -d "$pp_dir" \
+            || { echo "::error::$pp_entry missing from $(basename "$pp_jar")"; exit 1; }
+          [ "$(unzip -Z1 "$pp_jar" | grep -c 'libprivacy_pools')" = 1 ] \
+            || { echo "::error::$(basename "$pp_jar") carries more than one Privacy Pools library"; exit 1; }
+          pp_archs=$(lipo -archs "$pp_dir/$pp_entry")
+          echo "$pp_entry -> [$pp_archs]"
+          echo "$pp_archs" | tr ' ' '\n' | grep -qx "$want" \
+            || { echo "::error::libprivacy_pools arch mismatch: expected $want, got [$pp_archs]"; exit 1; }
           bundle_id=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$app/Contents/Info.plist")
           [ "$bundle_id" = "eth.serotine" ] \
             || { echo "::error::bundle id is '$bundle_id', expected eth.serotine"; exit 1; }
