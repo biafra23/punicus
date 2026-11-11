@@ -92,8 +92,7 @@ internal object PrivacyPoolsNative {
         val dir = if (Platform.isWindows()) {
             File(System.getProperty("java.io.tmpdir"), TEMP_PREFIX).also { d ->
                 d.mkdirs()
-                val stale = System.currentTimeMillis() - STALE_AFTER_MS
-                d.listFiles { f -> f.name.endsWith(suffix) && f.lastModified() < stale }?.forEach { it.delete() }
+                removeStaleCopies(d, suffix, System.currentTimeMillis())
             }
         } else {
             null
@@ -103,6 +102,17 @@ internal object PrivacyPoolsNative {
         file.deleteOnExit()
         stream.use { input -> file.outputStream().use { input.copyTo(it) } }
         return file.absolutePath
+    }
+
+    /**
+     * Deletes the files in [dir] ending in [suffix] last written more than an hour before [now]: the
+     * copies earlier runs left. A younger one, or one of another suffix, stays; so does one the
+     * platform refuses to delete (on Windows, one a running process has loaded).
+     */
+    internal fun removeStaleCopies(dir: File, suffix: String, now: Long) {
+        val stale = now - STALE_AFTER_MS
+        dir.listFiles { f -> f.isFile && f.name.endsWith(suffix) && f.lastModified() < stale }
+            ?.forEach { it.delete() }
     }
 
     private const val NAME = "privacy_pools"

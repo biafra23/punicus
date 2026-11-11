@@ -29,9 +29,12 @@ on:
       - "desktop-app/src/main/kotlin/eth/serotine/desktop/Main.kt"
       - "build.gradle.kts"
       - "gradle/libs.versions.toml"
-      # The Privacy Pools library the msi carries in :data's jar, and the build that makes it.
+      # The Privacy Pools library the msi carries in :data's jar, the build that makes it, and the
+      # binding that loads it and its tests, which this job alone runs on Windows.
       - "data/build.gradle.kts"
       - "native/privacy-pools/**"
+      - "data/src/jvmSharedMain/kotlin/eth/serotine/data/privacypools/**"
+      - "data/src/desktopTest/kotlin/eth/serotine/data/privacypools/**"
   # Any branch, on demand from the Actions tab.
   workflow_dispatch:
 
