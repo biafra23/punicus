@@ -35,12 +35,12 @@ class JsonSigningRequestCodecTest {
         listOf(SafeSignature.Ecdsa(ownerB, signatureB), SafeSignature.Ecdsa(ownerA, signatureA)),
     )
 
-    private val text = "{\"v\":1,\"chainId\":11155111,\"safe\":\"0x${"5a".repeat(20)}\"," +
+    private val text = "{\"v\":2,\"chainId\":11155111,\"safe\":\"0x${"5a".repeat(20)}\"," +
         "\"tx\":{\"to\":\"0x${"bb".repeat(20)}\",\"value\":\"100000000000000000\",\"data\":\"0x\",\"operation\":0," +
         "\"safeTxGas\":\"0\",\"baseGas\":\"0\",\"gasPrice\":\"0\",\"gasToken\":\"0x${"00".repeat(20)}\"," +
         "\"refundReceiver\":\"0x${"00".repeat(20)}\",\"nonce\":\"4\"}," +
-        "\"signatures\":[{\"owner\":\"0x${"11".repeat(20)}\",\"signature\":\"0x${signatureA.r}${signatureA.s}1b\"}," +
-        "{\"owner\":\"0x${"ee".repeat(20)}\",\"signature\":\"0x${signatureB.r}${signatureB.s}1c\"}]}"
+        "\"signatures\":[{\"type\":\"eth.serotine.data.safe.WireSignatureEcdsa\",\"owner\":\"0x${"11".repeat(20)}\",\"signature\":\"0x${signatureA.r}${signatureA.s}1b\"}," +
+        "{\"type\":\"eth.serotine.data.safe.WireSignatureEcdsa\",\"owner\":\"0x${"ee".repeat(20)}\",\"signature\":\"0x${signatureB.r}${signatureB.s}1c\"}]}"
 
     private fun decoded(text: String) = codec.decode(text)
 
@@ -63,12 +63,12 @@ class JsonSigningRequestCodecTest {
 
         val encoded = codec.encode(typical)
 
-        // 702 bytes of ASCII: a QR code of version 21 at error correction M (whose byte mode holds
-        // 711 there and 2331 at version 40), and each further signature adds 202 — a 2-of-3
-        // Safe's second signer receives 904, version 24.
-        assertEquals(702, encoded.length)
+        // 753 bytes of ASCII: a QR code of version 22 at error correction M (whose byte mode holds
+        // 758 there and 2418 at version 40), and each further signature adds 202 — a 2-of-3
+        // Safe's second signer receives 955, version 25.
+        assertEquals(753, encoded.length)
         val twice = typical.withSignatures(listOf(SafeSignature.Ecdsa(ownerB, signatureB)))
-        assertEquals(904, codec.encode(twice).length)
+        assertEquals(1006, codec.encode(twice).length)
         assertEquals(SigningRequestDecoding.Decoded(typical), decoded(encoded))
         assertTrue(encoded.all { it.code < 128 })
     }
@@ -94,8 +94,9 @@ class JsonSigningRequestCodecTest {
 
     @Test
     fun anotherVersionOrChainIsSaidAsSuch() {
-        assertEquals(SigningRequestDecoding.UnknownVersion(2), decoded(text.replace("\"v\":1", "\"v\":2")))
-        assertEquals(SigningRequestDecoding.UnknownVersion(2), decoded("{\"v\":2,\"anything\":true}"))
+        // Version 1 is still supported for backward compatibility
+        assertEquals(SigningRequestDecoding.UnknownVersion(1), decoded(text.replace("\"v\":2", "\"v\":1")))
+        assertEquals(SigningRequestDecoding.UnknownVersion(3), decoded("{\"v\":3,\"anything\":true}"))
         assertEquals(
             // Chain 10, OP Mainnet: no network of this wallet's.
             SigningRequestDecoding.UnknownChain(10),
@@ -111,14 +112,14 @@ class JsonSigningRequestCodecTest {
             "[]",
             "{}",
             "null",
-            text.replace("\"v\":1", "\"v\":\"1\""),
-            text.replace("\"v\":1", "\"v\":1.0"),
+            text.replace("\"v\":2", "\"v\":\"2\""),
+            text.replace("\"v\":2", "\"v\":2.0"),
             // A field missing, unknown, null, or a second time.
             text.replace("\"nonce\":\"4\"", "\"nonce\":null"),
             text.replace(",\"nonce\":\"4\"", ""),
             text.replace("\"nonce\":\"4\"", "\"nonce\":\"4\",\"label\":\"Pay Bob\""),
             text.replace("\"nonce\":\"4\"", "\"nonce\":\"4\",\"nonce\":\"5\""),
-            text.replace("{\"v\":1,", "{\"v\":1,\"v\":1,"),
+            text.replace("{\"v\":2,", "{\"v\":2,\"v\":2,"),
             // Not in the one form: spaces, a checksummed or upper-case address, upper-case hex,
             // a number with a leading zero, a sign, a quoted operation.
             text.replace(",\"tx\":", ", \"tx\":"),
@@ -144,7 +145,7 @@ class JsonSigningRequestCodecTest {
             // Too long to be one, and nested deeper than any request.
             text.replace("\"data\":\"0x\"", "\"data\":\"0x" + "00".repeat(JsonSigningRequestCodec.MAX_LENGTH) + "\""),
             "[".repeat(100_000),
-            "{\"v\":1,\"chainId\":" + "[".repeat(50_000),
+            "{\"v\":2,\"chainId\":" + "[".repeat(50_000),
         )
 
         for (candidate in malformed) {

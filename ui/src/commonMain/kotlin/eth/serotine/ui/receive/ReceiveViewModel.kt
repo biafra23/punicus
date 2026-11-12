@@ -36,6 +36,7 @@ class ReceiveViewModel(
                     // A Safe is a contract: at the same address on another network there may
                     // be nothing, or someone else's.
                     AccountKind.SAFE -> "This Safe exists only on ${network.displayName}"
+                    AccountKind.SAFE_P256 -> "This Safe with hardware-bound P-256 owners exists only on ${network.displayName}"
                     AccountKind.EOA -> "Only send ${network.displayName} assets to this address"
                 },
                 // A key's address is the same on every chain, but each is an account of its own.

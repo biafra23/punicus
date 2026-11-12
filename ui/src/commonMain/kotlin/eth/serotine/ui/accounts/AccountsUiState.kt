@@ -399,6 +399,11 @@ internal fun sendBlockedReason(kind: AccountKind, control: Control): String? = w
         "No owner of this Safe has its key on this device, so nothing can be proposed from it. Import an owner's " +
             "recovery phrase to propose and sign its transactions."
     }
+    AccountKind.SAFE_P256 -> if (control != Control.WATCH_ONLY) {
+        null
+    } else {
+        "No owner of this Safe has its key on this device, so nothing can be proposed from it. Add a hardware-bound P-256 owner to propose and sign its transactions."
+    }
 }
 
 /**
@@ -410,6 +415,7 @@ internal fun sendBlockedReason(kind: AccountKind, control: Control): String? = w
 internal fun swapBlockedReason(kind: AccountKind, control: Control): String? = when (kind) {
     AccountKind.EOA -> if (control == Control.FULL_CONTROL) null else watchOnlyReason("swapped", "swap")
     AccountKind.SAFE -> sendBlockedReason(kind, control)
+    AccountKind.SAFE_P256 -> sendBlockedReason(kind, control)
 }
 
 /**

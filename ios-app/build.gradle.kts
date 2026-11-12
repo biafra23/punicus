@@ -21,6 +21,8 @@ kotlin {
             // Static: the Kotlin code, the Myotis engine's libmyotis_engine.a, libsodium and
             // libsecp256k1 end up in one archive the app links, with nothing to embed or load.
             isStatic = true
+            // The Myotis engine uses SystemConfiguration.framework for network monitoring.
+            linkerOpts("-framework", "SystemConfiguration")
         }
     }
 

@@ -9,6 +9,10 @@ import eth.serotine.domain.model.Signature
  * checking a co-signer's signature of a Safe transaction before it is believed (CLAUDE.md, *Data
  * sources*). Public data in, an address out: no key is involved. :data implements it with
  * libsecp256k1, as `:domain` has no secp256k1 of its own. Never throws.
+ *
+ * Note: WebAuthn signatures (P-256 hardware-bound owners) are verified by the Safe's WebAuthn
+ * signer proxy contract directly, not through signature recovery. This port is only for ECDSA
+ * signatures.
  */
 interface SignatureRecovery {
     /**

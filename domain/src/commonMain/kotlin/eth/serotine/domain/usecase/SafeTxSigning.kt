@@ -362,27 +362,46 @@ private val SafeReading.unproven: Boolean
     get() = this == UNPROVEN_SAFE
 
 /**
- * [request]'s signatures that are current owners' (of [owners]) and recover to them over the
+ * [request]'s ECDSA signatures that are current owners' (of [owners]) and recover to them over the
  * hash computed here; or the first that is not, as a refusal ([SafeTxRefusal.NotAnOwner],
  * [SafeTxRefusal.BadSignature]).
+ *
+ * Note: WebAuthn signatures (P-256 hardware-bound owners) are verified by the Safe's WebAuthn
+ * signer proxy contract directly, not through signature recovery.
  */
 internal fun SignatureRecovery.check(request: SigningRequest, owners: List<Address>): SafeTxRefusal? {
     for (signature in request.signatures) {
         if (signature.owner !in owners) return SafeTxRefusal.NotAnOwner(signature.owner)
-        if (recover(request.hash, signature.signature) != signature.owner) {
-            return SafeTxRefusal.BadSignature(signature.owner)
+        // Only ECDSA signatures use recovery; WebAuthn is verified by the Safe contract
+        if (signature is SafeSignature.Ecdsa) {
+            if (recover(request.hash, signature.signature) != signature.owner) {
+                return SafeTxRefusal.BadSignature(signature.owner)
+            }
         }
     }
     return null
 }
 
-/** [request]'s signatures that are [owners]' and recover to them: those a Safe accepts now. */
-internal fun SignatureRecovery.valid(request: SigningRequest, owners: List<Address>): List<SafeSignature.Ecdsa> =
-    request.signatures.filter { it.owner in owners && recover(request.hash, it.signature) == it.owner }
+/**
+ * [request]'s ECDSA signatures that are [owners]' and recover to them: those a Safe accepts now.
+ *
+ * Note: WebAuthn signatures (P-256 hardware-bound owners) are verified by the Safe's WebAuthn
+ * signer proxy contract directly, not through signature recovery. They are included as-is.
+ */
+internal fun SignatureRecovery.valid(request: SigningRequest, owners: List<Address>): List<SafeSignature> =
+    request.signatures.filter { sig ->
+        sig.owner in owners && (
+            (sig is SafeSignature.Ecdsa && recover(request.hash, sig.signature) == sig.owner) ||
+                (sig is SafeSignature.WebAuthn)
+        )
+    }
 
 /**
  * [request] with only the signatures [valid] keeps: what is shown and shared of it, so that a
  * signature of an owner removed since it was queued never makes another device refuse it.
+ *
+ * Note: WebAuthn signatures (P-256 hardware-bound owners) are verified by the Safe's WebAuthn
+ * signer proxy contract directly, not through signature recovery.
  */
 internal fun SignatureRecovery.validOnly(request: SigningRequest, owners: List<Address>): SigningRequest =
     SigningRequest.of(request.network, request.safe, request.tx, valid(request, owners))
@@ -553,6 +572,7 @@ class SignSafeTx(
     internal suspend fun signature(checked: SafeTxSignCheck.Ready, unlock: Unlock): SafeTxSignature {
         val request = checked.request
         val owner = checked.owner
+        // Only ECDSA signatures can be signed by the key store; WebAuthn is handled separately
         val signature = when (val signing = signer.sign(owner, request.hash, unlock)) {
             is Signing.Signed -> signing.signature
             else -> return SafeTxSignature.NotMade(SafeTxSigning.NotSigned(signing))
@@ -590,13 +610,17 @@ sealed interface SafeTxSignCheck {
     /**
      * [owner] may sign [request]: the Safe's [state] as just verified, and the request's
      * signatures that are valid against it ([valid]). Made only by [SignSafeTx.check].
+     *
+     * Note: [valid] may include both ECDSA signatures (for secp256k1 owners) and WebAuthn
+     * signatures (for P-256 hardware-bound owners). ECDSA signatures are verified via recovery;
+     * WebAuthn signatures are verified by the Safe's WebAuthn signer proxy contract.
      */
     @ConsistentCopyVisibility
     data class Ready internal constructor(
         val request: SigningRequest,
         val owner: Address,
         val state: SafeState,
-        val valid: List<SafeSignature.Ecdsa>,
+        val valid: List<SafeSignature>,
     ) : SafeTxSignCheck
 
     /** Not to be signed: [refusal]. */

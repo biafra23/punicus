@@ -129,6 +129,7 @@ class FileAccountRepository(
             when (account.custody) {
                 AccountCustody.Watched -> WATCHED
                 AccountCustody.InKeyStore -> IN_KEY_STORE
+                AccountCustody.HardwareBound -> HARDWARE_BOUND
             },
             account.ensName,
             account.network.chainId,
@@ -151,6 +152,7 @@ class FileAccountRepository(
                 version == 1 && custody == null -> AccountCustody.InKeyStore
                 custody == WATCHED -> AccountCustody.Watched
                 custody == IN_KEY_STORE -> AccountCustody.InKeyStore
+                custody == HARDWARE_BOUND -> AccountCustody.HardwareBound
                 else -> error("an account without a known custody")
             },
             ens,
@@ -165,6 +167,7 @@ class FileAccountRepository(
         const val FORMAT_VERSION = 4
         const val WATCHED = "watched"
         const val IN_KEY_STORE = "key-store"
+        const val HARDWARE_BOUND = "hardware-bound"
         val STRICT = Json
     }
 }

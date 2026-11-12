@@ -111,7 +111,7 @@ class SafeTxSigningTest {
         val forged = SigningRequest.of(Network.SEPOLIA, world.safe, usdcTransfer(4), listOf(other))
         assertEquals(SafeTxRefusal.BadSignature(world.carol), refusal(forged))
         // A signature that recovers to Alice, said to be Carol's.
-        val alices = world.request(usdcTransfer(4), world.alice.address).signatures.single().signature
+        val alices = (world.request(usdcTransfer(4), world.alice.address).signatures.single() as SafeSignature.Ecdsa).signature
         val claimed = SigningRequest.of(
             Network.SEPOLIA,
             world.safe,
@@ -346,7 +346,10 @@ class SafeTxSigningTest {
     fun onlyCheckedSignaturesAreQueuedWithANewOne() = runTest {
         // Carried in from no check at all: a stranger's, and one said to be Carol's that is not.
         val unchecked = world.request(usdcTransfer(4), world.stranger)
-        val notCarols = SafeSignature.Ecdsa(world.carol, unchecked.signatures.single().signature)
+        val notCarols = SafeSignature.Ecdsa(
+            world.carol,
+            (unchecked.signatures.single() as SafeSignature.Ecdsa).signature,
+        )
         val request = unchecked.withSignatures(listOf(notCarols))
 
         val signed = assertIs<SafeTxSigning.Signed>(sign(request, world.alice.address, unlock))
@@ -357,7 +360,7 @@ class SafeTxSigningTest {
 
     @Test
     fun aForgedSignatureInTheOwnersNameNeitherStandsForItNorKeepsItFromSigning() = runTest {
-        val strangers = world.request(usdcTransfer(4), world.stranger).signatures.single().signature
+        val strangers = (world.request(usdcTransfer(4), world.stranger).signatures.single() as SafeSignature.Ecdsa).signature
         val forged = SigningRequest.of(
             Network.SEPOLIA,
             world.safe,

@@ -7,6 +7,12 @@ enum class AccountKind {
 
     /** A Safe{Wallet} smart-contract account: its owners sign Safe transactions for it. */
     SAFE,
+
+    /**
+     * A Safe{Wallet} that uses a P-256 hardware-bound owner via WebAuthn.
+     * The key is stored in the device's Secure Enclave/StrongBox and never leaves it.
+     */
+    SAFE_P256,
 }
 
 /**
@@ -21,6 +27,13 @@ sealed interface AccountCustody {
 
     /** Its key is in this device's key store, sealed in the envelope of the recovery phrase it came from. */
     data object InKeyStore : AccountCustody
+
+    /**
+     * The account is owned by a P-256 key stored in the device's Secure Enclave/StrongBox.
+     * The key never leaves the hardware; signing uses platform WebAuthn APIs.
+     * This custody type applies only to Safe{Wallet} accounts with a hardware-bound owner.
+     */
+    data object HardwareBound : AccountCustody
 }
 
 /**

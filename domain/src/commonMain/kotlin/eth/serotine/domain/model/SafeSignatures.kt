@@ -7,14 +7,14 @@ import eth.serotine.domain.model.AbiWords.word
 
 /**
  * One owner's confirmation of a Safe transaction's hash, as the Safe's `checkSignatures` reads
- * it: 65 bytes each, packed in ascending order of their [owner]s ([SafeCalls.packSignatures]).
+ * it. The encoding format depends on the signature type.
  */
 sealed interface SafeSignature {
 
     /** The owner this confirms for. */
     val owner: Address
 
-    /** Its 65 bytes as `execTransaction` takes them. */
+    /** Its bytes as `execTransaction` takes them (dynamic length). */
     fun encode(): ByteArray
 
     /**
@@ -25,6 +25,34 @@ sealed interface SafeSignature {
     data class Ecdsa(override val owner: Address, val signature: Signature) : SafeSignature {
         override fun encode(): ByteArray = signature.r.hexToBytes() + signature.s.hexToBytes() +
             byteArrayOf((ECDSA_V_OFFSET + signature.recoveryId).toByte())
+    }
+
+    /**
+     * A WebAuthn-formatted P-256 signature for Safe transactions.
+     *
+     * Format: `authenticatorData ‖ clientDataFields ‖ r ‖ s`
+     * This is used for hardware-bound P-256 owners stored in Secure Enclave/StrongBox.
+     */
+    data class WebAuthn(
+        override val owner: Address,
+        val authenticatorData: ByteArray,
+        val clientDataFields: String,
+        val r: String,
+        val s: String,
+    ) : SafeSignature {
+        init {
+            require(r.length == 64) { "r must be 64 hex characters (32 bytes)" }
+            require(s.length == 64) { "s must be 64 hex characters (32 bytes)" }
+            require(SCALAR.matches(r)) { "r must be lowercase hex" }
+            require(SCALAR.matches(s)) { "s must be lowercase hex" }
+            // s must be in lower half of curve order for non-malleability
+            require(s <= HALF_ORDER) { "s must be in lower half of curve order" }
+        }
+
+        override fun encode(): ByteArray {
+            val clientDataBytes = clientDataFields.encodeToByteArray()
+            return authenticatorData + clientDataBytes + r.hexToBytes() + s.hexToBytes()
+        }
     }
 
     /**
@@ -40,6 +68,9 @@ sealed interface SafeSignature {
     private companion object {
         const val ECDSA_V_OFFSET = 27
         const val APPROVED_HASH_V: Byte = 1
+
+        private val SCALAR = Regex("^[0-9a-f]{64}$")
+        private const val HALF_ORDER = "7fffffffffffffffffffffffffffffff5d576e7357a4501ddfe92f46681b20a0"
     }
 }
 
@@ -84,8 +115,8 @@ object SafeCalls {
     fun approveHash(hash: Digest): ByteArray = APPROVE_HASH + hash.hex.hexToBytes()
 
     /**
-     * [signatures] as `checkSignatures` reads them: 65 bytes each, in ascending order of their
-     * owners, which the Safe requires (it refuses an owner that does not sort above the one
+     * [signatures] as `checkSignatures` reads them: in ascending order of their owners,
+     * which the Safe requires (it refuses an owner that does not sort above the one
      * before it). One per owner: two for one owner throw, as a caller's error.
      */
     fun packSignatures(signatures: List<SafeSignature>): ByteArray {
@@ -98,7 +129,7 @@ object SafeCalls {
 /**
  * A request to sign a Safe transaction, as it moves between devices without any off-chain
  * service (CLAUDE.md, *Data sources*): the Safe at [safe] on [network], the raw transaction
- * [tx], and the ECDSA [signatures] of its owners collected so far — one per owner, in ascending
+ * [tx], and the signatures of its owners collected so far — one per owner, in ascending
  * order of owner. It carries no label, summary or hash for its receiver to trust: [hash] is
  * computed here from the fields, and what it does is decoded from them ([SafeTxAction]).
  *
@@ -109,7 +140,7 @@ data class SigningRequest private constructor(
     val network: Network,
     val safe: Address,
     val tx: SafeTx,
-    val signatures: List<SafeSignature.Ecdsa>,
+    val signatures: List<SafeSignature>,
 ) {
     /** The hash its owners sign, recomputed from [tx] for [safe] on [network]. */
     val hash: Digest = tx.hash(network.chainId, safe)
@@ -127,7 +158,7 @@ data class SigningRequest private constructor(
      * that one. Neither is checked here: who signed what is checked against the chain by the use
      * case that accepts a signature.
      */
-    fun withSignatures(added: List<SafeSignature.Ecdsa>): SigningRequest =
+    fun withSignatures(added: List<SafeSignature>): SigningRequest =
         of(network, safe, tx, signatures + added.filter { it.owner !in signers }.distinctBy { it.owner })
 
     override fun toString(): String = "SigningRequest(safe=$safe, nonce=${tx.nonce}, hash=$hash, signers=$signers)"
@@ -141,7 +172,7 @@ data class SigningRequest private constructor(
             network: Network,
             safe: Address,
             tx: SafeTx,
-            signatures: List<SafeSignature.Ecdsa> = emptyList(),
+            signatures: List<SafeSignature> = emptyList(),
         ): SigningRequest {
             require(signatures.map { it.owner }.toSet().size == signatures.size) { "one signature per owner" }
             return SigningRequest(network, safe, tx, signatures.sortedBy { it.owner.hex })

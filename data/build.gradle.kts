@@ -74,6 +74,13 @@ kotlin {
         target.compilations.getByName("main").cinterops.create("sodium") {
             definitionFile.set(project.file("src/nativeInterop/cinterop/sodium.def"))
         }
+        // The Myotis engine uses SystemConfiguration.framework for network monitoring.
+        // Add it to the test executable binary.
+        target.binaries.all {
+            if (name == "debugTest") {
+                linkerOpts("-framework", "SystemConfiguration")
+            }
+        }
     }
 
     applyDefaultHierarchyTemplate()

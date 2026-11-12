@@ -59,6 +59,7 @@ class RemoveAccount(
                     KeyDeletion.Failed -> AccountRemoval.RemovedKeyKept
                 }
             }
+            AccountCustody.HardwareBound -> AccountRemoval.Removed
         }
     }
 }

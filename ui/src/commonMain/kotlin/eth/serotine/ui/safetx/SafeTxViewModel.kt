@@ -2028,6 +2028,7 @@ class SafeTxViewModel(
             val who = context.labelOf(signature.owner)
             when (signature) {
                 is SafeSignature.Ecdsa -> "$who's signature"
+                is SafeSignature.WebAuthn -> "$who's hardware-bound P-256 signature"
                 is SafeSignature.ApprovedHash -> if (signature.owner == quote.executor) {
                     "$who, by sending the execution"
                 } else {
