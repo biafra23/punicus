@@ -106,7 +106,8 @@ private fun WatchNotASafePreview() = WatchPreview(
 
 @Preview
 @Composable
-private fun WatchInWalletPreview() = WatchPreview(account.copy(name = "", detection = Detection.InWallet("Savings", SAVINGS)))
+private fun WatchInWalletPreview() =
+    WatchPreview(account.copy(name = "", detection = Detection.InWallet("Savings", SAVINGS)))
 
 @Preview
 @Composable

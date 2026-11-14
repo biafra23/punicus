@@ -293,7 +293,8 @@ class WatchViewModel(
                     card,
                     offered = network in offered,
                     chosen = network in chosen && network in offered,
-                    differs = first?.takeIf { it.address != address }?.let { "Not ${it.network.displayName}'s address" },
+                    differs = first?.takeIf { it.address != address }
+                        ?.let { "Not ${it.network.displayName}'s address" },
                 )
             },
             question = if (everyAccount && oneAddress) {
