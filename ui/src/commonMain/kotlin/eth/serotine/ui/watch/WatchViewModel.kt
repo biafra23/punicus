@@ -37,6 +37,7 @@ import eth.serotine.ui.components.recipientStates
 import eth.serotine.ui.components.recipientText
 import eth.serotine.ui.components.resolveAgain
 import eth.serotine.ui.components.retryLookupWaits
+import eth.serotine.ui.components.shortAddress
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
@@ -272,6 +273,8 @@ class WatchViewModel(
         val cards = found.map { it.network to it.detection }
         // Where the registries gave different addresses, they are different accounts: no question for them.
         val oneAddress = found.map { it.address }.distinct().size == 1
+        // The first network's address, Ethereum's where it is on: a row at another one says so (#273).
+        val first = found.first()
         // A Safe exists only where it was deployed: where it is one, it is offered there alone (N11).
         val safeSomewhere = cards.any { (_, card) -> card is Detection.Safe }
         val offered = cards.filter { (_, card) -> if (safeSomewhere) card is Detection.Safe else card.addable }
@@ -283,12 +286,13 @@ class WatchViewModel(
         // A delegated account (EIP-7702) has code: its delegation designation.
         val delegated = cards.any { (_, card) -> (card as? Detection.Account)?.delegate != null }
         return copy(
-            networks = cards.map { (network, card) ->
+            networks = found.map { (network, address, card) ->
                 WatchNetwork(
                     NetworkLabel.of(network),
                     card,
                     offered = network in offered,
                     chosen = network in chosen && network in offered,
+                    differs = "Not ${first.network.displayName}'s address".takeIf { address != first.address },
                 )
             },
             question = if (everyAccount && oneAddress) {
@@ -435,7 +439,7 @@ class WatchViewModel(
                 return Outcome(nameError = "Use at most ${RenameAccount.MAX_LABEL_LENGTH} characters")
             }
             val why = when (result) {
-                is AddressWatch.AlreadyInWallet -> "Already in your wallet as “${result.account.label}”."
+                is AddressWatch.AlreadyInWallet -> alreadyInWallet(Eip55.format(resolved.address), result.account.label)
                 AddressWatch.Contract -> CONTRACT
                 is AddressWatch.NotVerified -> "The address cannot be checked right now."
                 else -> "The account could not be saved."
@@ -470,7 +474,7 @@ class WatchViewModel(
         reading: KindReading?,
         accounts: List<Account>,
     ): Detection = when {
-        inWallet != null -> Detection.InWallet(inWallet.label)
+        inWallet != null -> Detection.InWallet(inWallet.label, Eip55.format(address))
         list is AccountList.Unreadable ->
             Detection.Unavailable("Your account list cannot be read right now, so nothing can be added.")
         reading == null -> Detection.Checking
@@ -637,6 +641,10 @@ class WatchViewModel(
         "“$name” no longer resolves to the address that was shown: check the address it has now. " +
             "Nothing was added."
     }
+
+    /** "0x51Fd…9F0d is already in your wallet as account “Daily”.": its own name here, not an ENS name. */
+    private fun alreadyInWallet(address: String, label: String) =
+        "${shortAddress(address)} is already in your wallet as account “$label”."
 
     private companion object {
         /** What a card says in simple mode in place of its block: what it shows was read from the chain and proven. */

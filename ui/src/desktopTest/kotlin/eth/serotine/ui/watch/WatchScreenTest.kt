@@ -92,8 +92,10 @@ class WatchScreenTest {
 
         rule.onNodeWithText("Checking the address on chain…").assertIsDisplayed()
         rule.onNodeWithText("Add").assertIsNotEnabled()
-        detection = Detection.InWallet("Daily")
-        rule.onNodeWithText("Already in your wallet as “Daily”.").assertIsDisplayed()
+        detection = Detection.InWallet("Daily", vitalik)
+        rule.onNodeWithText("Already in your wallet as account “Daily”.").assertIsDisplayed()
+        // The address, not only the account's name (#273).
+        rule.onNodeWithText(vitalik).assertIsDisplayed()
         detection = Detection.Unavailable("The light client is not synced yet.")
         rule.onNodeWithText("The light client is not synced yet.").assertIsDisplayed()
         rule.onNodeWithText("Add").assertIsNotEnabled()

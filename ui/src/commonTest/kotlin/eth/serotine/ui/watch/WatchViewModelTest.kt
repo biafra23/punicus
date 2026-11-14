@@ -155,7 +155,7 @@ class WatchViewModelTest {
         viewModel.onAddressChange(daily.address.hex)
         runCurrent()
 
-        assertEquals(Detection.InWallet("Daily"), viewModel.uiState.value.detection)
+        assertEquals(Detection.InWallet("Daily", Eip55.format(daily.address)), viewModel.uiState.value.detection)
         assertFalse(viewModel.uiState.value.canAdd)
     }
 
@@ -562,6 +562,11 @@ class WatchViewModelTest {
         )
         assertTrue(state.networks.none { it.chosen }, "different accounts: none ticked until the user ticks it")
         assertFalse(state.canAdd)
+        assertEquals(
+            listOf(null, null, "Not Ethereum's address"),
+            state.networks.map { it.differs },
+            "the row at another address than Ethereum's says so (#273)",
+        )
 
         listOf(Network.ETHEREUM, Network.GNOSIS, Network.SEPOLIA).forEach { viewModel.onNetworkToggle(it.chainId) }
         runCurrent()
