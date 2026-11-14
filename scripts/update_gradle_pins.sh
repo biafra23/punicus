@@ -134,7 +134,11 @@ args=(--console=plain)
 # hashes are written (lenient only warns, and only for this run).
 # --write-locks rewrites the lock state of every configuration it resolves, so
 # a removed dependency leaves its lockfile here.
-./gradlew resolveAllDependencies --write-locks --dependency-verification lenient "${args[@]}"
+# :android-app:processDebugResources as in the `gradle pins` chain: AGP creates
+# some configurations (androidApis) and settles some graphs only once its
+# tasks are configured, and the lock must match what the hash run sees.
+./gradlew resolveAllDependencies :android-app:processDebugResources --write-locks \
+    --dependency-verification lenient "${args[@]}"
 
 # Then the hashes, with the NEW locks in force — a separate run on purpose:
 # without lock constraints, conflict resolution also fetches the metadata of

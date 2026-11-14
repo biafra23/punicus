@@ -260,8 +260,12 @@ jobs:
         run: |
           for attempt in 1 2; do
             if [ "$WRITE_LOCKS" = true ]; then
-              ./gradlew resolveAllDependencies --write-locks --dependency-verification lenient --console=plain \
-                || { sleep 20; continue; }
+              # With the same extra tasks as the hash pass: AGP creates some configurations
+              # (androidApis) and settles some graphs only once its tasks are configured, so a lock
+              # pass without them writes lock state the hash pass then disagrees with.
+              # shellcheck disable=SC2086
+              ./gradlew resolveAllDependencies $EXTRA_TASKS --write-locks --dependency-verification lenient \
+                --console=plain || { sleep 20; continue; }
             fi
             # shellcheck disable=SC2086
             ./gradlew resolveAllDependencies $EXTRA_TASKS --write-verification-metadata sha256 \
