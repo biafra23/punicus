@@ -42,6 +42,8 @@ class VerifiedTokenBalances internal constructor(
     gated: Set<Address> = emptySet(),
     /** When its balances are proven again: at every head when null; on demand in simple mode ([ProofSchedule]). */
     schedule: ProofSchedule? = null,
+    /** Spaces out the re-proofs of different holders ([ReadPacer], #253); none: each at once. */
+    pacer: ReadPacer? = null,
 ) : TokenBalances {
 
     /** One holder's balance of one token. */
@@ -66,6 +68,8 @@ class VerifiedTokenBalances internal constructor(
         // A kept "not a token" is asked again: only an amount stands between heads.
         atHead = { _, value, _ -> value },
         schedule = schedule,
+        // By holder: a holder's token balances take its turn with its own balance.
+        pacing = pacer?.let { turns -> Pacing<Key>(turns) { key -> key.holder } },
     ) { verified, key ->
         when (val outcome = verified.call(key.token, Abi.balanceOf(key.holder))) {
             is CallOutcome.Returned -> EngineReading.Proven(

@@ -20,6 +20,7 @@ import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.advanceTimeBy
 import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
+import kotlinx.coroutines.test.testTimeSource
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class VerifiedNativeBalancesTest {
@@ -380,5 +381,99 @@ class VerifiedNativeBalancesTest {
         step(running(head = 8, headTimestamp = 1_012))
         assertEquals(BalanceReading.Verified(Wei.of("2"), 8, provenAt = 1_012), seen.last())
         screen.cancel()
+    }
+
+    @Test
+    fun reProofsOfDifferentAccountsAreSpacedOutButFirstProofsAreNot() = runTest {
+        // Issue #253: at a new head, a second account's re-proof waits for the pacer's gap.
+        val other = Address.of("0x" + "cd".repeat(20))
+        val balances = VerifiedNativeBalances(
+            Network.SEPOLIA,
+            chain,
+            StandardTestDispatcher(testScheduler),
+            POLL,
+            pacer = ReadPacer(gap = { 3.seconds }, clock = testTimeSource),
+        )
+        chain.snapshot = running(head = 7)
+        chain.proofs[address] = ProvenBalance("1", 7)
+        chain.proofs[other] = ProvenBalance("2", 7)
+        val one = launch { balances.observeBalance(Network.SEPOLIA, address).collect {} }
+        val two = launch { balances.observeBalance(Network.SEPOLIA, other).collect {} }
+        runCurrent()
+        assertEquals(2, chain.proofRequests.size, "first proofs go at once")
+
+        chain.proofs[address] = ProvenBalance("3", 8)
+        chain.proofs[other] = ProvenBalance("4", 8)
+        step(running(head = 8))
+        assertEquals(3, chain.proofRequests.size, "one account re-proven, the other waits its turn")
+        advanceTimeBy(3.seconds)
+        runCurrent()
+        assertEquals(4, chain.proofRequests.size)
+        assertEquals(setOf(address, other), chain.proofRequests.drop(2).toSet())
+        one.cancel()
+        two.cancel()
+    }
+
+    @Test
+    fun aFirstProofIsNotHeldUpByAQueuedReProofOfItsKey() = runTest {
+        // A one-shot read (a quote, a review) of an account whose re-proof waits for its turn
+        // is proven at once, and the queued re-proof is then answered by that proof.
+        val other = Address.of("0x" + "cd".repeat(20))
+        val balances = VerifiedNativeBalances(
+            Network.SEPOLIA,
+            chain,
+            StandardTestDispatcher(testScheduler),
+            POLL,
+            pacer = ReadPacer(gap = { 3.seconds }, clock = testTimeSource),
+        )
+        chain.snapshot = running(head = 7)
+        chain.proofs[address] = ProvenBalance("1", 7)
+        chain.proofs[other] = ProvenBalance("2", 7)
+        val one = launch { balances.observeBalance(Network.SEPOLIA, address).collect {} }
+        val two = launch { balances.observeBalance(Network.SEPOLIA, other).collect {} }
+        runCurrent()
+        chain.proofs[address] = ProvenBalance("3", 8)
+        chain.proofs[other] = ProvenBalance("4", 8)
+        step(running(head = 8))
+        assertEquals(3, chain.proofRequests.size, "one re-proof made, one queued")
+        val queued = chain.proofRequests.drop(2).single().let { if (it == address) other else address }
+
+        val quoted = async { balances.observeBalance(Network.SEPOLIA, queued).first() }
+        runCurrent()
+        assertEquals(8, (quoted.await() as BalanceReading.Verified).blockNumber)
+        assertEquals(4, chain.proofRequests.size)
+
+        advanceTimeBy(3.seconds)
+        runCurrent()
+        assertEquals(4, chain.proofRequests.size, "the queued re-proof is answered by the one-shot's proof")
+        one.cancel()
+        two.cancel()
+    }
+
+    @Test
+    fun aRefreshIsNotPaced() = runTest {
+        // Pull-to-refresh is the user's "now": every account is proven again at once.
+        val other = Address.of("0x" + "cd".repeat(20))
+        val schedule = ProofSchedule(live = { false })
+        val balances = VerifiedNativeBalances(
+            Network.SEPOLIA,
+            chain,
+            StandardTestDispatcher(testScheduler),
+            POLL,
+            schedule = schedule,
+            pacer = ReadPacer(gap = { 3.seconds }, clock = testTimeSource),
+        )
+        chain.snapshot = running(head = 7)
+        chain.proofs[address] = ProvenBalance("1", 7)
+        chain.proofs[other] = ProvenBalance("2", 7)
+        val one = launch { balances.observeBalance(Network.SEPOLIA, address).collect {} }
+        val two = launch { balances.observeBalance(Network.SEPOLIA, other).collect {} }
+        runCurrent()
+        chain.snapshot = running(head = 8)
+        schedule.refresh()
+        runCurrent()
+        assertEquals(4, chain.proofRequests.size)
+        one.cancel()
+        two.cancel()
     }
 }

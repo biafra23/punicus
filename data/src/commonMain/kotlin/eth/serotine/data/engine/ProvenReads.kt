@@ -1,6 +1,7 @@
 package eth.serotine.data.engine
 
 import eth.serotine.data.engine.EngineSnapshot.Phase
+import eth.serotine.domain.model.Address
 import eth.serotine.domain.repository.ReadUnavailable
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineDispatcher
@@ -128,6 +129,14 @@ internal class ProvenReads<K, T>(
      */
     private val schedule: ProofSchedule? = null,
     /**
+     * Spaces out the background re-proofs of different addresses ([Pacing], issue #253); none by
+     * default. A re-proof waits for its address's turn BEFORE it reads the engine's state, and
+     * then reads it afresh, so it is made at the head of its turn, a proof made meanwhile serves
+     * it, and nothing joins it while it waits. Not paced: a first proof (a screen opening, a quote,
+     * a review, a signature) and a poll that a refresh woke (the user asked for "now").
+     */
+    private val pacing: Pacing<K>? = null,
+    /**
      * The fact about a key and the block its proof anchors to; a refusal ([EngineReading.Unavailable]);
      * or null when unproven. Blocks, and may suspend between its blocking calls (to check its
      * cancellation, or to pause before a retry).
@@ -164,24 +173,27 @@ internal class ProvenReads<K, T>(
             // every quote, review and signature reads fresh state, and in lenient mode the check
             // before sending does (owner rulings, 2026-11-06).
             var proven = false
+            var refreshesSeen = schedule?.refreshes?.value
             while (true) {
-                val snapshot = try {
-                    chain.snapshot()
-                } catch (e: Throwable) {
-                    // A cancellation of this poll ends it; anything else, a CancellationException
-                    // the engine's own code throws included, is an engine failure.
-                    currentCoroutineContext().ensureActive()
-                    // Throwable, as for proofs: the engine's state crosses JNA too. This poll's
-                    // reading says it is not verified, never an answer kept from before.
-                    emit(UNPROVEN)
-                    pause()
-                    continue
+                // A poll a refresh woke is the user's "now": never paced.
+                val refreshes = schedule?.refreshes?.value
+                val paced = pacing != null && proven && refreshes == refreshesSeen
+                refreshesSeen = refreshes
+                var outcome = poll(chain, key, mayHold = proven, paced = paced)
+                if (outcome == Poll.NeedsTurn) {
+                    val turns = checkNotNull(pacing) { "only a paced read needs a turn" }
+                    outcome = turns.pacer.paced(turns.addressOf(key)) {
+                        poll(chain, key, mayHold = proven, paced = false)
+                    }
                 }
-                if (snapshot == EngineSnapshot.Down) {
-                    emit(EngineReading.Unavailable(ReadUnavailable.NO_ENGINE))
-                    return@flow
+                val reading = when (outcome) {
+                    Poll.Down -> {
+                        emit(EngineReading.Unavailable(ReadUnavailable.NO_ENGINE))
+                        return@flow
+                    }
+                    Poll.NeedsTurn -> error("a read in its turn needs no other")
+                    is Poll.Read -> outcome.reading
                 }
-                val reading = readingAt(chain, key, snapshot, mayHold = proven)
                 if (reading is EngineReading.Proven) proven = true
                 emit(reading)
                 // A refusal is for good on this build: asking again on every tick changes nothing.
@@ -189,6 +201,29 @@ internal class ProvenReads<K, T>(
                 pause()
             }
         }.distinctUntilChanged().flowOn(dispatcher)
+    }
+
+    /** One poll's outcome: a reading, the engine gone for good, or a re-proof waiting for its turn. */
+    private sealed interface Poll<out T> {
+        data class Read<T>(val reading: EngineReading<T>) : Poll<T>
+        data object Down : Poll<Nothing>
+        data object NeedsTurn : Poll<Nothing>
+    }
+
+    /** One poll of [key]: the engine's state read now, then [readingAt] it. */
+    private suspend fun poll(chain: VerifiedChain, key: K, mayHold: Boolean, paced: Boolean): Poll<T> {
+        val snapshot = try {
+            chain.snapshot()
+        } catch (e: Throwable) {
+            // A cancellation of this poll ends it; anything else, a CancellationException
+            // the engine's own code throws included, is an engine failure.
+            currentCoroutineContext().ensureActive()
+            // Throwable, as for proofs: the engine's state crosses JNA too. This poll's
+            // reading says it is not verified, never an answer kept from before.
+            return Poll.Read(UNPROVEN)
+        }
+        if (snapshot == EngineSnapshot.Down) return Poll.Down
+        return readingAt(chain, key, snapshot, mayHold, paced)?.let { Poll.Read(it) } ?: Poll.NeedsTurn
     }
 
     /** Until the next poll: [pollInterval], or less when a refresh is asked for meanwhile. */
@@ -200,14 +235,17 @@ internal class ProvenReads<K, T>(
 
     /**
      * The reading of [key] at [snapshot]; [mayHold] when the subscriber asking has had a proof made
-     * for it, so that a proof [schedule] holds across heads may stand for it.
+     * for it, so that a proof [schedule] holds across heads may stand for it. [paced]: when a new
+     * proof is needed and none is in flight to join, null instead, with nothing registered: the
+     * caller takes its address's turn ([pacing]) and polls again inside it.
      */
     private suspend fun readingAt(
         chain: VerifiedChain,
         key: K,
         snapshot: EngineSnapshot,
         mayHold: Boolean,
-    ): EngineReading<T> {
+        paced: Boolean,
+    ): EngineReading<T>? {
         // A stopped network: what was last verified, dated, or that it is off; never "syncing".
         if (snapshot is EngineSnapshot.Stopped) {
             val last = if (offersLastKnownWhenStopped) lastKnown(key) else null
@@ -251,6 +289,8 @@ internal class ProvenReads<K, T>(
                     }
                 }
                 inFlight[key]?.takeIf { (at, _) -> head - at in 0 until sharedForHeads }?.second ?: run {
+                    // A re-proof to pace: its turn first, then everything above again.
+                    if (paced) return null
                     inFlight[key] = head to pending
                     null
                 }
@@ -317,3 +357,10 @@ internal class ProvenReads<K, T>(
         const val MAX_CACHED = 64
     }
 }
+
+/**
+ * How a [ProvenReads] paces its background re-proofs: the [pacer] shared by the network's reads,
+ * and the address each key is about ([addressOf]), the one a read's turn is taken for. One value,
+ * so a pacer cannot be wired without it.
+ */
+internal class Pacing<K>(val pacer: ReadPacer, val addressOf: (K) -> Address)

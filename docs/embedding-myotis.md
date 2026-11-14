@@ -222,6 +222,30 @@ consumer developed against an unreleased engine, Myotis's
   fetched waits for that fetch rather than making the same blocking calls:
   the account screen, the Accounts screen and every account of the portfolio
   read the same prices and balances.
+- **Accounts' re-proofs are spaced out** (#253, WalletBeat's *multi-address
+  correlation*). A peer that gets the reads of several addresses at the same
+  moment from one IP can tell they belong to one user. From the Myotis release
+  that carries its #863 on, the engine sends each address to its own peers
+  (an account read, and a token's `balanceOf(holder)` by its holder); until
+  then they share its first peer. `ReadPacer` adds time between them, per
+  network: native and token balances take turns by address. All of one
+  address's reads run together. Another address waits until they are done
+  and then 1.5 to 4 random seconds more, the waiting addresses first come,
+  first served. A turn takes no new reads after 8 seconds while another
+  address waits. A re-proof waits for its turn before it reads the engine's
+  state, so it is made at the head of its turn, a proof made meanwhile
+  answers it, and nothing joins it while it waits. While it waits, its
+  screen keeps the last reading, as it does while any read runs.
+  - What is paced: re-proofs while a screen stays open across heads.
+  - What is not paced:
+    - A first proof, i.e. every new subscription. The Accounts screen shares
+      its state for 5 seconds after it is left, so a return from the
+      background or from another screen reads every account together again.
+    - A pull-to-refresh, which the user asked for "now".
+    - Each Safe's state (`VerifiedAddressKinds`).
+  - Those go out together, each to its own peers once the engine carries
+    #863. Nothing hides this device's IP or its engine's node key. Myotis's
+    Tor mode would, and Punicus does not turn it on (an owner decision).
 - **Verified address kinds.** `VerifiedAddressKinds` reads what is at an
   address for the Watch screen, polled, cached and refused the same way (the
   two share `ProvenReads`). The code hash comes from `requestAccount`'s proof,

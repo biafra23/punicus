@@ -33,6 +33,8 @@ class VerifiedNativeBalances internal constructor(
     activity: AddressActivity? = null,
     /** When its balances are proven again: at every head when null; on demand in simple mode ([ProofSchedule]). */
     schedule: ProofSchedule? = null,
+    /** Spaces out the re-proofs of different accounts ([ReadPacer], #253); none: each at once. */
+    pacer: ReadPacer? = null,
 ) : NativeBalances {
 
     private val reads = ProvenReads<Address, Wei>(
@@ -47,6 +49,7 @@ class VerifiedNativeBalances internal constructor(
             ?: KeptProofs.none(),
         offersLastKnownWhenStopped = true,
         schedule = schedule,
+        pacing = pacer?.let { turns -> Pacing<Address>(turns) { address -> address } },
         unchangedSince = { address, provenAt, provenHash, head ->
             activity?.unchangedSince(address, AddressActivity.Kind.ACCOUNT, provenAt, provenHash, head) == true
         },
