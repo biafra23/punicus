@@ -98,7 +98,7 @@ if [[ "$from_ci" == 1 ]]; then
         }
     fi
     tmp=$(mktemp -d)
-    trap 'rm -rf "$tmp"' EXIT
+    trap 'rm -rf "$tmp" "$committed"' EXIT
     # The last job of the chain uploads the union of every host's entries,
     # with the lockfiles the first host wrote (carried along the chain).
     gh run download "$run" --name gradle-pins-merged --dir "$tmp"
@@ -108,6 +108,11 @@ if [[ "$from_ci" == 1 ]]; then
     (cd "$tmp" && find . -name '*.lockfile' -type f) | while read -r lock; do
         mkdir -p "$(dirname "$lock")"
         tr -d '\r' < "$tmp/$lock" > "$lock"
+    done
+    # A lockfile the upload lacks belongs to a project or configuration
+    # nothing resolves any more: it would still constrain a later build.
+    git ls-files '*.lockfile' | while read -r lock; do
+        [[ -f "$tmp/$lock" ]] || { echo "removing $lock: the CI run wrote no lock state for it"; rm -f "$lock"; }
     done
     existing_pins_unchanged
     echo "updated the pins from run $run — review the diff:"
