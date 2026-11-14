@@ -78,6 +78,7 @@ import eth.serotine.ui.FakeLogIndex
 import eth.serotine.ui.FakeEnsNfts
 import eth.serotine.ui.FakeNftContracts
 import eth.serotine.ui.MemoryAddedNfts
+import eth.serotine.ui.MemorySeenEnsNames
 import eth.serotine.ui.FakeReceiptsNever
 import eth.serotine.ui.FakeMetadata
 import eth.serotine.ui.FakeNames
