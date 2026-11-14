@@ -64,7 +64,7 @@ internal class ReadPacer(
             while (true) {
                 val seen = ended.value
                 val wait = lock.withLock {
-                    val wait = admit(address)
+                    val wait = admit(address, othersWaiting = waiting - if (counted) 1 else 0)
                     if (wait != null && !counted) {
                         waiting++
                         counted = true
@@ -93,11 +93,14 @@ internal class ReadPacer(
         }
     }
 
-    /** Null when a read about [address] may start now (and counts it); else how long to wait at most. */
-    private fun admit(address: Address): Duration? {
+    /**
+     * Null when a read about [address] may start now (and counts it); else how long to wait at most.
+     * [othersWaiting]: the reads waiting, the caller left out.
+     */
+    private fun admit(address: Address, othersWaiting: Int): Duration? {
         val joins = current == address &&
-            (active > 0 || waiting == 0 || nextAt?.hasPassedNow() != false) &&
-            (waiting == 0 || turnStarted?.elapsedNow()?.let { it < maxTurn } != false)
+            (active > 0 || othersWaiting == 0 || nextAt?.hasPassedNow() != false) &&
+            (othersWaiting == 0 || turnStarted?.elapsedNow()?.let { it < maxTurn } != false)
         val starts = current == null || (active == 0 && nextAt?.hasPassedNow() != false)
         return when {
             joins -> {
