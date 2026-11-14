@@ -369,6 +369,10 @@ its KDoc and returns it as a result the UI shows as state.
        first 31 bits" read big-endian (`uint32 >>> 1`); a host outside
        ASCII refused rather than mapped by IDNA (its `xn--` form accepted);
        the tag keeping the app's old name; a collision checked per phrase.
+    3. **The tag and the host are joined with nothing between**, so a later
+       tag `v10` with `example.com` would hash as `v1` with `0example.com`.
+       A closing character no host holds (`serotine/app-isolation/v1/`)
+       rules that out, and costs nothing while no address exists.
   - **The path** is `m/44'/60'/a'/0/0`. `a` is the first 31 bits, read
     big-endian, of `keccak256("serotine/app-isolation/v1" ‖ host)`, set to 1
     if that gives 0 (`AppIsolation.accountOf` in `:domain`). The tag is
