@@ -222,6 +222,10 @@ upgrades*).
      update (docs/embedding-myotis.md, *Network upgrades*).
    - One row per account: blockie (with `t/n` for a Safe), name, short
      address, control badge, native balance and its fiat value.
+   - With no account yet, each network that is on still runs while this
+     screen is open, and shows its light client above "No accounts yet": its
+     status line, and a stale checkpoint's warning with "Catch up anyway…"
+     (#66).
    - Under a network's status line, what its accounts have queued in
      lenient mode (docs/lenient-mode.md, *Where it shows*; owner rulings,
      2026-11-06): "1 waiting to send" (or N), and while its light client
@@ -538,6 +542,12 @@ upgrades*).
       say why. A name with no verified answer right now stands as last
       verified. Primary names (the reverse record, any account) are still to
       come in #67. The zero address is refused: nobody holds its key.
+    - An address already in the wallet on a network is said with its blockie
+      and full address: "Already in your wallet as account “‹name›”", the
+      account's name here, never a claim about the ENS name typed. With two
+      or more networks on, a network whose registry names another address
+      than the first network's says so under its card ("Not Ethereum's
+      address", #273).
 11. **Import recovery phrase**: today's seed screen, with the account's name,
     the wallet password (on the first key) and the biometric opt-in (still to
     come; until then it is turned on in Security, 21).

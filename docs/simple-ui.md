@@ -186,6 +186,9 @@ change what it trusts.
   open to send it sooner."; "1 needs your signature again"), and once, a
   notice that a queued transaction was lost, with Dismiss, as in Detailed
   view (docs/wallet-ux.md, screen 1; owner rulings, 2026-11-06).
+  With no account yet, the sync line of each network that is on while it
+  syncs, and a stale checkpoint's warning with "Catch up anyway…", above
+  "No accounts yet" (#66).
 - **H2 · Home, pulled to refresh.** The spinner, and "Checking Ethereum and
   Gnosis Chain…" under the total, until a newer proof is shown (15 s at
   most). A wallet on live networks alone ("Live") needs no spinner. The
