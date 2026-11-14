@@ -98,6 +98,30 @@ final PR, unless a part dispatches the workflow. A first-party referrer
 engine library and its host. AGP and Gradle are newer here, for the reason the
 catalog states. Bump both repositories together.
 
+## Every Gradle dependency is pinned by version and by hash
+
+(Owner's request, 2026-11-09, #281; carried over from Myotis's #734.)
+docs/gradle-dependency-pins.md has the detail.
+
+- Lockfiles (`gradle.lockfile` per project, `buildscript-gradle.lockfile`,
+  `settings-gradle.lockfile`) pin every version, transitives included.
+  `gradle/verification-metadata.xml` pins every artifact's SHA-256, per CI
+  host. The wrapper pins the distribution (`distributionSha256Sum`).
+- A new or bumped dependency, plugins included, fails the build until its
+  pins are regenerated: `scripts/update_gradle_pins.sh` (`--write-locks`, then
+  `--write-verification-metadata`), then `--from-ci` for the hashes of the
+  hosts this machine is not. Where Gradle cannot run, the `gradle pins`
+  workflow writes the locks too, and `--from-ci` takes them.
+- The `gradle pins` check fails a PR on a dependency that is not locked or
+  not hash-pinned, on every CI host.
+- Review the lock and hash diff like code: every new component is code the
+  build runs or ships.
+- **Never "fix" a verification failure you did not cause by re-pinning.**
+  Bytes changed under a pinned version: find out why. The update script
+  refuses a changed pin without `--allow-repin`.
+- A Gradle bump keeps the checksum: `./gradlew wrapper --gradle-version <v>
+  --gradle-distribution-sha256-sum <sha>`.
+
 ## HTTP client: Ktor
 
 When a feature needs HTTP at all (`.claude/rules/data-sources.md` says when),
