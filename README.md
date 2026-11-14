@@ -156,6 +156,12 @@ certificate's SHA-256 is pinned in `android-app/release-signing-cert.sha256`;
 `apksigner verify --print-certs` on a downloaded `Punicus-<tag>-android.apk`
 must print the same digest.
 
+## Privacy
+
+Punicus collects nothing: no account, no telemetry, no servers of its own.
+What the peers, the WalletConnect relay and CoW Protocol can see is in the
+[privacy policy](docs/privacy-policy.md).
+
 ## Funding
 
 Punicus has no grant or sponsor today: its developer funds it. It is looking
