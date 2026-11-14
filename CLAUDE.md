@@ -167,6 +167,8 @@ Full text: `.claude/skills/release/SKILL.md`.
   initiative (owner rulings, 2026-09-02 and 2026-09-11 in Myotis).
 - Moving the version pin is mandatory, not a question (owner ruling,
   2026-09-24): `version = "X.Y.Z-SNAPSHOT"` in the root `build.gradle.kts`.
+- So is the release's entry in `CHANGELOG.md` (owner's request, 2026-11-09,
+  #281): `[Unreleased]` becomes the release, in the same release PR.
 
 ## Pull requests and code review
 
@@ -199,6 +201,10 @@ Full text: `.claude/rules/platform.md`.
 - Java 17 class files for everything Android loads.
 - Kotlin and Compose Multiplatform everywhere; new code in `commonMain`.
 - Toolchain pins mirror Myotis's (`gradle/libs.versions.toml`).
+- **Every Gradle dependency is pinned by version AND hash** (owner's request,
+  2026-11-09, #281): a bump regenerates the lockfiles and
+  `gradle/verification-metadata.xml` with `scripts/update_gradle_pins.sh`.
+  Never re-pin a verification failure you did not cause.
 
 ## Trust
 

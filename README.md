@@ -143,6 +143,10 @@ and the rules they follow: [docs/wallet-ux.md](docs/wallet-ux.md); swaps:
 
 ## Releases
 
+What changed in each release: [CHANGELOG.md](CHANGELOG.md). Every Gradle
+dependency the build downloads is pinned by version (lockfiles) and by
+SHA-256 ([docs/gradle-dependency-pins.md](docs/gradle-dependency-pins.md)).
+
 Every `v*` tag publishes a pre-release with the Android APK signed with
 Punicus's release key, the debug APK, the
 macOS dmgs (arm64 + x64) and the Linux debs (x64, and arm64 while the

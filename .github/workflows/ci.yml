@@ -54,6 +54,11 @@ jobs:
           python3 -m unittest discover -s scripts -p 'test_check_security_invariants.py'
           python3 scripts/check_security_invariants.py
 
+      # The guard scripts/update_gradle_pins.sh runs before it takes new pins: a change to
+      # gradle/verification-metadata.xml may only ADD entries (docs/gradle-dependency-pins.md).
+      - name: Test the pins guard
+        run: python3 -I scripts/test_check_pins_additive.py
+
       # The Android launcher icon is GENERATED from assets/serotine_logo.svg and committed
       # (android-app/src/main/res: ic_launcher_foreground, ic_launcher_background,
       # mipmap-anydpi-v26/ic_launcher; android-app/src/debug/res: the debug app's recoloured

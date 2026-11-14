@@ -1,6 +1,6 @@
 ---
 name: release
-description: "Cutting a release of Punicus. One release PR with the version pin moved, the engine-bump question, the Android release key, and what a v* tag publishes. The tag is the owner's. Use when the owner asks for a release, a version bump, a v* tag, or says 'cut a release'."
+description: "Cutting a release of Punicus. One release PR with the version pin moved, the changelog entry, the engine-bump question, the Android release key, and what a v* tag publishes. The tag is the owner's. Use when the owner asks for a release, a version bump, a v* tag, or says 'cut a release'."
 ---
 
 # Releases: ask before cutting one
@@ -36,13 +36,24 @@ Then verify with the SAME query the tag guard makes:
 release) accepts `vX.Y.Z` and `vX.Y.Z-<suffix>` (rc and hotfix shapes),
 nothing else, and refuses the tag otherwise before anything is uploaded.
 
-## 2. Bump the embedded Myotis engine? Ask
+## 2. Add the release to CHANGELOG.md. MANDATORY, not a question
+
+(Owner's request, 2026-11-09, #281.) `CHANGELOG.md` follows Keep a Changelog.
+The release PR turns `## [Unreleased]` into `## [X.Y.Z] - <date of the PR>`
+(the tag's version, its suffix included for a pre-release such as
+`0.3.0-rc1`), starts a new empty `## [Unreleased]` above it, and updates the
+compare links at the bottom. Check the entry against the merged PRs since the
+last tag (`git log --first-parent <last tag>..main`): every change a user or a
+packager would notice, under Added, Changed, Fixed, Removed or Security, with
+its PR and issue numbers. The GitHub release notes may link to the entry.
+
+## 3. Bump the embedded Myotis engine? Ask
 
 A Myotis release is published to its `maven-repo` branch. Moving the
 `eth.myotis:myotis-engine` version is a dependency change like any other. It
 goes through the release PR when the owner wants it in the release.
 
-## 3. The Android release key
+## 4. The Android release key
 
 `sign-release` (android-apk.yml) signs the release APK on the tag with the
 key in the `android-release` environment, and only for a tree with
@@ -55,7 +66,7 @@ asset at all. Say which case applies in the release PR.
 ## What a tag publishes
 
 Every `v*` tag publishes a pre-release with the signed Android APK (once the
-release key is set up, step 3), the debug APK, the macOS dmgs (arm64 + x64)
+release key is set up, step 4), the debug APK, the macOS dmgs (arm64 + x64)
 and the Linux debs (x64; arm64 while the repository is public, the free
 arm64 runner's condition). Each workflow creates the release race-tolerantly
 and uploads its assets. The Windows msi is left out of tags until Myotis
@@ -64,6 +75,7 @@ ships a Windows engine library (owner's decision, 2026-10-21): it builds on
 
 ## The release PR
 
-An ordinary single PR against `main`, under the Workflow (the `pr` skill).
+An ordinary single PR against `main`, under the Workflow (the `pr` skill),
+with the version pin (step 1) and the changelog entry (step 2) in it.
 Whatever is still on a feature branch is simply not in that release. The
 merge is the owner's, and so is the tag.
