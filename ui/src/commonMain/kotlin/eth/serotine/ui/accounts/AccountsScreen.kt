@@ -80,6 +80,9 @@ const val ACCOUNTS_NOTICE_TAG = "accounts-notice"
 /** Test tag of a network's section header, followed by its chain id, for UI tests. */
 const val ACCOUNTS_SECTION_TAG = "accounts-section-"
 
+/** Test tag prefix of a network's light-client line on the empty Accounts screen (#66), plus its chain id. */
+const val ACCOUNTS_EMPTY_LIGHT_CLIENT_TAG = "accounts-empty-light-client-"
+
 /** Test tag of the portfolio's total, for UI tests. */
 const val ACCOUNTS_TOTAL_TAG = "accounts-total"
 
@@ -326,7 +329,10 @@ private fun BoxScope.Rows(
         )
         is AccountsUiState.Ready ->
             if (state.accounts.isEmpty()) {
-                NoAccounts(Modifier.align(Alignment.Center))
+                Column(Modifier.fillMaxSize()) {
+                    state.lightClients.forEach { EmptyWalletLightClient(it) }
+                    Box(Modifier.weight(1f).fillMaxWidth()) { NoAccounts(Modifier.align(Alignment.Center)) }
+                }
             } else {
                 AccountList(
                     state.sections,
@@ -359,6 +365,36 @@ internal fun NoAccounts(modifier: Modifier = Modifier) {
             style = MaterialTheme.typography.bodyMedium,
             textAlign = TextAlign.Center,
         )
+    }
+}
+
+/**
+ * A network's light client on the empty Accounts screen (#66): its mark and its status strip's
+ * line, as a section header draws them, with no total and no accounts.
+ */
+@Composable
+private fun EmptyWalletLightClient(network: NetworkLightClient) {
+    Column(
+        Modifier.fillMaxWidth()
+            .background(MaterialTheme.colorScheme.surfaceContainerLow)
+            .padding(horizontal = 16.dp, vertical = 10.dp)
+            .semantics(mergeDescendants = true) {}
+            .testTag(ACCOUNTS_EMPTY_LIGHT_CLIENT_TAG + network.chainId),
+    ) {
+        NetworkMark(network.chainId, network.name, network.testnet)
+        Row(
+            Modifier.padding(top = 4.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            LightClientHealthDot(network.status.health)
+            Text(
+                network.status.text,
+                Modifier.weight(1f),
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
     }
 }
 

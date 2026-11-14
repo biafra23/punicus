@@ -78,6 +78,10 @@ sealed interface AccountsUiState {
      * it sooner"), drawn under [freshness] (Detailed view says it in the section,
      * [NetworkSection.queued]); and [lostNotice], said until dismissed, when queued signed bytes
      * could not be opened since they were sealed (the seal key gone), null otherwise.
+     *
+     * [lightClients] is each network that is on, with its light client, while the wallet has no
+     * account at all (#66): a new wallet syncs from its first start, and shows it, before the first
+     * account is added. Empty once there is an account: each section then carries its own.
      */
     data class Ready(
         val sections: List<NetworkSection>,
@@ -94,6 +98,7 @@ sealed interface AccountsUiState {
         val amountsHidden: Boolean = false,
         val queued: List<String> = emptyList(),
         val lostNotice: String? = null,
+        val lightClients: List<NetworkLightClient> = emptyList(),
     ) : AccountsUiState {
         init {
             require(accounts.distinctBy { it.chainId to it.address }.size == accounts.size) {
@@ -132,6 +137,18 @@ sealed interface AccountsUiState {
             get() = message
     }
 }
+
+/**
+ * A network that is on, and its light client ([status]), as the empty Accounts screen shows it
+ * (#66): its [name], whether it is a [testnet], and its [chainId]. Detailed view draws the status
+ * strip's line; simple mode its sync line ([LightClientItem.simpleText]), none once it is synced.
+ */
+data class NetworkLightClient(
+    val chainId: Long,
+    val name: String,
+    val testnet: Boolean,
+    val status: LightClientItem,
+)
 
 /**
  * One network's section of the Accounts screen (docs/networks.md, N1, N2 and N18): its [name]

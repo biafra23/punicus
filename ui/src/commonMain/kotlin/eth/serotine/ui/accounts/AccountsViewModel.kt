@@ -514,6 +514,19 @@ class AccountsViewModel(
                             .ifEmpty { null }
                     },
                     upgrades = upgrade,
+                    // An empty wallet's light clients run from the start (#66): shown, so the sync is seen.
+                    lightClients = if (list.accounts.isEmpty()) {
+                        Network.entries.filter { it in on }.map { network ->
+                            NetworkLightClient(
+                                network.chainId,
+                                network.displayName,
+                                network.testnet,
+                                lightClients[network.ordinal],
+                            )
+                        }
+                    } else {
+                        emptyList()
+                    },
                 )
             }
         }

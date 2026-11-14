@@ -164,6 +164,17 @@ fun SimpleAccountsScreen(
                         state.lostNotice?.let { LostQueuedNotice(it, onDismissLost) }
                         // A damaged list set aside is said exactly when the list that follows is empty.
                         state.notice?.let { Notice(it) }
+                        // Each network's sync line while it syncs, before the first account (#66).
+                        state.lightClients.forEach { network ->
+                            val line = network.status.simpleText ?: return@forEach
+                            Text(
+                                line,
+                                Modifier.padding(horizontal = 16.dp, vertical = 4.dp)
+                                    .testTag(ACCOUNTS_EMPTY_LIGHT_CLIENT_TAG + network.chainId),
+                                style = MaterialTheme.typography.labelMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
                         Box(Modifier.weight(1f).fillMaxWidth()) { NoAccounts(Modifier.align(Alignment.Center)) }
                     }
                 } else {
