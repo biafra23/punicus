@@ -19,9 +19,11 @@ import kotlinx.coroutines.flow.first
  * A [NameResolver] that remembers each name it resolves to one of the user's accounts (issue #274):
  * [inner] answers, unchanged, and a [NameResolution.Resolved] whose address is an account of
  * [accounts] on that network is kept in [seen] with its block. Every resolution in the wallet goes
- * through it (Watch, the duplicate case included; Send; dApp requests; the check of a followed name),
- * so a name seen anywhere becomes a candidate the account's NFTs are proven against. A name that lands
- * on an address not in the wallet is not kept: the list never records whom the user looked up.
+ * through it (Watch, the duplicate case included; Send, from a Safe and to another wallet too; Create
+ * Safe's owners; the check of a followed name), so a name seen anywhere becomes a candidate the
+ * account's NFTs are proven against. No dApp request resolves a name, so what a dApp sends never feeds
+ * the list. A name that lands on an address not in the wallet is not kept: the list never records whom
+ * the user looked up.
  */
 class RememberResolvedNames(
     private val inner: NameResolver,

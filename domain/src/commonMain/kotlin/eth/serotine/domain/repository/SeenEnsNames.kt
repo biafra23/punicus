@@ -9,7 +9,9 @@ import kotlinx.coroutines.flow.Flow
  * of candidates, never an answer: whether the account holds a name is proven again at the head each
  * time it is shown (`ObserveNfts`), so a name that has moved away only costs a call. Separate from the
  * name an account's label follows (`Account.ensName`). :data keeps it in a file, so it survives a
- * restart.
+ * restart. A damaged file is set aside and the list starts over ([SeenEnsNameList.Loaded.setAside]):
+ * the names resolutions find come back by themselves, while one added by hand (`AddEnsName`) has to be
+ * added again.
  */
 interface SeenEnsNames {
 

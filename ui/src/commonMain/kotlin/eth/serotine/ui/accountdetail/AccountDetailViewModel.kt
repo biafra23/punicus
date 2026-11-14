@@ -506,17 +506,21 @@ class AccountDetailViewModel(
     /**
      * Adds the token [tokenId] (decimal, or `0x` hex) of the contract at [contract], once the account is
      * proven to hold it; the dialog says why when nothing was added, and closes when it was. A [contract]
-     * that is an ENS name ("alice.eth": a dot, and no `0x` in front) is added by the name alone, and
-     * [tokenId] is not read (#274).
+     * that is no address and holds a dot is an ENS name ("alice.eth", "0xbow.eth" too), added by the
+     * name alone (#274); a token id typed beside it is refused, never dropped.
      */
     fun addNft(contract: String, tokenId: String) {
-        val typedName = contract.trim()
-        if ('.' in typedName && !typedName.startsWith("0x", ignoreCase = true)) {
-            addByName(typedName)
-            return
-        }
         // Parsed as typed text is: a mixed-case address must match its EIP-55 checksum (Address's KDoc).
         val typed = Eip55.parse(contract)
+        // The address first, then the dot, as ResolveRecipient takes a name: an address never holds a dot.
+        if (typed == AddressInput.NotAnAddress && '.' in contract) {
+            if (tokenId.isNotBlank()) {
+                addingNft.value = AddNftForm(error = "Leave the token id empty for an ENS name.")
+            } else {
+                addByName(contract.trim())
+            }
+            return
+        }
         val address = (typed as? AddressInput.Valid)?.address
         val id = parseTokenId(tokenId)
         val error = when {

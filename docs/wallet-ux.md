@@ -1483,18 +1483,24 @@ they are helpful." The rulings (owner rulings, 2026-11-05, #246; the
   added by contract and id" for ENS names, which is open, the owner's to
   decide, as proposed in the PR that codes it). Every verified resolution
   in the wallet that lands on one of the user's accounts (Watch, the
-  duplicate case included; Send; the check of a name an account follows)
+  duplicate case included; Send; Create Safe's owners; the check of a name
+  an account follows; never a dApp request, which resolves none)
   keeps that name for the account, with its block, in `ens-names.json`
   (`RememberResolvedNames`, `FileSeenEnsNames`). A name that lands on an
   address not in the wallet is not kept. The tokens each name can be are
   worked out by hashing it (`EnsNameTokens`): the .eth registrar's, whose id
   is the first label's hash, for a .eth name of the second level, and the
-  NameWrapper's, whose id is the namehash. They are checked as an added NFT
-  is, and listed only while held; a name seen is not the user's to remove.
+  NameWrapper's, whose id is the namehash. Those of the latest 20 names are
+  checked as an added NFT is, among the built-in collections' and before
+  the ones the log index found, and listed only while held; a name seen is
+  not the user's to remove. A damaged `ens-names.json` is set aside: the
+  names resolutions find come back by themselves, one added by hand has to
+  be added again.
   A registrar token whose label no receipt gave takes it from a name seen,
   checked by hashing. *Add an NFT* takes an ENS name alone in its contract
   field (`AddEnsName`), kept once the account is proven to hold one of its
-  tokens. ENSv2's names (Sepolia) are not found this way: the token id
+  tokens; a token id typed beside a name is refused. ENSv2's names
+  (Sepolia) are not found this way: the token id
   carries a version the name does not tell.
 - **On chain only.** A row shows the collection's name (its `name()`, the
   contract's claim, or the built-in name) and the token id; an ERC-1155

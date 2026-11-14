@@ -325,7 +325,19 @@ class AccountDetailViewModelTest {
         viewModel.openAddNft()
         runCurrent()
 
-        // No token id is read for a name.
+        // A token id beside a name is refused, never dropped.
+        viewModel.addNft("diskordia.eth", "4021")
+        runCurrent()
+        assertEquals("Leave the token id empty for an ENS name.", adding()?.error)
+
+        // A name that starts like an address is still a name: an address never holds a dot.
+        viewModel.addNft("0xbow.eth", "")
+        runCurrent()
+        assertEquals(
+            "Nothing verified says this account holds 0xbow.eth.",
+            adding()?.error?.substringBefore(" A name"),
+        )
+
         viewModel.addNft(" Diskordia.eth ", "")
         runCurrent()
         assertEquals(
