@@ -25,30 +25,36 @@ value class AppHost private constructor(val name: String) {
         /**
          * The host of [url], the URL a dApp states in its WalletConnect metadata, or why it has none. The
          * scheme must be `https` or `http`; the user part, the port, the path, the query and the fragment
-         * are dropped, the host is lower-cased and one trailing dot removed. Nothing else is repaired.
+         * are dropped, the host is lower-cased and one trailing dot removed. Nothing else is repaired: an
+         * authority holding whitespace or a backslash (which a browser reads as `/`, so that
+         * `https://evil.test\@app.example/` reaches `evil.test`) has no host.
          */
         fun ofUrl(url: String): AppHostResult {
             val trimmed = url.trim()
             val scheme = trimmed.substringBefore("://", missingDelimiterValue = "").lowercase()
             if (scheme != "https" && scheme != "http") return AppHostResult.NotAWebAddress
-            val authority = trimmed.substringAfter("://").substringBefore('/').substringBefore('?')
-                .substringBefore('#').substringAfterLast('@')
+            val raw = trimmed.substringAfter("://").substringBefore('/').substringBefore('?').substringBefore('#')
+            if (raw.any { it == '\\' || it.isWhitespace() }) return AppHostResult.NotAName
+            val authority = raw.substringAfterLast('@')
             if (authority.startsWith("[")) return AppHostResult.NotAName
             val host = authority.substringBefore(':')
             val port = authority.substringAfter(':', missingDelimiterValue = "")
             if (authority.contains(':') && (port.isEmpty() || !port.all { it in '0'..'9' })) {
                 return AppHostResult.NotAName
             }
-            return parse(host)
+            return normal(host)
         }
 
         /**
          * [text], a host alone (as the user types an old site's, or as a sign-in's domain names it without
          * its port), in its normal form, or why it is none.
          */
-        fun parse(text: String): AppHostResult {
+        fun parse(text: String): AppHostResult = normal(text.trim())
+
+        /** [text] in its normal form, nothing trimmed: lower case, one trailing dot removed, checked. */
+        private fun normal(text: String): AppHostResult {
             if (text.any { it.code > 0x7f }) return AppHostResult.NotAscii
-            val name = text.trim().lowercase().removeSuffix(".")
+            val name = text.lowercase().removeSuffix(".")
             if (name.isEmpty() || name.length > MAX_LENGTH) return AppHostResult.NotAName
             if (!name.split('.').all { LABEL.matches(it) }) return AppHostResult.NotAName
             return AppHostResult.Host(AppHost(name))
@@ -85,7 +91,7 @@ object AppIsolation {
     /** The domain separator hashed before the host. Changing it changes every per-app address. */
     const val TAG = "serotine/app-isolation/v1"
 
-    /** The BIP-44 account `a` of [host]'s address: hardened in the path, in 1 until 2³¹ - 1. */
+    /** The BIP-44 account `a` of [host]'s address: hardened in the path, in `1..2³¹ - 1`. */
     fun accountOf(host: AppHost): Int {
         val hash = keccak256((TAG + host.name).encodeToByteArray())
         val first = ((hash[0].toInt() and 0xff) shl 24) or ((hash[1].toInt() and 0xff) shl 16) or

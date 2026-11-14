@@ -173,7 +173,11 @@ everything on the chain side: the verified `call`, `estimateGasDetailed`,
 
 ### Per-app addresses (issue #252)
 
-Owner's decisions, 2026-11-05. A dApp that connects is offered an address
+Owner's decisions, 2026-11-05. Where this section reads them more
+narrowly than #252 states them (the host in ASCII alone; `www.` a host of
+its own; an alias removed without a question), the reading is proposed in
+PR #297 and open, the owner's to confirm; so is the path (docs/keys-and-signing.md,
+*Per-app addresses*, the open points). A dApp that connects is offered an address
 of its own, derived from the recovery phrase for the host it states, so that
 it cannot read the user's activity on other dApps (WalletBeat's *Privacy →
 App isolation*, which this earns a PASS on). How the address is derived and

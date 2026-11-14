@@ -36,6 +36,11 @@ class AppIsolationTest {
         assertEquals(AppHostResult.NotAName, AppHost.ofUrl("https://-example.com"))
         assertEquals(AppHostResult.NotAName, AppHost.ofUrl("https://example..com"))
         assertEquals(AppHostResult.NotAName, AppHost.ofUrl("https://exa%6dple.com"))
+        // Whitespace and backslashes in the authority are refused, not repaired: a browser reads `\` as `/`,
+        // so this URL reaches evil.test, and dropping the part before the '@' would make it app.uniswap.org.
+        assertEquals(AppHostResult.NotAName, AppHost.ofUrl("https://evil.test\\@app.uniswap.org/"))
+        assertEquals(AppHostResult.NotAName, AppHost.ofUrl("https:// example.com /x"))
+        assertEquals(AppHostResult.NotAName, AppHost.ofUrl("https://example.com\t/x"))
         assertEquals(AppHostResult.NotAscii, AppHost.ofUrl("https://münchen.de"))
         // A Cyrillic 'а' that looks like a Latin one is refused, not mapped.
         assertEquals(AppHostResult.NotAscii, AppHost.ofUrl("https://аpp.uniswap.org"))
@@ -46,6 +51,11 @@ class AppIsolationTest {
         assertEquals(host("app.safe.global"), host(" App.Safe.Global. "))
         assertEquals(AppHostResult.NotAName, AppHost.parse("app.safe.global:443"))
         assertEquals(AppHostResult.NotAName, AppHost.parse("a".repeat(64) + ".com"))
+        // The longest label and the longest name are accepted.
+        assertEquals("a".repeat(63) + ".com", host("a".repeat(63) + ".com").name)
+        val longest = ("a".repeat(63) + ".").repeat(3) + "a".repeat(61) // 3 × 64 + 61 = 253
+        assertEquals(253, host(longest).name.length)
+        assertEquals(AppHostResult.NotAName, AppHost.parse(longest + "a"))
         assertEquals(AppHostResult.NotAName, AppHost.parse(("a".repeat(63) + ".").repeat(4) + "com"))
     }
 
@@ -59,6 +69,10 @@ class AppIsolationTest {
         assertEquals(630_679_082, AppIsolation.accountOf(host("app.safe.global"))) // 4b2ecc55
         assertEquals(507_329_819, AppIsolation.accountOf(host("localhost"))) // 3c7a7a37
         assertEquals("m/44'/60'/197617227'/0/0", AppIsolation.pathOf(host("example.com")))
+        // 00000000: a would be 0, the account of the phrase's ordinary accounts, and is set to 1.
+        assertEquals(1, AppIsolation.accountOf(host("h995859629.test")))
+        // 00000002: a is 1 without that rule, so the two collide.
+        assertEquals(1, AppIsolation.accountOf(host("h1229355441.test")))
     }
 
     @Test
