@@ -73,6 +73,42 @@ class ReadPacerTest {
     }
 
     @Test
+    fun aTurnTakenUpAgainStartsItsClockAgain() = runTest {
+        // Long after a's last turn, a's reads take a new turn of their own: one more read about a
+        // joins it even with b waiting, since the new turn is young.
+        val pacer = pacer()
+        read(pacer, a, "first")
+        advanceTimeBy(20.seconds)
+        runCurrent()
+        read(pacer, a, "again", takes = 5.seconds)
+        runCurrent()
+        read(pacer, b, "b")
+        runCurrent()
+        advanceTimeBy(1.seconds)
+        runCurrent()
+        read(pacer, a, "token")
+        runCurrent()
+        assertEquals(21.seconds.inWholeMilliseconds, started["token"])
+    }
+
+    @Test
+    fun waitingAddressesGetTheirTurnsInTheOrderTheyCame() = runTest {
+        // b waited first, with one read; c came later, with three: b still goes first, and c's
+        // three reads share the next turn.
+        val pacer = pacer()
+        read(pacer, a, "a")
+        runCurrent()
+        read(pacer, b, "b")
+        runCurrent()
+        repeat(3) { read(pacer, c, "c$it") }
+        advanceTimeBy(60.seconds)
+        runCurrent()
+        assertEquals((READ + GAP).inWholeMilliseconds, started["b"])
+        val cTurn = (READ + GAP).inWholeMilliseconds * 2
+        assertEquals(listOf(cTurn, cTurn, cTurn), (0..2).map { started["c$it"] })
+    }
+
+    @Test
     fun aLongTurnTakesNoNewReadsWhileAnotherAddressWaits() = runTest {
         val pacer = pacer(maxTurn = 2.seconds)
         read(pacer, a, "a long", takes = 5.seconds)

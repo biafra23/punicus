@@ -24,13 +24,15 @@ import kotlinx.coroutines.withTimeoutOrNull
  *
  * Reads take turns by address. Every read about the address whose turn it is runs at once: its
  * balance and its token balances together, since they name the same address. A read about
- * another address waits until the turn's reads are done and then a random [gap] more. A turn
- * that has run for [maxTurn] takes no new reads while another address waits, so one address
- * cannot hold the others back for good.
+ * another address waits until the turn's reads are done and then a random [gap] more. Waiting
+ * addresses get their turns first come, first served, so each wait is bounded. A turn that has
+ * run for [maxTurn] takes no new reads while another address waits: those queue behind it.
  *
  * Only background re-proofs are paced ([ProvenReads]): a subscriber's first proof (a screen
- * opening, a review, a signature) never waits here. What it never does: delay a read about the
- * same address, hide the reads from the peers that get them, or change what a read proves.
+ * opening, a review, a signature) and a refresh the user asked for never wait here. A read about
+ * the turn's own address waits only past [maxTurn], or after its turn, while another address
+ * waits. What it never does: hide the reads from the peers that get them, or change what a read
+ * proves.
  */
 internal class ReadPacer(
     /** The pause between the end of one address's turn and the start of another's. */
@@ -48,38 +50,44 @@ internal class ReadPacer(
     /** The current turn's reads still running. */
     private var active = 0
 
-    /** Reads waiting for their address's turn. */
-    private var waiting = 0
+    /** The reads waiting, per address, in the order the addresses began to wait. */
+    private val waiters = LinkedHashMap<Address, Int>()
 
     /** When the next address may start, once [active] is 0. */
     private var nextAt: ComparableTimeMark? = null
 
-    /** Bumped whenever a read ends, so waiters look again. */
-    private val ended = MutableStateFlow(0L)
+    /** Bumped whenever a turn starts, a read ends or a waiter leaves, so waiters look again. */
+    private val changes = MutableStateFlow(0L)
 
     /** Runs [read], about [address], in its address's turn. */
     suspend fun <T> paced(address: Address, read: suspend () -> T): T {
-        var counted = false
+        var queued = false
         try {
             while (true) {
-                val seen = ended.value
+                val seen = changes.value
                 val wait = lock.withLock {
-                    val wait = admit(address, othersWaiting = waiting - if (counted) 1 else 0)
-                    if (wait != null && !counted) {
-                        waiting++
-                        counted = true
-                    }
-                    if (wait == null && counted) {
-                        waiting--
-                        counted = false
+                    val wait = admit(address)
+                    if (wait == null && queued) {
+                        leave(address)
+                        queued = false
+                    } else if (wait != null && !queued) {
+                        waiters[address] = (waiters[address] ?: 0) + 1
+                        queued = true
                     }
                     wait
                 } ?: break
-                withTimeoutOrNull(wait) { ended.first { it != seen } }
+                withTimeoutOrNull(wait) { changes.first { it != seen } }
             }
         } finally {
-            if (counted) withContext(NonCancellable) { lock.withLock { waiting-- } }
+            if (queued) {
+                withContext(NonCancellable) {
+                    lock.withLock { leave(address) }
+                    changes.update { it + 1 }
+                }
+            }
         }
+        // Admitted: the address's other waiting reads may join now.
+        changes.update { it + 1 }
         try {
             return read()
         } finally {
@@ -88,33 +96,45 @@ internal class ReadPacer(
                     active--
                     if (active == 0) nextAt = clock.markNow() + gap()
                 }
-                ended.update { it + 1 }
+                changes.update { it + 1 }
             }
         }
     }
 
-    /**
-     * Null when a read about [address] may start now (and counts it); else how long to wait at most.
-     * [othersWaiting]: the reads waiting, the caller left out.
-     */
-    private fun admit(address: Address, othersWaiting: Int): Duration? {
-        val joins = current == address &&
-            (active > 0 || othersWaiting == 0 || nextAt?.hasPassedNow() != false) &&
-            (othersWaiting == 0 || turnStarted?.elapsedNow()?.let { it < maxTurn } != false)
-        val starts = current == null || (active == 0 && nextAt?.hasPassedNow() != false)
-        return when {
-            joins -> {
+    /** One waiting read about [address] fewer. */
+    private fun leave(address: Address) {
+        val left = (waiters[address] ?: 0) - 1
+        if (left > 0) waiters[address] = left else waiters.remove(address)
+    }
+
+    /** Null when a read about [address] may start now (and counts it); else how long to wait at most. */
+    private fun admit(address: Address): Duration? {
+        val othersWait = waiters.keys.any { it != address }
+        val gapOver = nextAt?.hasPassedNow() != false
+        if (current == address) {
+            // The turn's address: joins a running turn, unless it is past its limit with others waiting.
+            if (active > 0 && (!othersWait || turnStarted?.elapsedNow()?.let { it < maxTurn } != false)) {
                 active++
-                null
+                return null
             }
-            starts -> {
-                current = address
+            // After its turn, with nobody else waiting: a new turn of its own, no gap needed.
+            if (active == 0 && !othersWait) {
                 turnStarted = clock.markNow()
                 active++
-                null
+                return null
             }
-            active == 0 -> nextAt?.let { -it.elapsedNow() }?.coerceAtLeast(Duration.ZERO) ?: Duration.ZERO
-            else -> Duration.INFINITE
+        }
+        val head = waiters.keys.firstOrNull()
+        if ((current == null || (active == 0 && gapOver)) && (head == null || head == address)) {
+            current = address
+            turnStarted = clock.markNow()
+            active++
+            return null
+        }
+        return if (active == 0 && !gapOver) {
+            nextAt?.let { -it.elapsedNow() }?.coerceAtLeast(Duration.ZERO) ?: Duration.ZERO
+        } else {
+            Duration.INFINITE
         }
     }
 

@@ -69,8 +69,7 @@ class VerifiedTokenBalances internal constructor(
         atHead = { _, value, _ -> value },
         schedule = schedule,
         // By holder: a holder's token balances take its turn with its own balance.
-        pacer = pacer,
-        pacedBy = { it.holder },
+        pacing = pacer?.let { turns -> Pacing<Key>(turns) { key -> key.holder } },
     ) { verified, key ->
         when (val outcome = verified.call(key.token, Abi.balanceOf(key.holder))) {
             is CallOutcome.Returned -> EngineReading.Proven(

@@ -49,8 +49,7 @@ class VerifiedNativeBalances internal constructor(
             ?: KeptProofs.none(),
         offersLastKnownWhenStopped = true,
         schedule = schedule,
-        pacer = pacer,
-        pacedBy = { it },
+        pacing = pacer?.let { turns -> Pacing<Address>(turns) { address -> address } },
         unchangedSince = { address, provenAt, provenHash, head ->
             activity?.unchangedSince(address, AddressActivity.Kind.ACCOUNT, provenAt, provenHash, head) == true
         },
