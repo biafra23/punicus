@@ -158,12 +158,10 @@ must print the same digest.
 
 ## Funding
 
-Punicus has no grant or sponsor today: its developer builds it in their own
-time. It is looking for funding, from ecosystem grants and from sponsors, to
-keep it independent of any company that would profit from its users' data.
+Punicus has no grant or sponsor today: its developer funds it. It is looking
+for funding, from ecosystem grants and from sponsors.
 
 You can support it through [GitHub Sponsors](https://github.com/sponsors/biafra23).
-Punicus charges no fee on anything it sends, and never will to pay for itself.
 
 ## License
 
