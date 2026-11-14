@@ -156,6 +156,15 @@ certificate's SHA-256 is pinned in `android-app/release-signing-cert.sha256`;
 `apksigner verify --print-certs` on a downloaded `Punicus-<tag>-android.apk`
 must print the same digest.
 
+## Funding
+
+Punicus has no grant or sponsor today: its developer builds it in their own
+time. It is looking for funding, from ecosystem grants and from sponsors, to
+keep it independent of any company that would profit from its users' data.
+
+You can support it through [GitHub Sponsors](https://github.com/sponsors/biafra23).
+Punicus charges no fee on anything it sends, and never will to pay for itself.
+
 ## License
 
 GNU General Public License v3.0 — see [LICENSE](LICENSE).
