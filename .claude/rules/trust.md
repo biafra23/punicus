@@ -114,6 +114,34 @@ docs/lenient-mode.md, which has the detail.)
   checkpoint too old asks again.
 - The bound itself is never raised: `setWsBoundPeriods` is not called.
 
+## Or from a fresh checkpoint the checkpoint servers and a long-known peer agree on
+
+(Owner's request, 2026-11-14: "In case of a weak subjectivity window expiry
+there should be now the option to find a new checkpoint". It applies Myotis's
+carve-out of 2026-11-10 and its rulings of 2026-11-11 and 2026-11-13 on #761;
+`.claude/rules/data-sources.md`, *Checkpoint servers*.)
+
+- The same warning offers a second way on: **Fetch a fresh checkpoint**, the
+  engine's `refreshAnchorFromCheckpointz`. It is offered first and called
+  recommended, since it starts from a recent checkpoint instead of walking
+  forward from an old one.
+- Only on the user's tap, and only while that network is parked on a stale
+  checkpoint. Never automatically, never remembered for now: the engine's
+  `setStaleAnchorPolicy` is not called.
+- The engine takes a checkpoint only when every checkpoint server that
+  answers names the same finalized epoch and root, run by at least two
+  operators, and a long-known peer (pinned in the release, or known to this
+  device for a week) names it too. One server that differs refuses it, and
+  the outlier is named; the screen shows the engine's reason.
+- **That checkpoint is the servers' word**, as the embedded one is the
+  release's. The dialog says so before the tap, and the outcome names the
+  agreeing operators and how many long-known peers confirmed it. Everything
+  synced from it is verified as usual.
+- When the servers agree but no long-known peer could be reached, the
+  dialog says an attack on the connection cannot be ruled out and offers
+  **Use it anyway**. That is the only call with `allowUnconfirmed`, asked
+  again every time and never remembered.
+
 ## A Safe's fallback handler is set only to a pinned one
 
 (Owner ruling, 2026-10-18, #63.)

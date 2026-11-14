@@ -113,6 +113,9 @@ import eth.serotine.domain.model.UInt256
 import eth.serotine.domain.model.TransferAsset
 import eth.serotine.domain.model.SignedTransfer
 import eth.serotine.domain.model.Eip1559Transaction
+import eth.serotine.domain.repository.FreshCheckpoint
+import eth.serotine.domain.repository.FreshCheckpoints
+import eth.serotine.domain.usecase.FetchFreshCheckpoint
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class AccountsViewModelTest {
@@ -126,6 +129,15 @@ class AccountsViewModelTest {
     private val consent = object : StaleAnchorConsent {
         override fun syncPastStaleAnchor(network: Network) {
             consented += network
+        }
+    }
+    /** What the checkpoint servers answer, and what was asked of them: each network and its "Use it anyway". */
+    private var checkpointAnswer: FreshCheckpoint = FreshCheckpoint.Refused("no server answered")
+    private val checkpointsAsked = mutableListOf<Pair<Network, Boolean>>()
+    private val checkpoints = object : FreshCheckpoints {
+        override suspend fun fetchFreshCheckpoint(network: Network, useUnconfirmed: Boolean): FreshCheckpoint {
+            checkpointsAsked += network to useUnconfirmed
+            return checkpointAnswer
         }
     }
     private val upgrades = FakeNetworkUpgrades()
@@ -174,6 +186,7 @@ class AccountsViewModelTest {
             SetNetworkEnabled(networks),
             ObserveUpgradeWarnings(upgrades, NoRecord, lightClient, networks, repository) { now },
             SyncPastStaleAnchor(lightClient, consent),
+            FetchFreshCheckpoint(lightClient, checkpoints),
             RefreshNetworkData(freshness),
             ObserveNetworkLive(freshness),
             ObserveAmountsHidden(hiddenSetting),
@@ -469,7 +482,7 @@ class AccountsViewModelTest {
                 "safely catch up from on its own. Nothing on Sepolia is verified until you decide.",
             warning.banner,
         )
-        assertEquals("Catch up with Sepolia anyway?", warning.title)
+        assertEquals("Catch up with Sepolia?", warning.title)
         assertTrue(warning.body.contains("cannot reveal your keys or move your funds by itself"), warning.body)
         assertTrue(consented.isEmpty(), "never without the user")
 
@@ -483,6 +496,44 @@ class AccountsViewModelTest {
         viewModel.syncPastStaleAnchor(Network.SEPOLIA.chainId)
         runCurrent()
         assertEquals(listOf(Network.SEPOLIA), consented, "nothing asked of a light client that is not refusing")
+    }
+
+    @Test
+    fun aFreshCheckpointIsAskedForOnlyOnTheUsersWordAndSaysOnWhoseWordItWasTaken() = runTest {
+        Dispatchers.setMain(UnconfinedTestDispatcher(testScheduler))
+        repository.accounts = listOf(daily)
+        val viewModel = viewModel()
+        backgroundScope.launch { viewModel.uiState.collect {} }
+        lightClient.status.value = LightClientStatus.StaleAnchor(anchorAgePeriods = 6, boundPeriods = 3)
+        runCurrent()
+        assertTrue(checkpointsAsked.isEmpty(), "never without the user")
+
+        checkpointAnswer = FreshCheckpoint.Refused("no long-known peer confirmed it", unconfirmed = true)
+        viewModel.fetchFreshCheckpoint(Network.SEPOLIA.chainId, useUnconfirmed = false)
+        runCurrent()
+        val refused = assertNotNull(viewModel.sepoliaSection.staleAnchor)
+        assertEquals("No fresh checkpoint: no long-known peer confirmed it.", refused.fetchProblem)
+        assertNotNull(refused.unconfirmedWarning, "the servers agreed: Use it anyway is offered")
+
+        // Caught up meanwhile and parked again: the old refusal, and its offer, are not carried over.
+        lightClient.status.value = LightClientStatus.CatchingUp(done = 1, total = 6)
+        runCurrent()
+        lightClient.status.value = LightClientStatus.StaleAnchor(anchorAgePeriods = 6, boundPeriods = 3)
+        runCurrent()
+        assertNull(assertNotNull(viewModel.sepoliaSection.staleAnchor).unconfirmedWarning, "asked again every time")
+
+        checkpointAnswer = FreshCheckpoint.Applied(epoch = 9_876, operators = listOf("a.io", "b.org"), emptyList())
+        viewModel.fetchFreshCheckpoint(Network.SEPOLIA.chainId, useUnconfirmed = true)
+        runCurrent()
+        assertEquals(listOf(Network.SEPOLIA to false, Network.SEPOLIA to true), checkpointsAsked)
+        assertEquals(
+            "Sepolia starts over from the checkpoint at epoch 9876: every checkpoint server that answered " +
+                "named it (a.io, b.org), and no peer Punicus has long known confirmed it; you chose to use it.",
+            (viewModel.uiState.value as AccountsUiState.Ready).message,
+        )
+        val applied = assertNotNull(viewModel.sepoliaSection.staleAnchor)
+        assertNull(applied.fetchProblem, "the refusal is gone with the fetch")
+        assertTrue(applied.fetching, "nothing more is offered until the light client stops refusing")
     }
 
     @Test

@@ -69,6 +69,24 @@ only" of 2026-10-15.)
 - Adding a network beyond these three is the owner's decision and is recorded
   here first.
 
+## Checkpoint servers: a fresh checkpoint, only at a stale checkpoint and on the user's tap
+
+(Owner's request, 2026-11-14, applying Myotis's carve-out of 2026-11-10:
+"at a `STALE_ANCHOR` park and only on the user's request, a fresh checkpoint
+that every answering checkpoint-sync server names".)
+
+- The engine reads one HTTPS source beside its peers: the network's public
+  checkpoint-sync servers (Checkpointz), at pinned URLs, through its own HTTP
+  client. Punicus adds no client and no server of its own.
+- Only while a network is parked on a checkpoint past the weak-subjectivity
+  bound, and only when the user taps *Fetch a fresh checkpoint*
+  (`.claude/rules/trust.md`). No other path calls it.
+- The servers see the device's IP address and that it asks for a checkpoint
+  of that network. They learn no account. The privacy policy says so.
+- What they answer is a trust anchor, never chain state: no balance, nonce
+  or transaction comes from it. Every read after it is verified against it
+  as usual.
+
 ## Prices come from Chainlink aggregators, read through the light client
 
 (Owner ruling, 2026-10-16.)

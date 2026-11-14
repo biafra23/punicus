@@ -19,6 +19,8 @@ import eth.serotine.domain.repository.LightClient
 import eth.serotine.domain.repository.LightClientControl
 import eth.serotine.domain.repository.LightClientRun
 import eth.serotine.domain.repository.EnsNfts
+import eth.serotine.domain.repository.FreshCheckpoint
+import eth.serotine.domain.repository.FreshCheckpoints
 import eth.serotine.domain.repository.LogIndex
 import eth.serotine.domain.repository.NftContracts
 import eth.serotine.domain.repository.NameResolver
@@ -63,6 +65,7 @@ import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
 import platform.Foundation.NSFileManager
@@ -95,7 +98,7 @@ class MyotisHost private constructor(
     private val apiLog: LogSink?,
     keptInputsPath: String?,
     keptSafesPath: String?,
-) : LightClientControl, StaleAnchorConsent, NetworkFreshness {
+) : LightClientControl, StaleAnchorConsent, FreshCheckpoints, NetworkFreshness {
 
     /** The engine of this process: none until a first start, [Absent] when it cannot be created here. */
     private sealed interface EngineState {
@@ -225,6 +228,28 @@ class MyotisHost private constructor(
         val node = nodes[network] ?: return
         onControl { node.acceptStaleAnchor() }
     }
+
+    /**
+     * Re-anchors [network]'s light client on a fresh checkpoint its checkpoint-sync servers and a
+     * long-known peer agree on (the engine's `refreshAnchorFromCheckpointz`, which refuses unless
+     * the chain is parked on a stale anchor). Off the control dispatcher: the round takes up to
+     * about a minute, and starting or stopping the other networks must not wait for it. A stop
+     * meanwhile may make the call fail, and a failure is said as a refusal.
+     */
+    override suspend fun fetchFreshCheckpoint(network: Network, useUnconfirmed: Boolean): FreshCheckpoint {
+        val node = nodes[network] ?: return FreshCheckpoint.Refused(notRunning(network))
+        // One at a time per network, whichever screen asked: a second tap is told, never run beside it.
+        val lock = checkpointFetchLocks.getValue(network)
+        if (!lock.tryLock()) return FreshCheckpoint.Refused(alreadyFetching(network))
+        return try {
+            withContext(Dispatchers.IO) { node.fetchFreshCheckpoint(useUnconfirmed) }
+        } finally {
+            lock.unlock()
+        }
+    }
+
+    /** Each network's fetch of a fresh checkpoint, while one runs. */
+    private val checkpointFetchLocks = Network.entries.associateWith { Mutex() }
 
     override fun observeLive(network: Network): Flow<Boolean> {
         val node = nodes[network] ?: return flowOf(false)
@@ -531,6 +556,22 @@ class MyotisHost private constructor(
                 return
             }
             if (!accepted) log("Punicus: ${network.displayName}'s light client did not take the stale anchor")
+        }
+
+        /** [FreshCheckpoints.fetchFreshCheckpoint] on this chain's handle, while it runs. Blocks. */
+        fun fetchFreshCheckpoint(useUnconfirmed: Boolean): FreshCheckpoint {
+            val handle = (state as? ChainState.Running)?.handle ?: return FreshCheckpoint.Refused(notRunning(network))
+            val refresh = try {
+                handle.refreshAnchorFromCheckpointz(useUnconfirmed)
+            } catch (e: Throwable) {
+                log("Punicus: ${network.displayName}'s light client could not fetch a checkpoint: $e")
+                return FreshCheckpoint.Refused("The checkpoint servers could not be asked: ${e.message ?: e}")
+            }
+            return if (refresh.applied) {
+                FreshCheckpoint.Applied(refresh.epoch, refresh.operators, refresh.confirmedBy)
+            } else {
+                FreshCheckpoint.Refused(refresh.error ?: "refused", refresh.unconfirmed)
+            }
         }
 
         fun followPauseWanted() {

@@ -10,6 +10,7 @@ import eth.serotine.domain.repository.LightClientStatus
 import eth.serotine.domain.repository.MeteredDownloadsChoice
 import eth.serotine.domain.repository.OutboxList
 import eth.serotine.domain.usecase.AllowHeavyDownloadsOnMetered
+import eth.serotine.domain.usecase.FetchFreshCheckpoint
 import eth.serotine.domain.usecase.HeavyDownloads
 import eth.serotine.domain.usecase.NetworkOverview
 import eth.serotine.domain.usecase.ObserveDebugScreen
@@ -28,6 +29,8 @@ import eth.serotine.domain.usecase.SetSyncPolicy
 import eth.serotine.domain.usecase.SyncPastStaleAnchor
 import eth.serotine.domain.usecase.TokenOrigin
 import eth.serotine.ui.APP_VERSION
+import eth.serotine.ui.components.CheckpointFetchState
+import eth.serotine.ui.components.FreshCheckpointFetches
 import eth.serotine.ui.components.LightClientHealth
 import eth.serotine.ui.components.LightClientItem
 import eth.serotine.ui.components.StaleAnchorWarning
@@ -43,8 +46,10 @@ import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.onStart
 import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -70,6 +75,8 @@ class SettingsViewModel(
     observeDebugScreen: ObserveDebugScreen,
     private val setDebugScreen: SetDebugScreen,
     private val syncPastStaleAnchor: SyncPastStaleAnchor,
+    /** The other way past a stale checkpoint: a fresh one from the network's checkpoint servers. */
+    freshCheckpoint: FetchFreshCheckpoint,
     observeInterfaceMode: ObserveInterfaceMode,
     private val setInterfaceMode: SetInterfaceMode,
     /** Whether each network updates live, which simple mode's rows say. */
@@ -119,15 +126,35 @@ class SettingsViewModel(
     /** The confirmation asked before a network is turned off, while it is asked. */
     private val turningOff = MutableStateFlow<TurnOffConfirmation?>(null)
 
+    /** Each network's fresh checkpoint applied while this screen is open, said under its row. */
+    private val checkpointNotes = MutableStateFlow(emptyMap<Network, String>())
+
+    /** The fresh checkpoints asked for, each network's said in its row's warning. */
+    private val checkpointFetches = FreshCheckpointFetches(
+        viewModelScope,
+        fetch = { network, useUnconfirmed -> freshCheckpoint(network, useUnconfirmed) },
+        onApplied = { network, said -> checkpointNotes.update { it + (network to said) } },
+    )
+
     val uiState: StateFlow<SettingsUiState> =
         combine(
             combine(
                 // Each row dates its head block, re-dated every second as the strip's line is.
-                observeNetworkOverview().redatedWhile { networks -> networks.any { it.on && it.status.dated } },
+                observeNetworkOverview()
+                    // A network that no longer refuses forgets what was said of its fetch, never carried
+                    // into a later park.
+                    .onEach { networks ->
+                        networks.filter { it.status !is LightClientStatus.StaleAnchor }
+                            .forEach { checkpointFetches.settled(it.network) }
+                    }
+                    .redatedWhile { networks -> networks.any { it.on && it.status.dated } },
                 networkNotSaved,
                 turningOff,
                 combine(Network.entries.map { observeNetworkLive(it).onStart { emit(false) } }) { it.toList() },
-            ) { networks, notSaved, confirming, live -> Rows(networks, notSaved, confirming, live) },
+                combine(checkpointFetches.states, checkpointNotes, ::Pair),
+            ) { networks, notSaved, confirming, live, (fetches, notes) ->
+                Rows(networks, notSaved, confirming, live, fetches, notes)
+            },
             combine(Network.entries.map { observeKnownTokens(it) }) { it.toList() },
             observeDisplayCurrencies(),
             screenCapture?.allowed ?: flowOf(null),
@@ -138,7 +165,7 @@ class SettingsViewModel(
                 detailedViewNotSaved,
                 ::Switches,
             ),
-        ) { (networks, notSaved, confirming, live), known, currencies, captureAllowed, switches ->
+        ) { (networks, notSaved, confirming, live, fetches, notes), known, currencies, captureAllowed, switches ->
             val tokens = known.flatMap { it.tokens }
             val builtIn = tokens.count { it.origin == TokenOrigin.BUILT_IN }
             val added = if (known.any { it.settingsUnavailable }) {
@@ -152,7 +179,9 @@ class SettingsViewModel(
                 else -> ""
             }
             SettingsUiState(
-                networks = networks.map { rowOf(it, it.network in notSaved, live[it.network.ordinal]) },
+                networks = networks.map {
+                    rowOf(it, it.network in notSaved, live[it.network.ordinal], fetches[it.network], notes[it.network])
+                },
                 version = APP_VERSION,
                 tokens = "$builtIn built in · $added",
                 currency = currency,
@@ -192,9 +221,17 @@ class SettingsViewModel(
         val notSaved: Set<Network>,
         val confirming: TurnOffConfirmation?,
         val live: List<Boolean>,
+        val fetches: Map<Network, CheckpointFetchState>,
+        val notes: Map<Network, String>,
     )
 
-    private fun rowOf(overview: NetworkOverview, notSaved: Boolean, live: Boolean): NetworkRow {
+    private fun rowOf(
+        overview: NetworkOverview,
+        notSaved: Boolean,
+        live: Boolean,
+        fetch: CheckpointFetchState?,
+        checkpointNote: String?,
+    ): NetworkRow {
         val accounts = overview.accounts
         val count = when {
             accounts == null -> "Accounts cannot be read"
@@ -213,7 +250,8 @@ class SettingsViewModel(
             notSaved = notSaved,
             staleAnchor = (overview.status as? LightClientStatus.StaleAnchor)
                 ?.takeIf { overview.on }
-                ?.let { StaleAnchorWarning.of(overview.network, it) },
+                ?.let { StaleAnchorWarning.of(overview.network, it, fetch) },
+            checkpointNote = checkpointNote,
             simpleLine = listOfNotNull(
                 "Test network".takeIf { overview.network.testnet },
                 when {
@@ -236,6 +274,17 @@ class SettingsViewModel(
     fun syncPastStaleAnchor(chainId: Long) {
         val network = Network.ofChainId(chainId) ?: return
         viewModelScope.launch { syncPastStaleAnchor(network) }
+    }
+
+    /**
+     * Asks [chainId]'s network's checkpoint servers for a fresh checkpoint to start over from:
+     * what the user chose in the stale-checkpoint dialog. [useUnconfirmed] is their "Use it anyway"
+     * for one no long-known peer confirmed. Its warning says how it goes; one applied is said under
+     * the row.
+     */
+    fun fetchFreshCheckpoint(chainId: Long, useUnconfirmed: Boolean) {
+        val network = Network.ofChainId(chainId) ?: return
+        checkpointFetches.fetch(network, useUnconfirmed)
     }
 
     /**

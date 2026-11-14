@@ -139,6 +139,17 @@ sealed interface AccountsUiState {
 }
 
 /**
+ * The stale-checkpoint warning of [chainId]'s network as this state draws it now, in its section or,
+ * in an empty wallet, its light client's line: what the open dialog shows, so that it follows a fetch
+ * of a fresh checkpoint and closes once the light client no longer refuses. Null when none.
+ */
+fun AccountsUiState.staleAnchorOf(chainId: Long): StaleAnchorWarning? {
+    val ready = this as? AccountsUiState.Ready ?: return null
+    return ready.sections.firstOrNull { it.chainId == chainId }?.staleAnchor
+        ?: ready.lightClients.firstOrNull { it.chainId == chainId }?.staleAnchor
+}
+
+/**
  * A network that is on, and its light client ([status]), as the empty Accounts screen shows it
  * (#66): its [name], whether it is a [testnet], and its [chainId]. Detailed view draws the status
  * strip's line; simple mode its sync line ([LightClientItem.simpleText]), none once it is synced.

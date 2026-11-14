@@ -705,12 +705,25 @@ user to update — before it, and, after it, nothing else.
   owner's request of 2026-10-24). A light client parked in `STALE_ANCHOR`
   (its newest anchor, the embedded checkpoint or the persisted snapshot,
   older than the weak-subjectivity bound) stays parked until the user
-  confirms Accounts' "Catch up anyway…" for that network:
+  confirms "Catch up anyway" in the dialog Accounts' "Catch up…" opens:
   `SyncPastStaleAnchor` checks it is still parked, and the host calls the
   chain's `acceptStaleAnchor()` on its control lane. The consent lasts for
   the run (the engine never persists it), so a restart that still finds the
   anchor stale asks again. The bound (`setWsBoundPeriods`) keeps the
   engine's default.
+- **Or from a fresh checkpoint, on the user's tap** (CLAUDE.md, *Trust*,
+  owner's request of 2026-11-14). The same dialog offers "Fetch a fresh
+  checkpoint" first: `FetchFreshCheckpoint` checks the network is still
+  parked, and the host calls the chain's `refreshAnchorFromCheckpointz` off
+  its control lane, since the round takes up to about a minute. The engine
+  applies a checkpoint only when every checkpoint-sync server that answers
+  names the same one, from at least two operators, and a long-known peer
+  confirms it; otherwise nothing changes and the dialog shows the engine's
+  reason. When no long-known peer answered, the dialog warns and offers "Use
+  it anyway", the one call with `allowUnconfirmed`, never remembered. An
+  applied checkpoint is said with its operators and the peers that confirmed
+  it. The remembered choice (`setStaleAnchorPolicy`) is not used: Punicus
+  asks each time. The engine has it from Myotis 0.1.21.
 - **A parameter that can change the answer is applied or refused**, never
   accepted and ignored — the Myotis rule, and the reason a port's contract
   spells out what each argument does.

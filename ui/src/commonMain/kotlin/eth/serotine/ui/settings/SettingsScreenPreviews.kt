@@ -186,7 +186,7 @@ private fun SettingsTurnOffPreview() = SettingsPreview(
     ),
 )
 
-/** Gnosis Chain refusing a checkpoint past its weak-subjectivity window, with "Catch up anyway…" (2026-10-24). */
+/** Gnosis Chain refusing a checkpoint past its weak-subjectivity window, with "Catch up…" (2026-10-24). */
 @Preview
 @Composable
 private fun SettingsStaleAnchorPreview() = SettingsPreview(

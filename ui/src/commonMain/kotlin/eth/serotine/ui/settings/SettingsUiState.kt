@@ -71,10 +71,12 @@ internal const val METERED_DOWNLOADS_ON = "On: the account history is walked bac
  * "1 account · Off"), the light client's [health] for the dot, and [notSaved] when the last switch
  * of it could not be saved. [chainId] names the network to the switch; [testnet] marks Sepolia.
  * [staleAnchor] warns that its light client refuses a checkpoint past the weak-subjectivity
- * window, with the way to catch up anyway (owner's request, 2026-10-24), whether or not it has
- * accounts: a screen's hold (Watch, Add token) runs it too. [simpleLine] is what simple mode says
- * instead of [line], with no block number (docs/simple-ui.md, T1): "Up to date", "Test network ·
- * live", "Catching up…", "Can't check right now", "Off".
+ * window, with the ways on: a fresh checkpoint, or catching up anyway (owner's requests,
+ * 2026-11-14 and 2026-10-24), whether or not it has accounts: a screen's hold (Watch, Add token)
+ * runs it too. [simpleLine] is what simple mode says instead of [line], with no block number
+ * (docs/simple-ui.md, T1): "Up to date", "Test network · live", "Catching up…", "Can't check right
+ * now", "Off". [checkpointNote] says, once a fresh checkpoint was applied on this screen, where
+ * its light client starts over and on whose word (owner's request, 2026-11-14).
  */
 data class NetworkRow(
     val chainId: Long,
@@ -86,6 +88,7 @@ data class NetworkRow(
     val notSaved: Boolean = false,
     val staleAnchor: StaleAnchorWarning? = null,
     val simpleLine: String = line,
+    val checkpointNote: String? = null,
 )
 
 /**

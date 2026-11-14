@@ -224,8 +224,17 @@ upgrades*).
      address, control badge, native balance and its fiat value.
    - With no account yet, each network that is on still runs while this
      screen is open, and shows its light client above "No accounts yet": its
-     status line, and a stale checkpoint's warning with "Catch up anyway…"
+     status line, and a stale checkpoint's warning with "Catch up…"
      (#66).
+   - A stale checkpoint's "Catch up…", in a section or in an empty wallet,
+     opens one dialog with the two ways on (owner's requests, 2026-10-24 and
+     2026-11-14): "Fetch a fresh checkpoint" (recommended), which says that
+     the checkpoint is the servers' word, shows "Asking the checkpoint
+     servers…" while it runs, and on a refusal says why; "Use it anyway" only
+     when no long-known peer confirmed the servers' answer; and "Catch up
+     anyway". An applied checkpoint is said once, with the operators that
+     named it and the long-known peers that confirmed it. Settings →
+     Networks offers the same dialog, and says it under the network's row.
    - Under a network's status line, what its accounts have queued in
      lenient mode (docs/lenient-mode.md, *Where it shows*; owner rulings,
      2026-11-06): "1 waiting to send" (or N), and while its light client
