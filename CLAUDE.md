@@ -210,7 +210,9 @@ Full text: `.claude/rules/trust.md`. These rules bind every change.
 - One older answer is shown, labelled as one (owner's request, 2026-10-19):
   a balance proved earlier stays on screen, dated, out of totals, never acted
   on. Past the weak-subjectivity window only on the user's word (owner's
-  request, 2026-10-24). In simple mode, on a network without block access
+  request, 2026-10-24), or from a fresh checkpoint the checkpoint servers and
+  a long-known peer agree on, fetched on the user's tap (owner's request,
+  2026-11-14). In simple mode, on a network without block access
   lists, a balance is read on demand and counts in totals with its age for
   up to an hour (owner's decisions, 2026-10-26). In lenient mode, off by
   default, a transaction may be signed on the state last verified; nothing
@@ -241,6 +243,9 @@ rulings to the screens.
 
 - The only source of chain data is the embedded Myotis engine. HTTP to a node
   is for debugging only.
+- The engine asks the checkpoint-sync servers for a fresh checkpoint only at
+  a stale checkpoint and on the user's tap; it is a trust anchor, never chain
+  state (owner's request, 2026-11-14).
 - Networks: Ethereum, Gnosis Chain and Sepolia; one chain per account; no
   current network; each network can be turned off; Sepolia keeps every
   testnet warning and is never added to a total with real funds (owner

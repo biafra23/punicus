@@ -17,6 +17,8 @@ import eth.serotine.domain.repository.ConnectionCost
 import eth.serotine.domain.repository.CurrencyChoice
 import eth.serotine.domain.repository.DraftBasis
 import eth.serotine.domain.repository.FeeLevel
+import eth.serotine.domain.repository.FreshCheckpoint
+import eth.serotine.domain.repository.FreshCheckpoints
 import eth.serotine.domain.repository.LightClient
 import eth.serotine.domain.repository.LightClientStatus
 import eth.serotine.domain.repository.MeteredDownloadsChoice
@@ -25,6 +27,7 @@ import eth.serotine.domain.repository.QueuedTransaction
 import eth.serotine.domain.repository.SentAction
 import eth.serotine.domain.repository.StaleAnchorConsent
 import eth.serotine.domain.usecase.AllowHeavyDownloadsOnMetered
+import eth.serotine.domain.usecase.FetchFreshCheckpoint
 import eth.serotine.domain.usecase.NetworkOverview
 import eth.serotine.domain.usecase.ObserveDebugScreen
 import eth.serotine.domain.usecase.ObserveDisplayCurrencies
@@ -91,6 +94,15 @@ class SettingsViewModelTest {
             consented += network
         }
     }
+    /** What the checkpoint servers answer, and what was asked of them: each network and its "Use it anyway". */
+    private var checkpointAnswer: FreshCheckpoint = FreshCheckpoint.Refused("no server answered")
+    private val checkpointsAsked = mutableListOf<Pair<Network, Boolean>>()
+    private val checkpoints = object : FreshCheckpoints {
+        override suspend fun fetchFreshCheckpoint(network: Network, useUnconfirmed: Boolean): FreshCheckpoint {
+            checkpointsAsked += network to useUnconfirmed
+            return checkpointAnswer
+        }
+    }
     private val lightClient = object : LightClient {
         override val datesFinalizedBlocks = true
         override fun observeStatus(network: Network): Flow<LightClientStatus> = status
@@ -128,6 +140,7 @@ class SettingsViewModelTest {
             ObserveDebugScreen(debugScreen),
             SetDebugScreen(debugScreen),
             SyncPastStaleAnchor(lightClient, consent),
+            FetchFreshCheckpoint(lightClient, checkpoints),
             ObserveInterfaceMode(interfaceMode),
             SetInterfaceMode(interfaceMode),
             ObserveNetworkLive(FakeFreshness(live = setOf(Network.SEPOLIA))),
@@ -293,11 +306,29 @@ class SettingsViewModelTest {
             row.line,
             "the decision is offered here",
         )
-        assertEquals("Catch up with Sepolia anyway?", row.staleAnchor?.title)
+        assertEquals("Catch up with Sepolia?", row.staleAnchor?.title)
 
         viewModel.syncPastStaleAnchor(Network.SEPOLIA.chainId)
         runCurrent()
         assertEquals(listOf(Network.SEPOLIA), consented)
+    }
+
+    @Test
+    fun aFreshCheckpointAppliedIsSaidUnderItsRow() = runTest {
+        val viewModel = viewModel()
+        status.value = LightClientStatus.StaleAnchor(anchorAgePeriods = 6, boundPeriods = 3)
+        runCurrent()
+
+        checkpointAnswer = FreshCheckpoint.Applied(epoch = 42, operators = listOf("a.io", "b.org"), listOf("peer"))
+        viewModel.fetchFreshCheckpoint(Network.SEPOLIA.chainId, useUnconfirmed = false)
+        runCurrent()
+
+        assertEquals(listOf(Network.SEPOLIA to false), checkpointsAsked)
+        assertEquals(
+            "Sepolia starts over from the checkpoint at epoch 42: every checkpoint server that answered " +
+                "named it (a.io, b.org), and 1 peer Punicus has long known confirmed it.",
+            viewModel.sepolia.checkpointNote,
+        )
     }
 
     @Test
@@ -313,6 +344,7 @@ class SettingsViewModelTest {
             ObserveDebugScreen(debugScreen),
             SetDebugScreen(debugScreen),
             SyncPastStaleAnchor(lightClient, consent),
+            FetchFreshCheckpoint(lightClient, checkpoints),
             ObserveInterfaceMode(interfaceMode),
             SetInterfaceMode(interfaceMode),
             ObserveNetworkLive(FakeFreshness(live = setOf(Network.SEPOLIA))),

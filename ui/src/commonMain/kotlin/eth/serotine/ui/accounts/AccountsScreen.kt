@@ -58,7 +58,7 @@ import eth.serotine.ui.components.SerotineIcons
 import eth.serotine.ui.components.SpeedDialAction
 import eth.serotine.ui.components.SpeedDialFab
 import eth.serotine.ui.components.StaleAnchorBanner
-import eth.serotine.ui.components.StaleAnchorDialog
+import eth.serotine.ui.components.StaleAnchorQuestion
 import eth.serotine.ui.components.StaleAnchorWarning
 import eth.serotine.ui.components.UnavailableDialog
 import eth.serotine.ui.components.UnavailableFix
@@ -119,6 +119,7 @@ fun AccountsRoute(
             modifier = modifier,
             onTurnOnNetwork = viewModel::turnOnNetwork,
             onSyncPastStaleAnchor = viewModel::syncPastStaleAnchor,
+            onFetchFreshCheckpoint = viewModel::fetchFreshCheckpoint,
             onMessageShown = viewModel::messageShown,
             onToggleAmounts = viewModel::toggleAmounts,
             onDismissLost = viewModel::dismissLost,
@@ -133,6 +134,7 @@ fun AccountsRoute(
             modifier = modifier,
             onTurnOnNetwork = viewModel::turnOnNetwork,
             onSyncPastStaleAnchor = viewModel::syncPastStaleAnchor,
+            onFetchFreshCheckpoint = viewModel::fetchFreshCheckpoint,
             onMessageShown = viewModel::messageShown,
             onToggleAmounts = viewModel::toggleAmounts,
             onDismissLost = viewModel::dismissLost,
@@ -151,7 +153,9 @@ fun AccountsRoute(
  * are in a section per network (docs/networks.md, N1), each headed by its network, its light client
  * and its total; on a network that is off, Send's reason offers to turn it on ([onTurnOnNetwork],
  * N18). A network whose light client refuses a stale checkpoint warns in its section, and its
- * "Catch up anyway…" asks first, then [onSyncPastStaleAnchor] (owner's request, 2026-10-24).
+ * "Catch up…" opens the dialog that offers the two ways on: a fresh checkpoint from the network's
+ * checkpoint servers ([onFetchFreshCheckpoint]; owner's request, 2026-11-14), or catching up from the
+ * old one anyway ([onSyncPastStaleAnchor]; owner's request, 2026-10-24).
  * [fabExpandedAtStart] opens the button's fan from the start (a preview). Once the list is read, the
  * eye at the top left hides or shows every amount ([onToggleAmounts]; docs/wallet-ux.md, *Hiding
  * amounts*). What lenient mode's outbox holds is said under each network's line, and a queued
@@ -170,6 +174,7 @@ fun AccountsScreen(
     fabExpandedAtStart: Boolean = false,
     onTurnOnNetwork: (chainId: Long) -> Unit = {},
     onSyncPastStaleAnchor: (chainId: Long) -> Unit = {},
+    onFetchFreshCheckpoint: (chainId: Long, useUnconfirmed: Boolean) -> Unit = { _, _ -> },
     onMessageShown: () -> Unit = {},
     onToggleAmounts: () -> Unit = {},
     onDismissLost: () -> Unit = {},
@@ -187,16 +192,13 @@ fun AccountsScreen(
     var unavailable by remember { mutableStateOf<UnavailableNotice?>(null) }
     unavailable?.let { notice -> UnavailableDialog(notice, onDismiss = { unavailable = null }) }
     var asking by remember { mutableStateOf<StaleAnchorWarning?>(null) }
-    asking?.let { warning ->
-        StaleAnchorDialog(
-            warning,
-            onConfirm = {
-                asking = null
-                onSyncPastStaleAnchor(warning.chainId)
-            },
-            onDismiss = { asking = null },
-        )
-    }
+    StaleAnchorQuestion(
+        asking,
+        current = { state.staleAnchorOf(it) },
+        onClose = { asking = null },
+        onCatchUp = onSyncPastStaleAnchor,
+        onFetch = onFetchFreshCheckpoint,
+    )
     val scope = rememberCoroutineScope()
     val act: (AccountAction) -> Unit = { action ->
         onAccountAction(action)
@@ -371,7 +373,7 @@ internal fun NoAccounts(modifier: Modifier = Modifier) {
 /**
  * A network's light client on the empty Accounts screen (#66): its mark and its status strip's
  * line, as a section header draws them, with no total and no accounts, and a stale checkpoint's
- * warning with its "Catch up anyway…" ([onCatchUp]), in the error colour.
+ * warning with its "Catch up…" ([onCatchUp]), in the error colour.
  */
 @Composable
 private fun EmptyWalletLightClient(network: NetworkLightClient, onCatchUp: (StaleAnchorWarning) -> Unit) {
@@ -441,7 +443,7 @@ private const val DIMMED = 0.6f
 /**
  * A network's section header (docs/networks.md, N1): its mark and total, and below them its light
  * client's line, which is the section's status strip, with what the total leaves out, and a stale
- * checkpoint's warning with its "Catch up anyway…" ([onCatchUp]).
+ * checkpoint's warning with its "Catch up…" ([onCatchUp]).
  */
 @Composable
 private fun SectionHeader(section: NetworkSection, onCatchUp: (StaleAnchorWarning) -> Unit) {

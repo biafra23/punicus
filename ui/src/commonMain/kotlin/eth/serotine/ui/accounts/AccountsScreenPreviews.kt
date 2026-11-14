@@ -23,6 +23,7 @@ import eth.serotine.ui.components.UnavailableNotice
 import eth.serotine.ui.components.catchingUpStripSample
 import eth.serotine.ui.components.verifiedStripSample
 import eth.serotine.ui.ScreenPreview
+import eth.serotine.ui.components.CheckpointFetchState
 import eth.serotine.ui.theme.SerotineTheme
 import eth.serotine.ui.update.UpgradeBannerItem
 import org.jetbrains.compose.ui.tooling.preview.Preview
@@ -528,7 +529,7 @@ private const val GNOSIS_BLOCKED = "This version of Punicus can no longer follow
 
 /**
  * Gnosis Chain's light client refusing a checkpoint past its weak-subjectivity window, the
- * section warning with its "Catch up anyway…" (owner's request, 2026-10-24).
+ * section warning with its "Catch up…" (owner's request, 2026-10-24).
  */
 private val staleAnchor = threeNetworks.copy(
     sections = listOf(
@@ -558,11 +559,55 @@ private fun AccountsStaleAnchorPreview() = AccountsPreview(staleAnchor)
 @Composable
 private fun AccountsStaleAnchorDarkPreview() = AccountsPreview(staleAnchor, darkTheme = true)
 
-/** What "Catch up anyway…" asks before the light client may sync past the stale checkpoint. */
+/** What "Catch up…" offers: a fresh checkpoint from the servers, or catching up from the old one anyway. */
 @Preview
 @Composable
 private fun AccountsStaleAnchorDialogPreview() = SerotineTheme {
     StaleAnchorDialog(StaleAnchorWarning.of(Network.GNOSIS, LightClientStatus.StaleAnchor(6, 3)), {}, {})
+}
+
+/** The dialog while the checkpoint servers and the long-known peers are asked: nothing else can be chosen. */
+@Preview
+@Composable
+private fun AccountsStaleAnchorFetchingPreview() = SerotineTheme {
+    StaleAnchorDialog(
+        StaleAnchorWarning.of(Network.GNOSIS, LightClientStatus.StaleAnchor(6, 3), CheckpointFetchState.Fetching),
+        {},
+        {},
+    )
+}
+
+/** The servers agreed, but no long-known peer confirmed it: the warning, and "Use it anyway". */
+@Preview
+@Composable
+private fun AccountsStaleAnchorUnconfirmedPreview() = SerotineTheme {
+    StaleAnchorDialog(
+        StaleAnchorWarning.of(
+            Network.GNOSIS,
+            LightClientStatus.StaleAnchor(6, 3),
+            CheckpointFetchState.Refused("no long-known peer could be reached to confirm it", unconfirmed = true),
+        ),
+        {},
+        {},
+    )
+}
+
+/** One server named another checkpoint: nothing changed, and the one that differs is named. */
+@Preview
+@Composable
+private fun AccountsStaleAnchorRefusedPreview() = SerotineTheme {
+    StaleAnchorDialog(
+        StaleAnchorWarning.of(
+            Network.GNOSIS,
+            LightClientStatus.StaleAnchor(6, 3),
+            CheckpointFetchState.Refused(
+                "checkpoint-b.example named another root for epoch 1,204,512 than checkpoint-a.example",
+                unconfirmed = false,
+            ),
+        ),
+        {},
+        {},
+    )
 }
 
 /** A display currency Gnosis Chain and Sepolia have no rate for: each section says so, out of the total. */
@@ -701,6 +746,9 @@ internal val accountsScreenPreviews: List<ScreenPreview> = listOf(
     ScreenPreview("stale-anchor") { AccountsStaleAnchorPreview() },
     ScreenPreview("stale-anchor-dark") { AccountsStaleAnchorDarkPreview() },
     ScreenPreview("stale-anchor-dialog") { AccountsStaleAnchorDialogPreview() },
+    ScreenPreview("stale-anchor-fetching") { AccountsStaleAnchorFetchingPreview() },
+    ScreenPreview("stale-anchor-unconfirmed") { AccountsStaleAnchorUnconfirmedPreview() },
+    ScreenPreview("stale-anchor-refused") { AccountsStaleAnchorRefusedPreview() },
     ScreenPreview("hidden") { AccountsHiddenPreview() },
     ScreenPreview("hidden-dark") { AccountsHiddenDarkPreview() },
     ScreenPreview("queued") { AccountsQueuedPreview() },

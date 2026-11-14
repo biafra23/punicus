@@ -471,6 +471,7 @@ private fun openWallet(dataDir: File) {
                 addressKinds = node.addressKinds,
                 lightClient = node.lightClient,
                 staleAnchorConsent = node,
+                freshCheckpoints = node,
                 networkFreshness = node,
                 networkUpgrades = node.networkUpgrades,
                 knownUpgrades = knownUpgrades,

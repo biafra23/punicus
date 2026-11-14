@@ -196,6 +196,8 @@ import eth.serotine.domain.repository.DappRequest
 import eth.serotine.domain.repository.DappRequestError
 import eth.serotine.domain.repository.DappRequestId
 import eth.serotine.domain.repository.DappSessionId
+import eth.serotine.domain.repository.FreshCheckpoint
+import eth.serotine.domain.repository.FreshCheckpoints
 import eth.serotine.ui.dapprequest.DAPP_REQUEST_REFUSE_TAG
 import eth.serotine.domain.usecase.OutboxLock
 
@@ -357,6 +359,10 @@ class AppNavigationTest {
         },
         staleAnchorConsent = object : StaleAnchorConsent {
             override fun syncPastStaleAnchor(network: Network) = Unit
+        },
+        freshCheckpoints = object : FreshCheckpoints {
+            override suspend fun fetchFreshCheckpoint(network: Network, useUnconfirmed: Boolean) =
+                FreshCheckpoint.NotRefused
         },
         networkUpgrades = object : NetworkUpgrades {
             override fun observeUpgrade(network: Network): Flow<NetworkUpgrade?> = report

@@ -11,7 +11,7 @@ If the folder grows too much, there are two levers, both the owner's. Deleting t
 | Screen | Folder | States |
 |---|---|---|
 | [Account detail](#account-detail) | `account-detail/` | 44 |
-| [Accounts](#accounts) | `accounts/` | 38 |
+| [Accounts](#accounts) | `accounts/` | 41 |
 | [Activity detail](#activity-detail) | `activity-detail/` | 11 |
 | [Add on networks (dialog)](#add-on-networks-dialog) | `add-on-networks-dialog/` | 5 |
 | [Add token](#add-token) | `add-token/` | 11 |
@@ -117,7 +117,7 @@ If the folder grows too much, there are two levers, both the owner's. Deleting t
 <a name="accounts"></a>
 ## Accounts
 
-`accounts/`, 38 states: `accounts`, `accounts-dark`, `catching-up`, `head-too-old`, `head-too-old-dark`, `no-accounts`, `no-accounts-syncing`, `no-accounts-syncing-dark`, `no-accounts-stale-anchor`, `create-safe-greyed-out`, `create-safe-reason`, `send-reason`, `loading`, `loading-create-safe-greyed-out`, `list-set-aside`, `upgrade-ahead`, `upgrade-activated-dark`, `list-unavailable`, `catching-up-dark`, `narrow`, `ens-names`, `three-networks`, `three-networks-dark`, `one-network-catching-up`, `network-off`, `network-off-dark`, `send-needs-network`, `network-blocked`, `no-rate-on-a-network`, `network-blocked-dark`, `stale-anchor`, `stale-anchor-dark`, `stale-anchor-dialog`, `hidden`, `hidden-dark`, `queued`, `queued-dark`, `lost-queued`
+`accounts/`, 41 states: `accounts`, `accounts-dark`, `catching-up`, `head-too-old`, `head-too-old-dark`, `no-accounts`, `no-accounts-syncing`, `no-accounts-syncing-dark`, `no-accounts-stale-anchor`, `create-safe-greyed-out`, `create-safe-reason`, `send-reason`, `loading`, `loading-create-safe-greyed-out`, `list-set-aside`, `upgrade-ahead`, `upgrade-activated-dark`, `list-unavailable`, `catching-up-dark`, `narrow`, `ens-names`, `three-networks`, `three-networks-dark`, `one-network-catching-up`, `network-off`, `network-off-dark`, `send-needs-network`, `network-blocked`, `no-rate-on-a-network`, `network-blocked-dark`, `stale-anchor`, `stale-anchor-dark`, `stale-anchor-dialog`, `stale-anchor-fetching`, `stale-anchor-unconfirmed`, `stale-anchor-refused`, `hidden`, `hidden-dark`, `queued`, `queued-dark`, `lost-queued`
 
 <a href="accounts/accounts.png"><img src="accounts/accounts.png" width="206" alt="accounts"></a>
 <a href="accounts/accounts-dark.png"><img src="accounts/accounts-dark.png" width="206" alt="accounts-dark"></a>
@@ -152,6 +152,9 @@ If the folder grows too much, there are two levers, both the owner's. Deleting t
 <a href="accounts/stale-anchor.png"><img src="accounts/stale-anchor.png" width="206" alt="stale-anchor"></a>
 <a href="accounts/stale-anchor-dark.png"><img src="accounts/stale-anchor-dark.png" width="206" alt="stale-anchor-dark"></a>
 <a href="accounts/stale-anchor-dialog.png"><img src="accounts/stale-anchor-dialog.png" width="206" alt="stale-anchor-dialog"></a>
+<a href="accounts/stale-anchor-fetching.png"><img src="accounts/stale-anchor-fetching.png" width="206" alt="stale-anchor-fetching"></a>
+<a href="accounts/stale-anchor-unconfirmed.png"><img src="accounts/stale-anchor-unconfirmed.png" width="206" alt="stale-anchor-unconfirmed"></a>
+<a href="accounts/stale-anchor-refused.png"><img src="accounts/stale-anchor-refused.png" width="206" alt="stale-anchor-refused"></a>
 <a href="accounts/hidden.png"><img src="accounts/hidden.png" width="206" alt="hidden"></a>
 <a href="accounts/hidden-dark.png"><img src="accounts/hidden-dark.png" width="206" alt="hidden-dark"></a>
 <a href="accounts/queued.png"><img src="accounts/queued.png" width="206" alt="queued"></a>

@@ -33,7 +33,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import eth.serotine.domain.model.InterfaceMode
 import eth.serotine.ui.components.LightClientHealthDot
 import eth.serotine.ui.components.StaleAnchorBanner
-import eth.serotine.ui.components.StaleAnchorDialog
+import eth.serotine.ui.components.StaleAnchorQuestion
 import eth.serotine.ui.components.StaleAnchorWarning
 import eth.serotine.ui.components.Unavailable
 import eth.serotine.ui.components.UnavailableDialog
@@ -73,6 +73,9 @@ internal const val SIGN_WHILE_SYNCING = "Prepare and sign transactions before th
 /** Test tag of a network's row, followed by its chain id, for UI tests. */
 const val SETTINGS_NETWORK_TAG = "settings-network-"
 
+/** Test tag of the note under a network's row once a fresh checkpoint was applied, followed by its chain id. */
+const val SETTINGS_CHECKPOINT_NOTE_TAG = "settings-checkpoint-note-"
+
 /** Binds [SettingsScreen], or in simple mode [SimpleSettingsScreen], to its ViewModel. */
 @Composable
 fun SettingsRoute(
@@ -104,6 +107,7 @@ fun SettingsRoute(
             connectionsOff = connectionsOff,
             onSignWhileSyncingChange = viewModel::signWhileSyncing,
             onMeteredDownloadsChange = viewModel::allowHeavyDownloadsOnMetered,
+            onFetchFreshCheckpoint = viewModel::fetchFreshCheckpoint,
         )
         InterfaceMode.DETAILED -> SettingsScreen(
             state,
@@ -122,6 +126,7 @@ fun SettingsRoute(
             connectionsOff = connectionsOff,
             onSignWhileSyncingChange = viewModel::signWhileSyncing,
             onMeteredDownloadsChange = viewModel::allowHeavyDownloadsOnMetered,
+            onFetchFreshCheckpoint = viewModel::fetchFreshCheckpoint,
         )
     }
 }
@@ -159,6 +164,7 @@ fun SettingsScreen(
     connectionsOff: Boolean = false,
     onSignWhileSyncingChange: (Boolean) -> Unit = {},
     onMeteredDownloadsChange: (Boolean) -> Unit = {},
+    onFetchFreshCheckpoint: (chainId: Long, useUnconfirmed: Boolean) -> Unit = { _, _ -> },
 ) {
     var asking by remember { mutableStateOf<StaleAnchorWarning?>(null) }
     var explainingConnections by remember { mutableStateOf(false) }
@@ -172,16 +178,13 @@ fun SettingsScreen(
             onDismiss = { explainingConnections = false },
         )
     }
-    asking?.let { warning ->
-        StaleAnchorDialog(
-            warning,
-            onConfirm = {
-                asking = null
-                onSyncPastStaleAnchor(warning.chainId)
-            },
-            onDismiss = { asking = null },
-        )
-    }
+    StaleAnchorQuestion(
+        asking,
+        current = { id -> state.networks.firstOrNull { it.chainId == id }?.staleAnchor },
+        onClose = { asking = null },
+        onCatchUp = onSyncPastStaleAnchor,
+        onFetch = onFetchFreshCheckpoint,
+    )
     state.turningOff?.let { asked ->
         AlertDialog(
             onDismissRequest = onCancelTurnOff,
@@ -251,6 +254,9 @@ fun SettingsScreen(
                             Text(network.line)
                             if (network.notSaved) {
                                 Text("The change could not be saved.", color = MaterialTheme.colorScheme.error)
+                            }
+                            network.checkpointNote?.let {
+                                Text(it, Modifier.testTag(SETTINGS_CHECKPOINT_NOTE_TAG + network.chainId))
                             }
                         }
                     },

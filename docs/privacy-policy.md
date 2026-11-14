@@ -58,6 +58,19 @@ by Punicus.
 To find peers, the light client also uses your network's DNS servers. They
 see those lookups, not your accounts.
 
+### Checkpoint servers (only if you ask for a fresh checkpoint)
+
+A light client starts from a trusted checkpoint. When the one it has is too
+old to catch up from safely, Punicus stops verifying that network and asks
+you what to do. If you choose to fetch a fresh checkpoint, the light client
+asks that network's public checkpoint-sync servers which block the chain
+finalized last.
+
+- They see your IP address and that you asked for a checkpoint of that
+  network.
+- They learn no account, balance or transaction.
+- They are not run by Punicus. Unless you ask, they are never contacted.
+
 ### The WalletConnect relay (only if you connect a dApp)
 
 When you connect to a dApp with WalletConnect, messages between the dApp and
@@ -91,6 +104,8 @@ IP address. Their privacy policies apply.
 - Turn off a network in Settings → Networks: its light client stops, and its
   peers hear nothing more from you.
 - Leave dApps unconnected, and the relay is never contacted.
+- Catch up from an old checkpoint instead of fetching a fresh one, and the
+  checkpoint servers are never contacted.
 - Keep Uniswap as the swap venue, and CoW is never contacted.
 - Remove an account or the app to delete what is stored for it.
 

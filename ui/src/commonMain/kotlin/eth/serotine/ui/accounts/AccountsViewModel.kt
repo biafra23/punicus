@@ -15,6 +15,7 @@ import eth.serotine.domain.repository.TokenBalanceReading
 import eth.serotine.domain.usecase.AccountValue
 import eth.serotine.domain.usecase.AcknowledgeLostOutbox
 import eth.serotine.domain.usecase.EnsNameCheck
+import eth.serotine.domain.usecase.FetchFreshCheckpoint
 import eth.serotine.domain.usecase.HoldNetworksWhileEmpty
 import eth.serotine.domain.usecase.ObserveAmountsHidden
 import eth.serotine.domain.usecase.ObserveEnabledNetworks
@@ -37,6 +38,7 @@ import eth.serotine.domain.usecase.UpgradeWarning
 import eth.serotine.domain.usecase.UpgradeWarnings
 import eth.serotine.ui.components.AMOUNTS_NOT_SAVED
 import eth.serotine.ui.components.Eip55
+import eth.serotine.ui.components.FreshCheckpointFetches
 import eth.serotine.ui.components.handoffChoice
 import eth.serotine.ui.components.LightClientHealth
 import eth.serotine.ui.components.LightClientItem
@@ -62,6 +64,7 @@ import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.onStart
 import kotlinx.coroutines.flow.shareIn
 import kotlinx.coroutines.flow.stateIn
@@ -92,6 +95,8 @@ class AccountsViewModel(
     private val setNetworkEnabled: SetNetworkEnabled,
     observeUpgradeWarnings: ObserveUpgradeWarnings,
     private val syncPastStaleAnchor: SyncPastStaleAnchor,
+    /** The other way past a stale checkpoint: a fresh one from the network's checkpoint servers. */
+    freshCheckpoint: FetchFreshCheckpoint,
     /** Proves every network's balances and prices again on [refresh]; the list's own reads are proven as it opens. */
     private val refreshNetworkData: RefreshNetworkData,
     /** Whether each network updates live, which simple mode's freshness line says. */
@@ -161,14 +166,26 @@ class AccountsViewModel(
         },
     ) { it.toList() }
 
+    /** What the screen says once, until it has: a network that could not be turned on. */
+    private val message = MutableStateFlow<String?>(null)
+
+    /** The fresh checkpoints asked for, each network's said in its warning; one applied is said once. */
+    private val checkpointFetches = FreshCheckpointFetches(
+        viewModelScope,
+        fetch = { network, useUnconfirmed -> freshCheckpoint(network, useUnconfirmed) },
+        onApplied = { _, said -> message.value = said },
+    )
+
     /** Each network's stale-checkpoint warning, in `Network` order: null while it is not refusing to sync. */
     private val staleAnchors = combine(
         Network.entries.zip(clientStatuses) { network, statusOf ->
-            statusOf
-                .map { status ->
-                    (status as? LightClientStatus.StaleAnchor)?.let { StaleAnchorWarning.of(network, it) }
-                }
-                .distinctUntilChanged()
+            // A network that no longer refuses forgets what was said of its fetch: never carried into a later park.
+            val settled = statusOf.onEach {
+                if (it !is LightClientStatus.StaleAnchor) checkpointFetches.settled(network)
+            }
+            combine(settled, checkpointFetches.states) { status, fetches ->
+                (status as? LightClientStatus.StaleAnchor)?.let { StaleAnchorWarning.of(network, it, fetches[network]) }
+            }.distinctUntilChanged()
         },
     ) { it.toList() }
 
@@ -180,9 +197,6 @@ class AccountsViewModel(
 
     // Accounts never waits for a name's check: until it comes, a name stands as it was verified at Watch.
     private val ensNames = observeEnsNames().onStart { emit(emptyMap()) }
-
-    /** What the screen says once, until it has: a network that could not be turned on. */
-    private val message = MutableStateFlow<String?>(null)
 
     /**
      * What each network's accounts have queued in lenient mode, by chain id, said under its line
@@ -334,7 +348,7 @@ class AccountsViewModel(
         val unreachable = held.mapNotNull { network ->
             val client = lightClients[network.ordinal]
             // A stale checkpoint or a network this version can no longer follow has its own warning, with
-            // its own way out (the user's "Catch up anyway…", an update): no "the app keeps trying" here.
+            // its own way out (the user's "Catch up…", an update): no "the app keeps trying" here.
             val alarmed = state.sections.any {
                 it.chainId == network.chainId && (it.staleAnchor != null || it.blocked != null)
             }
@@ -419,6 +433,16 @@ class AccountsViewModel(
     fun syncPastStaleAnchor(chainId: Long) {
         val network = Network.ofChainId(chainId) ?: return
         viewModelScope.launch { syncPastStaleAnchor(network) }
+    }
+
+    /**
+     * Asks [chainId]'s network's checkpoint servers for a fresh checkpoint to start over from:
+     * what the user chose in the stale-checkpoint dialog. [useUnconfirmed] is their "Use it anyway"
+     * for one no long-known peer confirmed. Its warning says how it goes; one applied is said once.
+     */
+    fun fetchFreshCheckpoint(chainId: Long, useUnconfirmed: Boolean) {
+        val network = Network.ofChainId(chainId) ?: return
+        checkpointFetches.fetch(network, useUnconfirmed)
     }
 
     /** The screen has said [AccountsUiState.Ready.message]. */

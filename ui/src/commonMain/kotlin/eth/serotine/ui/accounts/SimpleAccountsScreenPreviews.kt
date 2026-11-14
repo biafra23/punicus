@@ -206,7 +206,7 @@ private fun SimpleAccountsLivePreview() = SimpleAccountsPreview(
     ),
 )
 
-/** Gnosis Chain refusing a stale checkpoint: warned in the error colour, with "Catch up anyway…". */
+/** Gnosis Chain refusing a stale checkpoint: warned in the error colour, with "Catch up…". */
 @Preview
 @Composable
 private fun SimpleAccountsStaleAnchorPreview() = SimpleAccountsPreview(
@@ -226,7 +226,7 @@ private fun SimpleAccountsStaleAnchorPreview() = SimpleAccountsPreview(
 @Composable
 private fun SimpleAccountsEmptyPreview() = SimpleAccountsPreview(AccountsUiState.Ready(emptyList()))
 
-/** No accounts yet, and Gnosis Chain refusing a stale checkpoint: its warning and "Catch up anyway…". */
+/** No accounts yet, and Gnosis Chain refusing a stale checkpoint: its warning and "Catch up…". */
 @Preview
 @Composable
 private fun SimpleAccountsEmptyStaleAnchorPreview() = SimpleAccountsPreview(

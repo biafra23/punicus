@@ -1,11 +1,15 @@
 package eth.serotine.ui.accounts
 
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.assert
 import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.assertTextEquals
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.longClick
@@ -20,11 +24,14 @@ import androidx.compose.ui.test.rightClick
 import eth.serotine.domain.model.AccountKind
 import eth.serotine.domain.model.Network
 import eth.serotine.domain.repository.LightClientStatus
+import eth.serotine.ui.components.CheckpointFetchState
 import eth.serotine.ui.components.Control
 import eth.serotine.ui.components.LightClientHealth.NOT_VERIFIED
 import eth.serotine.ui.components.LightClientItem
 import eth.serotine.ui.components.STALE_ANCHOR_CATCH_UP_TAG
 import eth.serotine.ui.components.STALE_ANCHOR_CONFIRM_TAG
+import eth.serotine.ui.components.STALE_ANCHOR_FETCH_TAG
+import eth.serotine.ui.components.STALE_ANCHOR_UNCONFIRMED_TAG
 import eth.serotine.ui.components.StaleAnchorWarning
 import eth.serotine.ui.components.UNAVAILABLE_REASON_TAG
 import eth.serotine.ui.theme.SerotineTheme
@@ -67,6 +74,9 @@ class AccountsScreenTest {
 
     private val caughtUp = mutableListOf<Long>()
 
+    /** The fresh checkpoints asked for: the network's chain id, and whether "Use it anyway" was chosen. */
+    private val fetched = mutableListOf<Pair<Long, Boolean>>()
+
     /** [accounts] in Sepolia's section, under [syncing]: the only network until parts 4 and 5. */
     private fun ready(
         accounts: List<AccountItem>,
@@ -98,6 +108,7 @@ class AccountsScreenTest {
                     onAccountAction = { actions += it },
                     onTurnOnNetwork = { turnedOn += it },
                     onSyncPastStaleAnchor = { caughtUp += it },
+                    onFetchFreshCheckpoint = { chainId, anyway -> fetched += chainId to anyway },
                 )
             }
         }
@@ -475,5 +486,47 @@ class AccountsScreenTest {
         rule.onNodeWithTag(STALE_ANCHOR_CONFIRM_TAG).performClick()
         assertEquals(listOf(Network.SEPOLIA.chainId), caughtUp)
         rule.onNodeWithText(warning.title).assertDoesNotExist()
+    }
+
+    @Test
+    fun theDialogOffersAFreshCheckpointAndUseItAnywayOnlyWhenNoLongKnownPeerConfirmed() {
+        val stale = LightClientStatus.StaleAnchor(6, 3)
+        val state = ready(listOf(daily))
+        fun shown(fetch: CheckpointFetchState?): AccountsUiState {
+            val warning = StaleAnchorWarning.of(Network.SEPOLIA, stale, fetch)
+            return state.copy(sections = state.sections.map { it.copy(staleAnchor = warning) })
+        }
+        var current by mutableStateOf(shown(null))
+        rule.setContent {
+            SerotineTheme {
+                AccountsScreen(
+                    state = current,
+                    onWatchAddress = {},
+                    onImportPhrase = {},
+                    onCreateAccount = {},
+                    onCreateSafe = {},
+                    onAccountAction = {},
+                    onFetchFreshCheckpoint = { chainId, anyway -> fetched += chainId to anyway },
+                )
+            }
+        }
+
+        rule.onNodeWithTag(STALE_ANCHOR_CATCH_UP_TAG + Network.SEPOLIA.chainId).performClick()
+        rule.onNodeWithTag(STALE_ANCHOR_UNCONFIRMED_TAG).assertDoesNotExist()
+        rule.onNodeWithTag(STALE_ANCHOR_FETCH_TAG).performClick()
+        assertEquals(listOf(Network.SEPOLIA.chainId to false), fetched)
+
+        current = shown(CheckpointFetchState.Fetching)
+        rule.onNodeWithTag(STALE_ANCHOR_FETCH_TAG).assertIsNotEnabled()
+        rule.onNodeWithTag(STALE_ANCHOR_CONFIRM_TAG).assertIsNotEnabled()
+
+        current = shown(CheckpointFetchState.Refused("no long-known peer confirmed it", unconfirmed = true))
+        rule.onNodeWithText("No fresh checkpoint: no long-known peer confirmed it.").assertExists()
+        rule.onNodeWithTag(STALE_ANCHOR_UNCONFIRMED_TAG).performClick()
+        assertEquals(Network.SEPOLIA.chainId to true, fetched.last(), "only on the user's explicit choice")
+
+        // Re-anchored: the light client no longer refuses, and the dialog closes by itself.
+        current = state
+        rule.onNodeWithTag(STALE_ANCHOR_FETCH_TAG).assertDoesNotExist()
     }
 }

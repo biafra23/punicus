@@ -432,6 +432,7 @@ class SerotineApplication : Application() {
             addressKinds = node.addressKinds,
             lightClient = node.lightClient,
             staleAnchorConsent = node,
+            freshCheckpoints = node,
             networkFreshness = node,
             networkUpgrades = node.networkUpgrades,
             knownUpgrades = knownUpgrades,
