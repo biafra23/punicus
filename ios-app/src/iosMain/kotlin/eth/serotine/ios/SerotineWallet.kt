@@ -15,6 +15,7 @@ import eth.serotine.data.logs.MemoryDebugLog
 import eth.serotine.data.network.IosConnectionMeter
 import eth.serotine.data.networks.FileNetworkSettings
 import eth.serotine.data.nfts.FileAddedNfts
+import eth.serotine.data.nfts.FileSeenEnsNames
 import eth.serotine.data.outbox.iosOutbox
 import eth.serotine.data.safe.FileSafeTxQueue
 import eth.serotine.data.safe.JsonSigningRequestCodec
@@ -290,6 +291,7 @@ class SerotineWallet {
             ensNfts = node.ensNfts,
             // The NFTs added by contract and id, beside tokens.json (issue #246).
             addedNfts = FileAddedNfts("$dataDir/nfts.json"),
+            seenEnsNames = FileSeenEnsNames("$dataDir/ens-names.json"),
             // The Safe transactions waiting for their owners: the follower's one instance.
             safeTxQueue = safeTxQueue,
             signingRequests = JsonSigningRequestCodec(),

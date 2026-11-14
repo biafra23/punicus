@@ -2,6 +2,7 @@ package eth.serotine.domain.usecase
 
 import eth.serotine.domain.model.AccountId
 import eth.serotine.domain.model.Address
+import eth.serotine.domain.model.EnsNameTokens
 import eth.serotine.domain.model.Erc1155Transfers
 import eth.serotine.domain.model.KnownNftCollection
 import eth.serotine.domain.model.KnownNftCollections
@@ -25,6 +26,8 @@ import eth.serotine.domain.repository.NftContracts
 import eth.serotine.domain.repository.NftHolding
 import eth.serotine.domain.repository.ReceiptLog
 import eth.serotine.domain.repository.ReceiptTracker
+import eth.serotine.domain.repository.SeenEnsNameList
+import eth.serotine.domain.repository.SeenEnsNames
 import eth.serotine.domain.repository.TransactionProgress
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.seconds
@@ -126,6 +129,13 @@ sealed interface NftHoldings {
  * 2026-11-06): a .eth registrar token's label is looked for in the verified receipt of the transaction
  * that last brought it to the account. A pinned collection whose code is not its pin
  * ([EnsNftReading.NotPinned]) is shown as unlisted.
+ *
+ * The ENS names the wallet has seen point to the account ([SeenEnsNames]; issue #274) are candidates
+ * too: the tokens each can be ([EnsNameTokens.candidates]) of the latest [MAX_SEEN_NAMES] are checked as
+ * an added NFT is, among the built-in collections' and before those the log index found, so a name
+ * received before the account's history starts is found with no step of the user's. A candidate not
+ * held is not shown. A .eth registrar token whose label no receipt gave takes it from a seen name whose
+ * hash is its id ([EnsNameTokens.registrarLabel]).
  */
 class ObserveNfts(
     private val index: LogIndex,
@@ -137,6 +147,8 @@ class ObserveNfts(
     private val receipts: ReceiptTracker,
     /** The NFTs the user added by contract and id: checked as the ones found are, after the built-in ones. */
     private val added: AddedNfts,
+    /** The ENS names seen pointing to the account: the tokens they can be are checked as added ones are. */
+    private val seen: SeenEnsNames,
 ) {
 
     @OptIn(ExperimentalCoroutinesApi::class)
@@ -164,7 +176,7 @@ class ObserveNfts(
             decode = { log -> moveOf(address, log) },
         )
         val proofs = mutableMapOf<NftRef, Proof>()
-        val names = mutableMapOf<Address, NftCollectionReading.Read>()
+        val collectionNames = mutableMapOf<Address, NftCollectionReading.Read>()
         val ensNames = mutableMapOf<NftRef, EnsNftReading.Named>()
         val pins = Pins()
         /** The built-in collection at [collection], unless it is pinned and its code not proven to be its pin. */
@@ -179,10 +191,25 @@ class ObserveNfts(
             }
             .onStart { emit(emptyList<NftRef>() to AddedListState.READ) }
             .distinctUntilChanged()
+        // A list that cannot be read only finds no candidates: the NFTs found otherwise still show.
+        val seenNames = seen.observe(account)
+            .map { list -> (list as? SeenEnsNameList.Loaded)?.names.orEmpty().map { it.name } }
+            .onStart { emit(emptyList()) }
+            .distinctUntilChanged()
         emitAll(
-            combine(reader.observe(), addedNfts, ::Pair).transformLatest { (history, stored) ->
+            combine(reader.observe(), addedNfts, seenNames, ::Triple).transformLatest { (history, stored, names) ->
                 val (addedRefs, addedState) = stored
-                val addedList = addedRefs.toSet()
+                val ownAdded = addedRefs.toSet()
+                // The tokens the names seen can be, checked as the user's added ones are, but never theirs to take off.
+                // Only the latest MAX_SEEN_NAMES: the list only grows, and its candidates are checked first.
+                val candidates =
+                    names.takeLast(MAX_SEEN_NAMES).flatMap { EnsNameTokens.candidates(account.network, it) }.toSet()
+                val addedList = ownAdded + candidates
+                /** The label a seen name gives the registrar token [nft], checked by hashing; else null. */
+                fun labelOf(nft: NftRef): String? =
+                    EnsNameTokens.registrarLabel(nft.tokenId, names).takeIf {
+                        KnownNftCollections.find(account.network, nft.collection)?.kind == KnownNftKind.ENS_REGISTRAR
+                    }
                 when (history) {
                     IndexedHistory.NotFollowed -> emit(NftHoldings.NotFollowed)
                     is IndexedHistory.Checking -> emit(NftHoldings.Checking(history.start))
@@ -229,10 +256,20 @@ class ObserveNfts(
                         val reproveAfter = REPROVE_AFTER_SECONDS / account.network.secondsPerSlot
                         // Marked added only where no log brought it: one the history finds is not the user's
                         // to take off.
-                        val ownOnly = addedList - moves.flatMap { it.received }.toSet()
+                        // A candidate is not either: Remove would change nothing while its name is seen.
+                        val ownOnly = ownAdded - moves.flatMap { it.received }.toSet() - candidates
                         fun shown() =
-                            holdings(history, checking, ordered.size, proofs, names, ensNames, ::builtIn, ownOnly)
-                                .copy(addedList = addedState)
+                            holdings(
+                                history,
+                                checking,
+                                ordered.size,
+                                proofs,
+                                collectionNames,
+                                ensNames,
+                                ::builtIn,
+                                ownOnly,
+                                ::labelOf,
+                            ).copy(addedList = addedState)
                         emit(shown())
                         for (nft in checking) {
                             val move = last.getValue(nft)
@@ -247,10 +284,10 @@ class ObserveNfts(
                             // Proven again: its name is read again too (a renewal, a wrap or an unwrap).
                             ensNames.remove(nft)
                             val collection = nft.collection
-                            val unnamed = collection !in names && builtIn(collection) == null
+                            val unnamed = collection !in collectionNames && builtIn(collection) == null
                             if (holding is NftHolding.Held && unnamed) {
                                 val reading = contracts.collection(account.network, collection)
-                                if (reading is NftCollectionReading.Read) names[collection] = reading
+                                if (reading is NftCollectionReading.Read) collectionNames[collection] = reading
                             }
                         }
                         // What is proven shows now; the names, which may wait for a receipt, after.
@@ -322,7 +359,7 @@ class ObserveNfts(
 
     /**
      * What [proofs], [names] and [ensNames] show of [checking], in [history]'s span, with [received] NFTs
-     * found; a collection is built in as [builtIn] says.
+     * found; a collection is built in as [builtIn] says, a registrar token's missing label as [labelOf].
      */
     private fun holdings(
         history: IndexedHistory.Read<NftMove>,
@@ -333,13 +370,18 @@ class ObserveNfts(
         ensNames: Map<NftRef, EnsNftReading.Named>,
         builtIn: (Address) -> KnownNftCollection?,
         addedList: Set<NftRef>,
+        labelOf: (NftRef) -> String?,
     ): NftHoldings.Read {
         val held = checking.mapNotNull { nft ->
             val holding = proofs[nft]?.holding as? NftHolding.Held ?: return@mapNotNull null
             val known = builtIn(nft.collection)
             val said = names[nft.collection]
             val collection = NftCollection(nft.collection, known, said?.name, said?.symbol)
+            // A registrar token's label no receipt gave is taken from a name seen, checked by hashing.
             val ens = ensNames[nft].takeIf { known != null }
+                ?.let { named ->
+                    if (named.name != null) named else labelOf(nft)?.let { named.copy(name = "$it.eth") } ?: named
+                }
             HeldNft(nft, holding.amount, collection, holding.blockNumber, ens, added = nft in addedList)
         }
         // Stable: the built-in collections' first, each part in the order checked, the newest first.
@@ -394,6 +436,13 @@ class ObserveNfts(
     companion object {
         /** The most NFTs proven per account: the built-in collections' first, then the most recently moved. */
         const val MAX_CHECKED: Int = 100
+
+        /**
+         * The most names seen ([SeenEnsNames]) whose tokens are checked per account, the latest first seen:
+         * each brings up to two candidates checked before the NFTs the log index found, so no list of
+         * names can fill [MAX_CHECKED] (#274).
+         */
+        const val MAX_SEEN_NAMES: Int = 20
 
         /**
          * How long a proof stands with no log naming its NFT: an hour. Holding can change with no log at

@@ -86,6 +86,9 @@ import eth.serotine.domain.repository.ReceiptLog
 import kotlinx.coroutines.flow.flowOf
 import eth.serotine.domain.repository.AddedNftList
 import eth.serotine.domain.repository.AddedNfts
+import eth.serotine.domain.repository.SeenEnsName
+import eth.serotine.domain.repository.SeenEnsNameList
+import eth.serotine.domain.repository.SeenEnsNames
 import eth.serotine.domain.repository.TokenChange
 
 /** One gwei, in wei. */
@@ -491,6 +494,20 @@ internal class MemoryAddedNfts : AddedNfts {
     override suspend fun remove(account: AccountId, nft: NftRef): TokenChange {
         if (account to nft !in added.value) return TokenChange.NotFound
         added.value -= account to nft
+        return TokenChange.Changed
+    }
+}
+
+/** [SeenEnsNames] in memory: [seen] holds every account's names, in the order remembered. */
+internal class MemorySeenEnsNames : SeenEnsNames {
+    val seen = MutableStateFlow<List<Pair<AccountId, SeenEnsName>>>(emptyList())
+
+    override fun observe(account: AccountId): Flow<SeenEnsNameList> =
+        seen.map { all -> SeenEnsNameList.Loaded(all.filter { it.first == account }.map { it.second }) }
+
+    override suspend fun remember(account: AccountId, name: SeenEnsName): TokenChange {
+        if (seen.value.any { it.first == account && it.second.name == name.name }) return TokenChange.AlreadyPresent
+        seen.value += account to name
         return TokenChange.Changed
     }
 }

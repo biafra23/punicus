@@ -28,7 +28,9 @@ import eth.serotine.domain.usecase.ObserveEnsNames
 import eth.serotine.domain.usecase.ObserveKnownTokens
 import eth.serotine.domain.usecase.ObserveLightClient
 import eth.serotine.domain.usecase.ObserveNetworkLive
+import eth.serotine.domain.usecase.AddEnsName
 import eth.serotine.domain.usecase.AddNft
+import eth.serotine.domain.usecase.EnsNameAddition
 import eth.serotine.domain.usecase.NftAddition
 import eth.serotine.domain.usecase.NftHoldings
 import eth.serotine.domain.usecase.RemoveAddedNft
@@ -151,6 +153,8 @@ class AccountDetailViewModel(
     observeNfts: ObserveNfts,
     /** Adds an NFT by contract and token id, once the account is proven to hold it. */
     private val proveAndAddNft: AddNft,
+    /** Adds an ENS name by the name alone, once the account is proven to hold it (#274). */
+    private val addEnsName: AddEnsName,
     /** Takes an added NFT off the account's list. */
     private val removeAddedNft: RemoveAddedNft,
     /**
@@ -501,11 +505,22 @@ class AccountDetailViewModel(
 
     /**
      * Adds the token [tokenId] (decimal, or `0x` hex) of the contract at [contract], once the account is
-     * proven to hold it; the dialog says why when nothing was added, and closes when it was.
+     * proven to hold it; the dialog says why when nothing was added, and closes when it was. A [contract]
+     * that is no address and holds a dot is an ENS name ("alice.eth", "0xbow.eth" too), added by the
+     * name alone (#274); a token id typed beside it is refused, never dropped.
      */
     fun addNft(contract: String, tokenId: String) {
         // Parsed as typed text is: a mixed-case address must match its EIP-55 checksum (Address's KDoc).
         val typed = Eip55.parse(contract)
+        // The address first, then the dot, as ResolveRecipient takes a name: an address never holds a dot.
+        if (typed == AddressInput.NotAnAddress && '.' in contract) {
+            if (tokenId.isNotBlank()) {
+                addingNft.value = AddNftForm(error = "Leave the token id empty for an ENS name.")
+            } else {
+                addByName(contract.trim())
+            }
+            return
+        }
         val address = (typed as? AddressInput.Valid)?.address
         val id = parseTokenId(tokenId)
         val error = when {
@@ -536,6 +551,41 @@ class AccountDetailViewModel(
             }
             if (outcome is NftAddition.Added) {
                 view.update { it.copy(message = "NFT added. It is listed once this account's NFTs are read.") }
+            }
+        }
+    }
+
+    /** Adds the ENS name [name], once the account is proven to hold it, as [addNft] adds a token. */
+    private fun addByName(name: String) {
+        addingNft.value = AddNftForm(busy = true)
+        addingJob?.cancel()
+        addingJob = viewModelScope.launch {
+            val outcome = addEnsName(account, name)
+            addingNft.value = when (outcome) {
+                EnsNameAddition.Added -> null
+                EnsNameAddition.AlreadyAdded -> AddNftForm(error = "That name is kept for this account already.")
+                EnsNameAddition.NotAName -> AddNftForm(
+                    error = if (account.network.ensNames) {
+                        "That is not an ENS name: labels and dots, like alice.eth."
+                    } else {
+                        "${account.network.displayName} has no ENS names: add the NFT by its contract and token id."
+                    },
+                )
+                EnsNameAddition.NotHeld -> AddNftForm(
+                    error = "Nothing verified says this account holds ${name.trim().lowercase()}." +
+                        if (account.network == Network.SEPOLIA) {
+                            " A name registered on ENSv2 is added only by its contract and token id."
+                        } else {
+                            ""
+                        },
+                )
+                is EnsNameAddition.Unavailable -> AddNftForm(
+                    error = "Whether this account holds it cannot be proven right now. Try again in a moment.",
+                )
+                EnsNameAddition.NotSaved -> AddNftForm(error = "The name could not be saved. Nothing was added.")
+            }
+            if (outcome == EnsNameAddition.Added) {
+                view.update { it.copy(message = "Name added. It is listed once this account's NFTs are read.") }
             }
         }
     }
