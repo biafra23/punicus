@@ -232,6 +232,13 @@ fun WatchScreen(
                             NetworkMark(row.network)
                         }
                         DetectionCard(row.detection)
+                        row.differs?.let {
+                            Text(
+                                it,
+                                style = MaterialTheme.typography.labelMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
                     }
                 }
                 // A network that is off: not checked, and one more to choose once turned on.
@@ -326,11 +333,30 @@ private fun DetectionCard(detection: Detection) {
                 }
                 is Detection.Safe -> SafeCard(detection)
                 is Detection.Contract -> Text(detection.message)
-                is Detection.InWallet -> Text("Already in your wallet as “${detection.label}”.")
+                is Detection.InWallet -> InWalletCard(detection)
                 is Detection.Unavailable -> Text(detection.message, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
         }
     }
+}
+
+/**
+ * An address the wallet holds already (#273): its blockie and address, as the new-address card shows
+ * them, and the account's own name in this wallet, said to be one, so that it never reads as the ENS
+ * name typed, nor as a claim that the account holds that name.
+ */
+@Composable
+private fun InWalletCard(detection: Detection.InWallet) {
+    Row(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
+        AccountAvatar(detection.address, size = 36.dp)
+        Text("Already in your wallet as account “${detection.label}”.")
+    }
+    Text(
+        detection.address,
+        Modifier.testTag(WATCH_CHECKSUMMED_TAG),
+        style = MaterialTheme.typography.bodySmall,
+        fontFamily = FontFamily.Monospace,
+    )
 }
 
 /**

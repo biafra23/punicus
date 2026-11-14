@@ -9,6 +9,8 @@ import eth.serotine.ui.components.LightClientHealth.VERIFIED
 import eth.serotine.ui.components.LightClientItem
 import eth.serotine.ui.components.NetworkLabel
 import eth.serotine.ui.components.StaleAnchorWarning
+import eth.serotine.ui.components.catchingUpStripSample
+import eth.serotine.ui.components.verifiedStripSample
 import eth.serotine.ui.ScreenPreview
 import eth.serotine.ui.theme.SerotineTheme
 import org.jetbrains.compose.ui.tooling.preview.Preview
@@ -224,6 +226,42 @@ private fun SimpleAccountsStaleAnchorPreview() = SimpleAccountsPreview(
 @Composable
 private fun SimpleAccountsEmptyPreview() = SimpleAccountsPreview(AccountsUiState.Ready(emptyList()))
 
+/** No accounts yet, and Gnosis Chain refusing a stale checkpoint: its warning and "Catch up anyway…". */
+@Preview
+@Composable
+private fun SimpleAccountsEmptyStaleAnchorPreview() = SimpleAccountsPreview(
+    AccountsUiState.Ready(
+        emptyList(),
+        lightClients = listOf(
+            NetworkLightClient(
+                100,
+                "Gnosis Chain",
+                testnet = false,
+                status = catchingUpStripSample,
+                staleAnchor = StaleAnchorWarning.of(Network.GNOSIS, LightClientStatus.StaleAnchor(6, 3)),
+            ),
+        ),
+    ),
+)
+
+/** No accounts yet, Ethereum syncing from the first start and Gnosis Chain synced: its line alone (#66). */
+@Preview
+@Composable
+private fun SimpleAccountsEmptySyncingPreview() = SimpleAccountsPreview(
+    AccountsUiState.Ready(
+        emptyList(),
+        lightClients = listOf(
+            NetworkLightClient(
+                1,
+                "Ethereum",
+                testnet = false,
+                status = catchingUpStripSample.copy(simpleText = "Syncing Ethereum · 1 of 4 periods"),
+            ),
+            NetworkLightClient(100, "Gnosis Chain", testnet = false, status = verifiedStripSample),
+        ),
+    ),
+)
+
 /** The stored list was damaged and set aside: said above the empty list that follows. */
 @Preview
 @Composable
@@ -296,6 +334,8 @@ internal val simpleAccountsScreenPreviews: List<ScreenPreview> = listOf(
     ScreenPreview("live") { SimpleAccountsLivePreview() },
     ScreenPreview("stale-anchor") { SimpleAccountsStaleAnchorPreview() },
     ScreenPreview("empty") { SimpleAccountsEmptyPreview() },
+    ScreenPreview("empty-syncing") { SimpleAccountsEmptySyncingPreview() },
+    ScreenPreview("empty-stale-anchor") { SimpleAccountsEmptyStaleAnchorPreview() },
     ScreenPreview("loading") { SimpleAccountsLoadingPreview() },
     ScreenPreview("set-aside") { SimpleAccountsSetAsidePreview() },
     ScreenPreview("list-unavailable") { SimpleAccountsListUnavailablePreview() },

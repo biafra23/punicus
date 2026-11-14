@@ -106,7 +106,8 @@ private fun WatchNotASafePreview() = WatchPreview(
 
 @Preview
 @Composable
-private fun WatchInWalletPreview() = WatchPreview(account.copy(name = "", detection = Detection.InWallet("Savings")))
+private fun WatchInWalletPreview() =
+    WatchPreview(account.copy(name = "", detection = Detection.InWallet("Savings", SAVINGS)))
 
 @Preview
 @Composable
@@ -292,6 +293,28 @@ private fun WatchSafeOnOneNetworkPreview() = WatchPreview(
     ),
 )
 
+/**
+ * #273: a name already in the wallet on Ethereum and on Sepolia, where Sepolia's registry names
+ * another address; Gnosis Chain is offered at Ethereum's.
+ */
+@Preview
+@Composable
+private fun WatchInWalletOnTwoNetworksPreview() = WatchPreview(
+    WatchUiState(
+        address = "savings-example.eth",
+        networks = listOf(
+            WatchNetwork(ethereum, Detection.InWallet("savings-example.eth", SAVINGS), offered = false),
+            WatchNetwork(gnosis, Detection.Account(SAVINGS, "Checked at block 42,907,115", null), true, true),
+            WatchNetwork(
+                sepolia,
+                Detection.InWallet("Test key", TREASURY),
+                offered = false,
+                differs = "Not Ethereum's address",
+            ),
+        ),
+    ),
+)
+
 /** No network on: nothing can be checked. */
 @Preview
 @Composable
@@ -331,4 +354,5 @@ internal val watchScreenPreviews: List<ScreenPreview> = listOf(
     ScreenPreview("choose-networks") { WatchChooseNetworksPreview() },
     ScreenPreview("safe-on-one-network") { WatchSafeOnOneNetworkPreview() },
     ScreenPreview("no-network") { WatchNoNetworkPreview() },
+    ScreenPreview("in-wallet-on-two-networks") { WatchInWalletOnTwoNetworksPreview() },
 )

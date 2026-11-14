@@ -68,13 +68,16 @@ data class WatchUiState(
 /**
  * One network's row while two or more are on (N10, N11): its [network], what is at the address
  * there ([detection]), whether it can be added there ([offered]: an account or a Safe, not yet in
- * the wallet), and whether it is ticked ([chosen]).
+ * the wallet), and whether it is ticked ([chosen]). [differs] says, display-ready, that a name
+ * resolved to another address on this network than on the first one ("Not Ethereum's address"),
+ * null where it is the same address.
  */
 data class WatchNetwork(
     val network: NetworkLabel,
     val detection: Detection,
     val offered: Boolean,
     val chosen: Boolean = false,
+    val differs: String? = null,
 )
 
 /** Whether this card is one that can be added: an account or a Safe. */
@@ -125,8 +128,13 @@ sealed interface Detection {
     /** A contract that is not a recognised Safe, which cannot be watched. */
     data class Contract(val message: String) : Detection
 
-    /** The address is in the wallet already, as [label]. */
-    data class InWallet(val label: String) : Detection
+    /**
+     * The EIP-55 [address] is in the wallet already, as the account named [label]: the account's
+     * label in this wallet, which may be the ENS name it follows (#67). The card says it is the
+     * account's name, so that it is not read as the name typed, nor as a claim that the account
+     * holds that name (#273).
+     */
+    data class InWallet(val label: String, val address: String) : Detection
 
     /** No verified answer right now, for the reason [message] gives. */
     data class Unavailable(val message: String) : Detection

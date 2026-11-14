@@ -78,6 +78,35 @@ class HoldNetwork(private val demand: NetworkDemand) {
 }
 
 /**
+ * The Accounts screen's hold while the wallet has no account at all (#66): each network that is on
+ * runs while the screen is open, so a new wallet syncs from its first start and shows it, and the
+ * first account added is verified without a fresh warm-up. A screen asking, as Watch does
+ * ([NetworkDemand]): the background work, which opens no screen, is not changed. Nothing is held
+ * while the list cannot be read ([FollowNetworks] runs every network that is on then) or has an
+ * account. Runs until cancelled, which releases every hold.
+ */
+class HoldNetworksWhileEmpty(
+    private val accounts: AccountRepository,
+    private val settings: NetworkSettings,
+    private val demand: NetworkDemand,
+) {
+    /** Runs until cancelled. */
+    suspend operator fun invoke() {
+        val holds = mutableMapOf<Network, NetworkHold>()
+        try {
+            combine(accounts.observeAccounts(), settings.observe()) { list, on ->
+                if (list is AccountList.Loaded && list.accounts.isEmpty()) on else emptySet()
+            }.distinctUntilChanged().collect { wanted ->
+                (holds.keys - wanted).forEach { holds.remove(it)?.release() }
+                wanted.filter { it !in holds }.forEach { holds[it] = demand.hold(it) }
+            }
+        } finally {
+            holds.values.forEach { it.release() }
+        }
+    }
+}
+
+/**
  * Keeps each network's light client doing what the wallet needs of it (docs/networks.md, *The
  * engine host*), for as long as it runs (the hosts run it while the engine does, never `App`):
  *

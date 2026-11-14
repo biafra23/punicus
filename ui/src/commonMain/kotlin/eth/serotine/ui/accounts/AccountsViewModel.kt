@@ -15,6 +15,7 @@ import eth.serotine.domain.repository.TokenBalanceReading
 import eth.serotine.domain.usecase.AccountValue
 import eth.serotine.domain.usecase.AcknowledgeLostOutbox
 import eth.serotine.domain.usecase.EnsNameCheck
+import eth.serotine.domain.usecase.HoldNetworksWhileEmpty
 import eth.serotine.domain.usecase.ObserveAmountsHidden
 import eth.serotine.domain.usecase.ObserveEnabledNetworks
 import eth.serotine.domain.usecase.ObserveEnsNames
@@ -115,7 +116,17 @@ class AccountsViewModel(
      * drawn, since a wallet app may have been installed meanwhile. Null: never offered.
      */
     private val offerHandoff: OfferHandoff? = null,
+    /**
+     * Keeps every network that is on running while the wallet has no account, for as long as this
+     * screen is (#66): a new wallet syncs from its first start, which [AccountsUiState.Ready.lightClients]
+     * shows. Null: nothing held.
+     */
+    holdNetworksWhileEmpty: HoldNetworksWhileEmpty? = null,
 ) : ViewModel() {
+
+    init {
+        holdNetworksWhileEmpty?.let { hold -> viewModelScope.launch { hold() } }
+    }
 
     /**
      * The last refresh asked: when ([Refresh.at], unix seconds), and the oldest balance proof shown
@@ -514,6 +525,20 @@ class AccountsViewModel(
                             .ifEmpty { null }
                     },
                     upgrades = upgrade,
+                    // An empty wallet's light clients run from the start (#66): shown, so the sync is seen.
+                    lightClients = if (list.accounts.isEmpty()) {
+                        Network.entries.filter { it in on }.map { network ->
+                            NetworkLightClient(
+                                network.chainId,
+                                network.displayName,
+                                network.testnet,
+                                lightClients[network.ordinal],
+                                staleAnchors[network.ordinal],
+                            )
+                        }
+                    } else {
+                        emptyList()
+                    },
                 )
             }
         }

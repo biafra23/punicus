@@ -74,6 +74,27 @@ class SimpleAccountsScreenTest {
     )
 
     @Test
+    fun anEmptyWalletSaysWhichNetworksAreStillSyncing() {
+        val syncing = strip.copy(simpleText = "Syncing Ethereum · 1 of 4 periods")
+        val synced = strip.copy(simpleText = null)
+        show(
+            AccountsUiState.Ready(
+                emptyList(),
+                lightClients = listOf(
+                    NetworkLightClient(Network.ETHEREUM.chainId, "Ethereum", false, syncing),
+                    NetworkLightClient(Network.GNOSIS.chainId, "Gnosis Chain", false, synced),
+                ),
+            ),
+        )
+
+        // A network still syncing says so before the first account (#66); a synced one draws no line.
+        rule.onNodeWithTag(ACCOUNTS_EMPTY_LIGHT_CLIENT_TAG + Network.ETHEREUM.chainId)
+            .assertTextEquals("Syncing Ethereum · 1 of 4 periods")
+        rule.onNodeWithTag(ACCOUNTS_EMPTY_LIGHT_CLIENT_TAG + Network.GNOSIS.chainId).assertDoesNotExist()
+        rule.onNodeWithText("No accounts yet").assertIsDisplayed()
+    }
+
+    @Test
     fun theEyeAtTheTopLeftSaysWhatItDoesAndAsksToToggle() {
         show(ready(main))
         rule.onNodeWithContentDescription(HIDE_AMOUNTS).assertIsDisplayed().performClick()

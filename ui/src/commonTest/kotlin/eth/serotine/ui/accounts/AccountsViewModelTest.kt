@@ -238,7 +238,14 @@ class AccountsViewModelTest {
 
         backgroundScope.launch { viewModel.uiState.collect {} }
         runCurrent()
-        assertEquals(AccountsUiState.Ready(emptyList()), viewModel.uiState.value)
+        // No account yet: the light client of each network that is on, shown from the start (#66).
+        assertEquals(
+            AccountsUiState.Ready(
+                emptyList(),
+                lightClients = listOf(NetworkLightClient(Network.SEPOLIA.chainId, "Sepolia", true, starting)),
+            ),
+            viewModel.uiState.value,
+        )
 
         repository.accounts = listOf(treasury)
         runCurrent()

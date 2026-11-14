@@ -111,6 +111,21 @@ class AccountsScreenTest {
     }
 
     @Test
+    fun anEmptyWalletShowsEachNetworksLightClient() {
+        show(
+            AccountsUiState.Ready(
+                emptyList(),
+                lightClients = listOf(NetworkLightClient(Network.SEPOLIA.chainId, "Sepolia", true, syncing)),
+            ),
+        )
+
+        // The sync is seen before the first account (#66).
+        rule.onNodeWithTag(ACCOUNTS_EMPTY_LIGHT_CLIENT_TAG + Network.SEPOLIA.chainId).assertIsDisplayed()
+        rule.onNodeWithText(syncing.text).assertIsDisplayed()
+        rule.onNodeWithText("No accounts yet").assertIsDisplayed()
+    }
+
+    @Test
     fun readyStateListsEveryAccountWithItsControlAndBalance() {
         show(ready(listOf(daily, savings)))
 
