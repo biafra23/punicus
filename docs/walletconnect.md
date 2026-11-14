@@ -171,6 +171,73 @@ everything on the chain side: the verified `call`, `estimateGasDetailed`,
   designed below. Whether the dApps on the test list still fall back to that
   is part 1.1's spike.
 
+### Per-app addresses (issue #252)
+
+Owner's decisions, 2026-11-05. A dApp that connects is offered an address
+of its own, derived from the recovery phrase for the host it states, so that
+it cannot read the user's activity on other dApps (WalletBeat's *Privacy →
+App isolation*, which this earns a PASS on). How the address is derived and
+held: docs/keys-and-signing.md, *Per-app addresses*.
+
+- **The host.** The host of the `url` in the dApp's metadata (`AppHost`):
+  the scheme `https` or `http`, the user part, the port, the path and one
+  trailing dot dropped, lower case. It is the dApp's own claim (ruling 7),
+  and D3 says so. A site posing as another learns that one address, and
+  still signs nothing without the user's review.
+  - A host must be a DNS name in ASCII. An internationalised name counts in
+    its `xn--` form, as a URL carries it; one with characters outside ASCII
+    is not mapped (no IDNA mapping table is in the app), and an IPv6
+    address, or a URL that is not `https` or `http`, has no host. Then
+    "New address" is greyed out, a tap saying why.
+  - `www.example.com` and `example.com` are two hosts, and so are two
+    subdomains: nothing is guessed. An alias (below) joins them when the
+    user wants.
+- **D3 offers it and preselects it.** "New address for `<host>`" heads the
+  account choice, ticked, when the host has no address yet; the existing
+  accounts follow, and the user may tick them instead or as well. Approve
+  approves what is ticked. Making the address takes the wallet unlock, as
+  New account from the same phrase does.
+  - It is made from a recovery phrase held here. With several phrases, D3
+    asks which, defaulting to the phrase of the first account in the list
+    that has one.
+  - Without a phrase on this device (only watched accounts, or Safes) the
+    option is greyed out, never hidden (owner ruling, 2026-10-18, #55), and
+    a tap says that a per-app address needs a recovery phrase held here.
+  - A host whose address collides with another host's on this device is
+    refused with "already used for another app", and the choice falls back
+    to the existing accounts.
+  - The account made is an ordinary EOA on the session's network, named
+    after its host and marked as a per-app address, its host on its
+    details. The same address serves the session's other network (Ethereum
+    and Gnosis Chain, ruling 9) as one more account there.
+- **Remembered per host.** The addresses last approved for a host are kept,
+  app-private like a session's state (ruling 8), and preselected when that
+  host connects again (WalletBeat's *per-app account persistence*). After a
+  restore, connecting again re-derives the address, so nothing needs a
+  backup.
+- **Aliases, for a dApp that moved.** A host with no address yet and no
+  alias: D3 says "No address for `<host>` yet", preselects the new address,
+  and offers **"Use an address from another site…"**:
+  - the per-app addresses held here, each with its host and aliases, by
+    last use. It suggests nothing: no "looks like `<oldhost>`", the cue a
+    look-alike phishing domain wants;
+  - **"Type the old site's host"** re-derives that host's address without
+    needing it in the list (after a restore, or for a domain the user only
+    remembers);
+  - choosing one asks first: "`<newhost>` will see the same address as
+    `<oldhost>`. The two sites can link your activity." Then the alias
+    `newhost → address` is kept, remembered and preselected like any host.
+  - Aliases are app-private data, not key material, and not restored with
+    the phrase. The account's details list them, each removable there.
+- **Signing in with one** (D4): see *Signing in* below.
+- **Not done here, said where it matters:** paying gas for a per-app address
+  from another of the user's accounts links them on chain (signing in needs
+  no gas); the relay sees one IP address behind all the device's sessions,
+  though not the addresses; the peers serving the light client could link
+  the addresses it reads together (a follow-up issue).
+- **One-click auth** (`wc_sessionAuthenticate`), once answered, takes its
+  account through this same choice.
+
 ### The methods
 
 (Ruling 6.)
@@ -241,6 +308,12 @@ everything on the chain side: the verified `call`, `estimateGasDetailed`,
     is warned about in plain words. Both are the dApp's own claim, so the
     warning says it may be a site posing as another, and cannot say which
     site it is.
+  - **A per-app address** (*Per-app addresses* above): D4 names the host it
+    was made for. A domain whose host is neither that host nor one of its
+    aliases gets a plain warning, "this address was made for `<host>`;
+    signing in to `<domain>` with it links the two". A domain matched
+    through an alias says "linked by you to `<oldhost>`". The checks above
+    are unchanged.
 - **A message that does not parse as EIP-4361** is signed only after a
   warning that it is not a sign-in and that the app cannot say what it
   commits to.
@@ -594,10 +667,14 @@ their mockups come with the PR that builds each.
   `serotine://wc` deep link, or scan the dApp's QR code (Android).
 - **D3 Session proposal**: the dApp's stated name and URL, marked as not
   verified; the chain; the methods it asks for, those outside the closed list
-  marked as refused; the accounts to choose from; Approve and Reject.
+  marked as refused; "New address for `<host>`", preselected, or the
+  addresses remembered for the host (*Per-app addresses*), then the accounts
+  to choose from; "Use an address from another site…"; Approve and Reject.
 - **D4 Sign-in request**: the dApp's stated name and URL, marked as not
   verified; the account asked to sign, in full; the EIP-4361 fields, or the
   message as text or hex; the domain warning or the not-a-sign-in warning;
+  for a per-app address, its host, and the warning of a domain it was not
+  made for, or the alias it matched through;
   how long the dApp waits; the unlock, and Refuse. D1 lists the requests
   waiting, each opening D4.
 - **D5 Typed-data request**: the decoded struct or its fields; the domain;
@@ -653,7 +730,18 @@ merge part PRs into the feature branch itself.
       request and the local check of its signature, the executor of ruling
       4, inclusion from a verified receipt and log. Screen D8. A dApp's Safe
       request (1.5) then takes the external wallet's signature too.
-3. **Later, each its own issue:** QR scanning on iOS (Android's is built); a
+3. **`feature/per-app-addresses`, issue #252** (*Per-app addresses*):
+   1. The rulings in these pages, and in `:domain` the host and the path
+      with fixed vectors and the collision refusal.
+   2. The key store: an envelope that names its account `a`, deriving and
+      signing at the per-app path, a restore giving the same address.
+   3. D3: the new address offered and preselected, greyed out without a
+      phrase, the phrase chosen, the per-host memory and its preselection,
+      the account marked as per-app.
+   4. Aliases: the list, "Type the old site's host", the confirmation,
+      preselection through an alias, removal on the account's details.
+   5. D4: the host named, the domain warning, the alias match.
+4. **Later, each its own issue:** QR scanning on iOS (Android's is built); a
    `wc:` URL scheme
    registered by the desktop installers; requests delivered while Punicus is
    in the background; `wallet_sendCalls` (EIP-5792) through MultiSend for a

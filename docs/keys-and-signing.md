@@ -349,6 +349,63 @@ its KDoc and returns it as a result the UI shows as state.
   nothing. The use case (`DeriveAccount`) adds the account on the network of
   the one it comes from, as one step under the app's `WalletChanges`; Add on
   another network adds it elsewhere.
+- **Per-app addresses** (issue #252; owner's decisions, 2026-11-05). An
+  address of its own for each dApp that connects, so that no dApp learns the
+  user's activity on another (WalletBeat's *App isolation*). The flow is in
+  docs/walletconnect.md (*Per-app addresses*); what the key store does:
+  - **The path** is `m/44'/60'/a'/0/0`. `a` is the first 31 bits, read
+    big-endian, of `keccak256("serotine/app-isolation/v1" ‖ host)`, set to 1
+    if that gives 0 (`AppIsolation.accountOf` in `:domain`). The tag is
+    UTF-8, the host its normal form (`AppHost`: ASCII, lower case, no port,
+    no trailing dot) in ASCII, with nothing between the two. The tag keeps
+    the name the app had when the decision was taken: changing it would
+    change every per-app address.
+  - `a` is never 0, so a per-app address is never one of the phrase's
+    ordinary accounts (`m/44'/60'/0'/0/i`).
+  - **Nothing is stored that the phrase does not give back.** The address
+    depends on the phrase's seed and the host alone, not on the chain or on
+    anything kept: restoring the phrase and connecting to the same host gives
+    the same address. A wallet that takes a custom path, as Ledger Live's
+    account-level path does, finds it once given `a`; the account's details
+    show the full path.
+  - **Made like a further account** (above): from the envelope of an account
+    of the phrase, opened with the wallet password, its seed checked against
+    that account; sealed again in an envelope of its own under the per-app
+    address. Only an account whose envelope holds a seed can give one: an
+    account imported as a bare private key, a watched account or a Safe
+    cannot.
+  - **The envelope names its account** (`account`, `a`, beside `index`, both
+    left out when 0, so envelopes stored before are unchanged): the path
+    signing derives is `m/44'/60'/account'/0/index`. Neither is bound as
+    additional data, for the reason `index` is not: signing derives the key
+    at that path and refuses one that is not the account the envelope is
+    filed under, so a path edited on disk signs nothing.
+  - **A collision is refused**, never merged. Two hosts whose `a` is the
+    same give one address. When a host's `a` is that of another host whose
+    per-app address this device holds for the same phrase, the second host
+    gets "already used for another app" and the choice of existing accounts.
+    With 2³¹ values it is a vanishing case (a collision among n hosts is
+    about n²/2³²).
+  - **Not key material, and not restored with the phrase:** which host an
+    address was made for, the addresses last approved for each host, and the
+    aliases the user links (docs/walletconnect.md). They are app-private
+    data, kept like a session's state. Connecting again after a restore
+    re-derives the address, and an alias is linked again with "Type the old
+    site's host".
+  - **Fixed vectors**, for Hardhat's published phrase
+    `test test test test test test test test test test test junk` (the
+    empty passphrase), computed independently of the code:
+
+    | host | first 4 bytes of the hash | `a` | address |
+    |---|---|---|---|
+    | `example.com` | `178ecc97` | 197617227 | `0xB22b2aDA95ADF7bc412319854673Ce8EC704BDF9` |
+    | `app.uniswap.org` | `e2fa906d` | 1904035894 | `0xdbcF5FD66702399a082d6D4dec20c8aCC0986Ab4` |
+    | `walletbeat.eth.limo` | `48342a87` | 605689155 | `0xF4ea49D1DD471407299954EFCD8d1B65Fe8f5b8e` |
+    | `app.safe.global` | `4b2ecc55` | 630679082 | `0x7A603d66Bc7cAbdF034f3E74d67068981942a37B` |
+    | `localhost` | `3c7a7a37` | 507329819 | `0xd3AE63Dfe861077a9B1582264987b98175924F7c` |
+
+    `h34064.test` and `h38875.test` collide (both `a` = 1424491982), the
+    vector for the refusal.
 - **Storage.** The BIP-39 seed goes into the envelope above, one file per
   account (`<address>.seed`, JSON) in a directory of the app's own.
   - Writes go through a temporary file readable by this user alone, an
