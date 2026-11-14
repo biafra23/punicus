@@ -11,7 +11,7 @@ If the folder grows too much, there are two levers, both the owner's. Deleting t
 | Screen | Folder | States |
 |---|---|---|
 | [Account detail](#account-detail) | `account-detail/` | 44 |
-| [Accounts](#accounts) | `accounts/` | 37 |
+| [Accounts](#accounts) | `accounts/` | 38 |
 | [Activity detail](#activity-detail) | `activity-detail/` | 11 |
 | [Add on networks (dialog)](#add-on-networks-dialog) | `add-on-networks-dialog/` | 5 |
 | [Add token](#add-token) | `add-token/` | 11 |
@@ -41,7 +41,7 @@ If the folder grows too much, there are two levers, both the owner's. Deleting t
 | [Send](#send) | `send/` | 32 |
 | [Settings](#settings) | `settings/` | 28 |
 | [Account detail (simple mode)](#simple-account-detail) | `simple-account-detail/` | 12 |
-| [Home (simple mode)](#simple-accounts) | `simple-accounts/` | 17 |
+| [Home (simple mode)](#simple-accounts) | `simple-accounts/` | 18 |
 | [Activity detail (simple mode)](#simple-activity-detail) | `simple-activity-detail/` | 4 |
 | [Add token (simple mode)](#simple-add-token) | `simple-add-token/` | 2 |
 | [CoW order (simple mode)](#simple-cow-order) | `simple-cow-order/` | 3 |
@@ -117,7 +117,7 @@ If the folder grows too much, there are two levers, both the owner's. Deleting t
 <a name="accounts"></a>
 ## Accounts
 
-`accounts/`, 37 states: `accounts`, `accounts-dark`, `catching-up`, `head-too-old`, `head-too-old-dark`, `no-accounts`, `no-accounts-syncing`, `no-accounts-syncing-dark`, `create-safe-greyed-out`, `create-safe-reason`, `send-reason`, `loading`, `loading-create-safe-greyed-out`, `list-set-aside`, `upgrade-ahead`, `upgrade-activated-dark`, `list-unavailable`, `catching-up-dark`, `narrow`, `ens-names`, `three-networks`, `three-networks-dark`, `one-network-catching-up`, `network-off`, `network-off-dark`, `send-needs-network`, `network-blocked`, `no-rate-on-a-network`, `network-blocked-dark`, `stale-anchor`, `stale-anchor-dark`, `stale-anchor-dialog`, `hidden`, `hidden-dark`, `queued`, `queued-dark`, `lost-queued`
+`accounts/`, 38 states: `accounts`, `accounts-dark`, `catching-up`, `head-too-old`, `head-too-old-dark`, `no-accounts`, `no-accounts-syncing`, `no-accounts-syncing-dark`, `no-accounts-stale-anchor`, `create-safe-greyed-out`, `create-safe-reason`, `send-reason`, `loading`, `loading-create-safe-greyed-out`, `list-set-aside`, `upgrade-ahead`, `upgrade-activated-dark`, `list-unavailable`, `catching-up-dark`, `narrow`, `ens-names`, `three-networks`, `three-networks-dark`, `one-network-catching-up`, `network-off`, `network-off-dark`, `send-needs-network`, `network-blocked`, `no-rate-on-a-network`, `network-blocked-dark`, `stale-anchor`, `stale-anchor-dark`, `stale-anchor-dialog`, `hidden`, `hidden-dark`, `queued`, `queued-dark`, `lost-queued`
 
 <a href="accounts/accounts.png"><img src="accounts/accounts.png" width="206" alt="accounts"></a>
 <a href="accounts/accounts-dark.png"><img src="accounts/accounts-dark.png" width="206" alt="accounts-dark"></a>
@@ -127,6 +127,7 @@ If the folder grows too much, there are two levers, both the owner's. Deleting t
 <a href="accounts/no-accounts.png"><img src="accounts/no-accounts.png" width="206" alt="no-accounts"></a>
 <a href="accounts/no-accounts-syncing.png"><img src="accounts/no-accounts-syncing.png" width="206" alt="no-accounts-syncing"></a>
 <a href="accounts/no-accounts-syncing-dark.png"><img src="accounts/no-accounts-syncing-dark.png" width="206" alt="no-accounts-syncing-dark"></a>
+<a href="accounts/no-accounts-stale-anchor.png"><img src="accounts/no-accounts-stale-anchor.png" width="206" alt="no-accounts-stale-anchor"></a>
 <a href="accounts/create-safe-greyed-out.png"><img src="accounts/create-safe-greyed-out.png" width="206" alt="create-safe-greyed-out"></a>
 <a href="accounts/create-safe-reason.png"><img src="accounts/create-safe-reason.png" width="206" alt="create-safe-reason"></a>
 <a href="accounts/send-reason.png"><img src="accounts/send-reason.png" width="206" alt="send-reason"></a>
@@ -742,7 +743,7 @@ If the folder grows too much, there are two levers, both the owner's. Deleting t
 <a name="simple-accounts"></a>
 ## Home (simple mode)
 
-`simple-accounts/`, 17 states: `everyday`, `everyday-dark`, `refreshing`, `syncing`, `unreachable`, `live`, `stale-anchor`, `empty`, `empty-syncing`, `loading`, `set-aside`, `list-unavailable`, `hidden`, `hidden-dark`, `queued`, `queued-dark`, `lost-queued`
+`simple-accounts/`, 18 states: `everyday`, `everyday-dark`, `refreshing`, `syncing`, `unreachable`, `live`, `stale-anchor`, `empty`, `empty-syncing`, `empty-stale-anchor`, `loading`, `set-aside`, `list-unavailable`, `hidden`, `hidden-dark`, `queued`, `queued-dark`, `lost-queued`
 
 <a href="simple-accounts/everyday.png"><img src="simple-accounts/everyday.png" width="206" alt="everyday"></a>
 <a href="simple-accounts/everyday-dark.png"><img src="simple-accounts/everyday-dark.png" width="206" alt="everyday-dark"></a>
@@ -753,6 +754,7 @@ If the folder grows too much, there are two levers, both the owner's. Deleting t
 <a href="simple-accounts/stale-anchor.png"><img src="simple-accounts/stale-anchor.png" width="206" alt="stale-anchor"></a>
 <a href="simple-accounts/empty.png"><img src="simple-accounts/empty.png" width="206" alt="empty"></a>
 <a href="simple-accounts/empty-syncing.png"><img src="simple-accounts/empty-syncing.png" width="206" alt="empty-syncing"></a>
+<a href="simple-accounts/empty-stale-anchor.png"><img src="simple-accounts/empty-stale-anchor.png" width="206" alt="empty-stale-anchor"></a>
 <a href="simple-accounts/loading.png"><img src="simple-accounts/loading.png" width="206" alt="loading"></a>
 <a href="simple-accounts/set-aside.png"><img src="simple-accounts/set-aside.png" width="206" alt="set-aside"></a>
 <a href="simple-accounts/list-unavailable.png"><img src="simple-accounts/list-unavailable.png" width="206" alt="list-unavailable"></a>
