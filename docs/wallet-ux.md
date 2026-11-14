@@ -1479,6 +1479,23 @@ they are helpful." The rulings (owner rulings, 2026-11-05, #246; the
   could have sent, and listed only while it is held. An added row has
   Remove. *Add an NFT* is greyed out while the account's network is off, a
   tap saying why (owner ruling, 2026-10-18, #55).
+- **ENS names seen, as candidates** (issue #274; it amends "older NFTs are
+  added by contract and id" for ENS names, which is open, the owner's to
+  decide, as proposed in the PR that codes it). Every verified resolution
+  in the wallet that lands on one of the user's accounts (Watch, the
+  duplicate case included; Send; the check of a name an account follows)
+  keeps that name for the account, with its block, in `ens-names.json`
+  (`RememberResolvedNames`, `FileSeenEnsNames`). A name that lands on an
+  address not in the wallet is not kept. The tokens each name can be are
+  worked out by hashing it (`EnsNameTokens`): the .eth registrar's, whose id
+  is the first label's hash, for a .eth name of the second level, and the
+  NameWrapper's, whose id is the namehash. They are checked as an added NFT
+  is, and listed only while held; a name seen is not the user's to remove.
+  A registrar token whose label no receipt gave takes it from a name seen,
+  checked by hashing. *Add an NFT* takes an ENS name alone in its contract
+  field (`AddEnsName`), kept once the account is proven to hold one of its
+  tokens. ENSv2's names (Sepolia) are not found this way: the token id
+  carries a version the name does not tell.
 - **On chain only.** A row shows the collection's name (its `name()`, the
   contract's claim, or the built-in name) and the token id; an ERC-1155
   amount above one shows as "×n", masked while amounts are hidden. The

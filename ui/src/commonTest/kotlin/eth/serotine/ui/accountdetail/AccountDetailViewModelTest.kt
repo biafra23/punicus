@@ -66,6 +66,7 @@ import eth.serotine.domain.usecase.RefreshNetworkData
 import eth.serotine.domain.usecase.SetNetworkEnabled
 import eth.serotine.domain.usecase.SetTokenHidden
 import eth.serotine.domain.usecase.ToggleAmountsHidden
+import eth.serotine.domain.usecase.AddEnsName
 import eth.serotine.domain.usecase.AddNft
 import eth.serotine.domain.usecase.ObserveNfts
 import eth.serotine.domain.usecase.RemoveAddedNft
@@ -144,6 +145,7 @@ class AccountDetailViewModelTest {
     private val historyStarts = MemoryHistoryStarts()
     private val nftContracts = FakeNftContracts()
     private val addedNfts = MemoryAddedNfts()
+    private val seenEnsNames = MemorySeenEnsNames()
 
     /** The log index the NFTs are found in: apart from the Activity's, which is read only on its tab. */
     private val nftLogIndex = FakeLogIndex()
@@ -209,8 +211,17 @@ class AccountDetailViewModelTest {
         DropWaitingSwap(waitingSwaps),
         ObserveAmountsHidden(amountsHidden),
         ToggleAmountsHidden(amountsHidden),
-        ObserveNfts(nftLogIndex, historyStarts, nftContracts, FakeEnsNfts(), FakeReceiptsNever(), addedNfts),
+        ObserveNfts(
+            nftLogIndex,
+            historyStarts,
+            nftContracts,
+            FakeEnsNfts(),
+            FakeReceiptsNever(),
+            addedNfts,
+            seenEnsNames,
+        ),
         AddNft(nftContracts, addedNfts),
+        AddEnsName(nftContracts, seenEnsNames),
         RemoveAddedNft(addedNfts),
         ObserveOutbox(outbox),
         formatTime = { "<$it>" },
@@ -299,6 +310,40 @@ class AccountDetailViewModelTest {
         assertEquals(listOf(AccountId(Network.SEPOLIA, daily.address) to held), addedNfts.added.value)
         assertEquals(
             "NFT added. It is listed once this account's NFTs are read.",
+            (viewModel.uiState.value as AccountDetailUiState.Ready).message,
+        )
+    }
+
+    @Test
+    fun anEnsNameIsAddedByTheNameAloneOnceTheAccountIsProvenToHoldIt() = runTest {
+        Dispatchers.setMain(UnconfinedTestDispatcher(testScheduler))
+        val viewModel = viewModel()
+        backgroundScope.launch { viewModel.uiState.collect {} }
+        runCurrent()
+        fun adding() = (viewModel.uiState.value as AccountDetailUiState.Ready).nfts?.adding
+        viewModel.openAddNft()
+        runCurrent()
+
+        // No token id is read for a name.
+        viewModel.addNft(" Diskordia.eth ", "")
+        runCurrent()
+        assertEquals(
+            "Nothing verified says this account holds diskordia.eth.",
+            adding()?.error?.substringBefore(" A name"),
+        )
+        assertEquals(emptyList(), seenEnsNames.seen.value)
+
+        // The .eth registrar's token: the hash of "diskordia".
+        val registrar = Address.of("0x57f1887a8bf19b14fc0df6fd9b2acc9af147ea85")
+        val labelHash = UInt256.of("92284740816284767470494325593910015800813377803007834405330052279263655667190")
+        nftContracts.held[NftRef(registrar, labelHash, NftStandard.ERC721)] = UInt256.ONE
+        viewModel.addNft("diskordia.eth", "")
+        runCurrent()
+        assertEquals(null, adding())
+        assertEquals(listOf("diskordia.eth"), seenEnsNames.seen.value.map { it.second.name })
+        assertEquals(emptyList(), addedNfts.added.value)
+        assertEquals(
+            "Name added. It is listed once this account's NFTs are read.",
             (viewModel.uiState.value as AccountDetailUiState.Ready).message,
         )
     }
@@ -1076,8 +1121,17 @@ class AccountDetailViewModelTest {
             DropWaitingSwap(waitingSwaps),
             ObserveAmountsHidden(amountsHidden),
             ToggleAmountsHidden(amountsHidden),
-            ObserveNfts(nftLogIndex, historyStarts, nftContracts, FakeEnsNfts(), FakeReceiptsNever(), addedNfts),
+            ObserveNfts(
+            nftLogIndex,
+            historyStarts,
+            nftContracts,
+            FakeEnsNfts(),
+            FakeReceiptsNever(),
+            addedNfts,
+            seenEnsNames,
+        ),
         AddNft(nftContracts, addedNfts),
+        AddEnsName(nftContracts, seenEnsNames),
         RemoveAddedNft(addedNfts),
         ObserveOutbox(outbox),
         )

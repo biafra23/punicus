@@ -35,6 +35,7 @@ import eth.serotine.data.logs.MemoryDebugLog
 import eth.serotine.data.network.AndroidConnectionMeter
 import eth.serotine.data.networks.FileNetworkSettings
 import eth.serotine.data.nfts.FileAddedNfts
+import eth.serotine.data.nfts.FileSeenEnsNames
 import eth.serotine.data.outbox.androidOutbox
 import eth.serotine.data.prices.PinnedFeedTable
 import eth.serotine.data.rates.FileLastExchangeRate
@@ -450,6 +451,7 @@ class SerotineApplication : Application() {
             ensNfts = node.ensNfts,
             // The NFTs added by contract and id, beside tokens.json (issue #246).
             addedNfts = FileAddedNfts(filesDir.resolve("nfts.json").path),
+            seenEnsNames = FileSeenEnsNames(filesDir.resolve("ens-names.json").path),
             // The Safe transactions waiting for their owners: the follower's one instance.
             safeTxQueue = safeTxQueue,
             signingRequests = JsonSigningRequestCodec(),

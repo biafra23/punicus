@@ -42,6 +42,7 @@ import eth.serotine.domain.repository.ReceiptTracker
 import eth.serotine.domain.repository.SafeApprovals
 import eth.serotine.domain.repository.SafeReleases
 import eth.serotine.domain.repository.SafeTxQueue
+import eth.serotine.domain.repository.SeenEnsNames
 import eth.serotine.domain.repository.SentTransfers
 import eth.serotine.domain.repository.SignatureRecovery
 import eth.serotine.domain.repository.Signer
@@ -59,6 +60,7 @@ import eth.serotine.domain.repository.UserTokens
 import eth.serotine.domain.repository.WaitingSwaps
 import eth.serotine.domain.repository.WalletHandoff
 import eth.serotine.domain.usecase.AcknowledgeLostOutbox
+import eth.serotine.domain.usecase.AddEnsName
 import eth.serotine.domain.usecase.AddNft
 import eth.serotine.domain.usecase.AddOnNetworks
 import eth.serotine.domain.usecase.AddToken
@@ -167,6 +169,7 @@ import eth.serotine.domain.usecase.RebroadcastTransfer
 import eth.serotine.domain.usecase.RefreshNetworkData
 import eth.serotine.domain.usecase.RefuseDappRequest
 import eth.serotine.domain.usecase.RejectDappProposal
+import eth.serotine.domain.usecase.RememberResolvedNames
 import eth.serotine.domain.usecase.RemoveAccount
 import eth.serotine.domain.usecase.RemoveAddedNft
 import eth.serotine.domain.usecase.RemoveQueuedSafeTx
@@ -321,6 +324,8 @@ class AppGraph(
     private val ensNfts: EnsNfts,
     /** The NFTs the user added to an account by contract and id, kept on this device (#246). */
     private val addedNfts: AddedNfts,
+    /** The ENS names seen pointing to the user's accounts, kept on this device: candidates for their NFTs (#274). */
+    private val seenEnsNames: SeenEnsNames,
     /** The Safe transactions waiting for their owners, kept on this device across restarts. */
     private val safeTxQueue: SafeTxQueue,
     /** The text a Safe's signing request travels in between devices, for every network the app knows. */
@@ -417,6 +422,9 @@ class AppGraph(
     /** The one [WalletChanges] of the app: imports and removals never interleave. */
     private val walletChanges = WalletChanges()
 
+    /** Every resolution of the app: [names]', each one that lands on an account kept in [seenEnsNames] (#274). */
+    private val resolver: NameResolver = RememberResolvedNames(names, accounts, seenEnsNames)
+
     /** The one toggle of the eye for every screen: its taps take turns app-wide, not only within a screen. */
     private val toggleAmountsHidden = ToggleAmountsHidden(amountsHidden)
 
@@ -428,7 +436,7 @@ class AppGraph(
         AccountsViewModel(
             ObservePortfolio(ObserveAccounts(accounts), accountValue(), displayCurrencies()),
             ObserveSafes(accounts, observeSafe()),
-            ObserveEnsNames(accounts, names),
+            ObserveEnsNames(accounts, resolver),
             ObserveLightClient(lightClient),
             ObserveEnabledNetworks(networkSettings),
             SetNetworkEnabled(networkSettings),
@@ -456,7 +464,7 @@ class AppGraph(
             observeSafeTxQueue(account.network),
             knownTokens(),
             SetTokenHidden(userTokens),
-            ObserveEnsNames(accounts, names),
+            ObserveEnsNames(accounts, resolver),
             accountActivity(),
             ObserveEnabledNetworks(networkSettings),
             SetNetworkEnabled(networkSettings),
@@ -468,8 +476,9 @@ class AppGraph(
             DropWaitingSwap(waitingSwaps),
             ObserveAmountsHidden(amountsHidden),
             toggleAmountsHidden,
-            ObserveNfts(logIndex, historyStarts, nfts, ensNfts, receipts, addedNfts),
+            ObserveNfts(logIndex, historyStarts, nfts, ensNfts, receipts, addedNfts, seenEnsNames),
             AddNft(nfts, addedNfts),
+            AddEnsName(nfts, seenEnsNames),
             RemoveAddedNft(addedNfts),
             // A Safe's queue lists the signatures held for it too (lenient mode).
             ObserveOutbox(outbox),
@@ -482,7 +491,7 @@ class AppGraph(
         asset,
         ObserveAccounts(accounts),
         accountValue(),
-        ResolveRecipient(names),
+        ResolveRecipient(resolver),
         OfferHandoff(walletHandoff),
         HandOffTransfer(walletHandoff, blockTransactions),
         WatchHandoff(blockTransactions, receipts),
@@ -559,7 +568,7 @@ class AppGraph(
             accountValue(),
             observeSafe(),
             DescribeKeyStore(keys),
-            ResolveRecipient(names),
+            ResolveRecipient(resolver),
             ProposeSafeTx(
                 observeSafe(),
                 nativeBalances,
@@ -653,7 +662,7 @@ class AppGraph(
         ObserveAccounts(accounts),
         accountValue(),
         DescribeKeyStore(keys),
-        ResolveRecipient(names),
+        ResolveRecipient(resolver),
         QuoteTransfer(
             transactionInputs,
             nativeBalances,
@@ -839,7 +848,7 @@ class AppGraph(
     fun createSafeViewModel(): CreateSafeViewModel = CreateSafeViewModel(
         ObserveAccounts(accounts),
         DescribeKeyStore(keys),
-        ResolveRecipient(names),
+        ResolveRecipient(resolver),
         PlanSafe(safeReleases),
         QuoteSafeDeployment(addressKinds, nativeBalances, transactionInputs, sentTransfers, outbox = outbox),
         DeploySafe(signer, broadcaster, sentTransfers),
@@ -881,7 +890,7 @@ class AppGraph(
         ObserveAddressKind(addressKinds),
         ObserveAccounts(accounts),
         WatchAddress(accounts, addressKinds),
-        ResolveRecipient(names),
+        ResolveRecipient(resolver),
         ObserveEnabledNetworks(networkSettings),
         SetNetworkEnabled(networkSettings),
         HoldNetwork(networkDemand),

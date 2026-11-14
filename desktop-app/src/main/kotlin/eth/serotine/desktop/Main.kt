@@ -23,6 +23,7 @@ import eth.serotine.data.logs.MemoryDebugLog
 import eth.serotine.data.network.UnreportedConnectionMeter
 import eth.serotine.data.networks.FileNetworkSettings
 import eth.serotine.data.nfts.FileAddedNfts
+import eth.serotine.data.nfts.FileSeenEnsNames
 import eth.serotine.data.outbox.desktopOutbox
 import eth.serotine.data.safe.FileSafeTxQueue
 import eth.serotine.data.safe.JsonSigningRequestCodec
@@ -490,6 +491,7 @@ private fun openWallet(dataDir: File) {
                 ensNfts = node.ensNfts,
                 // The NFTs added by contract and id, beside tokens.json (issue #246).
                 addedNfts = FileAddedNfts(dataDir.resolve("nfts.json").path),
+                seenEnsNames = FileSeenEnsNames(dataDir.resolve("ens-names.json").path),
                 // The Safe transactions waiting for their owners: the follower's one instance.
                 safeTxQueue = safeTxQueue,
                 signingRequests = JsonSigningRequestCodec(),

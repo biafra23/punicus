@@ -1,6 +1,7 @@
 package eth.serotine.domain.usecase
 
 import eth.serotine.domain.model.Address
+import eth.serotine.domain.model.EnsNameTokens
 import eth.serotine.domain.model.Erc1155Transfers
 import eth.serotine.domain.model.KnownNftCollection
 import eth.serotine.domain.model.KnownNftCollections
@@ -24,6 +25,7 @@ import eth.serotine.domain.repository.NftHolding
 import eth.serotine.domain.repository.ReadUnavailable
 import eth.serotine.domain.repository.ReceiptLog
 import eth.serotine.domain.repository.ReceiptTracker
+import eth.serotine.domain.repository.SeenEnsName
 import eth.serotine.domain.repository.TransactionProgress
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flowOf
@@ -54,6 +56,7 @@ class ObserveNftsTest {
     private val ens = FakeEnsNfts()
     private val receipts = FakeReceipts()
     private val added = MemoryAddedNfts()
+    private val seenNames = MemorySeenEnsNames()
     private val index = RecordingLogIndex()
     private val starts = MemoryHistoryStarts(alice to HistoryStart.Fixed(9_000))
     private val contracts = FakeNftContracts()
@@ -61,7 +64,7 @@ class ObserveNftsTest {
     private fun known(kind: KnownNftKind) = KnownNftCollections.of(Network.SEPOLIA).single { it.kind == kind }.address
 
     private fun TestScope.collectInto(seen: MutableList<NftHoldings>) = backgroundScope.launch {
-        ObserveNfts(index, starts, contracts, ens, receipts, added)(alice.onSepolia).collect { seen += it }
+        ObserveNfts(index, starts, contracts, ens, receipts, added, seenNames)(alice.onSepolia).collect { seen += it }
     }
 
     private fun topic(address: Address) = "0x" + "00".repeat(12) + address.hex.removePrefix("0x")
@@ -222,6 +225,30 @@ class ObserveNftsTest {
         covered(9_300)
         runCurrent()
         assertEquals(2, ens.asked.size, "a name is read once")
+    }
+
+    @Test
+    fun aNameSeenPointingHereIsFoundHeldWithNoLogAndNamedByIt() = runTest {
+        // No log names alice: the name arrived before her history starts (#274).
+        logs = emptyList()
+        val registrar = known(KnownNftKind.ENS_REGISTRAR)
+        val token = NftRef(registrar, EnsNameTokens.labelHash("diskordia"), NftStandard.ERC721)
+        contracts.held += token
+        // The registrar keeps only the label's hash: no receipt, so no label from the adapter.
+        ens.needsLogs += token
+        seenNames.remember(alice.onSepolia, SeenEnsName("diskordia.eth", 9_100))
+        covered(9_200)
+        val seen = mutableListOf<NftHoldings>()
+        collectInto(seen)
+        runCurrent()
+
+        val read = assertIs<NftHoldings.Read>(seen.last())
+        val held = read.nfts.single()
+        assertEquals(token, held.nft, "the NameWrapper's token, not held, is not shown")
+        assertEquals("diskordia.eth", held.ens?.name, "the label comes from the name seen, checked by hashing")
+        assertEquals(false, held.added, "a name seen is not the user's to take off")
+        assertEquals(2, contracts.holdingCalls, "the registrar's and the NameWrapper's tokens were both checked")
+        assertEquals(listOf(token), ens.asked.map { it.first }, "only a held token's name is read")
     }
 
     @Test
