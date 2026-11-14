@@ -274,7 +274,8 @@ class WatchViewModel(
         // Where the registries gave different addresses, they are different accounts: no question for them.
         val oneAddress = found.map { it.address }.distinct().size == 1
         // The first network's address, Ethereum's where it is on: a row at another one says so (#273).
-        val first = found.first()
+        // None with no network on.
+        val first = found.firstOrNull()
         // A Safe exists only where it was deployed: where it is one, it is offered there alone (N11).
         val safeSomewhere = cards.any { (_, card) -> card is Detection.Safe }
         val offered = cards.filter { (_, card) -> if (safeSomewhere) card is Detection.Safe else card.addable }
@@ -292,7 +293,7 @@ class WatchViewModel(
                     card,
                     offered = network in offered,
                     chosen = network in chosen && network in offered,
-                    differs = "Not ${first.network.displayName}'s address".takeIf { address != first.address },
+                    differs = first?.takeIf { it.address != address }?.let { "Not ${it.network.displayName}'s address" },
                 )
             },
             question = if (everyAccount && oneAddress) {
