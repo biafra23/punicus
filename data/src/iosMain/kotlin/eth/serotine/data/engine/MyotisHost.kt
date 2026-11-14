@@ -383,6 +383,9 @@ class MyotisHost private constructor(
         /** When this network's balances and prices are proven again: at every head, or on demand in simple mode. */
         val schedule = ProofSchedule(live = activity::hasAccountCoverage)
 
+        /** Spaces out this network's background re-proofs of different accounts (#253). */
+        private val pacer = ReadPacer()
+
         /** Whether this network's values update live: a readable verified head with block access lists. */
         fun live(): Boolean {
             val head = (chain.snapshot() as? EngineSnapshot.Running)?.readableHead ?: return false
@@ -426,6 +429,7 @@ class MyotisHost private constructor(
                 lastBalances,
                 activity,
                 schedule,
+                pacer = pacer,
             ),
             tokenBalances = VerifiedTokenBalances(
                 network,
@@ -436,6 +440,7 @@ class MyotisHost private constructor(
                 activity,
                 gated = BuiltInTokens.of(network).mapTo(HashSet()) { it.address },
                 schedule = schedule,
+                pacer = pacer,
             ),
             tokenMetadata = VerifiedTokenMetadata(network, chain, Dispatchers.IO, POLL_INTERVAL),
             addressKinds = VerifiedAddressKinds(

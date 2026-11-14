@@ -222,6 +222,21 @@ consumer developed against an unreleased engine, Myotis's
   fetched waits for that fetch rather than making the same blocking calls:
   the account screen, the Accounts screen and every account of the portfolio
   read the same prices and balances.
+- **Accounts' re-proofs are spaced out** (#253, WalletBeat's *multi-address
+  correlation*). A peer that gets the reads of several addresses at the same
+  moment from one IP can tell they belong to one user. From the Myotis release
+  that carries its #863 on, the engine sends each address to its own peers
+  (an account read, and a token's `balanceOf(holder)` by its holder); until
+  then they share its first peer. `ReadPacer` adds time between them, per
+  network: native and token balances take turns by address. All of one
+  address's reads run together; another address waits until they are done
+  and then 1.5 to 4 random seconds more; a turn takes no new reads after 8
+  seconds while another address waits. Only re-proofs are paced: a first
+  proof (a screen opening, a quote, a review, a signature) goes at once, so
+  the Accounts screen's first load after a start still asks for every account
+  together, each at its own peers. Nothing hides the reads from this device's
+  IP or its engine's node key; Myotis's Tor mode would, and Punicus does not
+  turn it on (an owner decision).
 - **Verified address kinds.** `VerifiedAddressKinds` reads what is at an
   address for the Watch screen, polled, cached and refused the same way (the
   two share `ProvenReads`). The code hash comes from `requestAccount`'s proof,

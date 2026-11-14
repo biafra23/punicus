@@ -1,6 +1,7 @@
 package eth.serotine.data.engine
 
 import eth.serotine.data.engine.EngineSnapshot.Phase
+import eth.serotine.domain.model.Address
 import eth.serotine.domain.repository.ReadUnavailable
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineDispatcher
@@ -128,6 +129,14 @@ internal class ProvenReads<K, T>(
      */
     private val schedule: ProofSchedule? = null,
     /**
+     * Spaces out the re-proofs of different addresses ([ReadPacer], issue #253), with [pacedBy]
+     * naming the address a key is about; none by default. Only a subscriber that has had a proof
+     * made for it is paced: a first proof (a screen opening, a quote, a review, a signature)
+     * never waits for it, though one that joins a paced read in flight for its key waits with it.
+     */
+    private val pacer: ReadPacer? = null,
+    private val pacedBy: (K) -> Address = { error("a paced ProvenReads names the address of its keys") },
+    /**
      * The fact about a key and the block its proof anchors to; a refusal ([EngineReading.Unavailable]);
      * or null when unproven. Blocks, and may suspend between its blocking calls (to check its
      * cancellation, or to pause before a retry).
@@ -181,7 +190,7 @@ internal class ProvenReads<K, T>(
                     emit(EngineReading.Unavailable(ReadUnavailable.NO_ENGINE))
                     return@flow
                 }
-                val reading = readingAt(chain, key, snapshot, mayHold = proven)
+                val reading = readingAt(chain, key, snapshot, mayHold = proven, paced = proven)
                 if (reading is EngineReading.Proven) proven = true
                 emit(reading)
                 // A refusal is for good on this build: asking again on every tick changes nothing.
@@ -200,13 +209,15 @@ internal class ProvenReads<K, T>(
 
     /**
      * The reading of [key] at [snapshot]; [mayHold] when the subscriber asking has had a proof made
-     * for it, so that a proof [schedule] holds across heads may stand for it.
+     * for it, so that a proof [schedule] holds across heads may stand for it; [paced] when a proof
+     * made for it waits for its address's turn ([pacer]).
      */
     private suspend fun readingAt(
         chain: VerifiedChain,
         key: K,
         snapshot: EngineSnapshot,
         mayHold: Boolean,
+        paced: Boolean,
     ): EngineReading<T> {
         // A stopped network: what was last verified, dated, or that it is off; never "syncing".
         if (snapshot is EngineSnapshot.Stopped) {
@@ -264,7 +275,12 @@ internal class ProvenReads<K, T>(
             // Null unless the read completes: a waiter is never left without an answer.
             var reading: EngineReading<T>? = null
             try {
-                reading = prove(chain, key, head, snapshot.headTimestamp)
+                val turns = pacer
+                reading = if (paced && turns != null) {
+                    turns.paced(pacedBy(key)) { prove(chain, key, head, snapshot.headTimestamp) }
+                } else {
+                    prove(chain, key, head, snapshot.headTimestamp)
+                }
                 return reading
             } finally {
                 withContext(NonCancellable) {
