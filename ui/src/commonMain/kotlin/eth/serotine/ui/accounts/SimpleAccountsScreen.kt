@@ -166,6 +166,11 @@ fun SimpleAccountsScreen(
                         state.notice?.let { Notice(it) }
                         // Each network's sync line while it syncs, before the first account (#66).
                         state.lightClients.forEach { network ->
+                            // A stale checkpoint: its warning and "Catch up anyway…", as for a section.
+                            network.staleAnchor?.let { warning ->
+                                NetworkAlarm(network.chainId, network.name, null, warning) { asking = it }
+                                return@forEach
+                            }
                             val line = network.status.simpleText ?: return@forEach
                             Text(
                                 line,
@@ -206,7 +211,7 @@ private fun SimpleAccountList(
         items(state.unreachable, key = { "unreachable/${it.chainId}" }) { Unreachable(it) }
         // A network this version can no longer follow, or that refuses a stale checkpoint: said in both views.
         items(state.sections.filter { it.blocked != null || it.staleAnchor != null }, key = { "alarm/${it.chainId}" }) {
-            NetworkAlarm(it, onCatchUp)
+            NetworkAlarm(it.chainId, it.name, it.blocked, it.staleAnchor, onCatchUp)
         }
         state.notice?.let { notice -> item(key = "notice") { Notice(notice) } }
         val totalNote = state.simpleTotalNote ?: state.totalNote
@@ -300,23 +305,30 @@ private fun Unreachable(network: UnreachableNetwork) {
 }
 
 /**
- * A network this version can no longer follow, or whose light client refuses a stale checkpoint,
- * with its "Catch up anyway…" ([onCatchUp]): in the error colour, as its section is in Detailed view.
+ * A network ([chainId], [name]) this version can no longer follow ([blocked]), or whose light
+ * client refuses a stale checkpoint ([staleAnchor]), with its "Catch up anyway…" ([onCatchUp]): in
+ * the error colour, as its section is in Detailed view.
  */
 @Composable
-private fun NetworkAlarm(section: NetworkSection, onCatchUp: (StaleAnchorWarning) -> Unit) {
+private fun NetworkAlarm(
+    chainId: Long,
+    name: String,
+    blocked: String?,
+    staleAnchor: StaleAnchorWarning?,
+    onCatchUp: (StaleAnchorWarning) -> Unit,
+) {
     val colors = MaterialTheme.colorScheme
     Surface(
         Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp)
-            .testTag(ACCOUNTS_SECTION_TAG + section.chainId),
+            .testTag(ACCOUNTS_SECTION_TAG + chainId),
         shape = MaterialTheme.shapes.medium,
         color = colors.errorContainer,
         contentColor = colors.onErrorContainer,
     ) {
         Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-            Text(section.name, style = MaterialTheme.typography.titleSmall)
-            section.blocked?.let { Text(it, style = MaterialTheme.typography.bodySmall) }
-            section.staleAnchor?.let { warning ->
+            Text(name, style = MaterialTheme.typography.titleSmall)
+            blocked?.let { Text(it, style = MaterialTheme.typography.bodySmall) }
+            staleAnchor?.let { warning ->
                 StaleAnchorBanner(warning, colors.onErrorContainer) { onCatchUp(warning) }
             }
         }

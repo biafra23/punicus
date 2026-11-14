@@ -91,6 +91,7 @@ import eth.serotine.domain.usecase.FindWaitingSwap
 import eth.serotine.domain.usecase.HandOffTransfer
 import eth.serotine.domain.usecase.HasSwapVenue
 import eth.serotine.domain.usecase.HoldNetwork
+import eth.serotine.domain.usecase.HoldNetworksWhileEmpty
 import eth.serotine.domain.usecase.HoldSafeSignature
 import eth.serotine.domain.usecase.ImportMnemonicAccount
 import eth.serotine.domain.usecase.ImportSigningRequest
@@ -440,6 +441,7 @@ class AppGraph(
             ObserveOutbox(outbox),
             AcknowledgeLostOutbox(outbox),
             offerHandoff = OfferHandoff(walletHandoff),
+            holdNetworksWhileEmpty = HoldNetworksWhileEmpty(accounts, networkSettings, networkDemand),
         )
 
     /** The light clients' status strips of the screens that depend on them: one for the app, in the host's scope. */

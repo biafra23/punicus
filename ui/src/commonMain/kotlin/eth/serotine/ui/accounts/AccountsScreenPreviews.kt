@@ -241,6 +241,29 @@ private fun AccountsNoAccountsSyncingPreview() = AccountsPreview(noAccountsSynci
 @Composable
 private fun AccountsNoAccountsSyncingDarkPreview() = AccountsPreview(noAccountsSyncing, darkTheme = true)
 
+/** No accounts yet, and Gnosis Chain's light client refusing a stale checkpoint on the first start. */
+@Preview
+@Composable
+private fun AccountsNoAccountsStaleAnchorPreview() = AccountsPreview(
+    noAccountsSyncing.copy(
+        lightClients = listOf(
+            noAccountsSyncing.lightClients[0],
+            NetworkLightClient(
+                100,
+                "Gnosis Chain",
+                testnet = false,
+                status = LightClientItem(
+                    "Not syncing: the last trusted checkpoint is 6 periods old, past the safe limit of 3",
+                    null,
+                    false,
+                    NOT_VERIFIED,
+                ),
+                staleAnchor = StaleAnchorWarning.of(Network.GNOSIS, LightClientStatus.StaleAnchor(6, 3)),
+            ),
+        ),
+    ),
+)
+
 @Preview
 @Composable
 private fun AccountsLoadingPreview() =
@@ -653,6 +676,7 @@ internal val accountsScreenPreviews: List<ScreenPreview> = listOf(
     ScreenPreview("no-accounts") { AccountsNoAccountsPreview() },
     ScreenPreview("no-accounts-syncing") { AccountsNoAccountsSyncingPreview() },
     ScreenPreview("no-accounts-syncing-dark") { AccountsNoAccountsSyncingDarkPreview() },
+    ScreenPreview("no-accounts-stale-anchor") { AccountsNoAccountsStaleAnchorPreview() },
     ScreenPreview("create-safe-greyed-out") { AccountsCreateSafeGreyedOutPreview() },
     ScreenPreview("create-safe-reason") { AccountsCreateSafeReasonPreview() },
     ScreenPreview("send-reason") { AccountsSendReasonPreview() },

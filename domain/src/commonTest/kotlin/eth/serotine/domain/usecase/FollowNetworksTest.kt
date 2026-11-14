@@ -31,8 +31,6 @@ class FollowNetworksTest {
         "Daily",
         AccountCustody.InKeyStore,
     )
-    /** An account on another network than [daily]'s: the wallet is not empty without [daily]. */
-    private val elsewhere = daily.copy(network = Network.ETHEREUM, label = "Elsewhere")
     private val accounts = ListAccountRepository()
     private val on = MutableStateFlow(setOf(Network.SEPOLIA))
     private val settings = object : NetworkSettings {
@@ -61,7 +59,6 @@ class FollowNetworksTest {
 
     @Test
     fun aNetworkWithAnAccountRunsAndOneWithoutIsIdleAtOnce() = runTest {
-        accounts.add(elsewhere)
         follow()
         assertEquals(listOf(LightClientRun.IDLE), told, "nothing needs it yet")
 
@@ -71,27 +68,7 @@ class FollowNetworksTest {
     }
 
     @Test
-    fun anEmptyWalletRunsEveryNetworkThatIsOnFromTheStart() = runTest {
-        on.value = setOf(Network.GNOSIS, Network.SEPOLIA)
-        follow()
-        assertEquals(listOf(LightClientRun.RUN), told, "a new wallet syncs before its first account (#66)")
-        assertEquals<List<LightClientRun>?>(listOf(LightClientRun.RUN), toldEach[Network.GNOSIS])
-        assertEquals<List<LightClientRun>?>(listOf(LightClientRun.OFF), toldEach[Network.ETHEREUM], "off stays off")
-
-        // The first account, on Sepolia: Gnosis Chain, with no account, goes idle after the delay.
-        accounts.add(daily)
-        advanceTimeBy(31.seconds)
-        runCurrent()
-        assertEquals(listOf(LightClientRun.RUN), told, "no fresh warm-up for the first account")
-        assertEquals<List<LightClientRun>?>(
-            listOf(LightClientRun.RUN, LightClientRun.IDLE),
-            toldEach[Network.GNOSIS],
-        )
-    }
-
-    @Test
     fun aNetworkNoLongerNeededIsIdleOnlyAfterTheDelayAndOneNeededAgainKeepsRunning() = runTest {
-        accounts.add(elsewhere)
         accounts.add(daily)
         follow()
         assertEquals(listOf(LightClientRun.RUN), told)
@@ -149,5 +126,44 @@ class FollowNetworksTest {
         follow()
 
         assertEquals(listOf(LightClientRun.RUN), told)
+    }
+
+    @Test
+    fun anEmptyWalletsAccountsScreenRunsEveryNetworkThatIsOnUntilTheFirstAccount() = runTest {
+        on.value = setOf(Network.GNOSIS, Network.SEPOLIA)
+        follow()
+        val screen = backgroundScope.launch { HoldNetworksWhileEmpty(accounts, settings, demand)() }
+        runCurrent()
+        assertEquals(listOf(LightClientRun.IDLE, LightClientRun.RUN), told, "a new wallet syncs at once (#66)")
+        assertEquals<List<LightClientRun>?>(
+            listOf(LightClientRun.IDLE, LightClientRun.RUN),
+            toldEach[Network.GNOSIS],
+        )
+        assertEquals<List<LightClientRun>?>(listOf(LightClientRun.OFF), toldEach[Network.ETHEREUM], "off stays off")
+
+        // The first account, on Sepolia: it keeps running; Gnosis Chain, with none, is idle after the delay.
+        accounts.add(daily)
+        advanceTimeBy(31.seconds)
+        runCurrent()
+        assertEquals(listOf(LightClientRun.IDLE, LightClientRun.RUN), told, "no fresh warm-up for the first account")
+        assertEquals<List<LightClientRun>?>(
+            listOf(LightClientRun.IDLE, LightClientRun.RUN, LightClientRun.IDLE),
+            toldEach[Network.GNOSIS],
+        )
+
+        // The last account removed, the screen still open: every network that is on runs again.
+        accounts.remove(daily.id)
+        runCurrent()
+        assertEquals<List<LightClientRun>?>(
+            listOf(LightClientRun.IDLE, LightClientRun.RUN, LightClientRun.IDLE, LightClientRun.RUN),
+            toldEach[Network.GNOSIS],
+        )
+
+        // The screen gone (the app closed): its holds go with it, and nothing else runs them.
+        screen.cancel()
+        advanceTimeBy(31.seconds)
+        runCurrent()
+        assertEquals(LightClientRun.IDLE, told.last())
+        assertEquals(LightClientRun.IDLE, toldEach.getValue(Network.GNOSIS).last())
     }
 }

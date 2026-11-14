@@ -301,9 +301,9 @@ private fun WatchSafeOnOneNetworkPreview() = WatchPreview(
 @Composable
 private fun WatchInWalletOnTwoNetworksPreview() = WatchPreview(
     WatchUiState(
-        address = "savings.eth",
+        address = "savings-example.eth",
         networks = listOf(
-            WatchNetwork(ethereum, Detection.InWallet("savings.eth", SAVINGS), offered = false),
+            WatchNetwork(ethereum, Detection.InWallet("savings-example.eth", SAVINGS), offered = false),
             WatchNetwork(gnosis, Detection.Account(SAVINGS, "Checked at block 42,907,115", null), true, true),
             WatchNetwork(
                 sepolia,

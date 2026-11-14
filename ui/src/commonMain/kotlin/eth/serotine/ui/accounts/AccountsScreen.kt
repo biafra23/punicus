@@ -330,7 +330,7 @@ private fun BoxScope.Rows(
         is AccountsUiState.Ready ->
             if (state.accounts.isEmpty()) {
                 Column(Modifier.fillMaxSize()) {
-                    state.lightClients.forEach { EmptyWalletLightClient(it) }
+                    state.lightClients.forEach { EmptyWalletLightClient(it, onCatchUp) }
                     Box(Modifier.weight(1f).fillMaxWidth()) { NoAccounts(Modifier.align(Alignment.Center)) }
                 }
             } else {
@@ -370,13 +370,16 @@ internal fun NoAccounts(modifier: Modifier = Modifier) {
 
 /**
  * A network's light client on the empty Accounts screen (#66): its mark and its status strip's
- * line, as a section header draws them, with no total and no accounts.
+ * line, as a section header draws them, with no total and no accounts, and a stale checkpoint's
+ * warning with its "Catch up anyway…" ([onCatchUp]), in the error colour.
  */
 @Composable
-private fun EmptyWalletLightClient(network: NetworkLightClient) {
+private fun EmptyWalletLightClient(network: NetworkLightClient, onCatchUp: (StaleAnchorWarning) -> Unit) {
+    val colors = MaterialTheme.colorScheme
+    val alarmed = network.staleAnchor != null
     Column(
         Modifier.fillMaxWidth()
-            .background(MaterialTheme.colorScheme.surfaceContainerLow)
+            .background(if (alarmed) colors.errorContainer else colors.surfaceContainerLow)
             .padding(horizontal = 16.dp, vertical = 10.dp)
             .semantics(mergeDescendants = true) {}
             .testTag(ACCOUNTS_EMPTY_LIGHT_CLIENT_TAG + network.chainId),
@@ -392,8 +395,11 @@ private fun EmptyWalletLightClient(network: NetworkLightClient) {
                 network.status.text,
                 Modifier.weight(1f),
                 style = MaterialTheme.typography.labelMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                color = if (alarmed) colors.onErrorContainer else colors.onSurfaceVariant,
             )
+        }
+        network.staleAnchor?.let { warning ->
+            StaleAnchorBanner(warning, colors.onErrorContainer) { onCatchUp(warning) }
         }
     }
 }

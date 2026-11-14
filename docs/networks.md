@@ -265,11 +265,10 @@ are unchanged.
   that is off never runs. A network that is on runs while it has accounts
   (from launch, or from the first account added) or while a screen asks
   about it (the Watch screen checking an address on every network that is
-  on, N10). While the wallet has no account at all, every network that is
-  on runs, so a new wallet syncs from its first start and shows it on the
-  empty Accounts screen (owner's report, 2026-10-18, #66). It is stopped
-  30 s after its last account is removed and no screen asks, and at once
-  when it is turned off. Pause and resume
+  on, N10), as the Accounts screen does for every network that is on while
+  the wallet has no account at all, so a new wallet syncs from its first
+  start (#66). It is stopped 30 s after its last account is removed and no
+  screen asks, and at once when it is turned off. Pause and resume
   (Android's 30 s after the last hold, the desktop's window) apply to all
   running networks at once. A user with only Ethereum accounts never syncs
   Gnosis or Sepolia, whether those are on or off.

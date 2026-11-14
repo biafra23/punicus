@@ -129,9 +129,10 @@ sealed interface Detection {
     data class Contract(val message: String) : Detection
 
     /**
-     * The EIP-55 [address] is in the wallet already, as the account the user named [label]: the
-     * account's own name in this wallet, never an ENS name the address was found by, nor a claim
-     * that the account holds one (#273).
+     * The EIP-55 [address] is in the wallet already, as the account named [label]: the account's
+     * label in this wallet, which may be the ENS name it follows (#67). The card says it is the
+     * account's name, so that it is not read as the name typed, nor as a claim that the account
+     * holds that name (#273).
      */
     data class InWallet(val label: String, val address: String) : Detection
 

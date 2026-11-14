@@ -142,12 +142,16 @@ sealed interface AccountsUiState {
  * A network that is on, and its light client ([status]), as the empty Accounts screen shows it
  * (#66): its [name], whether it is a [testnet], and its [chainId]. Detailed view draws the status
  * strip's line; simple mode its sync line ([LightClientItem.simpleText]), none once it is synced.
+ * [staleAnchor] warns that its light client refuses to sync from a checkpoint past the
+ * weak-subjectivity window, with the way to catch up anyway (owner's request, 2026-10-24), as a
+ * section does: drawn in the error colour, in both views.
  */
 data class NetworkLightClient(
     val chainId: Long,
     val name: String,
     val testnet: Boolean,
     val status: LightClientItem,
+    val staleAnchor: StaleAnchorWarning? = null,
 )
 
 /**
