@@ -95,6 +95,15 @@ Their versions still follow the pinned Compose version, and their bytes are
 still pinned per host in the metadata. A lock mismatch on one host means a new
 host-specific module: add it to that list; do not write locks on that host.
 
+The same list holds two modules that are not host-specific:
+`kotlin-stdlib-common` and libsodium-bindings' `resource-loader`. Their
+presence in `:android-app`'s runtime classpaths differs between the run that
+writes the locks and the runs that have them in force (Gradle 8.14 with AGP
+8.13), so no lock state is right for both. Their versions are still fixed
+(by kotlin-stdlib's alignment and by libsodium-bindings' POM) and their bytes
+are pinned. The comment in `build.gradle.kts` has the detail; revisit it on
+the move to AGP 9 and Gradle 9.
+
 `--write-verification-metadata` only ever adds entries, so entries for
 versions nothing resolves any more stay behind. `--prune` deletes the file
 first and regenerates it from this host; then do steps 2 and 3 so the other

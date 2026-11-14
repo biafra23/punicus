@@ -50,6 +50,20 @@ allprojects {
             listOf(
                 "org.jetbrains.compose.desktop:desktop-jvm-*",
                 "org.jetbrains.skiko:skiko-awt-runtime-*",
+                // Two modules whose presence in :android-app's runtime classpaths flips
+                // between the run that writes the locks and every run after it, which has
+                // the locks in force (Gradle 8.14 with AGP 8.13's compile/runtime classpath
+                // alignment; seen in the first `gradle pins` runs of #281): the lock pass
+                // records kotlin-stdlib-common, which a locked run then no longer selects,
+                // and misses libsodium-bindings' resource-loader (excluded on :data's edge
+                // to it), which a locked run then selects. No lock state can be right for
+                // both, so they stay out of it. Their versions are still fixed:
+                // kotlin-stdlib-common is aligned to the pinned Kotlin version by
+                // kotlin-stdlib's own constraints, and resource-loader is a fixed version
+                // in libsodium-bindings' POM. Their bytes are still pinned in
+                // verification-metadata.xml. Revisit on the AGP 9 / Gradle 9 move.
+                "org.jetbrains.kotlin:kotlin-stdlib-common",
+                "com.goterl:resource-loader",
             ),
         )
         // DEFAULT lock mode, not STRICT: STRICT fails any configuration without
