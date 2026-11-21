@@ -2,6 +2,8 @@
 // The Public Suffix List, sha256 c61dec506c4a1045355280a560bf66c9ee893fb1510db98510ef7fb277fb2df8,
 // fetched 2026-11-15, https://raw.githubusercontent.com/publicsuffix/list/main/public_suffix_list.dat.
 // 10449 rules, both sections, every label in ASCII (`xn--` for the internationalised ones).
+// The list is subject to the Mozilla Public License, v. 2.0: https://mozilla.org/MPL/2.0/.
+// This file is derived from it and is under the same licence.
 package eth.serotine.domain.model
 
 /** The pinned list's sha256: docs/keys-and-signing.md names it beside the vectors. */

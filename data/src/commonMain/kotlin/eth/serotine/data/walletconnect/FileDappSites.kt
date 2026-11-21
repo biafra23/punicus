@@ -58,6 +58,15 @@ class FileDappSites(
     override suspend fun remember(site: AppHost, accounts: List<AccountId>): Boolean =
         file.change(notSaved = false) { sites -> Decision(true, sites + (site to accounts.distinct())) }
 
+    override suspend fun forget(account: AccountId): Boolean =
+        file.change(notSaved = false) { sites ->
+            if (sites.values.none { account in it }) {
+                Decision(true)
+            } else {
+                Decision(true, sites.mapValues { (_, kept) -> kept - account }.filterValues { it.isNotEmpty() })
+            }
+        }
+
     /** The file's layout. [version] comes first and is always written. */
     @Serializable
     private class StoredSites(val version: Int, val sites: List<StoredSite>)

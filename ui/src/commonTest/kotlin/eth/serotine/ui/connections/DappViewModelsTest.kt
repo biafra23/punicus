@@ -838,6 +838,32 @@ class DappViewModelsTest {
     }
 
     @Test
+    fun aSiteRememberedWithAnOrdinaryAccountGetsTheNewAddressOfferedButNotTicked() = runTest {
+        main()
+        // Approved before with Main, the new address unticked then: declining it once is respected.
+        sites.remembered.value = mapOf(uniswap to listOf(ethereumHeld.id))
+        sessions.connections.value = DappConnections.On(DappRelayLink.CONNECTED, listOf(perAppProposal()), emptyList())
+        val vm = perAppViewModel(FakeAccounts(ethereumHeld))
+        backgroundScope.launch { vm.uiState.collect {} }
+        runCurrent()
+        assertFalse(vm.uiState.value.newAddress!!.chosen)
+        assertTrue(vm.uiState.value.accounts.single().chosen)
+    }
+
+    @Test
+    fun aSiteWhoseAliasWasRemovedGetsTheNewAddressTickedAgain() = runTest {
+        main()
+        // uniswap.app was linked to uniswap.org's address and approved with it; the link is removed since.
+        val moved = (AppHost.parse("uniswap.app") as AppHostResult.Host).host
+        sites.remembered.value = mapOf(moved to listOf(ofUniswap.id))
+        sessions.connections.value = DappConnections.On(DappRelayLink.CONNECTED, listOf(movedProposal()), emptyList())
+        val vm = perAppViewModel(FakeAccounts(ethereumHeld, ofUniswap))
+        backgroundScope.launch { vm.uiState.collect {} }
+        runCurrent()
+        assertTrue(vm.uiState.value.newAddress!!.chosen, "nothing remembered can be preselected: offered ticked")
+    }
+
+    @Test
     fun aWrongPasswordMakesAndApprovesNothing() = runTest {
         main()
         val wallet = FakeAccounts(ethereumHeld)

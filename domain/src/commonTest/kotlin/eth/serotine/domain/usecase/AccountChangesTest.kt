@@ -38,7 +38,7 @@ class AccountChangesTest {
     private val keys = RecordingKeyStore(listOf(keyed.address))
 
     private fun removeFrom(repository: ListAccountRepository) =
-        RemoveAccount(repository, keys, WalletChanges(), MemoryAliases())
+        RemoveAccount(repository, keys, WalletChanges(), MemoryAliases(), MemorySites())
 
     @Test
     fun observeAccountFollowsOneEntryUntilItIsGone() = runTest {
@@ -117,7 +117,7 @@ class AccountChangesTest {
             changes,
         )(Mnemonic("words"), WalletPassword("pw"), listOf(Network.SEPOLIA)) }
         runCurrent() // the import holds the wallet while it stores the key
-        val removal = async { RemoveAccount(repository, keys, changes, MemoryAliases())(watched.id) }
+        val removal = async { RemoveAccount(repository, keys, changes, MemoryAliases(), MemorySites())(watched.id) }
         advanceUntilIdle()
 
         assertEquals(MnemonicImport.KeyAdded(watched.copy(custody = AccountCustody.InKeyStore)), import.await())
@@ -170,10 +170,40 @@ class AccountChangesTest {
         val repository = ListAccountRepository(onEthereum, onGnosis, watchedThere)
         val app = testHost("uniswap.app")
         val aliases = MemoryAliases(mapOf(app to onEthereum.address))
-        val remove = RemoveAccount(repository, RecordingKeyStore(listOf(onEthereum.address)), WalletChanges(), aliases)
+        val keysHere = RecordingKeyStore(listOf(onEthereum.address))
+        val remove = RemoveAccount(repository, keysHere, WalletChanges(), aliases, MemorySites())
         remove(onEthereum.id)
         assertEquals(mapOf(app to onEthereum.address), aliases.linked.value, "still held on Gnosis Chain")
         remove(onGnosis.id)
         assertEquals(emptyMap(), aliases.linked.value, "restoring it later never links uniswap.app again unasked")
+    }
+
+    @Test
+    fun aRemovedAccountIsForgottenByEverySiteThatRememberedIt() = runTest {
+        val repository = ListAccountRepository(keyed, watched)
+        val sites = MemorySites()
+        val dapp = testHost("dapp.test")
+        val other = testHost("other.test")
+        sites.remembered.value = mapOf(dapp to listOf(keyed.id, watched.id), other to listOf(keyed.id))
+        RemoveAccount(repository, keys, WalletChanges(), MemoryAliases(), sites)(keyed.id)
+        assertEquals(mapOf(dapp to listOf(watched.id)), sites.remembered.value, "and a site left with none goes")
+    }
+
+    @Test
+    fun aMemoryThatCannotBeSavedTakesNothingFromTheRemovalAndARemovalThatFailedForgetsNothing() = runTest {
+        val dapp = testHost("dapp.test")
+        val sites = MemorySites()
+        sites.remembered.value = mapOf(dapp to listOf(keyed.id))
+        sites.failSaves = true
+        val repository = ListAccountRepository(keyed, watched)
+        val removal = RemoveAccount(repository, keys, WalletChanges(), MemoryAliases(), sites)
+        assertEquals(AccountRemoval.Removed, removal(keyed.id))
+        assertEquals(mapOf(dapp to listOf(keyed.id)), sites.remembered.value, "kept, said by nothing but harmless")
+
+        sites.failSaves = false
+        val unsaved = ListAccountRepository(keyed, watched).also { it.failSaves = true }
+        val failing = RemoveAccount(unsaved, keys, WalletChanges(), MemoryAliases(), sites)
+        assertEquals(AccountRemoval.NotSaved, failing(keyed.id))
+        assertEquals(mapOf(dapp to listOf(keyed.id)), sites.remembered.value, "a removal that failed forgets nothing")
     }
 }

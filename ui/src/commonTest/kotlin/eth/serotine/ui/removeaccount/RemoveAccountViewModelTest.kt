@@ -14,6 +14,7 @@ import eth.serotine.ui.FakeAccounts
 import eth.serotine.ui.FakeKeys
 import eth.serotine.ui.MemoryAliases
 import eth.serotine.ui.components.Eip55
+import eth.serotine.ui.MemoryDappSites
 import kotlin.test.AfterTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -44,7 +45,7 @@ class RemoveAccountViewModelTest {
             AccountId(Network.SEPOLIA, address),
             ObserveAccount(accounts),
             ObserveAccounts(accounts),
-            RemoveAccount(accounts, keys, WalletChanges(), MemoryAliases()),
+            RemoveAccount(accounts, keys, WalletChanges(), MemoryAliases(), MemoryDappSites()),
         )
 
     @AfterTest

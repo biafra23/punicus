@@ -9,6 +9,7 @@ import kotlin.random.Random
 import kotlin.test.AfterTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.first
@@ -83,5 +84,20 @@ class FileDappSitesTest {
                 """"address":"${main.address.hex}"},{"chain":1,"address":"${perApp.address.hex}"}]}]}""",
         )
         assertEquals(mapOf(uniswap to listOf(perApp)), sites().observe().first())
+    }
+
+    @Test
+    fun aForgottenAccountLeavesEverySiteAndASiteLeftWithNoneGoes() = runTest {
+        assertTrue(sites().forget(main), "remembered for none")
+        assertFalse(SystemFileSystem.exists(file), "and nothing is written")
+        val sites = sites()
+        assertTrue(sites.remember(uniswap, listOf(perApp, main)))
+        assertTrue(sites.remember(safe, listOf(main)))
+        assertTrue(sites.forget(main))
+        assertEquals(mapOf(uniswap to listOf(perApp)), sites().observe().first(), "across a restart")
+
+        write("""{"version":2,"sites":[]}""")
+        assertFalse(sites().forget(main), "a newer format: not saved")
+        assertEquals("""{"version":2,"sites":[]}""", text(), "and left as it is")
     }
 }

@@ -24,4 +24,10 @@ interface DappSiteMemory {
      * caller passes a site, never a host of one. False when it could not be saved. Never throws.
      */
     suspend fun remember(site: AppHost, accounts: List<AccountId>): Boolean
+
+    /**
+     * Forgets [account] for every site, and a site left with none: what is stored for an account goes with it.
+     * True also when it was remembered for none. False when it could not be saved. Never throws.
+     */
+    suspend fun forget(account: AccountId): Boolean
 }

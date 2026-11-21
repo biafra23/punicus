@@ -325,6 +325,18 @@ private fun DappProposalLinkedPreview() = DappProposalPreview(
     ),
 )
 
+// A site seen before, approved with an ordinary account, the new address declined then: offered, unticked
+// (owner's decision, 2026-11-19, on #331).
+@Preview
+@Composable
+private fun DappProposalSeenBeforeDeclinedPreview() = DappProposalPreview(
+    firstVisit.copy(
+        newAddress = firstVisit.newAddress!!.copy(chosen = false),
+        password = WalletPassword.EMPTY,
+        accounts = realFunds.accounts.mapIndexed { index, account -> account.copy(chosen = index == 0) },
+    ),
+)
+
 // The site connecting again: its per-app address, approved last, preselected among the accounts.
 @Preview
 @Composable
@@ -367,6 +379,7 @@ internal val dappProposalScreenPreviews: List<ScreenPreview> = listOf(
     ScreenPreview("choosing-phrase") { DappProposalChoosingPhrasePreview() },
     ScreenPreview("no-phrase") { DappProposalNoPhrasePreview() },
     ScreenPreview("seen-before") { DappProposalSeenBeforePreview() },
+    ScreenPreview("seen-before-declined") { DappProposalSeenBeforeDeclinedPreview() },
     ScreenPreview("moved") { DappProposalMovedPreview() },
     ScreenPreview("choosing-alias") { DappProposalChoosingAliasPreview() },
     ScreenPreview("confirming-alias") { DappProposalConfirmingAliasPreview() },

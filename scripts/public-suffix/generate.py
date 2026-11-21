@@ -65,6 +65,8 @@ def main() -> int:
         f"// The Public Suffix List, sha256 {PINNED_SHA256},",
         f"// fetched {FETCHED}.",
         f"// {len(rules)} rules, both sections, every label in ASCII (`xn--` for the internationalised ones).",
+        "// The list is subject to the Mozilla Public License, v. 2.0: https://mozilla.org/MPL/2.0/.",
+        "// This file is derived from it and is under the same licence.",
         "package eth.serotine.domain.model",
         "",
         "/** The pinned list's sha256: docs/keys-and-signing.md names it beside the vectors. */",

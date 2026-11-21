@@ -200,14 +200,17 @@ held: docs/keys-and-signing.md, *Per-app addresses*.
   `uniswap.org` and see one address, which saves an alias when a dApp
   renames a host or spreads over several. Sites the list keeps apart stay
   apart: `a.github.io` and `b.github.io`, `a.vercel.app` and `b.vercel.app`,
-  and every ENS name behind `eth.limo` or `eth.link`.
+  and every ENS name behind `eth.limo` or `eth.link` (the list's `*.eth.limo`
+  makes `name.eth.limo` and its direct subnames sites of their own; a name
+  one label deeper, `a.b.c.eth.limo`, shares the site `b.c.eth.limo`).
   - What it costs: every host of the site sees the address, a subdomain
     serving strangers' content or taken over by an attacker among them. It
     still signs nothing without the user's review.
   - The screens name the host the dApp stated, and the site beside it where
     the two differ ("`app.uniswap.org`, site `uniswap.org`").
 - **D3 offers it and preselects it.** "New address for `<site>`" heads the
-  account choice, ticked, when the site has no address yet; the existing
+  account choice, ticked when the site has no address yet and nothing it
+  remembers can be preselected (*Remembered per site*); the existing
   accounts follow, and the user may tick them instead or as well. Approve
   approves what is ticked. Making the address takes the wallet unlock, as
   New account from the same phrase does.
@@ -262,8 +265,16 @@ held: docs/keys-and-signing.md, *Per-app addresses*.
   of that site connects again (WalletBeat's *per-app account persistence*). After a
   restore, connecting again re-derives the address, so nothing needs a
   backup.
+  - The new address is ticked by default only while nothing remembered for
+    the site can still be preselected: a site approved with another
+    account, the new address declined, is offered it unticked; a site that
+    remembers only what it can no longer be offered (an alias removed
+    since) has it ticked again (owner's decisions, 2026-11-19, on PRs #331
+    and #332).
+  - Removing an account takes it out of what every site remembers.
 - **Aliases, for a dApp that moved to another site.** A host whose site has
-  no address yet and no alias: D3 says "No address for `<site>` yet", preselects the new address,
+  no address yet and no alias: D3 says "No address for `<site>` yet", preselects the new address
+  (while nothing it remembers can be preselected),
   and offers **"Use an address from another site…"**:
   - the per-app addresses held here, each with its site and aliases, by
     last use. It suggests nothing: no "looks like `<oldhost>`", the cue a

@@ -12,6 +12,16 @@ and issues of this repository.
 
 ### Added
 
+- Per-app addresses: each site a dApp connects from is offered an address
+  of its own, made from your recovery phrase, so that no site can see your
+  activity on another. The connection request preselects it, and the sites
+  are remembered. Per-app addresses lists them, with each one's site,
+  networks, phrase and path, and restores one by site. A dApp that moved
+  may use its old site's address, after a question saying the two sites can
+  then link your activity. The signing screen names the address's site and
+  warns when a sign-in is for another site (#252; #297, #311, #313, #326,
+  #328, #329, #330).
+
 - Address poisoning protection on Send. A recipient that starts and ends
   like an address you sent to from this device (or one of your accounts) but
   differs in the middle blocks the send, with both addresses shown and the

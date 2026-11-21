@@ -81,8 +81,9 @@ data class DappProposalUiState(
     val missingRequired: String? = null,
     /**
      * The per-app address offered at the head of the accounts (issue #252; docs/walletconnect.md, *Per-app
-     * addresses*): a new address for the dApp's site, ticked by default while the site has none; null once the site
-     * has its address on every network it would go on, which then shows among the accounts.
+     * addresses*): a new address for the dApp's site, ticked by default while the site has none and nothing it
+     * remembers can be preselected; null once the site has its address on every network it would go on, which then
+     * shows among the accounts.
      */
     val newAddress: NewAddressOption? = null,
     /** The phrases a new address can come from, while the user chooses one; null otherwise. */
@@ -287,8 +288,11 @@ class DappProposalViewModel(
         val preselected = perApp.remembered.filter { it in offered }
             .ifEmpty { own.map { it.id }.filter { it in offered } }
             .map(::keyOf).toSet()
-        val wanted = local.chosen
-            ?: if (own.isEmpty() && proposal.refusal == null) preselected + NEW_KEY else preselected
+        // The new address is ticked only while nothing remembered can still be preselected: one declined once is not
+        // offered ticked beside the account approved instead (owner's decisions, 2026-11-19, on #331 and #332). A
+        // memory of what the site can no longer be offered (an alias removed since) is no such account.
+        val fresh = own.isEmpty() && preselected.isEmpty() && proposal.refusal == null
+        val wanted = local.chosen ?: if (fresh) preselected + NEW_KEY else preselected
         // What is chosen and still offered on its own: each account is judged beside the others chosen. One no
         // longer offered (its network turned off, say) counts for nothing, so it greys out no other.
         val ticked = offered.filter { keyOf(it) in wanted }

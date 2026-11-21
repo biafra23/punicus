@@ -4,7 +4,7 @@ Punicus is a wallet app for Ethereum accounts and Safe accounts. It runs on
 your device. This page says what it keeps there and what reaches anyone else.
 Its developer runs no server for Punicus and receives nothing from the app.
 
-Last updated: 2026-11-15.
+Last updated: 2026-11-19.
 
 ## What Punicus does not do
 
@@ -29,6 +29,10 @@ Last updated: 2026-11-15.
   device has one (docs/keys-and-signing.md).
 - The light client's own state, the balances it last verified, the record of
   what you sent, and your dApp sessions.
+- For each dApp site you connected, the accounts you approved for it last,
+  so that they are preselected when it connects again; and the sites you
+  linked to another site's per-app address. Neither is restored with your
+  recovery phrase.
 
 These files are private to the app. Keys and session secrets are kept out of
 cloud backups and device-to-device transfers. Removing the app deletes them.
@@ -107,7 +111,13 @@ IP address. Their privacy policies apply.
 - Catch up from an old checkpoint instead of fetching a fresh one, and the
   checkpoint servers are never contacted.
 - Keep Uniswap as the swap venue, and CoW is never contacted.
-- Remove an account or the app to delete what is stored for it.
+- Remove an account or the app to delete what is stored for it: removing an
+  account also takes it out of what each site remembers, and the last
+  account of a per-app address takes its links to other sites with it. If
+  the device cannot save that change, a site's memory of the account stays
+  until that site is approved again; it never preselects an account that is
+  gone.
+- Remove a site's link to another site's address on that address's details.
 
 ## Children
 

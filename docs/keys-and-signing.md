@@ -372,7 +372,9 @@ port `Signer` in `:domain`, all implemented by `EnvelopeKeyStore` in
     address, as do `www.example.com` and `example.com`, while
     `a.github.io` and `b.github.io` do not, nor do two ENS names behind a
     gateway: the list holds `*.eth.limo` and `*.eth.link`, so each
-    `<name>.eth.limo` is a site of its own. A host that is itself a public
+    `<name>.eth.limo`, and each of its direct subnames, is a site of its
+    own; a name one label deeper (`a.b.c.eth.limo`) shares the site
+    `b.c.eth.limo`. A host that is itself a public
     suffix (`localhost`, `github.io`) and an IPv4 address are their own
     site. The rules are matched as the list's formal algorithm says, both
     its ICANN and its private sections, every label in its `xn--` form.
